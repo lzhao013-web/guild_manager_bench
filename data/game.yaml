@@ -1,0 +1,40 @@
+rules:
+  max_turns: 8
+  seed: 20260524
+  monster_spawn:
+    count_curve:
+      base: 3
+      per_turn: 1
+      maximum: 6
+    stat_growth_curve:
+      base: 0
+      per_turn: 1
+    reward_growth_curve:
+      base: 0
+      per_turn: 1
+  turn_recovery:
+    hp: 0
+    mp: 0
+    hp_percent: 0.2
+    mp_percent: 0.25
+    use_recovery_stat: true
+
+starting:
+  gold: 40
+  materials:
+    iron_ore: 2
+    wood: 2
+    leather: 1
+    herb: 1
+
+experience:
+  base_required_experience: 80
+  required_experience_growth: 40
+  max_level: 10
+  stat_growth_per_level:
+    hp: 12
+    mp: 2
+    attack: 3
+    defense: 2
+    speed: 1
+    recovery: 1

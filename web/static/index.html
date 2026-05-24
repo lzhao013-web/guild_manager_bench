@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Guild Manager Bench</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar-brand">
+        <h1>Guild Manager Bench</h1>
+        <div id="sessionMeta" class="muted">未连接</div>
+      </div>
+      <div class="topbar-actions">
+        <button id="newSessionButton" type="button">新会话</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="band" id="overview"></section>
+
+      <nav class="tabs" id="tabBar">
+        <button class="tab active" data-tab="squad">队伍</button>
+        <button class="tab" data-tab="workshop">工坊</button>
+        <button class="tab" data-tab="reports">战报</button>
+      </nav>
+
+      <div class="tab-panel active" data-panel="squad">
+        <div class="panel">
+          <h2>冒险者</h2>
+          <div id="adventurers"></div>
+        </div>
+      </div>
+
+      <div class="tab-panel" data-panel="workshop">
+        <div class="grid three">
+          <div class="panel">
+            <h2>合成</h2>
+            <div id="crafting"></div>
+          </div>
+          <div class="panel">
+            <h2>装备</h2>
+            <div id="equipment"></div>
+          </div>
+          <div class="panel">
+            <h2>全局加成</h2>
+            <div id="upgrades"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-panel" data-panel="reports">
+        <div class="grid two">
+          <div class="panel">
+            <h2>战斗记录</h2>
+            <div id="battleLog" class="battle-log"></div>
+          </div>
+          <div class="panel">
+            <h2>操作轨迹</h2>
+            <div id="actionTimeline" class="timeline"></div>
+          </div>
+        </div>
+        <div class="panel">
+          <h2>事件</h2>
+          <div id="events" class="events"></div>
+        </div>
+      </div>
+    </main>
+
+    <div id="combatModal" class="modal-overlay" hidden>
+      <div class="modal">
+        <div class="modal-head">
+          <h2>选择交战目标</h2>
+          <button type="button" class="modal-close" onclick="closeCombatModal()">&times;</button>
+        </div>
+        <div id="modalHunts" class="modal-body"></div>
+        <div class="modal-foot">
+          <button id="modalEndTurn" type="button" class="btn-primary" onclick="endTurn()">结束回合</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="equipPopup" class="equip-popup" hidden></div>
+    <div id="toast" class="toast" hidden></div>
+    <script src="/app.js"></script>
+  </body>
+</html>
