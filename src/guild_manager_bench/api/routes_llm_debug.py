@@ -1,0 +1,122 @@
+from __future__ import annotations
+
+import asyncio
+from pathlib import Path
+from typing import Any, Mapping
+
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+
+from guild_manager_bench.bench.llm import (
+    LlmRunConfig,
+    OpenAIChatCompletionsAgent,
+    OpenAIChatCompletionsConfig,
+    run_llm_game,
+)
+from guild_manager_bench.bench.llm.prompts import DEFAULT_OBJECTIVE
+
+
+def llm_debug_router(data_dir: str | Path) -> APIRouter:
+    """创建 LLM 调试 WebSocket 路由。"""
+
+    router = APIRouter()
+
+    @router.websocket("/ws/llm/debug")
+    async def debug_llm(websocket: WebSocket) -> None:
+        await websocket.accept()
+        try:
+            request = await websocket.receive_json()
+            if request.get("type") != "start":
+                await websocket.send_json(
+                    {"type": "debug_error", "error": "first message must be start"}
+                )
+                return
+
+            loop = asyncio.get_running_loop()
+
+            def emit(event: dict[str, Any]) -> None:
+                future = asyncio.run_coroutine_threadsafe(websocket.send_json(event), loop)
+                future.result(timeout=10)
+
+            def run() -> None:
+                payload = request.get("payload", {})
+                if not isinstance(payload, Mapping):
+                    payload = {}
+                agent = OpenAIChatCompletionsAgent(
+                    OpenAIChatCompletionsConfig.from_env(
+                        model=_optional_string(payload, "model"),
+                        api_key=_optional_string(payload, "api_key"),
+                        base_url=_optional_string(payload, "base_url"),
+                        timeout=_float_value(payload, "timeout", 60.0),
+                        temperature=_optional_float(payload, "temperature"),
+                        max_tokens=_optional_int(payload, "max_tokens"),
+                    )
+                )
+                config = LlmRunConfig(
+                    objective=_string_value(payload, "objective", DEFAULT_OBJECTIVE),
+                    max_tool_calls_per_turn=_int_value(payload, "max_tool_calls_per_turn", 20),
+                    max_empty_responses=_int_value(payload, "max_empty_responses", 2),
+                    max_end_turn_attempts=_int_value(payload, "max_end_turn_attempts", 3),
+                    max_invalid_tool_responses=_int_value(payload, "max_invalid_tool_responses", 3),
+                    max_model_steps_per_turn=_int_value(payload, "max_model_steps_per_turn", 50),
+                )
+                run_llm_game(
+                    agent,
+                    data_dir=data_dir,
+                    session_id=_optional_string(payload, "session_id"),
+                    config=config,
+                    event_sink=emit,
+                )
+
+            await asyncio.to_thread(run)
+        except WebSocketDisconnect:
+            return
+        except Exception as exc:
+            try:
+                await websocket.send_json({"type": "debug_error", "error": str(exc)})
+            except RuntimeError:
+                return
+
+    return router
+
+
+def _optional_string(payload: Mapping[str, Any], key: str) -> str | None:
+    value = payload.get(key)
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
+def _string_value(payload: Mapping[str, Any], key: str, default: str) -> str:
+    return _optional_string(payload, key) or default
+
+
+def _int_value(payload: Mapping[str, Any], key: str, default: int) -> int:
+    value = payload.get(key)
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    if isinstance(value, str) and value.strip():
+        return int(value)
+    return default
+
+
+def _optional_int(payload: Mapping[str, Any], key: str) -> int | None:
+    value = payload.get(key)
+    if value in (None, ""):
+        return None
+    return _int_value(payload, key, 0)
+
+
+def _float_value(payload: Mapping[str, Any], key: str, default: float) -> float:
+    value = payload.get(key)
+    if isinstance(value, int | float) and not isinstance(value, bool):
+        return float(value)
+    if isinstance(value, str) and value.strip():
+        return float(value)
+    return default
+
+
+def _optional_float(payload: Mapping[str, Any], key: str) -> float | None:
+    value = payload.get(key)
+    if value in (None, ""):
+        return None
+    return _float_value(payload, key, 0.0)

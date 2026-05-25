@@ -24,6 +24,7 @@
         <button class="tab active" data-tab="squad">队伍</button>
         <button class="tab" data-tab="workshop">工坊</button>
         <button class="tab" data-tab="reports">战报</button>
+        <button class="tab" data-tab="llm">LLM</button>
       </nav>
 
       <div class="tab-panel active" data-panel="squad">
@@ -64,6 +65,66 @@
         <div class="panel">
           <h2>事件</h2>
           <div id="events" class="events"></div>
+        </div>
+      </div>
+
+      <div class="tab-panel" data-panel="llm">
+        <div class="llm-grid">
+          <div class="panel llm-config">
+            <h2>模型调试</h2>
+            <div class="llm-form">
+              <label>
+                <span>模型</span>
+                <input id="llmModel" type="text" placeholder="OPENAI_MODEL" autocomplete="off" />
+              </label>
+              <label>
+                <span>Base URL</span>
+                <input id="llmBaseUrl" type="text" placeholder="https://api.openai.com/v1" autocomplete="off" />
+              </label>
+              <label>
+                <span>API Key</span>
+                <input id="llmApiKey" type="password" placeholder="留空则使用服务端环境变量" autocomplete="off" />
+              </label>
+              <label>
+                <span>非 end_turn 预算</span>
+                <input id="llmMaxToolCalls" type="number" min="0" value="20" />
+              </label>
+              <label>
+                <span>Temperature</span>
+                <input id="llmTemperature" type="number" min="0" max="2" step="0.1" placeholder="默认" />
+              </label>
+              <label class="llm-wide">
+                <span>目标</span>
+                <textarea id="llmObjective" rows="3">最大化本局最终表现：尽量赢得战斗、提升队伍、积累有价值资源。</textarea>
+              </label>
+              <div class="llm-controls">
+                <button id="llmStartButton" type="button" class="btn-primary">开始真实模型调试</button>
+                <button id="llmStopButton" type="button" disabled>停止</button>
+              </div>
+            </div>
+            <div id="llmStatus" class="llm-status muted">未启动</div>
+          </div>
+
+          <div class="panel llm-context">
+            <h2>当前上下文</h2>
+            <pre id="llmPrompt" class="llm-pre">尚未开始</pre>
+          </div>
+        </div>
+
+        <div class="llm-grid lower">
+          <div class="panel">
+            <h2>模型输出</h2>
+            <div id="llmTranscript" class="llm-transcript"></div>
+          </div>
+          <div class="panel">
+            <h2>工具调用</h2>
+            <div id="llmToolTrace" class="llm-tool-trace"></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>调试事件</h2>
+          <div id="llmEventLog" class="llm-event-log"></div>
         </div>
       </div>
     </main>

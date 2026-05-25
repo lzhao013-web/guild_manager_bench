@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from guild_manager_bench.api.routes_actions import actions_router
+from guild_manager_bench.api.routes_llm_debug import llm_debug_router
 from guild_manager_bench.api.routes_sessions import sessions_router
 from guild_manager_bench.api.store import SessionStore
 from guild_manager_bench.api.websocket import SessionHub, websocket_router
@@ -22,6 +23,7 @@ def create_app(data_dir: str | Path = "data") -> FastAPI:
     app.include_router(sessions_router(store))
     app.include_router(actions_router(store, hub))
     app.include_router(websocket_router(store, hub))
+    app.include_router(llm_debug_router(data_dir))
 
     static_dir = _static_dir()
     if static_dir.exists():
@@ -35,4 +37,3 @@ def _static_dir() -> Path:
 
 
 app = create_app()
-
