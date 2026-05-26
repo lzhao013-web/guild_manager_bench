@@ -1,0 +1,72 @@
+equipment:
+  - id: iron_sword
+    name: 铁剑
+    slot: main_hand
+    stats:
+      attack: 10
+
+  - id: oak_shield
+    name: 橡木盾
+    slot: off_hand
+    stats:
+      hp: 15
+      defense: 5
+
+  - id: hunter_bow
+    name: 猎人长弓
+    slot: two_hand
+    stats:
+      attack: 16
+      speed: 3
+    skills:
+      - id: opening_shot
+        name: 开场射击
+        kind: active
+        priority: 200
+        once_per_battle: true
+        condition:
+          type: target_hp_pct_gte
+          value: 0.8
+        effects:
+          - type: damage_multiplier
+            value: 2.0
+
+  - id: leather_armor
+    name: 皮甲
+    slot: armor
+    stats:
+      hp: 25
+      defense: 4
+
+  - id: iron_helmet
+    name: 铁盔
+    slot: helmet
+    stats:
+      hp: 12
+      defense: 3
+
+  - id: swift_boots
+    name: 迅捷靴
+    slot: boots
+    stats:
+      speed: 4
+      recovery: 2
+
+  - id: focus_charm
+    name: 专注护符
+    slot: accessory
+    stats:
+      mp: 10
+      attack: 3
+    skills:
+      - id: focus_burst
+        name: 专注爆发
+        kind: passive
+        condition:
+          type: self_hp_pct_gte
+          value: 0.8
+        effects:
+          - type: stat_bonus
+            stat: attack
+            value: 5
+            target: self

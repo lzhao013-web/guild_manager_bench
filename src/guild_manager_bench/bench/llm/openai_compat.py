@@ -254,11 +254,15 @@ class OpenAIChatCompletionsAgent:
 
         body = self._request_body(messages, tools)
         body["stream"] = True
+        if "stream_options" not in body:
+            body["stream_options"] = {"include_usage": True}
         content_parts: list[str] = []
         reasoning_content_parts: list[str] = []
         has_reasoning_content = False
         tool_call_parts: dict[int, dict[str, Any]] = {}
-        chunks: list[Mapping[str, Any]] = []
+        chunk_count = 0
+        usage: dict[str, Any] = {}
+        finish_reason: str | None = None
 
         for chunk in self._stream_transport(
             self._chat_completions_url(),
@@ -266,7 +270,13 @@ class OpenAIChatCompletionsAgent:
             body,
             self.config.timeout,
         ):
-            chunks.append(chunk)
+            chunk_count += 1
+            chunk_usage = _usage_from_response(chunk)
+            if chunk_usage:
+                usage = chunk_usage
+            chunk_finish_reason = _finish_reason_from_chunk(chunk)
+            if chunk_finish_reason is not None:
+                finish_reason = chunk_finish_reason
             delta = _first_delta(chunk)
             if not delta:
                 continue
@@ -278,6 +288,8 @@ class OpenAIChatCompletionsAgent:
             if isinstance(reasoning_content, str):
                 has_reasoning_content = True
                 reasoning_content_parts.append(reasoning_content)
+                if reasoning_content:
+                    _emit(event_sink, "model_reasoning_delta", text=reasoning_content)
 
             for item in delta.get("tool_calls") or ():
                 if not isinstance(item, Mapping):
@@ -322,7 +334,18 @@ class OpenAIChatCompletionsAgent:
             "model_stream_completed",
             text=text,
             tool_calls=[call.to_dict() for call in tool_calls],
+            usage=usage,
+            chunk_count=chunk_count,
+            finish_reason=finish_reason,
         )
+        raw: dict[str, Any] = {
+            "stream": True,
+            "chunk_count": chunk_count,
+        }
+        if finish_reason is not None:
+            raw["finish_reason"] = finish_reason
+        if usage:
+            raw["usage"] = usage
         return LlmAgentResponse(
             text=text,
             tool_calls=tuple(tool_calls),
@@ -331,7 +354,8 @@ class OpenAIChatCompletionsAgent:
                 if has_reasoning_content
                 else {}
             ),
-            raw={"chunks": [dict(chunk) for chunk in chunks]},
+            usage=usage,
+            raw=raw,
         )
 
     def _request_body(
@@ -438,6 +462,7 @@ def _parse_chat_completion_response(response: Mapping[str, Any]) -> LlmAgentResp
         text=content,
         tool_calls=tuple(tool_calls),
         assistant_metadata=_assistant_metadata_from_openai_message(message),
+        usage=_usage_from_response(response),
         raw=dict(response),
     )
 
@@ -448,6 +473,19 @@ def _first_delta(chunk: Mapping[str, Any]) -> Mapping[str, Any] | None:
         return None
     delta = choices[0].get("delta")
     return delta if isinstance(delta, Mapping) else None
+
+
+def _finish_reason_from_chunk(chunk: Mapping[str, Any]) -> str | None:
+    choices = chunk.get("choices")
+    if not isinstance(choices, list) or not choices:
+        return None
+    finish_reason = choices[0].get("finish_reason")
+    return finish_reason if isinstance(finish_reason, str) else None
+
+
+def _usage_from_response(response: Mapping[str, Any]) -> dict[str, Any]:
+    usage = response.get("usage")
+    return dict(usage) if isinstance(usage, Mapping) else {}
 
 
 def _assistant_metadata_from_openai_message(

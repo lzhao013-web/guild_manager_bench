@@ -8,15 +8,15 @@ from threading import RLock
 from typing import Any, Callable, Mapping, Sequence
 from uuid import uuid4
 
-from guild_manager_bench.game.engine import GameError
+from guild_manager_bench.game.engine import GameError, preview_battle as preview_battle_result
 from guild_manager_bench.game.loader import load_game_definition
-from guild_manager_bench.game.state import GameDefinition
+from guild_manager_bench.game.models import CombatResources
+from guild_manager_bench.game.state import GameDefinition, GameState
 from guild_manager_bench.runtime.action_codec import (
     ActionCodecError,
     decode_end_turn_action,
     decode_preparation_action,
 )
-from guild_manager_bench.runtime.events import event_to_dict
 from guild_manager_bench.runtime.session import GameSession
 
 
@@ -30,10 +30,13 @@ def create_toolbox(data_dir: str | Path = "data") -> GuildManagerTools:
     return GuildManagerTools(load_game_definition(data_dir))
 
 
-def tool_schemas() -> list[dict[str, Any]]:
+def tool_schemas(*, expose_battle_preview: bool = False) -> list[dict[str, Any]]:
     """返回可注册到 LLM agent 框架的工具 JSON Schema。"""
 
-    return deepcopy(_TOOL_SCHEMAS)
+    schemas = list(_BASE_TOOL_SCHEMAS)
+    if expose_battle_preview:
+        schemas.append(_BATTLE_PREVIEW_SCHEMA)
+    return deepcopy(schemas)
 
 
 class GuildManagerTools:
@@ -58,7 +61,9 @@ class GuildManagerTools:
     def list_tool_schemas(self) -> list[dict[str, Any]]:
         """返回当前工具层支持的工具 schema。"""
 
-        return tool_schemas()
+        return tool_schemas(
+            expose_battle_preview=self.definition.llm_tools.expose_battle_preview
+        )
 
     def call_tool(
         self,
@@ -99,6 +104,14 @@ class GuildManagerTools:
         with self._lock:
             session = self._get_session(session_id)
             return {"session_id": session.session_id, "observation": session.observation()}
+
+    def get_state(self, session_id: str) -> GameState:
+        """读取内部状态，供 benchmark harness 做离线评估。"""
+
+        with self._lock:
+            session = self._get_session(session_id)
+            assert session.state is not None
+            return session.state
 
     def craft_equipment(self, session_id: str, recipe_id: str) -> dict[str, Any]:
         """按配方合成一件装备。"""
@@ -188,13 +201,15 @@ class GuildManagerTools:
 
             return {
                 "ok": True,
-                "event": event_to_dict(event),
+                "event": _compact_event(event),
                 "turn_result": {
-                    "battles": event.payload["battles"],
+                    "battles": [
+                        _compact_battle(battle)
+                        for battle in event.payload["battles"]
+                    ],
                     "crafted_equipment_ids": list(result.crafted_equipment_ids),
                     "purchased_upgrade_ids": list(result.purchased_upgrade_ids),
                 },
-                "observation": session.observation(),
             }
 
     def get_events(
@@ -219,7 +234,35 @@ class GuildManagerTools:
                 ]
             return {
                 "session_id": session.session_id,
-                "events": [event_to_dict(event) for event in events],
+                "events": [_compact_event(event) for event in events],
+            }
+
+    def preview_battle(
+        self,
+        session_id: str,
+        adventurer_id: str,
+        monster_id: str,
+    ) -> dict[str, Any]:
+        """预览一场 1v1 战斗，不推进会话状态。"""
+
+        with self._lock:
+            session = self._get_session(session_id)
+            assert session.state is not None
+            try:
+                battle = preview_battle_result(
+                    session.definition,
+                    session.state,
+                    adventurer_id=adventurer_id,
+                    monster_id=monster_id,
+                )
+            except (GameError, ValueError, TypeError) as exc:
+                return {"ok": False, "error": str(exc)}
+            return {
+                "ok": True,
+                "preview": _battle_preview(
+                    session.state,
+                    battle,
+                ),
             }
 
     def _submit_preparation(
@@ -236,8 +279,7 @@ class GuildManagerTools:
                 return _error_response(session, event, str(exc))
             return {
                 "ok": True,
-                "event": event_to_dict(event),
-                "observation": session.observation(),
+                "event": _compact_event(event),
             }
 
     def _get_session(self, session_id: str) -> GameSession:
@@ -251,17 +293,124 @@ class GuildManagerTools:
     def _handler(self, name: str) -> Callable[..., dict[str, Any]]:
         if not _non_empty_string(name):
             raise ToolCallError("tool name must be a non-empty string")
-        if name not in _HANDLER_NAMES:
+        handler_names = self._handler_names()
+        if name not in handler_names:
             raise ToolCallError(f"unknown tool: {name}")
-        return getattr(self, _HANDLER_NAMES[name])
+        return getattr(self, handler_names[name])
+
+    def _handler_names(self) -> dict[str, str]:
+        names = dict(_BASE_HANDLER_NAMES)
+        if self.definition.llm_tools.expose_battle_preview:
+            names["preview_battle"] = "preview_battle"
+        return names
 
 
 def _session_snapshot(session: GameSession) -> dict[str, Any]:
     return {
         "session_id": session.session_id,
         "observation": session.observation(),
-        "events": [event_to_dict(event) for event in session.events],
+        "events": [_compact_event(event) for event in session.events],
     }
+
+
+def _compact_event(event) -> dict[str, Any]:
+    payload = dict(event.payload)
+    data: dict[str, Any] = {
+        "sequence": event.sequence,
+        "turn": event.turn,
+        "type": event.event_type,
+        "summary": payload.get("summary", ""),
+    }
+    if "action" in payload:
+        data["action"] = payload["action"]
+    if "error" in payload:
+        data["error"] = payload["error"]
+    if "changes" in payload:
+        data["changes"] = list(payload["changes"])
+    if "battles" in payload:
+        data["battles"] = [_compact_battle(battle) for battle in payload["battles"]]
+    return data
+
+
+def _compact_battle(battle: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "adventurer_id": battle.get("adventurer_id"),
+        "adventurer_name": battle.get("adventurer_name"),
+        "monster_id": battle.get("monster_id"),
+        "monster_name": battle.get("monster_name"),
+        "won": battle.get("won"),
+        "reward": dict(battle.get("reward", {})),
+    }
+
+
+def _battle_preview(state, battle) -> dict[str, Any]:
+    adventurer = _adventurer_by_id(state, battle.adventurer_id)
+    monster = _monster_by_id(state, battle.monster_id)
+    result = battle.combat_result
+    return {
+        "adventurer_id": battle.adventurer_id,
+        "adventurer_name": adventurer.name,
+        "monster_id": battle.monster_id,
+        "monster_name": monster.name,
+        "won": battle.won,
+        "outcome": result.outcome,
+        "reason": result.reason,
+        "actions_taken": result.actions_taken,
+        "time_elapsed": result.time_elapsed,
+        "adventurer_resources": {
+            "before": _resources_to_dict(adventurer.resources),
+            "after": _resources_to_dict(result.left_resources),
+        },
+        "monster_resources": {
+            "before": _resources_to_dict(CombatResources.full(monster.stats)),
+            "after": _resources_to_dict(result.right_resources),
+        },
+        "reward": {
+            "gold": battle.reward.gold,
+            "experience": battle.reward.experience,
+            "materials": dict(battle.reward.materials),
+        },
+        "events": [
+            _compact_combat_event(event)
+            for event in result.events
+        ],
+    }
+
+
+def _resources_to_dict(resources: CombatResources) -> dict[str, int]:
+    return {
+        "current_hp": resources.current_hp,
+        "current_mp": resources.current_mp,
+    }
+
+
+def _compact_combat_event(event) -> dict[str, Any]:
+    return {
+        "action_index": event.action_index,
+        "time_elapsed": event.time_elapsed,
+        "action_type": event.action_type,
+        "actor_id": event.actor_id,
+        "target_id": event.target_id,
+        "damage": event.damage,
+        "target_hp": event.target_hp,
+        "skill_id": event.skill_id,
+        "healing": event.healing,
+        "healing_target_hp": event.healing_target_hp,
+    }
+
+
+def _adventurer_by_id(state, adventurer_id: str):
+    for adventurer in state.adventurers:
+        if adventurer.adventurer_id == adventurer_id:
+            return adventurer
+    raise ToolCallError(f"unknown adventurer: {adventurer_id}")
+
+
+def _monster_by_id(state, monster_id: str):
+    for monster in state.current_monsters:
+        if monster.monster_id == monster_id:
+            return monster
+    raise ToolCallError(f"unknown monster: {monster_id}")
 
 
 def _error_response(
@@ -272,8 +421,7 @@ def _error_response(
     return {
         "ok": False,
         "error": error,
-        "event": event_to_dict(event),
-        "observation": session.observation(),
+        "event": _compact_event(event),
     }
 
 
@@ -281,7 +429,7 @@ def _non_empty_string(value: object) -> bool:
     return isinstance(value, str) and bool(value)
 
 
-_HANDLER_NAMES = {
+_BASE_HANDLER_NAMES = {
     "get_observation": "get_observation",
     "craft_equipment": "craft_equipment",
     "purchase_upgrade": "purchase_upgrade",
@@ -307,7 +455,7 @@ _MONSTER_ID = {
 }
 
 
-_TOOL_SCHEMAS: list[dict[str, Any]] = [
+_BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
     {
         "name": "get_observation",
         "description": "读取一个会话的完整可见状态。",
@@ -452,4 +600,22 @@ _TOOL_SCHEMAS: list[dict[str, Any]] = [
             "additionalProperties": False,
         },
     },
-]
+)
+
+
+_BATTLE_PREVIEW_SCHEMA: dict[str, Any] = {
+    "name": "preview_battle",
+    "description": (
+        "预览一场单独的 1v1 战斗，不改变状态；每次只能传入一个冒险者和一个怪物。"
+    ),
+    "parameters": {
+        "type": "object",
+        "required": ["session_id", "adventurer_id", "monster_id"],
+        "properties": {
+            "session_id": _SESSION_ID,
+            "adventurer_id": _ADVENTURER_ID,
+            "monster_id": _MONSTER_ID,
+        },
+        "additionalProperties": False,
+    },
+}

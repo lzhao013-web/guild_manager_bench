@@ -237,6 +237,47 @@ class GameRules:
 
 
 @dataclass(frozen=True, slots=True)
+class LlmToolRules:
+    """LLM tool-use exposure switches for a data preset."""
+
+    expose_battle_preview: bool = False
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.expose_battle_preview, bool):
+            raise TypeError("expose_battle_preview must be a bool")
+
+
+@dataclass(frozen=True, slots=True)
+class ScoringRules:
+    """终局评分使用的离线 Arena 模拟配置。"""
+
+    mode: str = "endgame_arena"
+    seed: int = 20260526
+    waves: int = 256
+    wave_size: int = 6
+    difficulty_factors: tuple[int, ...] = (8, 10, 12, 14)
+    resource_mode: str = "full"
+    aggregation: str = "best_assignment"
+
+    def __post_init__(self) -> None:
+        if self.mode != "endgame_arena":
+            raise ValueError("scoring.mode must be endgame_arena")
+        if not isinstance(self.seed, int):
+            raise TypeError("scoring.seed must be an int")
+        _require_at_least("scoring.waves", self.waves, 1)
+        _require_at_least("scoring.wave_size", self.wave_size, 1)
+        object.__setattr__(self, "difficulty_factors", tuple(self.difficulty_factors))
+        if not self.difficulty_factors:
+            raise ValueError("scoring.difficulty_factors must not be empty")
+        for factor in self.difficulty_factors:
+            _require_at_least("scoring.difficulty_factors", factor, 0)
+        if self.resource_mode not in {"full", "current"}:
+            raise ValueError("scoring.resource_mode must be full or current")
+        if self.aggregation != "best_assignment":
+            raise ValueError("scoring.aggregation must be best_assignment")
+
+
+@dataclass(frozen=True, slots=True)
 class GameDefinition:
     """创建和推进一局游戏所需的静态定义。"""
 
@@ -244,12 +285,18 @@ class GameDefinition:
     rules: GameRules
     starting_gold: int = 0
     starting_materials: Mapping[str, int] = field(default_factory=dict)
+    llm_tools: LlmToolRules = field(default_factory=LlmToolRules)
+    scoring: ScoringRules = field(default_factory=ScoringRules)
 
     def __post_init__(self) -> None:
         if not isinstance(self.content, GameContent):
             raise TypeError("content must be GameContent")
         if not isinstance(self.rules, GameRules):
             raise TypeError("rules must be GameRules")
+        if not isinstance(self.llm_tools, LlmToolRules):
+            raise TypeError("llm_tools must be LlmToolRules")
+        if not isinstance(self.scoring, ScoringRules):
+            raise TypeError("scoring must be ScoringRules")
         _require_at_least("starting_gold", self.starting_gold, 0)
         object.__setattr__(
             self,

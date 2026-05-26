@@ -137,7 +137,12 @@ def test_openai_agent_sends_chat_completion_request_and_parses_tool_call() -> No
                         ],
                     }
                 }
-            ]
+            ],
+            "usage": {
+                "prompt_tokens": 10,
+                "completion_tokens": 4,
+                "total_tokens": 14,
+            },
         }
 
     agent = OpenAIChatCompletionsAgent(
@@ -173,6 +178,11 @@ def test_openai_agent_sends_chat_completion_request_and_parses_tool_call() -> No
     assert response.tool_calls == (
         LlmToolCall("end_turn", {"hunts": []}, call_id="call_abc"),
     )
+    assert response.usage == {
+        "prompt_tokens": 10,
+        "completion_tokens": 4,
+        "total_tokens": 14,
+    }
 
 
 def test_openai_message_conversion_preserves_tool_call_ids() -> None:
@@ -277,6 +287,7 @@ def test_openai_streaming_response_emits_deltas_and_accumulates_tool_call() -> N
         timeout: float,
     ):
         assert body["stream"] is True
+        assert body["stream_options"] == {"include_usage": True}
         yield {"choices": [{"delta": {"reasoning_content": "先看状态。"}}]}
         yield {"choices": [{"delta": {"content": "计划"}}]}
         yield {
@@ -314,6 +325,14 @@ def test_openai_streaming_response_emits_deltas_and_accumulates_tool_call() -> N
                 }
             ]
         }
+        yield {
+            "choices": [{"delta": {}, "finish_reason": "tool_calls"}],
+            "usage": {
+                "prompt_tokens": 20,
+                "completion_tokens": 8,
+                "total_tokens": 28,
+            },
+        }
 
     agent = OpenAIChatCompletionsAgent(
         OpenAIChatCompletionsConfig(model="test-model"),
@@ -331,8 +350,26 @@ def test_openai_streaming_response_emits_deltas_and_accumulates_tool_call() -> N
         LlmToolCall("end_turn", {"hunts": []}, call_id="call_stream"),
     )
     assert response.assistant_metadata == {"reasoning_content": "先看状态。"}
-    assert events[0] == {"type": "model_delta", "text": "计划"}
+    assert response.usage == {
+        "prompt_tokens": 20,
+        "completion_tokens": 8,
+        "total_tokens": 28,
+    }
+    assert response.raw == {
+        "stream": True,
+        "chunk_count": 5,
+        "finish_reason": "tool_calls",
+        "usage": {
+            "prompt_tokens": 20,
+            "completion_tokens": 8,
+            "total_tokens": 28,
+        },
+    }
+    assert events[0] == {"type": "model_reasoning_delta", "text": "先看状态。"}
+    assert events[1] == {"type": "model_delta", "text": "计划"}
     assert events[-1]["type"] == "model_stream_completed"
+    assert events[-1]["usage"]["total_tokens"] == 28
+    assert events[-1]["chunk_count"] == 5
 
 
 def test_runner_messages_are_accepted_by_openai_agent_shape() -> None:

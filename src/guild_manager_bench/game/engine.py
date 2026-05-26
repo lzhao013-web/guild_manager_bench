@@ -207,6 +207,27 @@ def end_turn(
     )
 
 
+def preview_battle(
+    definition: GameDefinition,
+    state: GameState,
+    *,
+    adventurer_id: str,
+    monster_id: str,
+) -> BattleSettlement:
+    """Preview one 1v1 hunt without changing game state."""
+
+    _validate_definition(definition)
+    _validate_state(state)
+    if is_finished(state):
+        raise GameError("game is already finished")
+    _, battle = _apply_hunt_action(
+        definition,
+        state,
+        HuntAction(adventurer_id=adventurer_id, monster_id=monster_id),
+    )
+    return battle
+
+
 def spawn_monsters(definition: GameDefinition, turn: int) -> tuple[SpawnedMonster, ...]:
     """刷新指定回合的怪物。"""
 

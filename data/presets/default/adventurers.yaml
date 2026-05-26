@@ -1,0 +1,78 @@
+adventurers:
+  - id: vanguard
+    name: 先锋
+    stats:
+      hp: 120
+      mp: 10
+      attack: 16
+      defense: 9
+      speed: 9
+      recovery: 6
+    skills:
+      - id: shield_stance
+        name: 守势
+        kind: passive
+        condition:
+          type: self_hp_pct_lte
+          value: 0.5
+        effects:
+          - type: stat_bonus
+            stat: defense
+            value: 6
+            target: self
+
+  - id: striker
+    name: 游击手
+    stats:
+      hp: 90
+      mp: 18
+      attack: 22
+      defense: 5
+      speed: 14
+      recovery: 4
+    skills:
+      - id: power_strike
+        name: 强力打击
+        kind: active
+        priority: 100
+        mp_cost: 5
+        condition:
+          type: target_hp_pct_gte
+          value: 0.4
+        effects:
+          - type: damage_multiplier
+            value: 1.8
+
+  - id: mystic
+    name: 秘术师
+    stats:
+      hp: 80
+      mp: 28
+      attack: 17
+      defense: 4
+      speed: 11
+      recovery: 5
+    skills:
+      - id: emergency_heal
+        name: 应急治疗
+        kind: active
+        priority: 150
+        mp_cost: 8
+        condition:
+          type: self_hp_pct_lte
+          value: 0.45
+        effects:
+          - type: heal
+            value: 28
+            target: self
+      - id: arcane_focus
+        name: 奥术专注
+        kind: passive
+        condition:
+          type: self_hp_pct_gte
+          value: 0.7
+        effects:
+          - type: stat_multiplier
+            stat: attack
+            value: 1.2
+            target: self

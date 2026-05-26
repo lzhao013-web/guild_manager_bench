@@ -40,6 +40,8 @@ def test_game_session_applies_actions_and_builds_observation() -> None:
     assert event.payload["summary"] == "合成 打造铁剑"
     assert any(change["label"] == "获得装备" for change in event.payload["changes"])
     assert observation["session_id"] == session.session_id
+    assert observation["seed"] == definition.rules.seed
+    assert observation["scoring"]["seed"] == definition.scoring.seed
     assert observation["equipment_inventory"][0]["template_id"] == "iron_sword"
     assert observation["crafting_recipes"][0]["can_craft"] is False
     assert observation["adventurers"][0]["next_level"]["remaining"] > 0

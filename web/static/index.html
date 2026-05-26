@@ -13,62 +13,68 @@
         <div id="sessionMeta" class="muted">未连接</div>
       </div>
       <div class="topbar-actions">
+        <div class="mode-switch" aria-label="界面模式">
+          <button class="mode-button active" type="button" data-mode="manual">人工操作</button>
+          <button class="mode-button" type="button" data-mode="llm">LLM 调试</button>
+        </div>
         <button id="newSessionButton" type="button">新会话</button>
       </div>
     </header>
 
     <main class="layout">
-      <section class="band" id="overview"></section>
+      <section class="mode-panel active" data-mode-panel="manual">
+        <section class="band" id="overview"></section>
 
-      <nav class="tabs" id="tabBar">
-        <button class="tab active" data-tab="squad">队伍</button>
-        <button class="tab" data-tab="workshop">工坊</button>
-        <button class="tab" data-tab="reports">战报</button>
-        <button class="tab" data-tab="llm">LLM</button>
-      </nav>
+        <nav class="tabs" id="tabBar">
+          <button class="tab active" data-tab="squad">队伍</button>
+          <button class="tab" data-tab="workshop">工坊</button>
+          <button class="tab" data-tab="reports">战报</button>
+        </nav>
 
-      <div class="tab-panel active" data-panel="squad">
-        <div class="panel">
-          <h2>冒险者</h2>
-          <div id="adventurers"></div>
-        </div>
-      </div>
-
-      <div class="tab-panel" data-panel="workshop">
-        <div class="grid three">
+        <div class="tab-panel active" data-panel="squad">
           <div class="panel">
-            <h2>合成</h2>
-            <div id="crafting"></div>
-          </div>
-          <div class="panel">
-            <h2>装备</h2>
-            <div id="equipment"></div>
-          </div>
-          <div class="panel">
-            <h2>全局加成</h2>
-            <div id="upgrades"></div>
+            <h2>冒险者</h2>
+            <div id="adventurers"></div>
           </div>
         </div>
-      </div>
 
-      <div class="tab-panel" data-panel="reports">
-        <div class="grid two">
-          <div class="panel">
-            <h2>战斗记录</h2>
-            <div id="battleLog" class="battle-log"></div>
-          </div>
-          <div class="panel">
-            <h2>操作轨迹</h2>
-            <div id="actionTimeline" class="timeline"></div>
+        <div class="tab-panel" data-panel="workshop">
+          <div class="grid three">
+            <div class="panel">
+              <h2>合成</h2>
+              <div id="crafting"></div>
+            </div>
+            <div class="panel">
+              <h2>装备</h2>
+              <div id="equipment"></div>
+            </div>
+            <div class="panel">
+              <h2>全局加成</h2>
+              <div id="upgrades"></div>
+            </div>
           </div>
         </div>
-        <div class="panel">
-          <h2>事件</h2>
-          <div id="events" class="events"></div>
-        </div>
-      </div>
 
-      <div class="tab-panel" data-panel="llm">
+        <div class="tab-panel" data-panel="reports">
+          <div class="grid two">
+            <div class="panel">
+              <h2>战斗记录</h2>
+              <div id="battleLog" class="battle-log"></div>
+            </div>
+            <div class="panel">
+              <h2>操作轨迹</h2>
+              <div id="actionTimeline" class="timeline"></div>
+            </div>
+          </div>
+          <div class="panel">
+            <h2>事件</h2>
+            <div id="events" class="events"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="mode-panel" data-mode-panel="llm">
+        <div class="llm-page">
         <div class="llm-grid">
           <div class="panel llm-config">
             <h2>模型调试</h2>
@@ -88,6 +94,14 @@
               <label>
                 <span>非 end_turn 预算</span>
                 <input id="llmMaxToolCalls" type="number" min="0" value="20" />
+              </label>
+              <label>
+                <span>游戏 Seed</span>
+                <input id="llmGameSeed" type="number" step="1" placeholder="默认 game.yaml" />
+              </label>
+              <label>
+                <span>评分 Seed</span>
+                <input id="llmScoringSeed" type="number" step="1" placeholder="默认 scoring.seed" />
               </label>
               <label>
                 <span>Temperature</span>
@@ -113,7 +127,7 @@
 
         <div class="llm-grid lower">
           <div class="panel">
-            <h2>模型输出</h2>
+            <h2>模型行为</h2>
             <div id="llmTranscript" class="llm-transcript"></div>
           </div>
           <div class="panel">
@@ -126,7 +140,26 @@
           <h2>调试事件</h2>
           <div id="llmEventLog" class="llm-event-log"></div>
         </div>
-      </div>
+
+        <div class="panel">
+          <div class="section-head">
+            <h2>Replay 回放</h2>
+            <div class="llm-controls compact">
+              <button id="llmReplayRefreshButton" type="button">刷新归档</button>
+              <select id="llmReplaySelect" aria-label="选择 LLM replay"></select>
+              <button id="llmReplayLoadButton" type="button">加载归档</button>
+              <button id="llmReplayResumeButton" type="button">继续运行</button>
+              <label class="file-button">
+                打开 replay.json
+                <input id="llmReplayFile" type="file" accept="application/json,.json" />
+              </label>
+            </div>
+          </div>
+          <div id="llmReplayStatus" class="llm-status muted">尚未加载 replay</div>
+          <div id="llmReplayView" class="llm-replay"></div>
+        </div>
+        </div>
+      </section>
     </main>
 
     <div id="combatModal" class="modal-overlay" hidden>
@@ -142,8 +175,21 @@
       </div>
     </div>
 
+    <div id="modelPromptModal" class="modal-overlay" hidden>
+      <div class="modal modal-wide">
+        <div class="modal-head">
+          <h2>完整输入 prompt</h2>
+          <button type="button" class="modal-close" onclick="closeModelPromptModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div id="modelPromptMeta" class="small muted"></div>
+          <pre id="modelPromptContent" class="llm-pre model-prompt-pre"></pre>
+        </div>
+      </div>
+    </div>
+
     <div id="equipPopup" class="equip-popup" hidden></div>
     <div id="toast" class="toast" hidden></div>
-    <script src="/app.js"></script>
+    <script src="/app.js?v=20260526-thinking-stream-toggle"></script>
   </body>
 </html>

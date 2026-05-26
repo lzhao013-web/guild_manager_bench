@@ -16,9 +16,11 @@ from guild_manager_bench.game.state import (
     GameDefinition,
     GameRules,
     IntCurve,
+    LlmToolRules,
     MonsterArchetype,
     MonsterSpawnRules,
     RewardBundle,
+    ScoringRules,
     TurnRecoveryRules,
 )
 from guild_manager_bench.game.upgrades import GlobalUpgrade
@@ -55,6 +57,8 @@ def load_game_definition(data_dir: str | Path) -> GameDefinition:
         rules=rules,
         starting_gold=_int(starting.get("gold", 0), "starting.gold"),
         starting_materials=_int_mapping(starting.get("materials", {}), "starting.materials"),
+        llm_tools=_parse_llm_tool_rules(_mapping(game_data.get("llm", {}), "llm")),
+        scoring=_parse_scoring_rules(_mapping(game_data.get("scoring", {}), "scoring")),
     )
 
 
@@ -189,6 +193,31 @@ def _parse_turn_recovery(data: Mapping[str, Any]) -> TurnRecoveryRules:
             data.get("use_recovery_stat", True),
             "rules.turn_recovery.use_recovery_stat",
         ),
+    )
+
+
+def _parse_llm_tool_rules(data: Mapping[str, Any]) -> LlmToolRules:
+    return LlmToolRules(
+        expose_battle_preview=_bool(
+            data.get("expose_battle_preview", False),
+            "llm.expose_battle_preview",
+        ),
+    )
+
+
+def _parse_scoring_rules(data: Mapping[str, Any]) -> ScoringRules:
+    difficulty_values = data.get("difficulty_factors", (8, 10, 12, 14))
+    return ScoringRules(
+        mode=_str(data.get("mode", "endgame_arena"), "scoring.mode"),
+        seed=_int(data.get("seed", 20260526), "scoring.seed"),
+        waves=_int(data.get("waves", 256), "scoring.waves"),
+        wave_size=_int(data.get("wave_size", 6), "scoring.wave_size"),
+        difficulty_factors=tuple(
+            _int(value, f"scoring.difficulty_factors[{index}]")
+            for index, value in enumerate(_list(difficulty_values, "scoring.difficulty_factors"))
+        ),
+        resource_mode=_str(data.get("resource_mode", "full"), "scoring.resource_mode"),
+        aggregation=_str(data.get("aggregation", "best_assignment"), "scoring.aggregation"),
     )
 
 

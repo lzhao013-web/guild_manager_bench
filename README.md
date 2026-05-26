@@ -17,7 +17,8 @@
 ## 项目结构
 
 ```text
-data/                         游戏数据 YAML
+data/                         游戏数据 YAML 和 presets
+  presets/default/            默认游戏配置 preset
 src/guild_manager_bench/
   game/                       纯游戏核心
   runtime/                    会话、观察、事件、动作编解码
@@ -60,6 +61,52 @@ http://127.0.0.1:8000/
 ```text
 http://127.0.0.1:8000/?session=<session_id>&watch=1
 ```
+
+## 数据 Preset
+
+推荐把可比较的游戏配置放在完整目录 preset 中：
+
+```text
+data/presets/<preset_name>/
+  game.yaml
+  adventurers.yaml
+  monsters.yaml
+  equipment.yaml
+  crafting_recipes.yaml
+  global_upgrades.yaml
+```
+
+当前内置 `data/presets/default/`。启动时可以选择 preset：
+
+```powershell
+uv run guild-manager serve --preset default --host 127.0.0.1 --port 8000
+```
+
+不传 `--preset` 时仍会读取顶层 `data/*.yaml`，用于兼容旧流程。LLM 留档会在 `replay.json` 顶层记录 `data.preset`、`data.data_dir` 和 `data.data_hash`；续跑时如果旧 replay 记录了 hash 且当前数据不一致，会拒绝恢复，避免用不同规则继续同一局。
+
+Preset 可以在 `game.yaml` 中控制 LLM 专用工具暴露：
+
+```yaml
+llm:
+  expose_battle_preview: false
+```
+
+开启后，LLM harness 会额外注册 `preview_battle`。该工具每次只能预览一名冒险者和一个怪物的 1v1 战斗，不改变游戏状态，但会消耗一次非 `end_turn` 工具预算。
+
+Preset 也可以在 `game.yaml` 中配置终局评分。默认评分器会在游戏结束后生成固定 Arena 波次，模拟大量 1v1 战斗，并按队伍在每波中的最优分配聚合为 0-100 分：
+
+```yaml
+scoring:
+  mode: endgame_arena
+  seed: 20260526
+  waves: 1000
+  wave_size: 6
+  difficulty_factors: [8, 10, 12, 14]
+  resource_mode: full
+  aggregation: best_assignment
+```
+
+评分结果会写入 `run.score` 和 `replay.json` 顶层 `score` 字段。
 
 ## HTTP 接口概览
 
@@ -109,6 +156,7 @@ ws://127.0.0.1:8000/ws/sessions/{session_id}
 ## LLM Benchmark 工具协议
 
 LLM benchmark 使用 `bench/llm` 下的纯 Python 强类型工具层。工具层只提供状态查询和动作执行，不包含合法动作枚举、推荐、估值或自动配队逻辑；回合预算、提示词和模型调用循环应放在 harness 中。
+动作类工具返回精简变更摘要，不会自动返回完整状态；模型需要完整状态时应主动调用 `get_observation`。
 
 ```python
 from guild_manager_bench.bench.llm import GuildManagerTools
@@ -182,6 +230,17 @@ run = run_llm_game(agent, data_dir="data")
 
 可视化页面的 `LLM` 标签页提供真实模型调试界面，会通过 `/ws/llm/debug` 展示每回合上下文、流式模型输出、工具调用、工具返回和调试事件。
 
+启动 LLM 调试时可以填写 `游戏 Seed` 和 `评分 Seed`，它们只覆盖本次 run，不会改写 YAML。留空时使用当前 preset 的 `rules.seed` 和 `scoring.seed`。归档会记录实际使用的 `data.game_seed` 和 `data.scoring_seed`；续跑时如果 seed 不一致会拒绝恢复。
+
+LLM run 默认会自动留档到 `runs/llm/<timestamp>_<session_id>/`，该目录已被 `.gitignore` 忽略。run 开始时就会创建目录，过程中增量写入两份文件：
+
+- `trace.jsonl`：完整调用链路，每个事件追加一行，包含模型请求 messages/tools、最终模型响应 raw payload、assistant metadata、工具调用参数和工具返回；流式输出只记录最终聚合结果，不逐 chunk 留档。
+- `replay.json`：精简回放流程，原子覆盖更新，保留 turn prompt、assistant 输出、tool call/result 和 retry prompt，足以复原 LLM 的游戏操作过程。顶层 `status` 会从 `running` 更新到 `completed`、`failed` 或 `interrupted`；完成后还会写入终局 `score`。
+
+如需关闭留档，可在代码里传入 `LlmRunConfig(archive_dir=None)`。
+
+可视化页面的 `LLM` 标签页可以直接刷新并加载 `runs/llm` 下的归档，也可以手动打开本地 `replay.json`，用于重放 LLM 的回合级操作流程。对于 `interrupted` 的归档，可以点击“继续运行”；系统会重放已确认成功的变更型工具调用恢复游戏状态，并继续追加写入原 `trace.jsonl` 和原 `replay.json`。
+
 Runner 规则：
 
 - 非法游戏动作会把 `ok=false` 和 `error` 返回给模型。
@@ -203,6 +262,7 @@ Harness 内部方法：
 - `unequip_item`
 - `end_turn`
 - `get_events`
+- `preview_battle`：仅在 preset 的 `llm.expose_battle_preview: true` 时开放。
 
 ## 开发约定
 

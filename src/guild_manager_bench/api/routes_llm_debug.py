@@ -15,7 +15,14 @@ from guild_manager_bench.bench.llm import (
 from guild_manager_bench.bench.llm.prompts import DEFAULT_OBJECTIVE
 
 
-def llm_debug_router(data_dir: str | Path) -> APIRouter:
+LLM_ARCHIVE_DIR = Path("runs/llm")
+
+
+def llm_debug_router(
+    data_dir: str | Path,
+    *,
+    data_source: Mapping[str, Any] | None = None,
+) -> APIRouter:
     """创建 LLM 调试 WebSocket 路由。"""
 
     router = APIRouter()
@@ -58,13 +65,18 @@ def llm_debug_router(data_dir: str | Path) -> APIRouter:
                     max_end_turn_attempts=_int_value(payload, "max_end_turn_attempts", 3),
                     max_invalid_tool_responses=_int_value(payload, "max_invalid_tool_responses", 3),
                     max_model_steps_per_turn=_int_value(payload, "max_model_steps_per_turn", 50),
+                    game_seed=_optional_int(payload, "game_seed"),
+                    scoring_seed=_optional_int(payload, "scoring_seed"),
                 )
+                resume_archive_dir = _resume_archive_dir(payload)
                 run_llm_game(
                     agent,
                     data_dir=data_dir,
                     session_id=_optional_string(payload, "session_id"),
                     config=config,
                     event_sink=emit,
+                    resume_archive_dir=resume_archive_dir,
+                    data_source=data_source,
                 )
 
             await asyncio.to_thread(run)
@@ -77,6 +89,22 @@ def llm_debug_router(data_dir: str | Path) -> APIRouter:
                 return
 
     return router
+
+
+def _resume_archive_dir(payload: Mapping[str, Any]) -> Path | None:
+    run_id = _optional_string(payload, "resume_run_id")
+    if run_id is None:
+        return None
+    if any(char in run_id for char in "\\/"):
+        raise ValueError("invalid resume_run_id")
+    resolved_base = LLM_ARCHIVE_DIR.resolve()
+    resolved_path = (resolved_base / run_id).resolve()
+    if resolved_path.parent != resolved_base:
+        raise ValueError("invalid resume_run_id")
+    replay_path = resolved_path / "replay.json"
+    if not replay_path.exists():
+        raise ValueError(f"replay not found for run: {run_id}")
+    return resolved_path
 
 
 def _optional_string(payload: Mapping[str, Any], key: str) -> str | None:
