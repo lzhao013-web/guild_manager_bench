@@ -11,22 +11,23 @@ def main() -> None:
 
     serve_parser = subparsers.add_parser("serve")
     serve_parser.add_argument("--data-dir", default="data")
+    serve_parser.add_argument("--preset", default=None)
     serve_parser.add_argument("--host", default="127.0.0.1")
     serve_parser.add_argument("--port", type=int, default=8000)
 
     args = parser.parse_args()
     if args.command == "serve":
-        _serve(args.data_dir, args.host, args.port)
+        _serve(args.data_dir, args.preset, args.host, args.port)
 
 
-def _serve(data_dir: str, host: str, port: int) -> None:
+def _serve(data_dir: str, preset: str | None, host: str, port: int) -> None:
     """启动可视化服务。"""
 
     import uvicorn
 
     from guild_manager_bench.api.app import create_app
 
-    uvicorn.run(create_app(data_dir), host=host, port=port)
+    uvicorn.run(create_app(data_dir, preset=preset), host=host, port=port)
 
 
 if __name__ == "__main__":

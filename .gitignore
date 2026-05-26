@@ -24,6 +24,7 @@ env/
 
 # Runtime output
 logs/
+runs/
 *.log
 
 # Editor and OS files

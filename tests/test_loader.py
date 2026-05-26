@@ -14,6 +14,7 @@ from guild_manager_bench.game.actions import (
 )
 from guild_manager_bench.game.engine import apply_turn, new_game
 from guild_manager_bench.game.loader import YamlLoadError, load_game_definition
+from guild_manager_bench.game.presets import list_data_presets, resolve_data_preset
 
 
 def test_load_game_definition_from_yaml_directory() -> None:
@@ -31,6 +32,53 @@ def test_load_game_definition_from_yaml_directory() -> None:
     assert definition.content.equipment_templates[0].equipment_id == "iron_sword"
     assert definition.content.crafting_recipes[0].recipe_id == "iron_sword_recipe"
     assert definition.content.global_upgrades[0].upgrade_id == "weapon_training"
+    assert definition.llm_tools.expose_battle_preview is False
+    assert definition.scoring.mode == "endgame_arena"
+    assert definition.scoring.waves == 256
+
+
+def test_load_game_definition_reads_llm_tool_switches() -> None:
+    with _data_dir("llm_tool_switches") as data_dir:
+        _write_game_yaml_files(data_dir)
+        game_yaml = (data_dir / "game.yaml").read_text(encoding="utf-8")
+        (data_dir / "game.yaml").write_text(
+            game_yaml + "\nllm:\n  expose_battle_preview: true\n",
+            encoding="utf-8",
+        )
+
+        definition = load_game_definition(data_dir)
+
+    assert definition.llm_tools.expose_battle_preview is True
+
+
+def test_load_game_definition_reads_scoring_rules() -> None:
+    with _data_dir("scoring_rules") as data_dir:
+        _write_game_yaml_files(data_dir)
+        game_yaml = (data_dir / "game.yaml").read_text(encoding="utf-8")
+        (data_dir / "game.yaml").write_text(
+            game_yaml
+            + dedent(
+                """
+                scoring:
+                  mode: endgame_arena
+                  seed: 123
+                  waves: 7
+                  wave_size: 3
+                  difficulty_factors: [0, 2, 4]
+                  resource_mode: current
+                  aggregation: best_assignment
+                """
+            ),
+            encoding="utf-8",
+        )
+
+        definition = load_game_definition(data_dir)
+
+    assert definition.scoring.seed == 123
+    assert definition.scoring.waves == 7
+    assert definition.scoring.wave_size == 3
+    assert definition.scoring.difficulty_factors == (0, 2, 4)
+    assert definition.scoring.resource_mode == "current"
 
 
 def test_loaded_definition_can_drive_turn_flow() -> None:
@@ -86,6 +134,45 @@ def test_load_game_definition_rejects_wrong_scalar_type() -> None:
 
         with pytest.raises(YamlLoadError):
             load_game_definition(data_dir)
+
+
+def test_resolve_data_preset_uses_named_preset_directory() -> None:
+    with _data_dir("preset_named") as data_dir:
+        preset_dir = data_dir / "presets" / "tiny"
+        preset_dir.mkdir(parents=True)
+        _write_game_yaml_files(preset_dir)
+
+        preset = resolve_data_preset(data_dir, "tiny")
+
+    assert preset.name == "tiny"
+    assert preset.source == "preset"
+    assert preset.data_dir.name == "tiny"
+    assert len(preset.data_hash) == 64
+
+
+def test_resolve_default_preset_keeps_legacy_data_dir_compatible() -> None:
+    with _data_dir("preset_legacy_default") as data_dir:
+        _write_game_yaml_files(data_dir)
+
+        preset = resolve_data_preset(data_dir, "default")
+
+    assert preset.name == "default"
+    assert preset.source == "legacy_data_dir"
+    assert preset.data_dir.name == "preset_legacy_default"
+
+
+def test_list_data_presets_returns_complete_presets_only() -> None:
+    with _data_dir("preset_list") as data_dir:
+        good = data_dir / "presets" / "good"
+        bad = data_dir / "presets" / "bad"
+        good.mkdir(parents=True)
+        bad.mkdir(parents=True)
+        _write_game_yaml_files(good)
+        (bad / "game.yaml").write_text("rules: {}\n", encoding="utf-8")
+
+        presets = list_data_presets(data_dir)
+
+    assert [preset.name for preset in presets] == ["good"]
 
 
 @contextmanager

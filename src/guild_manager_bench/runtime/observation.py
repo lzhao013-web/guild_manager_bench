@@ -35,11 +35,13 @@ def build_observation(definition: GameDefinition, state: GameState) -> dict[str,
     return {
         "turn": state.turn,
         "max_turns": state.max_turns,
+        "seed": state.seed,
         "finished": is_finished(state),
         "gold": state.gold,
         "materials": dict(state.materials),
         "experience_pool": state.experience_pool,
         "experience_rules": _experience_rules_to_dict(definition),
+        "scoring": _scoring_rules_to_dict(definition),
         "adventurers": [
             _adventurer_to_dict(definition, state, adventurer)
             for adventurer in state.adventurers
@@ -227,6 +229,19 @@ def _experience_rules_to_dict(definition: GameDefinition) -> dict[str, Any]:
         "required_experience_growth": rules.required_experience_growth,
         "max_level": rules.max_level,
         "stat_growth_per_level": _stat_modifier_to_dict(rules.stat_growth_per_level),
+    }
+
+
+def _scoring_rules_to_dict(definition: GameDefinition) -> dict[str, Any]:
+    rules = definition.scoring
+    return {
+        "mode": rules.mode,
+        "seed": rules.seed,
+        "waves": rules.waves,
+        "wave_size": rules.wave_size,
+        "difficulty_factors": list(rules.difficulty_factors),
+        "resource_mode": rules.resource_mode,
+        "aggregation": rules.aggregation,
     }
 
 

@@ -15,6 +15,7 @@ class ToolCallRecord:
     name: str
     arguments: dict[str, Any]
     result: dict[str, Any]
+    call_id: str | None = None
 
     @property
     def ok(self) -> bool | None:
@@ -27,13 +28,16 @@ class ToolCallRecord:
         return value if isinstance(value, str) else None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        data = {
             "name": self.name,
             "arguments": dict(self.arguments),
             "result": dict(self.result),
             "ok": self.ok,
             "error": self.error,
         }
+        if self.call_id is not None:
+            data["call_id"] = self.call_id
+        return data
 
 
 @dataclass(slots=True)
@@ -42,11 +46,27 @@ class ModelResponseRecord:
 
     text: str
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
+    step: int | None = None
+    request_messages: list[dict[str, Any]] = field(default_factory=list)
+    request_tools: list[dict[str, Any]] = field(default_factory=list)
+    assistant_metadata: dict[str, Any] = field(default_factory=dict)
+    timing: dict[str, Any] = field(default_factory=dict)
+    usage: dict[str, Any] = field(default_factory=dict)
+    raw: Any = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "step": self.step,
+            "request": {
+                "messages": [dict(message) for message in self.request_messages],
+                "tools": [dict(tool) for tool in self.request_tools],
+            },
             "text": self.text,
             "tool_calls": [dict(call) for call in self.tool_calls],
+            "assistant_metadata": dict(self.assistant_metadata),
+            "timing": dict(self.timing),
+            "usage": dict(self.usage),
+            "raw": self.raw,
         }
 
 
@@ -96,6 +116,8 @@ class LlmGameRun:
     final_observation: Mapping[str, Any]
     turns: list[TurnTrace]
     failure_reason: str | None = None
+    archive_dir: str | None = None
+    score: Mapping[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -107,4 +129,6 @@ class LlmGameRun:
                 for turn in self.turns
             ],
             "failure_reason": self.failure_reason,
+            "archive_dir": self.archive_dir,
+            "score": None if self.score is None else dict(self.score),
         }

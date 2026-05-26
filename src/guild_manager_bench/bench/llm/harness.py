@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping
 
-from guild_manager_bench.bench.llm.tools import GuildManagerTools, ToolCallError, tool_schemas
+from guild_manager_bench.bench.llm.tools import GuildManagerTools, ToolCallError
 
 
 @dataclass(slots=True)
@@ -59,11 +59,15 @@ class TurnToolHarness:
         self.session_id = session_id
         self.budget = ToolBudget(max_tool_calls=max_tool_calls)
         self.ended = False
+        self._agent_tool_names = tuple(
+            schema["name"]
+            for schema in self.tools.list_tool_schemas()
+        )
 
     def tool_schemas(self) -> list[dict[str, Any]]:
         """返回当前回合可注册给 LLM 的工具 schema。"""
 
-        return tool_schemas()
+        return self.tools.list_tool_schemas()
 
     def call_tool(
         self,
@@ -113,7 +117,7 @@ class TurnToolHarness:
         elif self.budget.exhausted:
             allowed_tools = ["end_turn"]
         else:
-            allowed_tools = list(_AGENT_TOOL_NAMES)
+            allowed_tools = list(self._agent_tool_names)
         return {
             "max_tool_calls": self.budget.max_tool_calls,
             "used": self.budget.used,
@@ -121,6 +125,3 @@ class TurnToolHarness:
             "end_turn_required": self.budget.exhausted and not self.ended,
             "allowed_tools": allowed_tools,
         }
-
-
-_AGENT_TOOL_NAMES = tuple(schema["name"] for schema in tool_schemas())

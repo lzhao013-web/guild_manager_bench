@@ -40,13 +40,13 @@ experience:
     recovery: 1
 
 llm:
-  expose_battle_preview: true
+  expose_battle_preview: false
 
 scoring:
   mode: endgame_arena
   seed: 20260526
   waves: 1000
   wave_size: 6
-  difficulty_factors: [8, 10, 12, 14, 16, 18, 20]
+  difficulty_factors: [8, 10, 12, 14]
   resource_mode: full
   aggregation: best_assignment

@@ -15,6 +15,17 @@ const state = {
     toolTrace: [],
     events: [],
     currentModelEntry: null,
+    renderQueued: false,
+    openThinking: new Set(),
+    openToolTrace: new Set(),
+    toolTraceSeq: 0,
+    replay: {
+      runs: [],
+      selectedRunId: "",
+      data: null,
+      source: "",
+      status: "尚未加载 replay",
+    },
   },
 };
 
@@ -24,15 +35,58 @@ window.addEventListener("load", () => {
   $("newSessionButton").addEventListener("click", () => createSession());
   $("llmStartButton").addEventListener("click", () => startLlmDebug());
   $("llmStopButton").addEventListener("click", () => stopLlmDebug());
+  $("llmReplayRefreshButton").addEventListener("click", () => refreshLlmReplayRuns());
+  $("llmReplayLoadButton").addEventListener("click", () => loadSelectedLlmReplay());
+  $("llmReplayResumeButton").addEventListener("click", () => resumeSelectedLlmReplay());
+  $("llmReplaySelect").addEventListener("change", (event) => {
+    state.llm.replay.selectedRunId = event.target.value;
+    renderLlmDebug();
+  });
+  $("llmReplayFile").addEventListener("change", (event) => loadLlmReplayFile(event));
   $("combatModal").addEventListener("click", (e) => {
     if (e.target === e.currentTarget) closeCombatModal();
   });
+  $("modelPromptModal").addEventListener("click", (e) => {
+    if (e.target === e.currentTarget) closeModelPromptModal();
+  });
   document.addEventListener("click", onDocumentClick);
+  document.addEventListener("toggle", onDocumentToggle, true);
+  initModes();
   initTabs();
   bootstrap();
+  refreshLlmReplayRuns();
 });
 
-/* ========== Tab Switching ========== */
+/* ========== Mode / Tab Switching ========== */
+
+function initModes() {
+  const params = new URLSearchParams(window.location.search);
+  const initialMode = params.get("mode") === "llm" ? "llm" : "manual";
+  document.querySelectorAll(".mode-button").forEach((button) => {
+    button.addEventListener("click", () => setMode(button.dataset.mode || "manual"));
+  });
+  setMode(initialMode, false);
+}
+
+function setMode(mode, updateUrl = true) {
+  const selectedMode = mode === "llm" ? "llm" : "manual";
+  document.querySelectorAll(".mode-button").forEach((button) => {
+    button.classList.toggle("active", button.dataset.mode === selectedMode);
+  });
+  document.querySelectorAll(".mode-panel").forEach((panel) => {
+    panel.classList.toggle("active", panel.dataset.modePanel === selectedMode);
+  });
+  if (!updateUrl) {
+    return;
+  }
+  const url = new URL(window.location.href);
+  if (selectedMode === "llm") {
+    url.searchParams.set("mode", "llm");
+  } else {
+    url.searchParams.delete("mode");
+  }
+  window.history.replaceState(null, "", url);
+}
 
 function initTabs() {
   document.querySelectorAll(".tab").forEach((tab) => {
@@ -154,6 +208,7 @@ function render() {
   }
   $("sessionMeta").textContent = `会话 ${obs.session_id} · 回合 ${obs.turn}/${obs.max_turns}`;
   $("newSessionButton").disabled = state.watchOnly;
+  updateLlmSeedPlaceholders(obs);
   renderOverview(obs);
   renderAdventurers(obs);
   renderCrafting(obs);
@@ -182,6 +237,7 @@ function renderOverview(obs) {
   $("overview").innerHTML = `
     <div class="overview">
       ${metric("回合", `${obs.turn}/${obs.max_turns}`, "turn")}
+      ${metric("Seed", seedText(obs), "seed")}
       ${metric("金币", obs.gold, "gold")}
       ${metric("经验池", obs.experience_pool, "exp")}
       ${metric("材料", materialsText(obs.materials), "mat")}
@@ -198,6 +254,25 @@ function metric(label, value, type) {
       <span class="metric-value">${escapeHtml(String(value))}</span>
     </div>
   `;
+}
+
+function seedText(obs) {
+  const scoringSeed = obs.scoring?.seed;
+  if (scoringSeed === undefined || scoringSeed === null) {
+    return obs.seed ?? "n/a";
+  }
+  return `${obs.seed ?? "n/a"} / ${scoringSeed}`;
+}
+
+function updateLlmSeedPlaceholders(obs) {
+  const gameSeedInput = $("llmGameSeed");
+  const scoringSeedInput = $("llmScoringSeed");
+  if (gameSeedInput) {
+    gameSeedInput.placeholder = `默认 ${obs.seed ?? "game.yaml"}`;
+  }
+  if (scoringSeedInput) {
+    scoringSeedInput.placeholder = `默认 ${obs.scoring?.seed ?? "scoring.seed"}`;
+  }
 }
 
 /* ========== Adventurers ========== */
@@ -310,6 +385,29 @@ function closeCombatModal() {
   $("combatModal").hidden = true;
 }
 
+function openModelPromptModal(modelId) {
+  const entry = findModelEntry(modelId);
+  if (!entry?.request) {
+    showToast("该次调用没有记录输入 prompt");
+    return;
+  }
+  $("modelPromptMeta").textContent = `T${entry.turn} · step ${entry.step}`;
+  $("modelPromptContent").textContent = formatModelRequest(entry.request);
+  $("modelPromptModal").hidden = false;
+}
+
+function closeModelPromptModal() {
+  $("modelPromptModal").hidden = true;
+}
+
+function findModelEntry(modelId) {
+  return state.llm.transcript.find((entry) => entry.kind === "model" && entry.id === modelId) || null;
+}
+
+function formatModelRequest(request) {
+  return JSON.stringify(request, null, 2);
+}
+
 function renderModalHunts() {
   const obs = state.observation;
   if (!obs) return;
@@ -409,9 +507,60 @@ function closeEquipPopup() {
 }
 
 function onDocumentClick(e) {
+  const promptButton = e.target.closest?.(".model-prompt-button");
+  if (promptButton) {
+    openModelPromptModal(promptButton.dataset.modelId);
+    return;
+  }
+
+  const thinkingSummary = e.target.closest?.(".llm-thinking > summary");
+  if (thinkingSummary) {
+    e.preventDefault();
+    const details = thinkingSummary.closest(".llm-thinking");
+    if (details) {
+      setThinkingOpen(details, !details.open);
+    }
+    return;
+  }
+
   const popup = $("equipPopup");
   if (!popup.hidden && !popup.contains(e.target) && !e.target.closest(".slot-empty")) {
     closeEquipPopup();
+  }
+}
+
+function onDocumentToggle(e) {
+  if (e.target.classList?.contains("llm-thinking")) {
+    syncThinkingOpenState(e.target);
+  }
+
+  if (e.target.classList?.contains("llm-tool-item")) {
+    const toolId = e.target.dataset.toolId;
+    if (!toolId) {
+      return;
+    }
+    if (e.target.open) {
+      state.llm.openToolTrace.add(toolId);
+    } else {
+      state.llm.openToolTrace.delete(toolId);
+    }
+  }
+}
+
+function setThinkingOpen(details, open) {
+  details.open = open;
+  syncThinkingOpenState(details);
+}
+
+function syncThinkingOpenState(details) {
+  const entryId = details.dataset.entryId;
+  if (!entryId) {
+    return;
+  }
+  if (details.open) {
+    state.llm.openThinking.add(entryId);
+  } else {
+    state.llm.openThinking.delete(entryId);
   }
 }
 
@@ -824,15 +973,18 @@ function showError(message) {
 
 /* ========== LLM Debug ========== */
 
-function startLlmDebug() {
+function startLlmDebug(options = {}) {
   stopLlmDebug(false);
   state.llm.running = true;
-  state.llm.status = "连接中";
+  state.llm.status = options.resumeRunId ? "续跑连接中" : "连接中";
   state.llm.prompt = "";
   state.llm.transcript = [];
   state.llm.toolTrace = [];
   state.llm.events = [];
   state.llm.currentModelEntry = null;
+  state.llm.openThinking.clear();
+  state.llm.openToolTrace.clear();
+  state.llm.toolTraceSeq = 0;
   renderLlmDebug();
 
   const protocol = window.location.protocol === "https:" ? "wss" : "ws";
@@ -840,9 +992,9 @@ function startLlmDebug() {
   state.llm.socket = socket;
 
   socket.addEventListener("open", () => {
-    const payload = llmPayload();
+    const payload = llmPayload(options);
     socket.send(JSON.stringify({ type: "start", payload }));
-    state.llm.status = "运行中";
+    state.llm.status = options.resumeRunId ? "续跑运行中" : "运行中";
     renderLlmDebug();
   });
   socket.addEventListener("message", (message) => {
@@ -874,15 +1026,21 @@ function stopLlmDebug(update = true) {
   }
 }
 
-function llmPayload() {
-  return {
+function llmPayload(options = {}) {
+  const payload = {
     model: readOptionalValue("llmModel"),
     base_url: readOptionalValue("llmBaseUrl"),
     api_key: readOptionalValue("llmApiKey"),
     max_tool_calls_per_turn: readNumberValue("llmMaxToolCalls", 20),
+    game_seed: readOptionalInteger("llmGameSeed"),
+    scoring_seed: readOptionalInteger("llmScoringSeed"),
     temperature: readOptionalNumber("llmTemperature"),
     objective: readOptionalValue("llmObjective"),
   };
+  if (options.resumeRunId) {
+    payload.resume_run_id = options.resumeRunId;
+  }
+  return payload;
 }
 
 function handleLlmEvent(event) {
@@ -893,15 +1051,24 @@ function handleLlmEvent(event) {
 
   if (event.type === "run_started") {
     state.llm.status = `运行中 · 会话 ${event.session_id}`;
+  } else if (event.type === "run_resumed") {
+    state.llm.status = `续跑中 · 会话 ${event.session_id}`;
+    state.llm.transcript.push({
+      kind: "turn",
+      title: `从归档续跑：${event.archive?.directory || ""}`,
+    });
   } else if (event.type === "turn_started") {
     state.llm.prompt = event.prompt || "";
     state.llm.status = `第 ${event.turn} 回合`;
     state.llm.currentModelEntry = null;
     state.llm.transcript.push({ kind: "turn", title: `第 ${event.turn} 回合开始` });
   } else if (event.type === "model_request") {
-    const entry = { kind: "model", turn: event.turn, step: event.step, text: "" };
+    const entry = createModelEntry(event.turn, event.step);
+    entry.request = event.request || null;
     state.llm.currentModelEntry = entry;
     state.llm.transcript.push(entry);
+  } else if (event.type === "model_reasoning_delta") {
+    ensureModelEntry().reasoningText += event.text || "";
   } else if (event.type === "model_delta") {
     ensureModelEntry().text += event.text || "";
   } else if (event.type === "model_response") {
@@ -909,27 +1076,39 @@ function handleLlmEvent(event) {
     if (!entry.text && event.text) {
       entry.text = event.text;
     }
+    const reasoning = event.assistant_metadata?.reasoning_content;
+    if (!entry.reasoningText && reasoning) {
+      entry.reasoningText = reasoning;
+    }
     entry.toolCalls = event.tool_calls || [];
+    entry.timing = event.timing || null;
+    entry.usage = event.usage || null;
+  } else if (event.type === "model_stream_completed") {
+    const entry = ensureModelEntry();
+    if (!entry.text && event.text) {
+      entry.text = event.text;
+    }
+    entry.toolCalls = event.tool_calls || entry.toolCalls || [];
+    entry.usage = event.usage || entry.usage || null;
   } else if (event.type === "tool_call") {
-    state.llm.toolTrace.push({
-      callId: event.call_id,
-      turn: event.turn,
-      name: event.name,
-      arguments: event.arguments || {},
-      result: null,
-    });
+    state.llm.toolTrace.push(createToolTraceItem(event));
   } else if (event.type === "tool_result") {
-    const item = findToolTrace(event.call_id, event.name);
+    let item = findToolTrace(event.call_id, event.name);
     if (item) {
-      item.result = event.result;
+      item.ok = event.result?.ok ?? null;
+      item.error = event.result?.error || "";
+      item.content = event.content || item.content || "";
     } else {
-      state.llm.toolTrace.push({
-        callId: event.call_id,
-        turn: event.turn,
-        name: event.name,
-        arguments: event.arguments || {},
-        result: event.result,
-      });
+      item = createToolTraceItem(event);
+      item.ok = event.result?.ok ?? null;
+      item.error = event.result?.error || "";
+      state.llm.toolTrace.push(item);
+    }
+    const toolId = toolTraceId(item);
+    if (event.result?.ok === false) {
+      state.llm.openToolTrace.add(toolId);
+    } else if (event.result?.ok === true) {
+      state.llm.openToolTrace.delete(toolId);
     }
   } else if (event.type === "retry") {
     state.llm.transcript.push({ kind: "retry", reason: event.reason, text: event.message });
@@ -939,51 +1118,129 @@ function handleLlmEvent(event) {
   } else if (event.type === "turn_failed") {
     state.llm.running = false;
     state.llm.status = `回合失败：${event.trace?.failure_reason || "unknown"}`;
+  } else if (event.type === "run_archived") {
+    state.llm.transcript.push({
+      kind: "turn",
+      title: `已留档：${event.archive?.directory || ""}`,
+    });
+    state.llm.replay.status = "新归档已生成，可刷新后加载 replay";
   } else if (event.type === "run_completed") {
     state.llm.running = false;
-    state.llm.status = `完成 · ${event.run?.turns || 0} 回合`;
+    const score = formatScore(event.run?.score);
+    state.llm.status = `完成 · ${event.run?.turns || 0} 回合 · ${score ? `${score} · ` : ""}已留档`;
   } else if (event.type === "run_failed") {
     state.llm.running = false;
-    state.llm.status = `失败：${event.run?.failure_reason || "unknown"}`;
+    state.llm.status = `失败：${event.run?.failure_reason || "unknown"} · 已留档`;
   } else if (event.type === "debug_error") {
     state.llm.running = false;
     state.llm.status = `错误：${event.error}`;
   }
 
-  renderLlmDebug();
+  if (isStreamingLlmEvent(event)) {
+    scheduleLlmRender();
+  } else {
+    renderLlmDebug();
+  }
 }
 
 function ensureModelEntry() {
   if (!state.llm.currentModelEntry) {
-    state.llm.currentModelEntry = { kind: "model", turn: "", step: "", text: "" };
+    state.llm.currentModelEntry = createModelEntry("", "");
     state.llm.transcript.push(state.llm.currentModelEntry);
   }
   return state.llm.currentModelEntry;
+}
+
+function createModelEntry(turn, step) {
+  return {
+    kind: "model",
+    id: `model-${turn ?? "na"}-${step ?? state.llm.transcript.length}`,
+    turn,
+    step,
+    text: "",
+    reasoningText: "",
+    timing: null,
+    usage: null,
+    request: null,
+  };
+}
+
+function createToolTraceItem(event) {
+  return {
+    id: event.call_id ? `tool-${event.call_id}` : `tool-${state.llm.toolTraceSeq++}`,
+    callId: event.call_id,
+    turn: event.turn,
+    name: event.name,
+    arguments: event.arguments || {},
+    content: event.content || "",
+    ok: null,
+    error: "",
+  };
+}
+
+function toolTraceId(item) {
+  if (!item.id) {
+    item.id = item.callId ? `tool-${item.callId}` : `tool-${state.llm.toolTraceSeq++}`;
+  }
+  return item.id;
+}
+
+function isStreamingLlmEvent(event) {
+  return event.type === "model_delta"
+    || event.type === "model_reasoning_delta"
+    || event.type === "tool_call_delta";
+}
+
+function scheduleLlmRender() {
+  if (state.llm.renderQueued) {
+    return;
+  }
+  state.llm.renderQueued = true;
+  const scheduleFrame = window.requestAnimationFrame || ((callback) => window.setTimeout(callback, 16));
+  scheduleFrame(() => {
+    state.llm.renderQueued = false;
+    renderLlmDebug({ streamOnly: true });
+  });
 }
 
 function findToolTrace(callId, name) {
   for (let i = state.llm.toolTrace.length - 1; i >= 0; i--) {
     const item = state.llm.toolTrace[i];
     if (callId && item.callId === callId) return item;
-    if (!callId && item.name === name && !item.result) return item;
+    if (!callId && item.name === name && item.ok === null) return item;
   }
   return null;
 }
 
-function renderLlmDebug() {
+function renderLlmDebug(options = {}) {
   if (!$("llmStatus")) return;
+  const includeReplay = options.includeReplay !== false;
+  const streamOnly = options.streamOnly === true;
   $("llmStatus").textContent = state.llm.status;
   $("llmStartButton").disabled = state.llm.running;
   $("llmStopButton").disabled = !state.llm.running;
+  $("llmReplayResumeButton").disabled = state.llm.running || !state.llm.replay.selectedRunId;
   $("llmPrompt").textContent = state.llm.prompt || "尚未开始";
-  $("llmTranscript").innerHTML = renderLlmTranscript();
+  if (streamOnly && state.llm.currentModelEntry) {
+    streamUpdateModelEntry(state.llm.currentModelEntry);
+  } else {
+    $("llmTranscript").innerHTML = renderLlmTranscript();
+  }
+  if (streamOnly) {
+    return;
+  }
   $("llmToolTrace").innerHTML = renderLlmToolTrace();
   $("llmEventLog").innerHTML = renderLlmEventLog();
+  if (includeReplay) {
+    renderLlmReplayControls();
+    $("llmReplayStatus").textContent = state.llm.replay.status;
+    $("llmReplayView").innerHTML = renderLlmReplay();
+  }
 }
 
 function renderLlmTranscript() {
   if (!state.llm.transcript.length) {
-    return '<div class="muted">尚无模型输出</div>';
+    return '<div class="muted">尚无模型行为</div>';
   }
   return state.llm.transcript.slice(-80).map((entry) => {
     if (entry.kind === "turn") {
@@ -992,20 +1249,204 @@ function renderLlmTranscript() {
     if (entry.kind === "retry") {
       return `<div class="llm-retry">重试提示：${escapeHtml(entry.text)}</div>`;
     }
-    const tools = entry.toolCalls?.length
-      ? `<div class="small muted">请求工具：${entry.toolCalls.map((call) => escapeHtml(call.name)).join(" · ")}</div>`
-      : "";
+    const entryId = entry.id || `model-${entry.turn || "na"}-${entry.step || "na"}`;
+    const meta = renderModelMeta(entry.timing, entry.usage);
+    const promptButton = entry.request ? `
+      <button type="button" class="model-prompt-button" data-model-id="${escapeHtml(entryId)}">查看输入</button>
+    ` : "";
     return `
-      <div class="llm-model-message">
+      <div class="llm-model-message" data-model-id="${escapeHtml(entryId)}">
         <div class="row-title">
-          <strong>模型响应</strong>
+          <strong>模型行为</strong>
           <span class="small muted">T${escapeHtml(entry.turn)} · step ${escapeHtml(entry.step)}</span>
+          ${promptButton}
         </div>
-        <pre>${escapeHtml(entry.text || "（无文本，可能只请求工具）")}</pre>
-        ${tools}
+        ${meta}
+        <div class="llm-model-body">
+          ${renderModelBodyContent(entry, entryId)}
+        </div>
       </div>
     `;
   }).join("");
+}
+
+function renderModelBodyContent(entry, entryId) {
+  return [
+    renderModelThinking(entry, entryId),
+    renderModelReply(entry.text),
+    renderModelToolCalls(entry.toolCalls),
+  ].filter(Boolean).join("");
+}
+
+function renderModelThinking(entry, entryId) {
+  if (!entry.reasoningText) {
+    return "";
+  }
+  const thinkingOpen = state.llm.openThinking.has(entryId) ? "open" : "";
+  return `
+    <details class="llm-thinking" data-entry-id="${escapeHtml(entryId)}" ${thinkingOpen}>
+      <summary>
+        <span>思考内容</span>
+        <span class="small muted">${entry.reasoningText.length} chars</span>
+      </summary>
+      <pre>${escapeHtml(entry.reasoningText)}</pre>
+    </details>
+  `;
+}
+
+function renderModelReply(text) {
+  if (!text || !text.trim()) {
+    return "";
+  }
+  return `
+    <div class="llm-model-reply">
+      <div class="llm-json-label">回复内容</div>
+      <pre>${escapeHtml(text)}</pre>
+    </div>
+  `;
+}
+
+function renderModelToolCalls(toolCalls) {
+  if (!toolCalls?.length) {
+    return "";
+  }
+  const names = toolCalls.map((call) => call.name || "unknown").join(" · ");
+  return `
+    <details class="llm-model-tool-calls">
+      <summary>
+        <span>工具调用</span>
+        <span class="small muted">${escapeHtml(names)}</span>
+      </summary>
+      ${toolCalls.map((call, index) => renderModelToolCall(call, index)).join("")}
+    </details>
+  `;
+}
+
+function renderModelToolCall(call, index) {
+  const callId = call.id || call.call_id || call.callId || "";
+  return `
+    <div class="llm-model-tool-call">
+      <div class="row-title">
+        <strong>${escapeHtml(call.name || `tool_${index + 1}`)}</strong>
+        <span class="small muted">${escapeHtml(callId || `#${index + 1}`)}</span>
+      </div>
+      <div class="llm-json-label">参数</div>
+      <pre>${escapeHtml(formatToolArguments(call.arguments))}</pre>
+    </div>
+  `;
+}
+
+function formatToolArguments(argumentsValue) {
+  if (argumentsValue === undefined || argumentsValue === null) {
+    return "{}";
+  }
+  if (typeof argumentsValue === "string") {
+    try {
+      return JSON.stringify(JSON.parse(argumentsValue), null, 2);
+    } catch {
+      return argumentsValue;
+    }
+  }
+  return JSON.stringify(argumentsValue, null, 2);
+}
+
+function streamUpdateModelEntry(entry) {
+  const entryId = entry.id || `model-${entry.turn || "na"}-${entry.step || "na"}`;
+  const container = $("llmTranscript");
+  const existing = container.querySelector(`[data-model-id="${entryId}"]`);
+  if (!existing) {
+    $("llmTranscript").innerHTML = renderLlmTranscript();
+    return;
+  }
+  updateModelMeta(existing, entry);
+  updateModelThinking(existing, entry, entryId);
+  updateModelReply(existing, entry.text);
+  updateModelToolCalls(existing, entry.toolCalls);
+}
+
+function updateModelThinking(container, entry, entryId) {
+  const body = container.querySelector(".llm-model-body");
+  if (!body) {
+    return;
+  }
+  const existing = body.querySelector(".llm-thinking");
+  if (!entry.reasoningText) {
+    existing?.remove();
+    return;
+  }
+  if (!existing) {
+    body.insertAdjacentHTML("afterbegin", renderModelThinking(entry, entryId));
+    return;
+  }
+  const shouldOpen = state.llm.openThinking.has(entryId);
+  if (existing.open !== shouldOpen) {
+    existing.open = shouldOpen;
+  }
+  const count = existing.querySelector(".small");
+  if (count) {
+    count.textContent = `${entry.reasoningText.length} chars`;
+  }
+  const pre = existing.querySelector("pre");
+  if (pre) {
+    pre.textContent = entry.reasoningText;
+  }
+}
+
+function updateModelReply(container, text) {
+  const body = container.querySelector(".llm-model-body");
+  if (!body) {
+    return;
+  }
+  const existing = body.querySelector(".llm-model-reply");
+  if (!text || !text.trim()) {
+    existing?.remove();
+    return;
+  }
+  if (existing) {
+    const pre = existing.querySelector("pre");
+    if (pre) {
+      pre.textContent = text;
+    }
+    return;
+  }
+  const toolCalls = body.querySelector(".llm-model-tool-calls");
+  const html = renderModelReply(text);
+  if (toolCalls) {
+    toolCalls.insertAdjacentHTML("beforebegin", html);
+  } else {
+    body.insertAdjacentHTML("beforeend", html);
+  }
+}
+
+function updateModelToolCalls(container, toolCalls) {
+  const body = container.querySelector(".llm-model-body");
+  if (!body) {
+    return;
+  }
+  const existing = body.querySelector(".llm-model-tool-calls");
+  if (!toolCalls?.length) {
+    existing?.remove();
+    return;
+  }
+  const html = renderModelToolCalls(toolCalls);
+  if (existing) {
+    existing.outerHTML = html;
+  } else {
+    body.insertAdjacentHTML("beforeend", html);
+  }
+}
+
+function updateModelMeta(container, entry) {
+  const metaHtml = renderModelMeta(entry.timing, entry.usage);
+  const existingMeta = container.querySelector(".llm-model-meta");
+  if (existingMeta) {
+    existingMeta.outerHTML = metaHtml;
+    return;
+  }
+  const rowTitle = container.querySelector(".row-title");
+  if (rowTitle) {
+    rowTitle.insertAdjacentHTML("afterend", metaHtml);
+  }
 }
 
 function renderLlmToolTrace() {
@@ -1013,21 +1454,24 @@ function renderLlmToolTrace() {
     return '<div class="muted">尚无工具调用</div>';
   }
   return state.llm.toolTrace.slice(-120).reverse().map((item) => {
-    const ok = item.result?.ok;
+    const ok = item.ok;
     const cls = ok === false ? "danger" : ok === true ? "ok" : "muted";
     const label = ok === false ? "失败" : ok === true ? "成功" : "等待结果";
+    const toolId = toolTraceId(item);
+    const open = state.llm.openToolTrace.has(toolId) ? "open" : "";
+    const received = item.content || "";
     return `
-      <details class="llm-tool-item" ${ok === false ? "open" : ""}>
+      <details class="llm-tool-item" data-tool-id="${escapeHtml(toolId)}" ${open}>
         <summary>
           <span>T${escapeHtml(item.turn)} · ${escapeHtml(item.name)}</span>
           <strong class="${cls}">${label}</strong>
         </summary>
         <div class="small muted">call_id：${escapeHtml(item.callId || "n/a")}</div>
         <div class="llm-json-label">参数</div>
-        <pre>${escapeHtml(JSON.stringify(item.arguments, null, 2))}</pre>
-        ${item.result ? `
-          <div class="llm-json-label">结果</div>
-          <pre>${escapeHtml(JSON.stringify(summarizeToolResult(item.result), null, 2))}</pre>
+        <pre>${escapeHtml(JSON.stringify(item.arguments || {}, null, 2))}</pre>
+        ${received ? `
+          <div class="llm-json-label">模型收到</div>
+          <pre>${escapeHtml(received)}</pre>
         ` : ""}
       </details>
     `;
@@ -1073,6 +1517,8 @@ function summarizeObservation(obs) {
     finished: obs.finished,
     gold: obs.gold,
     experience_pool: obs.experience_pool,
+    seed: obs.seed,
+    scoring_seed: obs.scoring?.seed,
     materials: obs.materials,
     adventurers: obs.adventurers?.map((a) => ({
       id: a.adventurer_id,
@@ -1092,6 +1538,38 @@ function summarizeObservation(obs) {
 
 function compactLlmEvent(event) {
   const compact = { ...event };
+  if (compact.type === "model_delta" || compact.type === "model_reasoning_delta") {
+    const text = typeof compact.text === "string" ? compact.text : "";
+    compact.text_length = text.length;
+    compact.text_preview = text.length > 80 ? `${text.slice(0, 80)}...` : text;
+    delete compact.text;
+  }
+  if (compact.type === "tool_call_delta") {
+    const delta = typeof compact.arguments_delta === "string" ? compact.arguments_delta : "";
+    compact.arguments_delta_length = delta.length;
+    compact.arguments_delta_preview = delta.length > 80 ? `${delta.slice(0, 80)}...` : delta;
+    delete compact.arguments_delta;
+  }
+  if (compact.request) {
+    compact.request = {
+      message_count: compact.request.messages?.length || 0,
+      tool_names: compact.request.tools?.map((tool) => tool.name || tool.function?.name).filter(Boolean) || [],
+    };
+  }
+  if (compact.raw) {
+    compact.raw = {
+      kind: compact.raw?.stream ? "stream" : Array.isArray(compact.raw?.chunks) ? "stream_chunks" : "response",
+      chunk_count: compact.raw?.chunk_count ?? compact.raw?.chunks?.length,
+      finish_reason: compact.raw?.finish_reason,
+      usage: compact.raw?.usage,
+    };
+  }
+  if (compact.type === "tool_result" && compact.result) {
+    compact.result = {
+      ok: compact.result.ok,
+      error: compact.result.error,
+    };
+  }
   if (compact.observation) compact.observation = summarizeObservation(compact.observation);
   if (compact.result?.observation) compact.result = summarizeToolResult(compact.result);
   if (compact.run?.final_observation) {
@@ -1103,7 +1581,258 @@ function compactLlmEvent(event) {
   if (compact.prompt && compact.prompt.length > 500) {
     compact.prompt = compact.prompt.slice(0, 500) + "...";
   }
+  if (compact.content && compact.content.length > 500) {
+    compact.content = compact.content.slice(0, 500) + "...";
+  }
   return compact;
+}
+
+async function refreshLlmReplayRuns() {
+  const replayState = state.llm.replay;
+  replayState.status = "正在刷新归档";
+  renderLlmDebug();
+  try {
+    const response = await fetch("/api/llm/runs");
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.detail || "刷新归档失败");
+    }
+    replayState.runs = data.runs || [];
+    if (!replayState.selectedRunId && replayState.runs.length) {
+      replayState.selectedRunId = replayState.runs[0].run_id;
+    }
+    replayState.status = replayState.runs.length
+      ? `找到 ${replayState.runs.length} 个归档`
+      : "尚无归档";
+  } catch (error) {
+    replayState.status = error.message || "刷新归档失败";
+  }
+  renderLlmDebug();
+}
+
+async function loadSelectedLlmReplay() {
+  const runId = state.llm.replay.selectedRunId || $("llmReplaySelect")?.value;
+  if (!runId) {
+    state.llm.replay.status = "请选择一个归档";
+    renderLlmDebug();
+    return;
+  }
+  state.llm.replay.status = "正在加载 replay";
+  renderLlmDebug();
+  try {
+    const response = await fetch(`/api/llm/runs/${encodeURIComponent(runId)}/replay`);
+    const replay = await response.json();
+    if (!response.ok) {
+      throw new Error(replay.detail || "加载 replay 失败");
+    }
+    setLlmReplay(replay, runId);
+  } catch (error) {
+    state.llm.replay.status = error.message || "加载 replay 失败";
+    renderLlmDebug();
+  }
+}
+
+function resumeSelectedLlmReplay() {
+  const runId = state.llm.replay.selectedRunId || $("llmReplaySelect")?.value;
+  if (!runId) {
+    state.llm.replay.status = "请选择一个归档";
+    renderLlmDebug();
+    return;
+  }
+  startLlmDebug({ resumeRunId: runId });
+}
+
+async function loadLlmReplayFile(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  try {
+    const replay = JSON.parse(await file.text());
+    setLlmReplay(replay, file.name);
+  } catch (error) {
+    state.llm.replay.status = `读取 replay 失败：${error.message || "invalid JSON"}`;
+    renderLlmDebug();
+  } finally {
+    event.target.value = "";
+  }
+}
+
+function setLlmReplay(replay, source) {
+  if (!replay || typeof replay !== "object" || !Array.isArray(replay.turns)) {
+    state.llm.replay.status = "replay 格式不正确：缺少 turns";
+    renderLlmDebug();
+    return;
+  }
+  state.llm.replay.data = replay;
+  state.llm.replay.source = source;
+  state.llm.replay.status = `已加载 ${source} · ${replay.turns.length} 回合 · ${replay.status || "unknown"}`;
+  setSeedInputIfEmpty("llmGameSeed", replay.final_observation?.seed ?? replay.data?.game_seed);
+  setSeedInputIfEmpty(
+    "llmScoringSeed",
+    replay.score?.seed ?? replay.final_observation?.scoring?.seed ?? replay.data?.scoring_seed,
+  );
+  renderLlmDebug();
+}
+
+function setSeedInputIfEmpty(id, value) {
+  const input = $(id);
+  if (!input || input.value || value === undefined || value === null) {
+    return;
+  }
+  input.value = String(value);
+}
+
+function renderLlmReplayControls() {
+  const select = $("llmReplaySelect");
+  if (!select) return;
+  const selected = state.llm.replay.selectedRunId || select.value;
+  select.innerHTML = state.llm.replay.runs.length
+    ? state.llm.replay.runs.map((run) => {
+      const preset = run.preset ? ` · ${run.preset}` : "";
+      const label = `${run.created_at || run.run_id} · ${run.status || "unknown"}${preset} · ${run.turns || 0} 回合`;
+      return `<option value="${escapeHtml(run.run_id)}">${escapeHtml(label)}</option>`;
+    }).join("")
+    : '<option value="">无归档</option>';
+  if (selected) {
+    select.value = selected;
+    state.llm.replay.selectedRunId = select.value;
+  }
+}
+
+function renderLlmReplay() {
+  const replay = state.llm.replay.data;
+  if (!replay) {
+    return '<div class="muted">选择归档或打开 replay.json 后开始回放</div>';
+  }
+  const gameSeed = replay.final_observation?.seed;
+  const scoringSeed = replay.score?.seed ?? replay.final_observation?.scoring?.seed;
+  const summary = `
+    <div class="llm-replay-summary">
+      <span>来源：${escapeHtml(state.llm.replay.source || "replay.json")}</span>
+      <span>会话：${escapeHtml(replay.session_id || "n/a")}</span>
+      <span>状态：${escapeHtml(replay.status || "unknown")}</span>
+      ${gameSeed !== undefined ? `<span>Game seed：${escapeHtml(gameSeed)}</span>` : ""}
+      ${scoringSeed !== undefined ? `<span>Scoring seed：${escapeHtml(scoringSeed)}</span>` : ""}
+      <span>Preset：${escapeHtml(replay.data?.preset || "custom")}</span>
+      <span>Data hash：${escapeHtml(shortHash(replay.data?.data_hash))}</span>
+      <span>回合：${escapeHtml(String(replay.turns?.length || 0))}</span>
+      ${replay.score ? `<span>得分：${escapeHtml(formatScore(replay.score))}</span>` : ""}
+    </div>
+  `;
+  const turns = (replay.turns || []).map((turn) => renderReplayTurn(turn)).join("");
+  return summary + turns;
+}
+
+function renderReplayTurn(turn) {
+  const steps = (turn.steps || []).map((step, index) => renderReplayStep(step, index + 1)).join("");
+  const open = turn.status === "failed" ? "open" : "";
+  return `
+    <details class="llm-replay-turn" ${open}>
+      <summary>
+        <span>第 ${escapeHtml(turn.turn)} 回合</span>
+        <strong>${escapeHtml(turn.status || "unknown")}</strong>
+      </summary>
+      ${turn.failure_reason ? `<div class="llm-retry">失败原因：${escapeHtml(turn.failure_reason)}</div>` : ""}
+      <div class="llm-replay-steps">${steps}</div>
+    </details>
+  `;
+}
+
+function renderReplayStep(step, index) {
+  if (step.type === "turn_prompt") {
+    return `
+      <details class="llm-replay-step">
+        <summary>${index}. Turn prompt</summary>
+        <pre>${escapeHtml(step.content || "")}</pre>
+      </details>
+    `;
+  }
+  if (step.type === "retry_prompt") {
+    return `<div class="llm-retry">${index}. 重试提示：${escapeHtml(step.content || "")}</div>`;
+  }
+  if (step.type === "assistant") {
+    const toolCalls = step.tool_calls?.length
+      ? `<div class="llm-json-label">工具调用</div><pre>${escapeHtml(JSON.stringify(step.tool_calls, null, 2))}</pre>`
+      : "";
+    const reasoning = step.reasoning_content
+      ? `<div class="llm-json-label">reasoning_content</div><pre>${escapeHtml(step.reasoning_content)}</pre>`
+      : "";
+    const meta = renderModelMeta(step.timing, step.usage);
+    return `
+      <details class="llm-replay-step" open>
+        <summary>${index}. Assistant</summary>
+        ${meta}
+        <pre>${escapeHtml(step.content || "（无文本，可能只请求工具）")}</pre>
+        ${reasoning}
+        ${toolCalls}
+      </details>
+    `;
+  }
+  if (step.type === "tool_result") {
+    const content = step.content || "";
+    return `
+      <details class="llm-replay-step">
+        <summary>${index}. Tool · ${escapeHtml(step.name || "unknown")}</summary>
+        <div class="small muted">call_id：${escapeHtml(step.call_id || "n/a")}</div>
+        <div class="llm-json-label">参数</div>
+        <pre>${escapeHtml(JSON.stringify(step.arguments || {}, null, 2))}</pre>
+        ${content ? `
+          <div class="llm-json-label">模型收到</div>
+          <pre>${escapeHtml(content)}</pre>
+        ` : '<div class="small muted">旧归档缺少模型可见的工具返回文本</div>'}
+      </details>
+    `;
+  }
+  return `
+    <details class="llm-replay-step">
+      <summary>${index}. ${escapeHtml(step.type || "step")}</summary>
+      <pre>${escapeHtml(JSON.stringify(step, null, 2))}</pre>
+    </details>
+  `;
+}
+
+function renderModelMeta(timing, usage) {
+  const parts = [];
+  const duration = Number(timing?.duration_ms);
+  if (Number.isFinite(duration)) {
+    parts.push(`耗时 ${formatDurationMs(duration)}`);
+  } else {
+    parts.push("耗时统计中");
+  }
+  const usageText = formatUsage(usage);
+  if (usageText) {
+    parts.push(usageText);
+  } else {
+    parts.push("tokens n/a");
+  }
+  return `<div class="llm-model-meta">${parts.map((part) => `<span>${escapeHtml(part)}</span>`).join("")}</div>`;
+}
+
+function formatDurationMs(value) {
+  if (value < 1000) {
+    return `${Math.round(value)} ms`;
+  }
+  return `${(value / 1000).toFixed(2)} s`;
+}
+
+function formatUsage(usage) {
+  if (!usage || typeof usage !== "object") {
+    return "";
+  }
+  const prompt = usage.prompt_tokens ?? usage.input_tokens;
+  const completion = usage.completion_tokens ?? usage.output_tokens;
+  const total = usage.total_tokens;
+  const parts = [];
+  if (prompt !== undefined) parts.push(`in ${prompt}`);
+  if (completion !== undefined) parts.push(`out ${completion}`);
+  if (total !== undefined) parts.push(`total ${total}`);
+  return parts.length ? `tokens ${parts.join(" · ")}` : "";
+}
+
+function formatScore(score) {
+  if (!score || typeof score !== "object" || score.score === undefined || score.score === null) {
+    return "";
+  }
+  return `得分 ${score.score}`;
 }
 
 function readOptionalValue(id) {
@@ -1116,11 +1845,22 @@ function readNumberValue(id, fallback) {
   return Number.isFinite(value) ? value : fallback;
 }
 
+function readOptionalInteger(id) {
+  const raw = $(id)?.value;
+  if (!raw) return undefined;
+  const value = Number.parseInt(raw, 10);
+  return Number.isFinite(value) ? value : undefined;
+}
+
 function readOptionalNumber(id) {
   const raw = $(id)?.value;
   if (!raw) return undefined;
   const value = Number.parseFloat(raw);
   return Number.isFinite(value) ? value : undefined;
+}
+
+function shortHash(value) {
+  return typeof value === "string" && value.length > 12 ? value.slice(0, 12) : value || "n/a";
 }
 
 function escapeHtml(value) {
