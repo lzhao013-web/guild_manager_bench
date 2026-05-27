@@ -178,7 +178,7 @@ ws://127.0.0.1:8000/ws/sessions/{session_id}
 ## LLM Benchmark 工具协议
 
 LLM benchmark 使用 `bench/llm` 下的纯 Python 强类型工具层。工具层只提供状态查询和动作执行，不包含合法动作枚举、推荐、估值或自动配队逻辑；回合预算、提示词和模型调用循环应放在 harness 中。
-动作类工具返回精简变更摘要，不会自动返回完整状态；模型需要完整状态时应主动调用 `get_observation`。
+动作类工具返回精简变更摘要，不会自动返回完整状态；模型需要详细信息时应按模块主动调用 `get_party`、`get_monsters`、`get_crafting`、`get_inventory` 或 `get_upgrades`。
 
 ```python
 from guild_manager_bench.bench.llm import GuildManagerTools
@@ -187,7 +187,8 @@ tools = GuildManagerTools.from_data_dir("data")
 session = tools.start_session()
 session_id = session["session_id"]
 
-observation = tools.get_observation(session_id)
+party = tools.get_party(session_id)
+monsters = tools.get_monsters(session_id)
 
 tools.craft_equipment(session_id, "iron_sword_recipe")
 tools.equip_item(session_id, "vanguard", "eq_0001")
@@ -204,7 +205,7 @@ from guild_manager_bench.bench.llm import TurnToolHarness
 
 harness = TurnToolHarness(tools, session_id, max_tool_calls=20)
 schemas = harness.tool_schemas()
-result = harness.call_tool("get_observation")
+result = harness.call_tool("get_party")
 ```
 
 `TurnToolHarness` 暴露给 LLM 的工具参数使用当前回合可见列表左侧的数字 id；harness 会在内部映射回真实 `adventurer_id`、`monster_id`、`recipe_id`、`upgrade_id` 和 `equipment_instance_id`。
@@ -280,7 +281,11 @@ Harness 内部方法：
 
 可注册给 agent 的工具：
 
-- `get_observation`
+- `get_party`
+- `get_monsters`
+- `get_crafting`
+- `get_inventory`
+- `get_upgrades`
 - `write_memo`
 - `craft_equipment`
 - `purchase_upgrade`

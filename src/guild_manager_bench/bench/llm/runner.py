@@ -742,8 +742,16 @@ def _format_tool_result_for_model(name: str, result: Mapping[str, Any]) -> str:
         return "\n".join(_append_budget_lines(lines, result))
 
     lines.append(f"OK {name}")
-    if name == "get_observation" and isinstance(result.get("observation"), Mapping):
-        _append_observation_lines(lines, result["observation"])
+    if name == "get_party":
+        _append_party_result_lines(lines, result, _result_refs(result))
+    elif name == "get_monsters":
+        _append_monsters_result_lines(lines, result, _result_refs(result))
+    elif name == "get_crafting":
+        _append_crafting_result_lines(lines, result, _result_refs(result))
+    elif name == "get_inventory":
+        _append_inventory_result_lines(lines, result, _result_refs(result))
+    elif name == "get_upgrades":
+        _append_upgrades_result_lines(lines, result, _result_refs(result))
     elif name == "get_events" and isinstance(result.get("events"), Sequence):
         _append_events_lines(lines, result["events"])
     elif name == "preview_battle" and isinstance(result.get("preview"), Mapping):
@@ -975,6 +983,240 @@ def _append_observation_lines(lines: list[str], observation: Mapping[str, Any]) 
             )
 
 
+def _append_party_result_lines(
+    lines: list[str],
+    result: Mapping[str, Any],
+    refs: Mapping[str, Mapping[str, int]],
+) -> None:
+    rules = result.get("experience_rules")
+    if not isinstance(rules, Mapping):
+        rules = {}
+    lines.append(
+        "队伍: "
+        f"回合 {result.get('turn')}/{result.get('max_turns')}; "
+        f"经验池 {result.get('experience_pool')}; "
+        f"升级需求 {rules.get('base_required_experience')}+"
+        f"{rules.get('required_experience_growth')}/级; "
+        f"最高等级 {rules.get('max_level')}"
+    )
+    _append_adventurer_lines(lines, result.get("adventurers"), refs)
+
+
+def _append_monsters_result_lines(
+    lines: list[str],
+    result: Mapping[str, Any],
+    refs: Mapping[str, Mapping[str, int]],
+) -> None:
+    lines.append(f"怪物: 回合 {result.get('turn')}/{result.get('max_turns')}")
+    _append_monster_lines(lines, result.get("monsters"), refs)
+
+
+def _append_crafting_result_lines(
+    lines: list[str],
+    result: Mapping[str, Any],
+    refs: Mapping[str, Mapping[str, int]],
+) -> None:
+    lines.append(
+        "制作资源: "
+        f"金币 {result.get('gold')}; "
+        f"材料 {_mapping_inline(result.get('materials'))}"
+    )
+    _append_recipe_lines(lines, result.get("crafting_recipes"), refs)
+
+
+def _append_inventory_result_lines(
+    lines: list[str],
+    result: Mapping[str, Any],
+    refs: Mapping[str, Mapping[str, int]],
+) -> None:
+    _append_inventory_lines(lines, result.get("equipment_inventory"), refs)
+
+
+def _append_upgrades_result_lines(
+    lines: list[str],
+    result: Mapping[str, Any],
+    refs: Mapping[str, Mapping[str, int]],
+) -> None:
+    lines.append(f"升级资源: 金币 {result.get('gold')}")
+    _append_upgrade_lines(lines, result.get("global_upgrades"), refs)
+
+
+def _append_adventurer_lines(
+    lines: list[str],
+    adventurers: Any,
+    refs: Mapping[str, Mapping[str, int]],
+) -> None:
+    values = [
+        adventurer
+        for adventurer in _sequence(adventurers)
+        if isinstance(adventurer, Mapping)
+    ]
+    if not values:
+        lines.append("冒险者: 无")
+        return
+    lines.append("冒险者:")
+    for adventurer in values:
+        resources = adventurer.get("resources", {})
+        stats = adventurer.get("effective_stats", {})
+        if not isinstance(resources, Mapping):
+            resources = {}
+        if not isinstance(stats, Mapping):
+            stats = {}
+        exp_text = _experience_inline(adventurer)
+        growth_text = _stat_modifier_inline(adventurer.get("stat_growth_per_level"))
+        equipment_text = _equipment_slots_inline(adventurer.get("equipment_slots"), refs)
+        if equipment_text == "无":
+            equipment_text = _equipment_inline(adventurer.get("equipment"), refs)
+        lines.append(
+            "- "
+            f"{display_ref(refs, 'adventurer', adventurer.get('adventurer_id'))} "
+            f"{adventurer.get('name')} "
+            f"Lv{adventurer.get('level')} "
+            f"EXP {exp_text} "
+            f"成长 {growth_text} "
+            f"HP {resources.get('current_hp')}/{stats.get('hp')} "
+            f"MP {resources.get('current_mp')}/{stats.get('mp')} "
+            f"攻击 {stats.get('attack')} 防御 {stats.get('defense')} 速度 {stats.get('speed')} "
+            f"恢复 {stats.get('recovery')} "
+            f"装备 {equipment_text} "
+            f"技能 {skill_summary(adventurer.get('skills'))}"
+        )
+
+
+def _append_monster_lines(
+    lines: list[str],
+    monsters: Any,
+    refs: Mapping[str, Mapping[str, int]],
+) -> None:
+    values = [
+        monster
+        for monster in _sequence(monsters)
+        if isinstance(monster, Mapping)
+    ]
+    if not values:
+        lines.append("怪物: 无")
+        return
+    for monster in values:
+        stats = monster.get("stats", {})
+        if not isinstance(stats, Mapping):
+            stats = {}
+        reward = monster.get("reward", {})
+        reward_text = _reward_inline(reward) if isinstance(reward, Mapping) else "{}"
+        lines.append(
+            "- "
+            f"{display_ref(refs, 'monster', monster.get('monster_id'))} "
+            f"{monster.get('name')} "
+            f"HP {stats.get('hp')} MP {stats.get('mp')} "
+            f"攻击 {stats.get('attack')} 防御 {stats.get('defense')} "
+            f"速度 {stats.get('speed')} 恢复 {stats.get('recovery')} "
+            f"技能 {skill_summary(monster.get('skills'))} "
+            f"奖励 {reward_text}"
+        )
+
+
+def _append_recipe_lines(
+    lines: list[str],
+    recipes: Any,
+    refs: Mapping[str, Mapping[str, int]],
+) -> None:
+    values = [
+        recipe
+        for recipe in _sequence(recipes)
+        if isinstance(recipe, Mapping)
+    ]
+    if not values:
+        lines.append("制作配方: 无")
+        return
+    lines.append("制作配方:")
+    for recipe in values:
+        availability = "可制作" if recipe.get("can_craft") else "不可制作"
+        missing = recipe.get("missing")
+        missing_text = (
+            f"; 缺少 {_mapping_inline(missing)}"
+            if isinstance(missing, Mapping) and missing
+            else ""
+        )
+        lines.append(
+            "- "
+            f"{display_ref(refs, 'recipe', recipe.get('recipe_id'))} "
+            f"{recipe.get('name')} -> {recipe.get('output_name')} "
+            f"槽位 {recipe.get('output_slot')} "
+            f"属性 {_mapping_inline(recipe.get('output_stats'))} "
+            f"技能 {skill_summary(recipe.get('output_skills'))} "
+            f"成本 金币 {recipe.get('gold_cost')} 材料 {_mapping_inline(recipe.get('material_costs'))} "
+            f"{availability}{missing_text}"
+        )
+
+
+def _append_inventory_lines(
+    lines: list[str],
+    inventory: Any,
+    refs: Mapping[str, Mapping[str, int]],
+) -> None:
+    values = [
+        item
+        for item in _sequence(inventory)
+        if isinstance(item, Mapping)
+    ]
+    if not values:
+        lines.append("装备库存: 无")
+        return
+    lines.append("装备库存:")
+    for item in values:
+        equipped = (
+            display_ref(refs, "adventurer", item.get("equipped_by"))
+            if item.get("equipped_by")
+            else "空闲"
+        )
+        lines.append(
+            "- "
+            f"{display_ref(refs, 'equipment', item.get('instance_id'))} "
+            f"{item.get('name')} 槽位 {item.get('slot')} "
+            f"属性 {_mapping_inline(item.get('stats'))} "
+            f"技能 {skill_summary(item.get('skills'))} "
+            f"装备者 {equipped}"
+        )
+
+
+def _append_upgrade_lines(
+    lines: list[str],
+    upgrades: Any,
+    refs: Mapping[str, Mapping[str, int]],
+) -> None:
+    values = [
+        upgrade
+        for upgrade in _sequence(upgrades)
+        if isinstance(upgrade, Mapping)
+    ]
+    if not values:
+        lines.append("全局升级: 无")
+        return
+    lines.append("全局升级:")
+    for upgrade in values:
+        state = (
+            "已解锁"
+            if upgrade.get("unlocked")
+            else "可购买"
+            if upgrade.get("can_purchase")
+            else "不可购买"
+        )
+        missing = upgrade.get("missing")
+        missing_text = (
+            f"; 缺少 {_mapping_inline(missing)}"
+            if isinstance(missing, Mapping) and missing
+            else ""
+        )
+        lines.append(
+            "- "
+            f"{display_ref(refs, 'upgrade', upgrade.get('upgrade_id'))} "
+            f"{upgrade.get('name')} "
+            f"金币 {upgrade.get('gold_cost')} "
+            f"属性 {_mapping_inline(upgrade.get('stats'))} "
+            f"技能 {skill_summary(upgrade.get('skills'))} "
+            f"{state}{missing_text}"
+        )
+
+
 def _append_events_lines(lines: list[str], events: Sequence[Any]) -> None:
     if not events:
         lines.append("事件: 无")
@@ -1121,6 +1363,24 @@ def _equipment_inline(
         display_ref(refs, "equipment", item.get("instance_id"))
         for item in items
     )
+
+
+def _equipment_slots_inline(
+    slots: Any,
+    refs: Mapping[str, Mapping[str, int]],
+) -> str:
+    values = []
+    for slot in _sequence(slots):
+        if not isinstance(slot, Mapping):
+            continue
+        item = slot.get("item")
+        if not isinstance(item, Mapping):
+            continue
+        values.append(
+            f"{item.get('name')}(id={display_ref(refs, 'equipment', item.get('instance_id'))}, "
+            f"{item.get('slot')})"
+        )
+    return ", ".join(values) if values else "无"
 
 
 def _reward_inline(reward: Mapping[str, Any]) -> str:

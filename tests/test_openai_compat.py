@@ -212,7 +212,7 @@ def test_openai_message_conversion_preserves_tool_call_ids() -> None:
                 "tool_calls": [
                     {
                         "id": "call_1",
-                        "name": "get_observation",
+                        "name": "get_party",
                         "arguments": {},
                     }
                 ],
@@ -220,7 +220,7 @@ def test_openai_message_conversion_preserves_tool_call_ids() -> None:
             {
                 "role": "tool",
                 "tool_call_id": "call_1",
-                "name": "get_observation",
+                "name": "get_party",
                 "content": '{"ok": true}',
             },
         ),
@@ -252,7 +252,7 @@ def test_openai_response_preserves_reasoning_content_for_followup() -> None:
                                 "id": "call_reasoning",
                                 "type": "function",
                                 "function": {
-                                    "name": "get_observation",
+                                    "name": "get_party",
                                     "arguments": "{}",
                                 },
                             }
@@ -381,7 +381,7 @@ def test_runner_messages_are_accepted_by_openai_agent_shape() -> None:
             self.calls += 1
             if self.calls == 1:
                 return LlmAgentResponse(
-                    tool_calls=(LlmToolCall("get_observation", {}),),
+                    tool_calls=(LlmToolCall("get_party", {}),),
                     assistant_metadata={"reasoning_content": "need tools"},
                 )
             assert messages[-1]["role"] == "tool"

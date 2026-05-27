@@ -17,7 +17,11 @@ def test_tool_schemas_expose_agent_facing_tools() -> None:
     names = {schema["name"] for schema in schemas}
 
     assert {
-        "get_observation",
+        "get_party",
+        "get_monsters",
+        "get_crafting",
+        "get_inventory",
+        "get_upgrades",
         "craft_equipment",
         "equip_item",
         "unequip_item",
@@ -30,6 +34,7 @@ def test_tool_schemas_expose_agent_facing_tools() -> None:
     assert "get_available_actions" not in names
     assert "list_sessions" not in names
     assert "get_score" not in names
+    assert "get_observation" not in names
     assert "preview_battle" not in names
     for schema in schemas:
         parameters = schema["parameters"]
@@ -108,8 +113,9 @@ def test_call_tool_dispatches_and_validates_tool_name() -> None:
     started = tools.start_session("dispatch-test")
 
     assert started["session_id"] == "dispatch-test"
-    observation = tools.call_tool("get_observation", {"session_id": "dispatch-test"})
-    assert observation["observation"]["session_id"] == "dispatch-test"
+    party = tools.call_tool("get_party", {"session_id": "dispatch-test"})
+    assert party["session_id"] == "dispatch-test"
+    assert party["adventurers"][0]["adventurer_id"] == "vanguard"
 
     with pytest.raises(ToolCallError):
         tools.call_tool("unknown_tool", {})
@@ -120,10 +126,10 @@ def test_turn_tool_harness_enforces_budget_and_still_allows_end_turn() -> None:
     session_id = tools.start_session("budget-test")["session_id"]
     harness = TurnToolHarness(tools, session_id, max_tool_calls=1)
 
-    observed = harness.call_tool("get_observation", {"session_id": "wrong-session"})
+    observed = harness.call_tool("get_party", {"session_id": "wrong-session"})
     assert observed["tool_budget"]["remaining"] == 0
     assert observed["tool_budget"]["end_turn_required"] is True
-    assert observed["observation"]["session_id"] == session_id
+    assert observed["session_id"] == session_id
 
     blocked = harness.call_tool("get_events")
     assert blocked["ok"] is False

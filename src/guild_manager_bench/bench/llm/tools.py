@@ -105,6 +105,70 @@ class GuildManagerTools:
             session = self._get_session(session_id)
             return {"session_id": session.session_id, "observation": session.observation()}
 
+    def get_party(self, session_id: str) -> dict[str, Any]:
+        """读取冒险者和经验相关详细信息。"""
+
+        with self._lock:
+            session = self._get_session(session_id)
+            observation = session.observation()
+            return {
+                "session_id": session.session_id,
+                "turn": observation["turn"],
+                "max_turns": observation["max_turns"],
+                "experience_pool": observation["experience_pool"],
+                "experience_rules": observation["experience_rules"],
+                "adventurers": observation["adventurers"],
+            }
+
+    def get_monsters(self, session_id: str) -> dict[str, Any]:
+        """读取当前怪物详细信息。"""
+
+        with self._lock:
+            session = self._get_session(session_id)
+            observation = session.observation()
+            return {
+                "session_id": session.session_id,
+                "turn": observation["turn"],
+                "max_turns": observation["max_turns"],
+                "monsters": observation["monsters"],
+            }
+
+    def get_crafting(self, session_id: str) -> dict[str, Any]:
+        """读取资源和制作配方详细信息。"""
+
+        with self._lock:
+            session = self._get_session(session_id)
+            observation = session.observation()
+            return {
+                "session_id": session.session_id,
+                "gold": observation["gold"],
+                "materials": observation["materials"],
+                "crafting_recipes": observation["crafting_recipes"],
+            }
+
+    def get_inventory(self, session_id: str) -> dict[str, Any]:
+        """读取装备库存详细信息。"""
+
+        with self._lock:
+            session = self._get_session(session_id)
+            observation = session.observation()
+            return {
+                "session_id": session.session_id,
+                "equipment_inventory": observation["equipment_inventory"],
+            }
+
+    def get_upgrades(self, session_id: str) -> dict[str, Any]:
+        """读取金币和全局升级详细信息。"""
+
+        with self._lock:
+            session = self._get_session(session_id)
+            observation = session.observation()
+            return {
+                "session_id": session.session_id,
+                "gold": observation["gold"],
+                "global_upgrades": observation["global_upgrades"],
+            }
+
     def get_state(self, session_id: str) -> GameState:
         """读取内部状态，供 benchmark harness 做离线评估。"""
 
@@ -430,7 +494,11 @@ def _non_empty_string(value: object) -> bool:
 
 
 _BASE_HANDLER_NAMES = {
-    "get_observation": "get_observation",
+    "get_party": "get_party",
+    "get_monsters": "get_monsters",
+    "get_crafting": "get_crafting",
+    "get_inventory": "get_inventory",
+    "get_upgrades": "get_upgrades",
     "craft_equipment": "craft_equipment",
     "purchase_upgrade": "purchase_upgrade",
     "allocate_experience": "allocate_experience",
@@ -448,34 +516,74 @@ _SESSION_ID = {
 _ADVENTURER_ID = {
     "type": "integer",
     "minimum": 1,
-    "description": "冒险者数字 id，使用提示词或 get_observation 中“冒险者”列表左侧的数字。",
+    "description": "冒险者数字 id，使用提示词或 get_party 中“冒险者”列表左侧的数字。",
 }
 _MONSTER_ID = {
     "type": "integer",
     "minimum": 1,
-    "description": "怪物数字 id，使用提示词或 get_observation 中“怪物”列表左侧的数字。",
+    "description": "怪物数字 id，使用提示词或 get_monsters 中“怪物”列表左侧的数字。",
 }
 _RECIPE_ID = {
     "type": "integer",
     "minimum": 1,
-    "description": "配方数字 id，使用 get_observation 中“制作配方”列表左侧的数字。",
+    "description": "配方数字 id，使用 get_crafting 中“制作配方”列表左侧的数字。",
 }
 _UPGRADE_ID = {
     "type": "integer",
     "minimum": 1,
-    "description": "升级数字 id，使用 get_observation 中“全局升级”列表左侧的数字。",
+    "description": "升级数字 id，使用 get_upgrades 中“全局升级”列表左侧的数字。",
 }
 _EQUIPMENT_INSTANCE_ID = {
     "type": "integer",
     "minimum": 1,
-    "description": "装备数字 id，使用 get_observation 中“装备库存”列表左侧的数字。",
+    "description": "装备数字 id，使用 get_inventory 中“装备库存”列表左侧的数字。",
 }
 
 
 _BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
     {
-        "name": "get_observation",
-        "description": "读取一个会话的完整可见状态。",
+        "name": "get_party",
+        "description": "读取冒险者、经验池、升级成长和装备槽位等队伍详细信息。",
+        "parameters": {
+            "type": "object",
+            "required": ["session_id"],
+            "properties": {"session_id": _SESSION_ID},
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "get_monsters",
+        "description": "读取当前回合怪物的属性、技能和奖励详细信息。",
+        "parameters": {
+            "type": "object",
+            "required": ["session_id"],
+            "properties": {"session_id": _SESSION_ID},
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "get_crafting",
+        "description": "读取当前金币、材料和制作配方详细信息。",
+        "parameters": {
+            "type": "object",
+            "required": ["session_id"],
+            "properties": {"session_id": _SESSION_ID},
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "get_inventory",
+        "description": "读取当前装备库存、装备属性、技能和装备者详细信息。",
+        "parameters": {
+            "type": "object",
+            "required": ["session_id"],
+            "properties": {"session_id": _SESSION_ID},
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "get_upgrades",
+        "description": "读取当前金币和全局升级详细信息。",
         "parameters": {
             "type": "object",
             "required": ["session_id"],

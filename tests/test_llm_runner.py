@@ -121,7 +121,7 @@ def test_empty_response_counter_resets_after_tool_call() -> None:
     agent = SequenceAgent(
         (
             LlmAgentResponse(text="thinking"),
-            LlmAgentResponse(tool_calls=(LlmToolCall("get_observation", {}),)),
+            LlmAgentResponse(tool_calls=(LlmToolCall("get_party", {}),)),
             LlmAgentResponse(text="thinking again"),
             LlmAgentResponse(tool_calls=(LlmToolCall("end_turn", {"hunts": []}),)),
         )
@@ -173,7 +173,7 @@ def test_invalid_end_turn_fails_after_attempt_limit() -> None:
 
 def test_budget_exhaustion_without_end_turn_fails() -> None:
     agent = StaticAgent(
-        LlmAgentResponse(tool_calls=(LlmToolCall("get_observation", {}),))
+        LlmAgentResponse(tool_calls=(LlmToolCall("get_party", {}),))
     )
 
     run = run_llm_game(
@@ -196,7 +196,7 @@ def test_run_llm_turn_emits_debug_events() -> None:
     events: list[dict[str, Any]] = []
     agent = SequenceAgent(
         (
-            LlmAgentResponse(tool_calls=(LlmToolCall("get_observation", {}),)),
+            LlmAgentResponse(tool_calls=(LlmToolCall("get_party", {}),)),
             LlmAgentResponse(tool_calls=(LlmToolCall("end_turn", {"hunts": []}),)),
         )
     )
@@ -215,16 +215,15 @@ def test_run_llm_turn_emits_debug_events() -> None:
     model_requests = [event for event in events if event["type"] == "model_request"]
     tool_message = model_requests[1]["request"]["messages"][-1]
     assert tool_message["role"] == "tool"
-    assert tool_message["content"].startswith("OK get_observation")
+    assert tool_message["content"].startswith("OK get_party")
     assert not tool_message["content"].lstrip().startswith("{")
-    assert "seed 20260524" in tool_message["content"]
-    assert "评分seed 20260526" in tool_message["content"]
+    assert "队伍: 回合 1/" in tool_message["content"]
     assert "冒险者:" in tool_message["content"]
     assert "- 1 先锋" in tool_message["content"]
     assert "EXP 0/" in tool_message["content"]
     assert "成长 HP+18 MP+1 攻击+2 防御+4 速度+1 恢复+2" in tool_message["content"]
     assert "技能 强力打击 主动" in tool_message["content"]
-    assert "效果 伤害倍率 2" in tool_message["content"]
+    assert "效果 伤害倍率 1.8" in tool_message["content"]
 
 
 def test_turn_prompt_includes_compact_skill_summaries() -> None:
