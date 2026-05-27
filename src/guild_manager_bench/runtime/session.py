@@ -11,6 +11,7 @@ from guild_manager_bench.game.actions import (
     EquipAction,
     PreparationAction,
     PurchaseUpgradeAction,
+    RecruitAction,
     UnequipAction,
 )
 from guild_manager_bench.game.engine import TurnResult, apply_preparation_action, end_turn, new_game
@@ -190,6 +191,9 @@ def _preparation_summary(
     if isinstance(action, AllocateExperienceAction):
         adventurer = _adventurer_by_id(observation, action.adventurer_id)
         return f"分配 {action.amount} 经验给 {adventurer['name']}"
+    if isinstance(action, RecruitAction):
+        candidate = _recruit_candidate_by_id(observation, action.candidate_id)
+        return f"招募 {candidate['name']}"
     if isinstance(action, EquipAction):
         adventurer = _adventurer_by_id(observation, action.adventurer_id)
         equipment = _equipment_by_instance_id(observation, action.equipment_instance_id)
@@ -212,6 +216,13 @@ def _observation_changes(
 ) -> list[dict[str, Any]]:
     changes: list[dict[str, Any]] = []
     _append_value_change(changes, "resource", "金币", before["gold"], after["gold"])
+    _append_value_change(
+        changes,
+        "resource",
+        "队伍人数上限",
+        before.get("party_size_limit"),
+        after.get("party_size_limit"),
+    )
     _append_value_change(
         changes,
         "resource",
@@ -256,8 +267,17 @@ def _append_adventurer_changes(
     }
     for adventurer in after["adventurers"]:
         adventurer_id = adventurer["adventurer_id"]
-        previous = before_by_id[adventurer_id]
         prefix = adventurer["name"]
+        previous = before_by_id.get(adventurer_id)
+        if previous is None:
+            changes.append(
+                {
+                    "kind": "adventurer",
+                    "label": "新冒险者",
+                    "after": f"{prefix} ({adventurer_id})",
+                }
+            )
+            continue
         for key, label in (("level", "等级"), ("experience", "经验")):
             _append_value_change(
                 changes,
@@ -393,6 +413,13 @@ def _upgrade_by_id(observation: dict[str, Any], upgrade_id: str) -> dict[str, An
         if upgrade["upgrade_id"] == upgrade_id:
             return upgrade
     raise ValueError(f"unknown upgrade: {upgrade_id}")
+
+
+def _recruit_candidate_by_id(observation: dict[str, Any], candidate_id: str) -> dict[str, Any]:
+    for candidate in observation["recruit_candidates"]:
+        if candidate["candidate_id"] == candidate_id:
+            return candidate
+    raise ValueError(f"unknown recruit candidate: {candidate_id}")
 
 
 def _equipment_by_instance_id(

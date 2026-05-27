@@ -102,6 +102,27 @@ class TurnRecoveryRules:
 
 
 @dataclass(frozen=True, slots=True)
+class RecruitmentRules:
+    """每回合招募候选与队伍人数上限规则。"""
+
+    candidate_count: int = 3
+    first_turn_candidate_count: int | None = None
+    initial_party_size_limit: int = 3
+    maximum_party_size_limit: int = 6
+
+    def __post_init__(self) -> None:
+        _require_at_least("candidate_count", self.candidate_count, 0)
+        if self.first_turn_candidate_count is not None:
+            _require_at_least("first_turn_candidate_count", self.first_turn_candidate_count, 0)
+        _require_at_least("initial_party_size_limit", self.initial_party_size_limit, 1)
+        _require_at_least(
+            "maximum_party_size_limit",
+            self.maximum_party_size_limit,
+            self.initial_party_size_limit,
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class MonsterArchetype:
     """怪物原型。"""
 
@@ -214,6 +235,68 @@ class LevelSkillUnlock:
 
 
 @dataclass(frozen=True, slots=True)
+class RecruitableAdventurerTemplate:
+    """可被招募系统刷出的冒险者模板。"""
+
+    template_id: str
+    name: str
+    recruit_gold: int
+    base_stats: CombatStats
+    stat_growth_per_level: CombatStatModifier
+    skills: tuple[Skill, ...] = ()
+    level_skill_unlocks: tuple[LevelSkillUnlock, ...] = ()
+
+    def __post_init__(self) -> None:
+        _require_non_empty("template_id", self.template_id)
+        _require_non_empty("name", self.name)
+        _require_at_least("recruit_gold", self.recruit_gold, 0)
+        if not isinstance(self.base_stats, CombatStats):
+            raise TypeError("base_stats must be CombatStats")
+        if not isinstance(self.stat_growth_per_level, CombatStatModifier):
+            raise TypeError("stat_growth_per_level must be CombatStatModifier")
+        object.__setattr__(self, "skills", tuple(self.skills))
+        for skill in self.skills:
+            if not isinstance(skill, Skill):
+                raise TypeError("skills must be Skill")
+        object.__setattr__(self, "level_skill_unlocks", tuple(self.level_skill_unlocks))
+        for unlock in self.level_skill_unlocks:
+            if not isinstance(unlock, LevelSkillUnlock):
+                raise TypeError("level_skill_unlocks must be LevelSkillUnlock")
+
+
+@dataclass(frozen=True, slots=True)
+class RecruitCandidate:
+    """当前回合可招募的冒险者候选。"""
+
+    candidate_id: str
+    template_id: str
+    name: str
+    recruit_gold: int
+    base_stats: CombatStats
+    stat_growth_per_level: CombatStatModifier
+    skills: tuple[Skill, ...] = ()
+    level_skill_unlocks: tuple[LevelSkillUnlock, ...] = ()
+
+    def __post_init__(self) -> None:
+        _require_non_empty("candidate_id", self.candidate_id)
+        _require_non_empty("template_id", self.template_id)
+        _require_non_empty("name", self.name)
+        _require_at_least("recruit_gold", self.recruit_gold, 0)
+        if not isinstance(self.base_stats, CombatStats):
+            raise TypeError("base_stats must be CombatStats")
+        if not isinstance(self.stat_growth_per_level, CombatStatModifier):
+            raise TypeError("stat_growth_per_level must be CombatStatModifier")
+        object.__setattr__(self, "skills", tuple(self.skills))
+        for skill in self.skills:
+            if not isinstance(skill, Skill):
+                raise TypeError("skills must be Skill")
+        object.__setattr__(self, "level_skill_unlocks", tuple(self.level_skill_unlocks))
+        for unlock in self.level_skill_unlocks:
+            if not isinstance(unlock, LevelSkillUnlock):
+                raise TypeError("level_skill_unlocks must be LevelSkillUnlock")
+
+
+@dataclass(frozen=True, slots=True)
 class GameContent:
     """一局游戏使用的静态内容。"""
 
@@ -222,6 +305,7 @@ class GameContent:
     equipment_templates: tuple[EquipmentTemplate, ...] = ()
     crafting_recipes: tuple[CraftingRecipe, ...] = ()
     global_upgrades: tuple[GlobalUpgrade, ...] = ()
+    recruitable_adventurers: tuple[RecruitableAdventurerTemplate, ...] = ()
     experience_rules: ExperienceRules = field(default_factory=ExperienceRules)
 
     def __post_init__(self) -> None:
@@ -230,15 +314,20 @@ class GameContent:
         object.__setattr__(self, "equipment_templates", tuple(self.equipment_templates))
         object.__setattr__(self, "crafting_recipes", tuple(self.crafting_recipes))
         object.__setattr__(self, "global_upgrades", tuple(self.global_upgrades))
+        object.__setattr__(self, "recruitable_adventurers", tuple(self.recruitable_adventurers))
 
         _validate_unique_ids("adventurer", (item.adventurer_id for item in self.adventurers))
         _validate_unique_ids("monster archetype", (item.archetype_id for item in self.monster_archetypes))
         _validate_unique_ids("equipment template", (item.equipment_id for item in self.equipment_templates))
         _validate_unique_ids("crafting recipe", (item.recipe_id for item in self.crafting_recipes))
         _validate_unique_ids("global upgrade", (item.upgrade_id for item in self.global_upgrades))
+        _validate_unique_ids(
+            "recruitable adventurer template",
+            (item.template_id for item in self.recruitable_adventurers),
+        )
 
-        if not self.adventurers:
-            raise ValueError("content must have at least one adventurer")
+        if not self.adventurers and not self.recruitable_adventurers:
+            raise ValueError("content must have at least one adventurer or recruitable adventurer")
         if not self.monster_archetypes:
             raise ValueError("content must have at least one monster archetype")
         if not isinstance(self.experience_rules, ExperienceRules):
@@ -253,6 +342,7 @@ class GameRules:
     seed: int
     monster_spawn: MonsterSpawnRules
     turn_recovery: TurnRecoveryRules = field(default_factory=TurnRecoveryRules)
+    recruitment: RecruitmentRules = field(default_factory=RecruitmentRules)
 
     def __post_init__(self) -> None:
         _require_at_least("max_turns", self.max_turns, 1)
@@ -262,6 +352,8 @@ class GameRules:
             raise TypeError("monster_spawn must be MonsterSpawnRules")
         if not isinstance(self.turn_recovery, TurnRecoveryRules):
             raise TypeError("turn_recovery must be TurnRecoveryRules")
+        if not isinstance(self.recruitment, RecruitmentRules):
+            raise TypeError("recruitment must be RecruitmentRules")
 
 
 @dataclass(frozen=True, slots=True)
@@ -347,7 +439,9 @@ class GameState:
     equipment_inventory: tuple[EquipmentInstance, ...]
     unlocked_upgrade_ids: frozenset[str]
     current_monsters: tuple[SpawnedMonster, ...]
+    recruit_candidates: tuple[RecruitCandidate, ...] = ()
     next_equipment_instance_number: int = 1
+    next_adventurer_number: int = 1
 
     def __post_init__(self) -> None:
         _require_at_least("turn", self.turn, 1)
@@ -357,15 +451,18 @@ class GameState:
         _require_at_least("gold", self.gold, 0)
         _require_at_least("experience_pool", self.experience_pool, 0)
         _require_at_least("next_equipment_instance_number", self.next_equipment_instance_number, 1)
+        _require_at_least("next_adventurer_number", self.next_adventurer_number, 1)
         object.__setattr__(self, "materials", _freeze_non_negative_mapping(self.materials))
         object.__setattr__(self, "adventurers", tuple(self.adventurers))
         object.__setattr__(self, "equipment_inventory", tuple(self.equipment_inventory))
         object.__setattr__(self, "current_monsters", tuple(self.current_monsters))
+        object.__setattr__(self, "recruit_candidates", tuple(self.recruit_candidates))
         object.__setattr__(self, "unlocked_upgrade_ids", frozenset(self.unlocked_upgrade_ids))
 
         _validate_unique_ids("adventurer", (item.adventurer_id for item in self.adventurers))
         _validate_unique_ids("equipment instance", (item.instance_id for item in self.equipment_inventory))
         _validate_unique_ids("monster", (item.monster_id for item in self.current_monsters))
+        _validate_unique_ids("recruit candidate", (item.candidate_id for item in self.recruit_candidates))
 
 
 def _freeze_non_negative_mapping(values: Mapping[str, int]) -> Mapping[str, int]:

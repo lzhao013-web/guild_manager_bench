@@ -172,6 +172,22 @@ class GuildManagerTools:
                 "global_upgrades": observation["global_upgrades"],
             }
 
+    def get_recruitment(self, session_id: str) -> dict[str, Any]:
+        """读取招募候选和队伍人数上限详细信息。"""
+
+        with self._lock:
+            session = self._get_session(session_id)
+            observation = session.observation()
+            return {
+                "session_id": session.session_id,
+                "turn": observation["turn"],
+                "max_turns": observation["max_turns"],
+                "gold": observation["gold"],
+                "party_size": observation["party_size"],
+                "party_size_limit": observation["party_size_limit"],
+                "recruit_candidates": observation["recruit_candidates"],
+            }
+
     def get_state(self, session_id: str) -> GameState:
         """读取内部状态，供 benchmark harness 做离线评估。"""
 
@@ -210,6 +226,21 @@ class GuildManagerTools:
                 "type": "allocate_experience",
                 "adventurer_id": adventurer_id,
                 "amount": amount,
+            },
+        )
+
+    def recruit_adventurer(
+        self,
+        session_id: str,
+        candidate_id: str,
+    ) -> dict[str, Any]:
+        """招募一个候选冒险者。"""
+
+        return self._submit_preparation(
+            session_id,
+            {
+                "type": "recruit",
+                "candidate_id": candidate_id,
             },
         )
 
@@ -276,6 +307,7 @@ class GuildManagerTools:
                     ],
                     "crafted_equipment_ids": list(result.crafted_equipment_ids),
                     "purchased_upgrade_ids": list(result.purchased_upgrade_ids),
+                    "recruited_adventurer_ids": list(result.recruited_adventurer_ids),
                 },
             }
 
@@ -504,9 +536,11 @@ _BASE_HANDLER_NAMES = {
     "get_crafting": "get_crafting",
     "get_inventory": "get_inventory",
     "get_upgrades": "get_upgrades",
+    "get_recruitment": "get_recruitment",
     "craft_equipment": "craft_equipment",
     "purchase_upgrade": "purchase_upgrade",
     "allocate_experience": "allocate_experience",
+    "recruit_adventurer": "recruit_adventurer",
     "equip_item": "equip_item",
     "unequip_item": "unequip_item",
     "end_turn": "end_turn",
@@ -537,6 +571,11 @@ _UPGRADE_ID = {
     "type": "integer",
     "minimum": 1,
     "description": "升级数字 id，使用 get_upgrades 中“全局升级”列表左侧的数字。",
+}
+_RECRUIT_CANDIDATE_ID = {
+    "type": "integer",
+    "minimum": 1,
+    "description": "招募候选数字 id，使用 get_recruitment 中“招募候选”列表左侧的数字。",
 }
 _EQUIPMENT_INSTANCE_ID = {
     "type": "integer",
@@ -597,6 +636,16 @@ _BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
         },
     },
     {
+        "name": "get_recruitment",
+        "description": "读取当前金币、队伍人数上限和可招募候选详细信息。",
+        "parameters": {
+            "type": "object",
+            "required": ["session_id"],
+            "properties": {"session_id": _SESSION_ID},
+            "additionalProperties": False,
+        },
+    },
+    {
         "name": "craft_equipment",
         "description": "消耗金币和材料，按配方合成装备实例。",
         "parameters": {
@@ -636,6 +685,19 @@ _BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
                     "minimum": 0,
                     "description": "要分配的经验值，不能超过当前 experience_pool。",
                 },
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "recruit_adventurer",
+        "description": "消耗金币招募一个候选冒险者加入队伍；队伍人数不能超过当前上限。",
+        "parameters": {
+            "type": "object",
+            "required": ["session_id", "candidate_id"],
+            "properties": {
+                "session_id": _SESSION_ID,
+                "candidate_id": _RECRUIT_CANDIDATE_ID,
             },
             "additionalProperties": False,
         },

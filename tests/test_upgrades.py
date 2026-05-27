@@ -9,6 +9,7 @@ from guild_manager_bench.game.upgrades import (
     apply_upgrade_stats,
     can_purchase_upgrade,
     combine_upgrade_skills,
+    combine_party_size_bonus,
     missing_upgrade_requirements,
     purchase_upgrade,
 )
@@ -135,6 +136,23 @@ def test_combine_upgrade_skills_appends_global_skills() -> None:
     result = combine_upgrade_skills((base_skill,), (upgrade,))
 
     assert result == (base_skill, upgrade_skill)
+
+
+def test_combine_party_size_bonus_adds_unlocked_upgrade_capacity() -> None:
+    first = GlobalUpgrade(
+        upgrade_id="contracts",
+        name="契约",
+        gold_cost=50,
+        party_size_bonus=1,
+    )
+    second = GlobalUpgrade(
+        upgrade_id="roster",
+        name="名册",
+        gold_cost=80,
+        party_size_bonus=2,
+    )
+
+    assert combine_party_size_bonus((first, second)) == 3
 
 
 def test_global_upgrade_rejects_self_requirement() -> None:

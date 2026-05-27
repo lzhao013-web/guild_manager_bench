@@ -22,10 +22,12 @@ def test_tool_schemas_expose_agent_facing_tools() -> None:
         "get_crafting",
         "get_inventory",
         "get_upgrades",
+        "get_recruitment",
         "craft_equipment",
         "equip_item",
         "unequip_item",
         "allocate_experience",
+        "recruit_adventurer",
         "purchase_upgrade",
         "end_turn",
         "get_events",
@@ -51,6 +53,10 @@ def test_tool_schemas_expose_agent_facing_tools() -> None:
             "description"
         ]
     )
+    assert (
+        by_name["recruit_adventurer"]["parameters"]["properties"]["candidate_id"]["type"]
+        == "integer"
+    )
     assert "preview_battle" in {
         schema["name"]
         for schema in tool_schemas(expose_battle_preview=True)
@@ -68,19 +74,28 @@ def test_toolbox_runs_actions_through_typed_tools() -> None:
     assert crafted["event"]["summary"] == "合成 打造铁剑"
     assert crafted["event"]["changes"][0]["label"] == "金币"
 
-    equipped = tools.equip_item(session_id, "vanguard", "eq_0001")
+    adventurer_id = _recruit_first(tools, session_id)
+    observation = tools.get_observation(session_id)["observation"]
+    adventurer_name = observation["adventurers"][0]["name"]
+
+    equipped = tools.equip_item(session_id, adventurer_id, "eq_0001")
     assert equipped["ok"] is True
     assert "observation" not in equipped
-    assert equipped["event"]["summary"] == "先锋 装备 铁剑"
+    assert equipped["event"]["summary"] == f"{adventurer_name} 装备 铁剑"
 
     observation = tools.get_observation(session_id)["observation"]
     assert observation["adventurers"][0]["equipment"][0]["instance_id"] == "eq_0001"
+
+    recruitment = tools.get_recruitment(session_id)
+    assert recruitment["party_size"] == 1
+    assert recruitment["party_size_limit"] == 3
+    assert recruitment["recruit_candidates"]
 
     ended = tools.end_turn(
         session_id,
         [
             {
-                "adventurer_id": "vanguard",
+                "adventurer_id": adventurer_id,
                 "monster_id": observation["monsters"][0]["monster_id"],
             }
         ],
@@ -115,7 +130,7 @@ def test_call_tool_dispatches_and_validates_tool_name() -> None:
     assert started["session_id"] == "dispatch-test"
     party = tools.call_tool("get_party", {"session_id": "dispatch-test"})
     assert party["session_id"] == "dispatch-test"
-    assert party["adventurers"][0]["adventurer_id"] == "vanguard"
+    assert party["adventurers"] == []
 
     with pytest.raises(ToolCallError):
         tools.call_tool("unknown_tool", {})
@@ -161,6 +176,9 @@ def test_turn_tool_harness_resolves_numeric_ids() -> None:
     session_id = tools.start_session("numeric-refs")["session_id"]
     harness = TurnToolHarness(tools, session_id, max_tool_calls=3)
 
+    recruited = harness.call_tool("recruit_adventurer", {"candidate_id": 1})
+    assert recruited["ok"] is True
+
     crafted = harness.call_tool("craft_equipment", {"recipe_id": 1})
     assert crafted["ok"] is True
 
@@ -181,6 +199,19 @@ def test_turn_tool_harness_resolves_numeric_ids() -> None:
         {"hunts": [{"adventurer_id": 1, "monster_id": 1}]},
     )
     assert ended["ok"] is True
+
+
+def test_turn_tool_harness_resolves_recruit_candidate_numeric_id() -> None:
+    tools = GuildManagerTools.from_data_dir(_data_dir())
+    session_id = tools.start_session("recruit-numeric-refs")["session_id"]
+    harness = TurnToolHarness(tools, session_id, max_tool_calls=2)
+
+    recruited = harness.call_tool("recruit_adventurer", {"candidate_id": 1})
+
+    assert recruited["ok"] is True
+    observation = tools.get_observation(session_id)["observation"]
+    assert len(observation["adventurers"]) == 1
+    assert observation["adventurers"][-1]["adventurer_id"] == "recruit_0001"
 
 
 def test_battle_preview_tool_is_controlled_by_definition_switch() -> None:
@@ -220,6 +251,7 @@ def test_battle_preview_tool_is_controlled_by_definition_switch() -> None:
     )
     session = enabled_tools.start_session("preview-enabled")
     session_id = session["session_id"]
+    adventurer_id = _recruit_first(enabled_tools, session_id)
     before = enabled_tools.get_observation(session_id)["observation"]
     harness = TurnToolHarness(enabled_tools, session_id, max_tool_calls=2)
 
@@ -232,14 +264,14 @@ def test_battle_preview_tool_is_controlled_by_definition_switch() -> None:
     preview = harness.call_tool(
         "preview_battle",
         {
-            "adventurer_id": "vanguard",
+            "adventurer_id": adventurer_id,
             "monster_id": monster_id,
         },
     )
     after = enabled_tools.get_observation(session_id)["observation"]
 
     assert preview["ok"] is True
-    assert preview["preview"]["adventurer_id"] == "vanguard"
+    assert preview["preview"]["adventurer_id"] == adventurer_id
     assert preview["preview"]["monster_id"] == monster_id
     assert "adventurer_resources" in preview["preview"]
     assert "events" in preview["preview"]
@@ -251,3 +283,12 @@ def test_battle_preview_tool_is_controlled_by_definition_switch() -> None:
 
 def _data_dir() -> Path:
     return Path(__file__).resolve().parents[1] / "data" / "presets" / "default"
+
+
+def _recruit_first(tools: GuildManagerTools, session_id: str) -> str:
+    recruitment = tools.get_recruitment(session_id)
+    candidate_id = recruitment["recruit_candidates"][0]["candidate_id"]
+    result = tools.recruit_adventurer(session_id, candidate_id)
+    assert result["ok"] is True
+    observation = tools.get_observation(session_id)["observation"]
+    return observation["adventurers"][0]["adventurer_id"]

@@ -14,6 +14,7 @@ def build_numeric_refs(observation: Mapping[str, Any]) -> RefMap:
         "monster": _refs_for(observation, "monsters", "monster_id"),
         "recipe": _refs_for(observation, "crafting_recipes", "recipe_id"),
         "upgrade": _refs_for(observation, "global_upgrades", "upgrade_id"),
+        "recruit": _refs_for(observation, "recruit_candidates", "candidate_id"),
         "equipment": _refs_for(
             observation,
             "equipment_inventory",
@@ -64,6 +65,8 @@ def resolve_tool_arguments(
         _resolve_field(values, "upgrade_id", "upgrade", refs)
     elif name == "allocate_experience":
         _resolve_field(values, "adventurer_id", "adventurer", refs)
+    elif name == "recruit_adventurer":
+        _resolve_field(values, "candidate_id", "recruit", refs)
     elif name == "equip_item":
         _resolve_field(values, "adventurer_id", "adventurer", refs)
         _resolve_field(values, "equipment_instance_id", "equipment", refs)

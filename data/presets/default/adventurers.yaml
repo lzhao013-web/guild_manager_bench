@@ -1,6 +1,7 @@
-adventurers:
+recruitable_adventurers:
   - id: vanguard
     name: 先锋
+    recruit_gold: 44
     stats:
       hp: 120
       mp: 10
@@ -59,6 +60,7 @@ adventurers:
 
   - id: striker
     name: 游击手
+    recruit_gold: 46
     stats:
       hp: 90
       mp: 18
@@ -117,6 +119,7 @@ adventurers:
 
   - id: mystic
     name: 秘术师
+    recruit_gold: 45
     stats:
       hp: 80
       mp: 28
@@ -210,3 +213,296 @@ adventurers:
                       stat: attack
                       value: 0.85
                       target: self
+
+  - id: wardancer
+    name: 战舞者
+    recruit_gold: 42
+    stats:
+      hp: 92
+      mp: 18
+      attack: 20
+      defense: 5
+      speed: 16
+      recovery: 4
+    stat_growth_per_level:
+      hp: 10
+      mp: 2
+      attack: 4
+      defense: 1
+      speed: 3
+      recovery: 1
+    skills:
+      - id: dancer_flurry
+        name: 连舞斩
+        kind: active
+        priority: 145
+        mp_cost: 5
+        condition:
+          type: self_mp_pct_gte
+          value: 0.25
+        effects:
+          - type: damage_multiplier
+            value: 1.25
+          - type: damage_bonus
+            value: 5
+    level_skill_unlocks:
+      - level: 3
+        skills:
+          - id: tempo_rush
+            name: 乘势疾攻
+            kind: passive
+            condition:
+              type: self_hp_pct_gte
+              value: 0.5
+            effects:
+              - type: stat_bonus
+                stat: speed
+                value: 3
+                target: self
+
+  - id: sentinel
+    name: 哨卫
+    recruit_gold: 45
+    stats:
+      hp: 118
+      mp: 12
+      attack: 14
+      defense: 10
+      speed: 8
+      recovery: 6
+    stat_growth_per_level:
+      hp: 17
+      mp: 1
+      attack: 2
+      defense: 4
+      speed: 1
+      recovery: 2
+    skills:
+      - id: guard_oath
+        name: 守护誓约
+        kind: passive
+        condition:
+          type: self_hp_pct_lte
+          value: 0.6
+        effects:
+          - type: stat_bonus
+            stat: defense
+            value: 5
+            target: self
+    level_skill_unlocks:
+      - level: 3
+        skills:
+          - id: iron_bastion
+            name: 铁壁姿态
+            kind: active
+            priority: 170
+            mp_cost: 4
+            once_per_battle: true
+            condition:
+              type: self_hp_pct_lte
+              value: 0.75
+            effects:
+              - type: apply_status
+                target: self
+                status:
+                  id: iron_bastion
+                  name: 铁壁
+                  duration: 2
+                  polarity: positive
+                  stack_mode: refresh
+                  effects:
+                    - type: stat_bonus
+                      stat: defense
+                      value: 7
+                      target: self
+
+  - id: herbalist
+    name: 药师
+    recruit_gold: 40
+    stats:
+      hp: 86
+      mp: 26
+      attack: 13
+      defense: 4
+      speed: 10
+      recovery: 8
+    stat_growth_per_level:
+      hp: 9
+      mp: 4
+      attack: 2
+      defense: 1
+      speed: 1
+      recovery: 3
+    skills:
+      - id: bitter_tonic
+        name: 苦药调息
+        kind: active
+        priority: 160
+        mp_cost: 6
+        condition:
+          type: self_hp_pct_lte
+          value: 0.65
+        effects:
+          - type: heal_percent
+            value: 0.18
+            target: self
+          - type: mp_restore
+            value: 2
+            target: self
+    level_skill_unlocks:
+      - level: 3
+        skills:
+          - id: lingering_salve
+            name: 留香药膏
+            kind: active
+            priority: 175
+            mp_cost: 7
+            once_per_battle: true
+            condition:
+              type: self_mp_pct_gte
+              value: 0.25
+            effects:
+              - type: apply_status
+                target: self
+                status:
+                  id: salve_regeneration
+                  name: 药膏再生
+                  duration: 2
+                  polarity: positive
+                  stack_mode: refresh
+                  effects:
+                    - type: heal_percent
+                      value: 0.1
+                      target: self
+                    - type: mp_restore
+                      value: 3
+                      target: self
+
+  - id: hexer
+    name: 咒术师
+    recruit_gold: 46
+    stats:
+      hp: 82
+      mp: 30
+      attack: 18
+      defense: 3
+      speed: 12
+      recovery: 5
+    stat_growth_per_level:
+      hp: 8
+      mp: 5
+      attack: 4
+      defense: 1
+      speed: 2
+      recovery: 1
+    skills:
+      - id: venom_hex
+        name: 毒咒
+        kind: active
+        priority: 150
+        mp_cost: 6
+        once_per_battle: true
+        condition:
+          type: action_index_lte
+          value: 4
+        effects:
+          - type: apply_status
+            target: target
+            status:
+              id: venom_hex
+              name: 中毒
+              duration: 3
+              polarity: negative
+              stack_mode: refresh
+              effects:
+                - type: true_damage
+                  value: 4
+    level_skill_unlocks:
+      - level: 3
+        skills:
+          - id: brittle_curse
+            name: 脆甲诅咒
+            kind: active
+            priority: 165
+            mp_cost: 7
+            once_per_battle: true
+            condition:
+              type: target_hp_pct_gte
+              value: 0.5
+            effects:
+              - type: apply_status
+                target: target
+                status:
+                  id: brittle_armor
+                  name: 破甲
+                  duration: 2
+                  polarity: negative
+                  stack_mode: refresh
+                  effects:
+                    - type: stat_multiplier
+                      stat: defense
+                      value: 0.75
+                      target: self
+
+  - id: pyromancer
+    name: 火术士
+    recruit_gold: 48
+    stats:
+      hp: 84
+      mp: 28
+      attack: 21
+      defense: 3
+      speed: 11
+      recovery: 4
+    stat_growth_per_level:
+      hp: 8
+      mp: 4
+      attack: 5
+      defense: 1
+      speed: 1
+      recovery: 1
+    skills:
+      - id: ember_brand
+        name: 余烬烙印
+        kind: active
+        priority: 150
+        mp_cost: 6
+        once_per_battle: true
+        condition:
+          type: all
+          conditions:
+            - type: action_index_lte
+              value: 5
+            - type: self_mp_pct_gte
+              value: 0.25
+        effects:
+          - type: damage_multiplier
+            value: 1.15
+          - type: apply_status
+            target: target
+            status:
+              id: burn
+              name: 灼伤
+              duration: 2
+              polarity: negative
+              stack_mode: refresh
+              effects:
+                - type: true_damage
+                  value: 5
+    level_skill_unlocks:
+      - level: 3
+        skills:
+          - id: overheat
+            name: 过载
+            kind: active
+            priority: 170
+            mp_cost: 8
+            once_per_battle: true
+            condition:
+              type: target_hp_pct_lte
+              value: 0.55
+            effects:
+              - type: damage_multiplier
+                value: 1.7
+              - type: self_damage
+                value: 5

@@ -54,6 +54,27 @@ upgrades:
       defense: 4
       speed: 2
 
+  - id: guild_contracts
+    name: 公会契约
+    gold: 75
+    required:
+      - training_ground
+    party_size_bonus: 1
+    stats:
+      hp: 6
+      recovery: 1
+
+  - id: expanded_roster
+    name: 扩编名册
+    gold: 115
+    required:
+      - guild_contracts
+      - veteran_command
+    party_size_bonus: 2
+    stats:
+      hp: 12
+      defense: 2
+
   - id: combat_alchemy
     name: 战斗炼金
     gold: 60

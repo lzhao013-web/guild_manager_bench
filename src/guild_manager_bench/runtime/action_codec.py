@@ -11,6 +11,7 @@ from guild_manager_bench.game.actions import (
     HuntAction,
     PreparationAction,
     PurchaseUpgradeAction,
+    RecruitAction,
     UnequipAction,
 )
 
@@ -32,6 +33,8 @@ def decode_preparation_action(payload: Mapping[str, Any]) -> PreparationAction:
             adventurer_id=_str(payload, "adventurer_id"),
             amount=_int(payload, "amount"),
         )
+    if action_type == "recruit":
+        return RecruitAction(candidate_id=_str(payload, "candidate_id"))
     if action_type == "equip":
         return EquipAction(
             adventurer_id=_str(payload, "adventurer_id"),
@@ -67,6 +70,8 @@ def encode_preparation_action(action: PreparationAction) -> dict[str, Any]:
             "adventurer_id": action.adventurer_id,
             "amount": action.amount,
         }
+    if isinstance(action, RecruitAction):
+        return {"type": "recruit", "candidate_id": action.candidate_id}
     if isinstance(action, EquipAction):
         return {
             "type": "equip",
@@ -131,4 +136,3 @@ def _int(payload: Mapping[str, Any], key: str) -> int:
     if not isinstance(value, int) or isinstance(value, bool):
         raise ActionCodecError(f"{key} must be an integer")
     return value
-

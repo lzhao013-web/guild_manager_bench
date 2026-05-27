@@ -12,6 +12,7 @@ from guild_manager_bench.game.actions import (
     HuntAction,
     PreparationAction,
     PurchaseUpgradeAction,
+    RecruitAction,
     TurnAction,
     UnequipAction,
 )
@@ -27,6 +28,7 @@ from guild_manager_bench.game.equipment import (
 )
 from guild_manager_bench.game.models import (
     CombatResources,
+    CombatStatModifier,
     CombatStats,
     apply_stat_modifier,
     scale_stat_modifier,
@@ -37,6 +39,8 @@ from guild_manager_bench.game.state import (
     GameDefinition,
     GameState,
     MonsterArchetype,
+    RecruitCandidate,
+    RecruitableAdventurerTemplate,
     RewardBundle,
     SpawnedMonster,
 )
@@ -45,6 +49,7 @@ from guild_manager_bench.game.upgrades import (
     GlobalUpgrade,
     UpgradeInventory,
     apply_upgrade_stats,
+    combine_party_size_bonus,
     combine_upgrade_skills,
     purchase_upgrade,
 )
@@ -73,6 +78,7 @@ class TurnResult:
     battles: tuple[BattleSettlement, ...]
     crafted_equipment_ids: tuple[str, ...]
     purchased_upgrade_ids: tuple[str, ...]
+    recruited_adventurer_ids: tuple[str, ...]
 
 
 def new_game(definition: GameDefinition) -> GameState:
@@ -90,7 +96,9 @@ def new_game(definition: GameDefinition) -> GameState:
         equipment_inventory=(),
         unlocked_upgrade_ids=frozenset(),
         current_monsters=spawn_monsters(definition, 1),
+        recruit_candidates=spawn_recruit_candidates(definition, 1),
         next_equipment_instance_number=1,
+        next_adventurer_number=1,
     )
 
 
@@ -115,9 +123,11 @@ def apply_turn(
 
     crafted_equipment_ids: list[str] = []
     purchased_upgrade_ids: list[str] = []
+    recruited_adventurer_ids: list[str] = []
     for operation in action.operations:
         previous_equipment_ids = {item.instance_id for item in state.equipment_inventory}
         previous_upgrade_ids = set(state.unlocked_upgrade_ids)
+        previous_adventurer_ids = {item.adventurer_id for item in state.adventurers}
         state = apply_preparation_action(definition, state, operation)
         crafted_equipment_ids.extend(
             item.instance_id
@@ -125,6 +135,11 @@ def apply_turn(
             if item.instance_id not in previous_equipment_ids
         )
         purchased_upgrade_ids.extend(sorted(state.unlocked_upgrade_ids - previous_upgrade_ids))
+        recruited_adventurer_ids.extend(
+            item.adventurer_id
+            for item in state.adventurers
+            if item.adventurer_id not in previous_adventurer_ids
+        )
 
     result = end_turn(definition, state, EndTurnAction(hunts=action.hunts))
     return TurnResult(
@@ -132,6 +147,7 @@ def apply_turn(
         battles=result.battles,
         crafted_equipment_ids=tuple(crafted_equipment_ids),
         purchased_upgrade_ids=tuple(purchased_upgrade_ids),
+        recruited_adventurer_ids=tuple(recruited_adventurer_ids),
     )
 
 
@@ -158,6 +174,9 @@ def apply_preparation_action(
 
     if isinstance(action, AllocateExperienceAction):
         return _apply_experience_allocation(definition, state, action)
+
+    if isinstance(action, RecruitAction):
+        return _apply_recruit_action(definition, state, action)
 
     if isinstance(action, UnequipAction):
         return _apply_unequip_action(definition, state, action)
@@ -197,13 +216,24 @@ def end_turn(
         if next_turn <= state.max_turns
         else ()
     )
-    state = replace(state, turn=next_turn, current_monsters=next_monsters)
+    next_candidates = (
+        spawn_recruit_candidates(definition, next_turn)
+        if next_turn <= state.max_turns
+        else ()
+    )
+    state = replace(
+        state,
+        turn=next_turn,
+        current_monsters=next_monsters,
+        recruit_candidates=next_candidates,
+    )
 
     return TurnResult(
         state=state,
         battles=tuple(battles),
         crafted_equipment_ids=(),
         purchased_upgrade_ids=(),
+        recruited_adventurer_ids=(),
     )
 
 
@@ -248,6 +278,39 @@ def spawn_monsters(definition: GameDefinition, turn: int) -> tuple[SpawnedMonste
     return tuple(monsters)
 
 
+def spawn_recruit_candidates(definition: GameDefinition, turn: int) -> tuple[RecruitCandidate, ...]:
+    """刷新指定回合的招募候选。"""
+
+    _validate_definition(definition)
+    if turn > definition.rules.max_turns:
+        return ()
+    count = _recruit_candidate_count(definition, turn)
+    templates = definition.content.recruitable_adventurers
+    if count <= 0 or not templates:
+        return ()
+
+    rng = random.Random(definition.rules.seed * 1_000_033 + turn * 97_409)
+    indexes = list(range(len(templates)))
+    if count <= len(indexes):
+        rng.shuffle(indexes)
+        selected = indexes[:count]
+    else:
+        selected = [rng.randrange(len(templates)) for _ in range(count)]
+
+    candidates: list[RecruitCandidate] = []
+    for index, template_index in enumerate(selected, start=1):
+        template = templates[template_index]
+        candidates.append(_spawn_recruit_candidate(template, turn, index, rng))
+    return tuple(candidates)
+
+
+def _recruit_candidate_count(definition: GameDefinition, turn: int) -> int:
+    rules = definition.rules.recruitment
+    if turn == 1 and rules.first_turn_candidate_count is not None:
+        return rules.first_turn_candidate_count
+    return rules.candidate_count
+
+
 def effective_adventurer_stats(
     definition: GameDefinition,
     state: GameState,
@@ -279,6 +342,19 @@ def effective_adventurer_skills(
         _equipped_templates(definition, state, adventurer),
     )
     return combine_upgrade_skills(skills, _unlocked_upgrades(definition, state))
+
+
+def party_size_limit(definition: GameDefinition, state: GameState) -> int:
+    """计算当前队伍人数上限。"""
+
+    _validate_definition(definition)
+    _validate_state(state)
+    rules = definition.rules.recruitment
+    return min(
+        rules.maximum_party_size_limit,
+        rules.initial_party_size_limit
+        + combine_party_size_bonus(_unlocked_upgrades(definition, state)),
+    )
 
 
 def _apply_craft_action(
@@ -355,6 +431,46 @@ def _apply_experience_allocation(
         resources=_sync_resources(adventurer.resources, old_stats, new_stats),
     )
     return _replace_adventurer(temp_state, updated)
+
+
+def _apply_recruit_action(
+    definition: GameDefinition,
+    state: GameState,
+    action: RecruitAction,
+) -> GameState:
+    candidate = _recruit_candidate_by_id(state, action.candidate_id)
+    limit = party_size_limit(definition, state)
+    if len(state.adventurers) >= limit:
+        raise GameError(f"party size limit reached: {len(state.adventurers)}/{limit}")
+    if state.gold < candidate.recruit_gold:
+        raise GameError("not enough gold")
+
+    adventurer_id, next_number = _next_recruited_adventurer_id(state)
+    adventurer = AdventurerState(
+        adventurer_id=adventurer_id,
+        name=candidate.name,
+        base_stats=candidate.base_stats,
+        resources=CombatResources.full(candidate.base_stats),
+        skills=candidate.skills,
+        level_skill_unlocks=candidate.level_skill_unlocks,
+        stat_growth_per_level=candidate.stat_growth_per_level,
+    )
+    updated_state = replace(
+        state,
+        gold=state.gold - candidate.recruit_gold,
+        adventurers=state.adventurers + (adventurer,),
+        recruit_candidates=tuple(
+            item
+            for item in state.recruit_candidates
+            if item.candidate_id != candidate.candidate_id
+        ),
+        next_adventurer_number=next_number,
+    )
+    effective_stats = effective_adventurer_stats(definition, updated_state, adventurer)
+    return _replace_adventurer(
+        updated_state,
+        replace(adventurer, resources=CombatResources.full(effective_stats)),
+    )
 
 
 def _apply_equip_action(
@@ -459,6 +575,75 @@ def _spawn_monster(
         reward=reward,
         skills=archetype.skills,
     )
+
+
+def _spawn_recruit_candidate(
+    template: RecruitableAdventurerTemplate,
+    turn: int,
+    index: int,
+    rng: random.Random,
+) -> RecruitCandidate:
+    price_factor = rng.uniform(0.85, 1.15)
+    recruit_gold = max(0, int(round(template.recruit_gold * price_factor)))
+    return RecruitCandidate(
+        candidate_id=f"turn_{turn}_recruit_{index}",
+        template_id=template.template_id,
+        name=_variant_candidate_name(template.name, rng),
+        recruit_gold=recruit_gold,
+        base_stats=_vary_combat_stats(template.base_stats, rng),
+        stat_growth_per_level=_vary_stat_modifier(template.stat_growth_per_level, rng),
+        skills=template.skills,
+        level_skill_unlocks=template.level_skill_unlocks,
+    )
+
+
+def _variant_candidate_name(name: str, rng: random.Random) -> str:
+    suffixes = ("", "", "", "·锐意", "·稳健", "·灵巧")
+    return f"{name}{suffixes[rng.randrange(len(suffixes))]}"
+
+
+def _vary_combat_stats(stats: CombatStats, rng: random.Random) -> CombatStats:
+    values = {
+        "hp": stats.hp,
+        "mp": stats.mp,
+        "attack": stats.attack,
+        "defense": stats.defense,
+        "speed": stats.speed,
+        "recovery": stats.recovery,
+    }
+    keys = list(values)
+    rng.shuffle(keys)
+    for key in keys[:2]:
+        magnitude = _stat_variation_amount(key, values[key])
+        values[key] = _clamp_stat_value(key, values[key] + rng.randint(-magnitude, magnitude))
+    return CombatStats(**values)
+
+
+def _vary_stat_modifier(modifier: CombatStatModifier, rng: random.Random) -> CombatStatModifier:
+    values = {
+        "hp": modifier.hp,
+        "mp": modifier.mp,
+        "attack": modifier.attack,
+        "defense": modifier.defense,
+        "speed": modifier.speed,
+        "recovery": modifier.recovery,
+    }
+    key = rng.choice(tuple(values))
+    values[key] = max(0, values[key] + rng.randint(-1, 1))
+    return CombatStatModifier(**values)
+
+
+def _stat_variation_amount(key: str, value: int) -> int:
+    if key == "hp":
+        return max(4, round(value * 0.08))
+    if key == "mp":
+        return max(1, round(max(value, 1) * 0.12))
+    return max(1, round(max(value, 1) * 0.12))
+
+
+def _clamp_stat_value(key: str, value: int) -> int:
+    minimum = 1 if key == "hp" else 0
+    return max(minimum, value)
 
 
 def _scale_reward(reward: RewardBundle, factor: int) -> RewardBundle:
@@ -707,6 +892,26 @@ def _upgrade_by_id(definition: GameDefinition, upgrade_id: str) -> GlobalUpgrade
         if upgrade.upgrade_id == upgrade_id:
             return upgrade
     raise GameError(f"unknown upgrade: {upgrade_id}")
+
+
+def _recruit_candidate_by_id(state: GameState, candidate_id: str) -> RecruitCandidate:
+    for candidate in state.recruit_candidates:
+        if candidate.candidate_id == candidate_id:
+            return candidate
+    raise GameError(f"unknown recruit candidate: {candidate_id}")
+
+
+def _next_recruited_adventurer_id(state: GameState) -> tuple[str, int]:
+    existing_ids = {
+        adventurer.adventurer_id
+        for adventurer in state.adventurers
+    }
+    number = state.next_adventurer_number
+    while True:
+        adventurer_id = f"recruit_{number:04d}"
+        number += 1
+        if adventurer_id not in existing_ids:
+            return adventurer_id, number
 
 
 def _validate_definition(definition: GameDefinition) -> None:

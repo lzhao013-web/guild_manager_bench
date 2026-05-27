@@ -28,11 +28,13 @@ class GlobalUpgrade:
     stat_modifier: CombatStatModifier = field(default_factory=CombatStatModifier)
     skills: tuple[Skill, ...] = ()
     required_upgrade_ids: tuple[str, ...] = ()
+    party_size_bonus: int = 0
 
     def __post_init__(self) -> None:
         _require_non_empty("upgrade_id", self.upgrade_id)
         _require_non_empty("name", self.name)
         _require_at_least("gold_cost", self.gold_cost, 0)
+        _require_at_least("party_size_bonus", self.party_size_bonus, 0)
         if not isinstance(self.stat_modifier, CombatStatModifier):
             raise TypeError("stat_modifier must be CombatStatModifier")
 
@@ -169,6 +171,21 @@ def combine_upgrade_skills(
         seen_upgrade_ids.add(upgrade.upgrade_id)
         skills.extend(upgrade.skills)
     return tuple(skills)
+
+
+def combine_party_size_bonus(upgrades: Iterable[GlobalUpgrade]) -> int:
+    """合并多个已解锁全局加成提供的队伍人数上限。"""
+
+    total = 0
+    seen_upgrade_ids: set[str] = set()
+    for upgrade in upgrades:
+        if not isinstance(upgrade, GlobalUpgrade):
+            raise TypeError("upgrades must contain GlobalUpgrade")
+        if upgrade.upgrade_id in seen_upgrade_ids:
+            raise ValueError(f"duplicate upgrade: {upgrade.upgrade_id}")
+        seen_upgrade_ids.add(upgrade.upgrade_id)
+        total += upgrade.party_size_bonus
+    return total
 
 
 def _validate_upgrade_and_inventory(

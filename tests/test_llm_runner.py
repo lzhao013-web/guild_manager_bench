@@ -219,12 +219,36 @@ def test_run_llm_turn_emits_debug_events() -> None:
     assert tool_message["content"].startswith("OK get_party")
     assert not tool_message["content"].lstrip().startswith("{")
     assert "队伍: 回合 1/" in tool_message["content"]
-    assert "冒险者:" in tool_message["content"]
-    assert "- 1 先锋" in tool_message["content"]
-    assert "EXP 0/" in tool_message["content"]
-    assert "成长 HP+18 MP+1 攻击+2 防御+4 速度+1 恢复+2" in tool_message["content"]
-    assert "  技能:\n    - 强力打击 主动" in tool_message["content"]
-    assert "效果 伤害倍率 1.8" in tool_message["content"]
+    assert "冒险者: 无" in tool_message["content"]
+    assert "EXP 0/" not in tool_message["content"]
+
+
+def test_recruitment_tool_returns_compact_model_visible_text() -> None:
+    tools = GuildManagerTools.from_data_dir(_data_dir())
+    session_id = tools.start_session("recruitment-text")["session_id"]
+    agent = SequenceAgent(
+        (
+            LlmAgentResponse(tool_calls=(LlmToolCall("get_recruitment", {}),)),
+            LlmAgentResponse(tool_calls=(LlmToolCall("end_turn", {"hunts": []}),)),
+        )
+    )
+
+    trace = run_llm_turn(agent, tools, session_id)
+
+    assert trace.status == "completed"
+    tool_message = next(
+        message
+        for message in trace.messages
+        if message.get("role") == "tool" and message.get("name") == "get_recruitment"
+    )
+    assert tool_message["content"].startswith("OK get_recruitment")
+    assert "招募: 回合 1/" in tool_message["content"]
+    assert "队伍 0/3" in tool_message["content"]
+    assert "招募候选:" in tool_message["content"]
+    assert tool_message["content"].count("\n- ") == 6
+    assert "费用" in tool_message["content"]
+    assert "成长" in tool_message["content"]
+    assert "预算: 已用 1/" in tool_message["content"]
 
 
 def test_turn_prompt_includes_compact_skill_summaries() -> None:
@@ -240,24 +264,29 @@ def test_turn_prompt_includes_compact_skill_summaries() -> None:
     assert "可制作配方" in prompt
     assert "可购买升级" in prompt
     assert "空闲装备" in prompt
+    assert "招募候选 6 个" in prompt
+    assert "队伍 0/3" in prompt
     assert "当前怪物" in prompt
     assert "总潜在奖励" not in prompt
     assert "怪物最高攻击" not in prompt
-    assert "- 1 先锋" in prompt
-    assert "EXP 0/" in prompt
+    assert "- 1 先锋" not in prompt
+    assert "EXP 0/" not in prompt
     assert "成长 HP+18 MP+1 攻击+2 防御+4 速度+1 恢复+2" not in prompt
-    assert "  技能:\n    - 强力打击 主动" in prompt
+    assert "  技能:\n    - 强力打击 主动" not in prompt
     assert "等级技能" not in prompt
     assert "壁垒集结" not in prompt
+    assert "战舞者" not in prompt
     assert "随机种子：游戏 20260524，评分 20260526" in prompt
-    assert "效果 伤害倍率 1.8" in prompt
+    assert "效果 伤害倍率 1.8" not in prompt
 
 
 def test_turn_prompt_shows_equipped_numeric_refs() -> None:
     tools = GuildManagerTools.from_data_dir(_data_dir())
     session_id = tools.start_session("equipped-prompt")["session_id"]
-    harness = TurnToolHarness(tools, session_id, max_tool_calls=3)
+    harness = TurnToolHarness(tools, session_id, max_tool_calls=4)
 
+    recruited = harness.call_tool("recruit_adventurer", {"candidate_id": 1})
+    assert recruited["ok"] is True
     assert harness.call_tool("craft_equipment", {"recipe_id": 1})["ok"] is True
     assert (
         harness.call_tool(
@@ -272,10 +301,11 @@ def test_turn_prompt_shows_equipped_numeric_refs() -> None:
 
     observation = tools.get_observation(session_id)["observation"]
     prompt = build_turn_prompt(observation, max_tool_calls=3)
+    adventurer_name = observation["adventurers"][0]["name"]
 
-    assert "1 先锋" in prompt
+    assert f"1 {adventurer_name}" in prompt
     assert "装备 铁剑(id=1)" in prompt
-    assert "装备 无" not in prompt.split("1 先锋", 1)[1].splitlines()[0]
+    assert "装备 无" not in prompt.split(f"1 {adventurer_name}", 1)[1].splitlines()[0]
 
 
 def test_skill_summary_formats_extended_conditions_and_effects() -> None:
@@ -365,7 +395,9 @@ def test_preview_battle_tool_returns_compact_model_visible_text() -> None:
             llm_tools=LlmToolRules(expose_battle_preview=True),
         )
     )
-    observation = tools.start_session("preview-text")["observation"]
+    tools.start_session("preview-text")
+    adventurer_id = _recruit_first(tools, "preview-text")
+    observation = tools.get_observation("preview-text")["observation"]
     monster_id = observation["monsters"][0]["monster_id"]
     agent = SequenceAgent(
         (
@@ -374,7 +406,7 @@ def test_preview_battle_tool_returns_compact_model_visible_text() -> None:
                     LlmToolCall(
                         "preview_battle",
                         {
-                            "adventurer_id": "vanguard",
+                            "adventurer_id": adventurer_id,
                             "monster_id": monster_id,
                         },
                     ),
@@ -694,6 +726,15 @@ def test_run_llm_game_refuses_resume_when_data_hash_changed(tmp_path) -> None:
 
 def _data_dir() -> Path:
     return Path(__file__).resolve().parents[1] / "data" / "presets" / "default"
+
+
+def _recruit_first(tools: GuildManagerTools, session_id: str) -> str:
+    recruitment = tools.get_recruitment(session_id)
+    candidate_id = recruitment["recruit_candidates"][0]["candidate_id"]
+    result = tools.recruit_adventurer(session_id, candidate_id)
+    assert result["ok"] is True
+    observation = tools.get_observation(session_id)["observation"]
+    return observation["adventurers"][0]["adventurer_id"]
 
 
 def _read_json(path: Path) -> dict[str, Any]:

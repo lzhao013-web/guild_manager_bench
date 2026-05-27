@@ -9,6 +9,7 @@ from guild_manager_bench.game.actions import (
     EquipAction,
     HuntAction,
     PurchaseUpgradeAction,
+    RecruitAction,
     TurnAction,
     UnequipAction,
 )
@@ -21,6 +22,8 @@ from guild_manager_bench.game.engine import (
     effective_adventurer_skills,
     effective_adventurer_stats,
     new_game,
+    party_size_limit,
+    spawn_recruit_candidates,
     spawn_monsters,
 )
 from guild_manager_bench.game.equipment import EquippedItem, EquipmentInstance, EquipmentLoadout, EquipmentTemplate
@@ -35,6 +38,8 @@ from guild_manager_bench.game.state import (
     LevelSkillUnlock,
     MonsterArchetype,
     MonsterSpawnRules,
+    RecruitableAdventurerTemplate,
+    RecruitmentRules,
     RewardBundle,
     TurnRecoveryRules,
 )
@@ -52,6 +57,7 @@ def test_new_game_spawns_first_turn_monsters() -> None:
     assert dict(state.materials) == {"iron_ore": 1}
     assert len(state.current_monsters) == 2
     assert state.current_monsters[0].stats.hp == 20
+    assert state.recruit_candidates == ()
 
 
 def test_spawn_monsters_uses_count_and_growth_curves() -> None:
@@ -296,6 +302,95 @@ def test_adventurer_unlocks_level_skills_after_level_up() -> None:
     ] == ["guard_break"]
 
 
+def test_spawn_recruit_candidates_is_deterministic_and_varies_template_values() -> None:
+    definition = _definition_with_recruitment()
+
+    first = spawn_recruit_candidates(definition, 1)
+    second = spawn_recruit_candidates(definition, 1)
+
+    assert first == second
+    assert len(first) == 4
+    assert first[0].candidate_id == "turn_1_recruit_1"
+    assert first[0].template_id in {"guard", "scout"}
+    assert len(spawn_recruit_candidates(definition, 2)) == 2
+    assert any(
+        candidate.recruit_gold != _template_by_id(definition, candidate.template_id).recruit_gold
+        or candidate.base_stats != _template_by_id(definition, candidate.template_id).base_stats
+        or candidate.stat_growth_per_level
+        != _template_by_id(definition, candidate.template_id).stat_growth_per_level
+        for candidate in first
+    )
+
+
+def test_recruit_action_deducts_gold_adds_adventurer_and_removes_candidate() -> None:
+    definition = _definition_with_recruitment()
+    state = replace(new_game(definition), unlocked_upgrade_ids=frozenset({"recruitment_board"}))
+    candidate = state.recruit_candidates[0]
+
+    state = apply_preparation_action(
+        definition,
+        state,
+        RecruitAction(candidate_id=candidate.candidate_id),
+    )
+
+    recruited = state.adventurers[-1]
+    assert state.gold == 200 - candidate.recruit_gold
+    assert recruited.adventurer_id == "recruit_0001"
+    assert recruited.name == candidate.name
+    assert recruited.base_stats == candidate.base_stats
+    assert recruited.stat_growth_per_level == candidate.stat_growth_per_level
+    assert recruited.resources == CombatResources.full(effective_adventurer_stats(definition, state, recruited))
+    assert candidate.candidate_id not in {item.candidate_id for item in state.recruit_candidates}
+    assert state.next_adventurer_number == 2
+
+
+def test_recruit_action_rejects_full_party_until_party_size_upgrade() -> None:
+    definition = _definition_with_recruitment()
+    state = new_game(definition)
+    assert party_size_limit(definition, state) == 1
+
+    with pytest.raises(GameError, match="party size limit"):
+        apply_preparation_action(
+            definition,
+            state,
+            RecruitAction(candidate_id=state.recruit_candidates[0].candidate_id),
+        )
+
+    state = apply_preparation_action(
+        definition,
+        state,
+        PurchaseUpgradeAction(upgrade_id="recruitment_board"),
+    )
+    assert party_size_limit(definition, state) == 2
+
+    state = apply_preparation_action(
+        definition,
+        state,
+        RecruitAction(candidate_id=state.recruit_candidates[0].candidate_id),
+    )
+
+    assert len(state.adventurers) == 2
+
+
+def test_apply_turn_reports_recruited_adventurers() -> None:
+    definition = _definition_with_recruitment()
+    state = replace(new_game(definition), unlocked_upgrade_ids=frozenset({"recruitment_board"}))
+
+    result = apply_turn(
+        definition,
+        state,
+        TurnAction(
+            operations=(
+                RecruitAction(candidate_id=state.recruit_candidates[0].candidate_id),
+            )
+        ),
+    )
+
+    assert result.recruited_adventurer_ids == ("recruit_0001",)
+    assert result.state.turn == 2
+    assert len(result.state.recruit_candidates) == 2
+
+
 def _definition() -> GameDefinition:
     adventurer_stats = CombatStats(hp=100, mp=10, attack=10, defense=1, speed=10, recovery=0)
     return GameDefinition(
@@ -367,3 +462,58 @@ def _definition() -> GameDefinition:
         starting_gold=20,
         starting_materials={"iron_ore": 1},
     )
+
+
+def _definition_with_recruitment() -> GameDefinition:
+    definition = _definition()
+    return replace(
+        definition,
+        starting_gold=200,
+        content=replace(
+            definition.content,
+            recruitable_adventurers=(
+                RecruitableAdventurerTemplate(
+                    template_id="guard",
+                    name="卫士",
+                    recruit_gold=40,
+                    base_stats=CombatStats(hp=80, mp=8, attack=8, defense=6, speed=6, recovery=2),
+                    stat_growth_per_level=CombatStatModifier(hp=8, attack=2, defense=3),
+                ),
+                RecruitableAdventurerTemplate(
+                    template_id="scout",
+                    name="斥候",
+                    recruit_gold=35,
+                    base_stats=CombatStats(hp=60, mp=12, attack=12, defense=3, speed=12, recovery=1),
+                    stat_growth_per_level=CombatStatModifier(hp=5, attack=3, speed=3),
+                ),
+            ),
+            global_upgrades=(
+                definition.content.global_upgrades[0],
+                GlobalUpgrade(
+                    upgrade_id="recruitment_board",
+                    name="招募栏",
+                    gold_cost=10,
+                    party_size_bonus=1,
+                ),
+            ),
+        ),
+        rules=replace(
+            definition.rules,
+            recruitment=RecruitmentRules(
+                candidate_count=2,
+                first_turn_candidate_count=4,
+                initial_party_size_limit=1,
+                maximum_party_size_limit=2,
+            ),
+        ),
+    )
+
+
+def _template_by_id(
+    definition: GameDefinition,
+    template_id: str,
+) -> RecruitableAdventurerTemplate:
+    for template in definition.content.recruitable_adventurers:
+        if template.template_id == template_id:
+            return template
+    raise AssertionError(f"unknown template {template_id}")

@@ -204,6 +204,7 @@ h2 { font-size: 15px; font-weight: 600; color: var(--text-secondary); }
 .metric-turn { border-left-color: var(--accent); }
 .metric-gold { border-left-color: var(--warning); }
 .metric-exp { border-left-color: var(--purple); }
+.metric-party { border-left-color: var(--accent); }
 .metric-mat { border-left-color: var(--ok); }
 .metric-status { border-left-color: var(--ok); }
 .metric-status.finished { border-left-color: var(--danger); }
@@ -634,6 +635,13 @@ details[open] > .adv-summary::before { transform: rotate(90deg); }
   margin-top: 4px;
   font-size: 12px;
   color: var(--text-secondary);
+}
+
+.recruit-row {
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 10px;
 }
 
 /* ========== Equip Popup ========== */

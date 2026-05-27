@@ -2,7 +2,8 @@ from dataclasses import replace
 from pathlib import Path
 
 from guild_manager_bench.bench.metrics import score_final_state
-from guild_manager_bench.game.engine import new_game
+from guild_manager_bench.game.actions import RecruitAction
+from guild_manager_bench.game.engine import apply_preparation_action, new_game
 from guild_manager_bench.game.loader import load_game_definition
 from guild_manager_bench.game.models import CombatResources, CombatStats
 from guild_manager_bench.game.state import ScoringRules
@@ -25,6 +26,11 @@ def test_score_final_state_is_deterministic_and_bounded() -> None:
 def test_score_final_state_rewards_stronger_final_team() -> None:
     definition = _small_scoring_definition()
     state = new_game(definition)
+    state = apply_preparation_action(
+        definition,
+        state,
+        RecruitAction(candidate_id=state.recruit_candidates[0].candidate_id),
+    )
     stronger_stats = CombatStats(
         hp=300,
         mp=100,

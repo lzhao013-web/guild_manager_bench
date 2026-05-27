@@ -25,6 +25,8 @@ from guild_manager_bench.game.state import (
     LlmToolRules,
     MonsterArchetype,
     MonsterSpawnRules,
+    RecruitableAdventurerTemplate,
+    RecruitmentRules,
     RewardBundle,
     ScoringRules,
     TurnRecoveryRules,
@@ -51,6 +53,9 @@ def load_game_definition(data_dir: str | Path) -> GameDefinition:
     experience_rules = _parse_experience_rules(_mapping(game_data.get("experience", {}), "experience"))
     content = GameContent(
         adventurers=_parse_adventurers(_list_section(adventurer_data, "adventurers")),
+        recruitable_adventurers=_parse_recruitable_adventurers(
+            _list_section(adventurer_data, "recruitable_adventurers")
+        ),
         monster_archetypes=_parse_monsters(_list_section(monster_data, "monsters")),
         equipment_templates=_parse_equipment(_list_section(equipment_data, "equipment")),
         crafting_recipes=_parse_recipes(_list_section(recipe_data, "recipes")),
@@ -90,6 +95,40 @@ def _parse_adventurers(values: list[Any]) -> tuple[AdventurerState, ...]:
                 ),
                 level=_int(data.get("level", 1), f"adventurers[{index}].level"),
                 experience=_int(data.get("experience", 0), f"adventurers[{index}].experience"),
+            )
+        )
+    return tuple(adventurers)
+
+
+def _parse_recruitable_adventurers(values: list[Any]) -> tuple[RecruitableAdventurerTemplate, ...]:
+    adventurers: list[RecruitableAdventurerTemplate] = []
+    for index, value in enumerate(values):
+        data = _mapping(value, f"recruitable_adventurers[{index}]")
+        adventurers.append(
+            RecruitableAdventurerTemplate(
+                template_id=_str(_id_field(data), f"recruitable_adventurers[{index}].id"),
+                name=_str(_required(data, "name"), f"recruitable_adventurers[{index}].name"),
+                recruit_gold=_int(
+                    data.get("recruit_gold", data.get("gold", 0)),
+                    f"recruitable_adventurers[{index}].recruit_gold",
+                ),
+                base_stats=_parse_combat_stats(
+                    _mapping(_required(data, "stats"), f"recruitable_adventurers[{index}].stats")
+                ),
+                skills=_parse_skills(
+                    data.get("skills", ()),
+                    f"recruitable_adventurers[{index}].skills",
+                ),
+                level_skill_unlocks=_parse_level_skill_unlocks(
+                    data.get("level_skill_unlocks", ()),
+                    f"recruitable_adventurers[{index}].level_skill_unlocks",
+                ),
+                stat_growth_per_level=_parse_stat_modifier(
+                    _mapping(
+                        data.get("stat_growth_per_level", {}),
+                        f"recruitable_adventurers[{index}].stat_growth_per_level",
+                    )
+                ),
             )
         )
     return tuple(adventurers)
@@ -172,6 +211,10 @@ def _parse_upgrades(values: list[Any]) -> tuple[GlobalUpgrade, ...]:
                     _str(item, f"upgrades[{index}].required[{required_index}]")
                     for required_index, item in enumerate(data.get("required", ()))
                 ),
+                party_size_bonus=_int(
+                    data.get("party_size_bonus", 0),
+                    f"upgrades[{index}].party_size_bonus",
+                ),
             )
         )
     return tuple(upgrades)
@@ -193,6 +236,31 @@ def _parse_game_rules(data: Mapping[str, Any]) -> GameRules:
         ),
         turn_recovery=_parse_turn_recovery(
             _mapping(data.get("turn_recovery", {}), "rules.turn_recovery")
+        ),
+        recruitment=_parse_recruitment_rules(
+            _mapping(data.get("recruitment", {}), "rules.recruitment")
+        ),
+    )
+
+
+def _parse_recruitment_rules(data: Mapping[str, Any]) -> RecruitmentRules:
+    return RecruitmentRules(
+        candidate_count=_int(data.get("candidate_count", 3), "rules.recruitment.candidate_count"),
+        first_turn_candidate_count=(
+            None
+            if data.get("first_turn_candidate_count") is None
+            else _int(
+                data.get("first_turn_candidate_count"),
+                "rules.recruitment.first_turn_candidate_count",
+            )
+        ),
+        initial_party_size_limit=_int(
+            data.get("initial_party_size_limit", 3),
+            "rules.recruitment.initial_party_size_limit",
+        ),
+        maximum_party_size_limit=_int(
+            data.get("maximum_party_size_limit", 6),
+            "rules.recruitment.maximum_party_size_limit",
         ),
     )
 

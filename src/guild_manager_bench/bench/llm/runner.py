@@ -752,6 +752,8 @@ def _format_tool_result_for_model(name: str, result: Mapping[str, Any]) -> str:
         _append_inventory_result_lines(lines, result, _result_refs(result))
     elif name == "get_upgrades":
         _append_upgrades_result_lines(lines, result, _result_refs(result))
+    elif name == "get_recruitment":
+        _append_recruitment_result_lines(lines, result, _result_refs(result))
     elif name == "get_events" and isinstance(result.get("events"), Sequence):
         _append_events_lines(lines, result["events"])
     elif name == "preview_battle" and isinstance(result.get("preview"), Mapping):
@@ -789,6 +791,7 @@ def _format_tool_result_for_model(name: str, result: Mapping[str, Any]) -> str:
                 )
             crafted = turn_result.get("crafted_equipment_ids")
             purchased = turn_result.get("purchased_upgrade_ids")
+            recruited = turn_result.get("recruited_adventurer_ids")
             if crafted:
                 lines.append(
                     "新装备: "
@@ -798,6 +801,11 @@ def _format_tool_result_for_model(name: str, result: Mapping[str, Any]) -> str:
                 lines.append(
                     "已购买升级: "
                     f"{_join_refs(purchased, 'upgrade', _result_refs(result))}"
+                )
+            if recruited:
+                lines.append(
+                    "新冒险者: "
+                    f"{_join_refs(recruited, 'adventurer', _result_refs(result))}"
                 )
 
     return "\n".join(_append_budget_lines(lines, result))
@@ -1043,6 +1051,20 @@ def _append_upgrades_result_lines(
     _append_upgrade_lines(lines, result.get("global_upgrades"), refs)
 
 
+def _append_recruitment_result_lines(
+    lines: list[str],
+    result: Mapping[str, Any],
+    refs: Mapping[str, Mapping[str, int]],
+) -> None:
+    lines.append(
+        "招募: "
+        f"回合 {result.get('turn')}/{result.get('max_turns')}; "
+        f"金币 {result.get('gold')}; "
+        f"队伍 {result.get('party_size')}/{result.get('party_size_limit')}"
+    )
+    _append_recruit_candidate_lines(lines, result.get("recruit_candidates"), refs)
+
+
 def _append_adventurer_lines(
     lines: list[str],
     adventurers: Any,
@@ -1084,6 +1106,49 @@ def _append_adventurer_lines(
         )
         _append_skill_lines(lines, adventurer.get("skills"), indent="  ")
         lines.append(f"  等级技能 {_level_skill_unlocks_inline(adventurer.get('level_skill_unlocks'))}")
+
+
+def _append_recruit_candidate_lines(
+    lines: list[str],
+    candidates: Any,
+    refs: Mapping[str, Mapping[str, int]],
+) -> None:
+    values = [
+        candidate
+        for candidate in _sequence(candidates)
+        if isinstance(candidate, Mapping)
+    ]
+    if not values:
+        lines.append("招募候选: 无")
+        return
+    lines.append("招募候选:")
+    for candidate in values:
+        availability = "可招募" if candidate.get("can_recruit") else "不可招募"
+        missing = candidate.get("missing")
+        missing_text = (
+            f"; 缺少 {_mapping_inline(missing)}"
+            if isinstance(missing, Mapping) and missing
+            else ""
+        )
+        stats = candidate.get("base_stats")
+        if not isinstance(stats, Mapping):
+            stats = {}
+        lines.append(
+            "- "
+            f"{display_ref(refs, 'recruit', candidate.get('candidate_id'))} "
+            f"{candidate.get('name')} "
+            f"模板 {candidate.get('template_id')} "
+            f"费用 {candidate.get('recruit_gold')} "
+            f"HP {stats.get('hp')} MP {stats.get('mp')} "
+            f"攻击 {stats.get('attack')} 防御 {stats.get('defense')} "
+            f"速度 {stats.get('speed')} 恢复 {stats.get('recovery')} "
+            f"成长 {_stat_modifier_inline(candidate.get('stat_growth_per_level'))} "
+            f"{availability}{missing_text}"
+        )
+        _append_skill_lines(lines, candidate.get("skills"), indent="  ")
+        lines.append(
+            f"  等级技能 {_level_skill_unlocks_inline(candidate.get('level_skill_unlocks'))}"
+        )
 
 
 def _append_monster_lines(
@@ -1215,6 +1280,7 @@ def _append_upgrade_lines(
             f"{upgrade.get('name')} "
             f"金币 {upgrade.get('gold_cost')} "
             f"属性 {_mapping_inline(upgrade.get('stats'))} "
+            f"队伍上限+{upgrade.get('party_size_bonus', 0)} "
             f"{state}{missing_text}"
         )
         _append_skill_lines(lines, upgrade.get("skills"), indent="  ")
@@ -1348,6 +1414,7 @@ def _replace_known_ids(
         "monster": "怪物",
         "recipe": "配方",
         "upgrade": "升级",
+        "recruit": "招募候选",
         "equipment": "装备",
     }
     for category, category_refs in refs.items():
@@ -1789,6 +1856,7 @@ _STATE_MUTATING_TOOL_NAMES = {
     "craft_equipment",
     "purchase_upgrade",
     "allocate_experience",
+    "recruit_adventurer",
     "equip_item",
     "unequip_item",
     "end_turn",

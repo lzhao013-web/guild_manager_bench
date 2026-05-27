@@ -28,7 +28,7 @@ def build_turn_prompt(
             "回合流程：准备阶段可调用查询工具读取信息，也可调用动作工具执行准备操作；回合结束通过 end_turn 提交讨伐列表。",
             f"工具预算：本回合最多允许 {max_tool_calls} 次非 end_turn 工具调用；查询、动作和非法调用均计入预算。预算耗尽后只接受 end_turn。",
             "工具参数：所有对象 id 都使用下方列表左侧的数字 id。",
-            "工具结果：返回 OK/FAIL、budget 和结果摘要。动作工具返回变更摘要，不自动附带完整状态；详细信息分散在队伍、怪物、制作、装备库存、全局升级等查询工具中。",
+            "工具结果：返回 OK/FAIL、budget 和结果摘要。动作工具返回变更摘要，不自动附带完整状态；详细信息分散在队伍、怪物、制作、装备库存、全局升级、招募等查询工具中。",
             "",
             _memo_summary(memo_entries),
             "",
@@ -137,11 +137,18 @@ def _turn_overview(observation: Mapping[str, Any]) -> str:
         for monster in _sequence(observation.get("monsters"))
         if isinstance(monster, Mapping)
     ]
+    recruit_candidates = [
+        candidate
+        for candidate in _sequence(observation.get("recruit_candidates"))
+        if isinstance(candidate, Mapping)
+    ]
     return (
         "本回合概览："
         f"可制作配方 {len(craftable)} 个，"
         f"可购买升级 {len(purchasable)} 个，"
         f"空闲装备 {len(free_equipment)} 件，"
+        f"招募候选 {len(recruit_candidates)} 个，"
+        f"队伍 {observation.get('party_size')}/{observation.get('party_size_limit')}，"
         f"当前怪物 {len(monsters)} 个。"
     )
 

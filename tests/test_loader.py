@@ -25,6 +25,10 @@ def test_load_game_definition_from_yaml_directory() -> None:
 
     assert definition.rules.max_turns == 2
     assert definition.rules.monster_spawn.count_curve.value_at(2) == 2
+    assert definition.rules.recruitment.candidate_count == 2
+    assert definition.rules.recruitment.first_turn_candidate_count == 4
+    assert definition.rules.recruitment.initial_party_size_limit == 1
+    assert definition.rules.recruitment.maximum_party_size_limit == 3
     assert definition.starting_gold == 20
     assert dict(definition.starting_materials) == {"iron_ore": 1}
     assert definition.content.adventurers[0].adventurer_id == "a1"
@@ -32,10 +36,14 @@ def test_load_game_definition_from_yaml_directory() -> None:
     assert definition.content.adventurers[0].stat_growth_per_level.attack == 12
     assert definition.content.adventurers[0].level_skill_unlocks[0].level == 2
     assert definition.content.adventurers[0].level_skill_unlocks[0].skills[0].skill_id == "guard_break"
+    assert definition.content.recruitable_adventurers[0].template_id == "guard"
+    assert definition.content.recruitable_adventurers[0].recruit_gold == 30
+    assert definition.content.recruitable_adventurers[0].stat_growth_per_level.defense == 2
     assert definition.content.monster_archetypes[0].archetype_id == "slime"
     assert definition.content.equipment_templates[0].equipment_id == "iron_sword"
     assert definition.content.crafting_recipes[0].recipe_id == "iron_sword_recipe"
     assert definition.content.global_upgrades[0].upgrade_id == "weapon_training"
+    assert definition.content.global_upgrades[0].party_size_bonus == 1
     assert definition.llm_tools.expose_battle_preview is False
     assert definition.scoring.mode == "endgame_arena"
     assert definition.scoring.waves == 256
@@ -273,6 +281,11 @@ def _write_game_yaml_files(path) -> None:
                 reward_growth_curve:
                   base: 0
                   per_turn: 1
+              recruitment:
+                candidate_count: 2
+                first_turn_candidate_count: 4
+                initial_party_size_limit: 1
+                maximum_party_size_limit: 3
             starting:
               gold: 20
               materials:
@@ -327,6 +340,32 @@ def _write_game_yaml_files(path) -> None:
                             stat: attack
                             value: 3
                             target: self
+            recruitable_adventurers:
+              - id: guard
+                name: 卫士
+                recruit_gold: 30
+                stats:
+                  hp: 80
+                  mp: 8
+                  attack: 8
+                  defense: 5
+                  speed: 6
+                  recovery: 2
+                stat_growth_per_level:
+                  hp: 8
+                  attack: 2
+                  defense: 2
+                skills:
+                  - id: guard_stance
+                    name: 守卫姿态
+                    kind: passive
+                    condition:
+                      type: always
+                    effects:
+                      - type: stat_bonus
+                        stat: defense
+                        value: 2
+                        target: self
             """
         ),
         encoding="utf-8",
@@ -405,6 +444,7 @@ def _write_game_yaml_files(path) -> None:
               - upgrade_id: weapon_training
                 name: 武器训练
                 gold: 10
+                party_size_bonus: 1
                 stats:
                   attack: 5
             """

@@ -39,6 +39,16 @@ class AllocateExperienceAction:
 
 
 @dataclass(frozen=True, slots=True)
+class RecruitAction:
+    """招募一个候选冒险者。"""
+
+    candidate_id: str
+
+    def __post_init__(self) -> None:
+        _require_non_empty("candidate_id", self.candidate_id)
+
+
+@dataclass(frozen=True, slots=True)
 class EquipAction:
     """把一件装备穿戴到指定冒险者身上。"""
 
@@ -79,6 +89,7 @@ PreparationAction: TypeAlias = (
     CraftAction
     | PurchaseUpgradeAction
     | AllocateExperienceAction
+    | RecruitAction
     | UnequipAction
     | EquipAction
 )
@@ -86,6 +97,7 @@ PREPARATION_ACTION_TYPES = (
     CraftAction,
     PurchaseUpgradeAction,
     AllocateExperienceAction,
+    RecruitAction,
     UnequipAction,
     EquipAction,
 )

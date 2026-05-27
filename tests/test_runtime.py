@@ -2,6 +2,7 @@ from pathlib import Path
 
 from guild_manager_bench.bench.operators.random_operator import RandomHuntOperator
 from guild_manager_bench.bench.runner import run_operator
+from guild_manager_bench.game.actions import RecruitAction
 from guild_manager_bench.game.loader import load_game_definition
 from guild_manager_bench.runtime.action_codec import (
     decode_end_turn_action,
@@ -14,6 +15,9 @@ def test_action_codec_decodes_preparation_and_end_turn_actions() -> None:
     craft = decode_preparation_action(
         {"type": "craft", "recipe_id": "iron_sword_recipe"}
     )
+    recruit = decode_preparation_action(
+        {"type": "recruit", "candidate_id": "turn_1_recruit_1"}
+    )
     end_turn = decode_end_turn_action(
         {
             "type": "end_turn",
@@ -22,6 +26,7 @@ def test_action_codec_decodes_preparation_and_end_turn_actions() -> None:
     )
 
     assert craft.recipe_id == "iron_sword_recipe"
+    assert recruit.candidate_id == "turn_1_recruit_1"
     assert end_turn.hunts[0].adventurer_id == "vanguard"
 
 
@@ -42,13 +47,14 @@ def test_game_session_applies_actions_and_builds_observation() -> None:
     assert observation["session_id"] == session.session_id
     assert observation["seed"] == definition.rules.seed
     assert observation["scoring"]["seed"] == definition.scoring.seed
+    assert observation["gold"] == 138
+    assert observation["party_size"] == 0
+    assert observation["party_size_limit"] == 3
+    assert len(observation["recruit_candidates"]) == 6
+    assert observation["recruit_candidates"][0]["can_recruit"] is True
     assert observation["equipment_inventory"][0]["template_id"] == "iron_sword"
     assert observation["crafting_recipes"][0]["can_craft"] is False
-    assert observation["adventurers"][0]["stat_growth_per_level"]["defense"] == 4
-    assert observation["adventurers"][0]["next_level"]["remaining"] > 0
-    assert observation["adventurers"][0]["level_skill_unlocks"][0]["level"] == 3
-    assert observation["adventurers"][0]["level_skill_unlocks"][0]["unlocked"] is False
-    assert observation["adventurers"][0]["equipment_slots"][0]["slot"] == "main_hand"
+    assert observation["adventurers"] == []
 
     result, event = session.end_turn(decode_end_turn_action({"type": "end_turn"}))
 
@@ -56,7 +62,26 @@ def test_game_session_applies_actions_and_builds_observation() -> None:
     assert event.payload["summary"] == "结束第 1 回合：0 场战斗，0 胜 0 负"
     assert event.payload["changes"][0]["label"] == "回合"
     assert result.state.turn == 2
-    assert session.observation()["turn"] == 2
+    next_observation = session.observation()
+    assert next_observation["turn"] == 2
+    assert len(next_observation["recruit_candidates"]) == 3
+
+
+def test_game_session_recruits_adventurer_and_records_change() -> None:
+    definition = load_game_definition(_data_dir())
+    session = GameSession(definition)
+    candidate_id = session.observation()["recruit_candidates"][0]["candidate_id"]
+
+    event = session.apply_preparation(RecruitAction(candidate_id=candidate_id))
+    observation = session.observation()
+
+    assert event.payload["summary"].startswith("招募 ")
+    assert any(change["label"] == "新冒险者" for change in event.payload["changes"])
+    assert observation["party_size"] == 1
+    assert len(observation["adventurers"]) == 1
+    assert observation["adventurers"][0]["adventurer_id"] == "recruit_0001"
+    assert observation["adventurers"][0]["next_level"]["remaining"] > 0
+    assert observation["adventurers"][0]["equipment_slots"][0]["slot"] == "main_hand"
 
 
 def test_random_operator_runner_finishes_without_direct_engine_calls() -> None:

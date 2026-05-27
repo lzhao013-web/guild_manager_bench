@@ -211,6 +211,7 @@ function render() {
   updateLlmSeedPlaceholders(obs);
   renderOverview(obs);
   renderAdventurers(obs);
+  renderRecruitment(obs);
   renderCrafting(obs);
   renderEquipment(obs);
   renderUpgrades(obs);
@@ -240,6 +241,7 @@ function renderOverview(obs) {
       ${metric("Seed", seedText(obs), "seed")}
       ${metric("金币", obs.gold, "gold")}
       ${metric("经验池", obs.experience_pool, "exp")}
+      ${metric("队伍", `${obs.party_size ?? obs.adventurers.length}/${obs.party_size_limit ?? obs.adventurers.length}`, "party")}
       ${metric("材料", materialsText(obs.materials), "mat")}
       ${metric("状态", obs.finished ? "已结束" : "进行中", obs.finished ? "status finished" : "status")}
       <button class="combat-trigger" ${obs.finished || state.watchOnly ? "disabled" : ""} onclick="openCombatModal()">交战${countBadge}</button>
@@ -321,6 +323,46 @@ function renderAdventurers(obs) {
   });
 }
 
+/* ========== Recruitment ========== */
+
+function renderRecruitment(obs) {
+  const candidates = obs.recruit_candidates || [];
+  $("recruitmentLimit").textContent = `队伍 ${obs.party_size ?? obs.adventurers.length}/${obs.party_size_limit ?? obs.adventurers.length}`;
+  $("recruitment").innerHTML = list(candidates.map((candidate) => `
+    <div class="row recruit-row">
+      <div class="row-title">
+        <strong>${escapeHtml(candidate.name)}</strong>
+        <span class="${candidate.can_recruit ? "ok" : "danger"} small">
+          ${candidate.can_recruit ? "可招募" : "暂不可招募"}
+        </span>
+      </div>
+      <div class="small muted">费用 ${candidate.recruit_gold} 金币 · ${escapeHtml(candidate.template_id)}</div>
+      ${candidateStats(candidate.base_stats)}
+      <div class="small">成长：${statModifierText(candidate.stat_growth_per_level)}</div>
+      ${skillList(candidate.skills)}
+      ${candidateLevelUnlocks(candidate)}
+      ${candidate.can_recruit ? "" : `<div class="small danger">缺少：${missingText(candidate.missing)}</div>`}
+      <button type="button" ${disabled(!candidate.can_recruit)} onclick="recruit('${candidate.candidate_id}')">招募</button>
+    </div>
+  `));
+}
+
+function candidateStats(stats) {
+  return `
+    <div class="stat-inline">
+      HP ${stats.hp} · MP ${stats.mp} · 攻击 ${stats.attack} · 防御 ${stats.defense} · 速度 ${stats.speed} · 恢复 ${stats.recovery}
+    </div>
+  `;
+}
+
+function candidateLevelUnlocks(candidate) {
+  const unlocks = candidate.level_skill_unlocks || [];
+  if (!unlocks.length) {
+    return "";
+  }
+  return `<div class="small muted">等级技能：${unlocks.map((unlock) => levelPreviewUnlockText(unlock)).join(" · ")}</div>`;
+}
+
 /* ========== Crafting ========== */
 
 function renderCrafting(obs) {
@@ -370,7 +412,7 @@ function renderUpgrades(obs) {
           ${upgrade.unlocked ? "已解锁" : upgrade.can_purchase ? "可购买" : "不可购买"}
         </span>
       </div>
-      <div class="small">金币 ${upgrade.gold_cost} · ${statModifierText(upgrade.stats)}</div>
+      <div class="small">金币 ${upgrade.gold_cost} · ${statModifierText(upgrade.stats)}${upgrade.party_size_bonus ? ` · 队伍上限 +${upgrade.party_size_bonus}` : ""}</div>
       <div class="small muted">前置：${upgradePrereqText(obs, upgrade.required_upgrade_ids)}</div>
       <button type="button" ${disabled(!upgrade.can_purchase)} onclick="purchaseUpgrade('${upgrade.upgrade_id}')">购买</button>
     </div>
@@ -662,6 +704,10 @@ function allocateExperience(adventurerId) {
   submitAction({ type: "allocate_experience", adventurer_id: adventurerId, amount });
 }
 
+function recruit(candidateId) {
+  submitAction({ type: "recruit", candidate_id: candidateId });
+}
+
 function equip(adventurerId, instanceId) {
   submitAction({ type: "equip", adventurer_id: adventurerId, equipment_instance_id: instanceId });
 }
@@ -875,6 +921,12 @@ function skillDescText(skill) {
   for (const eff of skill.effects) {
     if (eff.type === "damage_multiplier") parts.push(`伤害 ×${eff.value}`);
     if (eff.type === "heal") parts.push(`治疗 ${eff.value} HP`);
+    if (eff.type === "heal_percent") parts.push(`治疗 ${Math.round(eff.value * 100)}% 最大HP`);
+    if (eff.type === "mp_restore") parts.push(`${eff.target === "self" ? "自身" : "目标"}恢复 ${eff.value} MP`);
+    if (eff.type === "damage_bonus") parts.push(`伤害 +${eff.value}`);
+    if (eff.type === "true_damage") parts.push(`真实伤害 ${eff.value}`);
+    if (eff.type === "self_damage") parts.push(`自身受伤 ${eff.value}`);
+    if (eff.type === "apply_status" && eff.status) parts.push(`施加${eff.status.polarity === "positive" ? "正面" : eff.status.polarity === "negative" ? "负面" : ""}状态 ${eff.status.name}`);
     if (eff.type === "stat_bonus") parts.push(`${statName(eff.stat)} +${eff.value}`);
     if (eff.type === "stat_multiplier") parts.push(`${statName(eff.stat)} ×${eff.value}`);
   }
@@ -887,6 +939,12 @@ function skillConditionText(cond) {
   if (cond.type === "self_hp_pct_gte") return `自身HP ≥ ${Math.round(cond.value * 100)}%`;
   if (cond.type === "target_hp_pct_lte") return `目标HP ≤ ${Math.round(cond.value * 100)}%`;
   if (cond.type === "target_hp_pct_gte") return `目标HP ≥ ${Math.round(cond.value * 100)}%`;
+  if (cond.type === "self_mp_pct_lte") return `自身MP ≤ ${Math.round(cond.value * 100)}%`;
+  if (cond.type === "self_mp_pct_gte") return `自身MP ≥ ${Math.round(cond.value * 100)}%`;
+  if (cond.type === "target_mp_pct_lte") return `目标MP ≤ ${Math.round(cond.value * 100)}%`;
+  if (cond.type === "target_mp_pct_gte") return `目标MP ≥ ${Math.round(cond.value * 100)}%`;
+  if (cond.type === "action_index_lte") return `行动序号 ≤ ${cond.value}`;
+  if (cond.type === "action_index_gte") return `行动序号 ≥ ${cond.value}`;
   if (cond.type === "all") return (cond.conditions || []).map(skillConditionText).filter(Boolean).join(" 且 ");
   if (cond.type === "any") return (cond.conditions || []).map(skillConditionText).filter(Boolean).join(" 或 ");
   return "";
@@ -2113,6 +2171,7 @@ function finishSim(left, right, winner, reason, actions, time) {
 window.allocateExperience = allocateExperience;
 window.craft = craft;
 window.purchaseUpgrade = purchaseUpgrade;
+window.recruit = recruit;
 window.equip = equip;
 window.equipFromPopup = equipFromPopup;
 window.unequip = unequip;

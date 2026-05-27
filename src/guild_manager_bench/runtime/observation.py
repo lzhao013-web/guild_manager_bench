@@ -7,6 +7,7 @@ from guild_manager_bench.game.engine import (
     effective_adventurer_skills,
     effective_adventurer_stats,
     is_finished,
+    party_size_limit,
 )
 from guild_manager_bench.game.models import CombatResources, CombatStatModifier, CombatStats
 from guild_manager_bench.game.progression import (
@@ -23,6 +24,7 @@ from guild_manager_bench.game.state import (
     AdventurerState,
     GameDefinition,
     GameState,
+    RecruitCandidate,
     RewardBundle,
     SpawnedMonster,
 )
@@ -37,6 +39,7 @@ def build_observation(definition: GameDefinition, state: GameState) -> dict[str,
         for item in definition.content.equipment_templates
     }
     equipped_by = _equipped_by_adventurer_id(state)
+    size_limit = party_size_limit(definition, state)
     return {
         "turn": state.turn,
         "max_turns": state.max_turns,
@@ -45,6 +48,8 @@ def build_observation(definition: GameDefinition, state: GameState) -> dict[str,
         "gold": state.gold,
         "materials": dict(state.materials),
         "experience_pool": state.experience_pool,
+        "party_size_limit": size_limit,
+        "party_size": len(state.adventurers),
         "experience_rules": _experience_rules_to_dict(definition),
         "scoring": _scoring_rules_to_dict(definition),
         "adventurers": [
@@ -66,6 +71,10 @@ def build_observation(definition: GameDefinition, state: GameState) -> dict[str,
         "global_upgrades": [
             _upgrade_to_dict(state, upgrade)
             for upgrade in definition.content.global_upgrades
+        ],
+        "recruit_candidates": [
+            _recruit_candidate_to_dict(state, candidate, size_limit)
+            for candidate in state.recruit_candidates
         ],
     }
 
@@ -108,6 +117,36 @@ def _monster_to_dict(monster: SpawnedMonster) -> dict[str, Any]:
         "stats": _stats_to_dict(monster.stats),
         "reward": _reward_to_dict(monster.reward),
         "skills": [_skill_to_dict(skill) for skill in monster.skills],
+    }
+
+
+def _recruit_candidate_to_dict(
+    state: GameState,
+    candidate: RecruitCandidate,
+    size_limit: int,
+) -> dict[str, Any]:
+    missing: dict[str, Any] = {}
+    if state.gold < candidate.recruit_gold:
+        missing["gold"] = candidate.recruit_gold - state.gold
+    if len(state.adventurers) >= size_limit:
+        missing["party_size_limit"] = {
+            "current": len(state.adventurers),
+            "limit": size_limit,
+        }
+    return {
+        "candidate_id": candidate.candidate_id,
+        "template_id": candidate.template_id,
+        "name": candidate.name,
+        "recruit_gold": candidate.recruit_gold,
+        "base_stats": _stats_to_dict(candidate.base_stats),
+        "stat_growth_per_level": _stat_modifier_to_dict(candidate.stat_growth_per_level),
+        "skills": [_skill_to_dict(skill) for skill in candidate.skills],
+        "level_skill_unlocks": [
+            _level_skill_unlock_to_dict(unlock, 1)
+            for unlock in candidate.level_skill_unlocks
+        ],
+        "can_recruit": not missing,
+        "missing": missing,
     }
 
 
@@ -161,6 +200,7 @@ def _upgrade_to_dict(state, upgrade) -> dict[str, Any]:
         "name": upgrade.name,
         "gold_cost": upgrade.gold_cost,
         "stats": _stat_modifier_to_dict(upgrade.stat_modifier),
+        "party_size_bonus": upgrade.party_size_bonus,
         "skills": [_skill_to_dict(skill) for skill in upgrade.skills],
         "required_upgrade_ids": list(upgrade.required_upgrade_ids),
         "unlocked": upgrade.upgrade_id in state.unlocked_upgrade_ids,

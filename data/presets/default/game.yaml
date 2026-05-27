@@ -18,9 +18,14 @@ rules:
     hp_percent: 0.2
     mp_percent: 0.25
     use_recovery_stat: true
+  recruitment:
+    candidate_count: 3
+    first_turn_candidate_count: 6
+    initial_party_size_limit: 3
+    maximum_party_size_limit: 6
 
 starting:
-  gold: 40
+  gold: 150
   materials:
     iron_ore: 2
     wood: 2
