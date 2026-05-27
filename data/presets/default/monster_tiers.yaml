@@ -1,0 +1,29 @@
+bonus_skill_pool: [venom_spit, iron_shell, blood_fang, phantom_step, shattering_claw, rage_charge, regen_flesh, ambush_strike]
+
+tiers:
+  elite:
+    chance: 0.15
+    stat_multiplier: 1.5
+    reward_multiplier: 1.2
+    name_prefix: "精英"
+    bonus_reward_growth:
+      gold: 2
+      experience: 5
+      materials:
+        herb: 1
+        wood: 1
+    bonus_skill_count: 1
+
+  boss:
+    chance: 0.05
+    stat_multiplier: 2.5
+    reward_multiplier: 1.5
+    name_prefix: "首领"
+    bonus_reward_growth:
+      gold: 4
+      experience: 10
+      materials:
+        herb: 2
+        wood: 2
+        leather: 1
+    bonus_skill_count: 2

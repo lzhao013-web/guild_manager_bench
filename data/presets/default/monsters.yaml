@@ -95,17 +95,4 @@ monsters:
       experience: 8
       materials:
         herb: 1
-    skills:
-      - id: shaman_mend
-        name: 萨满治疗
-        kind: active
-        priority: 120
-        mp_cost: 6
-        once_per_battle: true
-        condition:
-          type: self_hp_pct_lte
-          value: 0.4
-        effects:
-          - type: heal
-            value: 24
-            target: self
+    skills: [shaman_mend]

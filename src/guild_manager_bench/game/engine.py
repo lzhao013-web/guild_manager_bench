@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass, replace
-from typing import Iterable, Mapping
+from typing import Any, Iterable, Mapping
 
 from guild_manager_bench.game.actions import (
     AllocateExperienceAction,
@@ -31,6 +31,7 @@ from guild_manager_bench.game.models import (
     CombatStatModifier,
     CombatStats,
     apply_stat_modifier,
+    scale_combat_stats,
     scale_stat_modifier,
 )
 from guild_manager_bench.game.progression import add_experience, level_stat_modifier
@@ -39,6 +40,8 @@ from guild_manager_bench.game.state import (
     GameDefinition,
     GameState,
     MonsterArchetype,
+    MonsterSpawnRules,
+    MonsterTierConfig,
     RecruitCandidate,
     RecruitableAdventurerTemplate,
     RewardBundle,
@@ -264,9 +267,10 @@ def spawn_monsters(definition: GameDefinition, turn: int) -> tuple[SpawnedMonste
     _validate_definition(definition)
     if turn > definition.rules.max_turns:
         return ()
-    count = definition.rules.monster_spawn.count_curve.value_at(turn)
-    stat_factor = definition.rules.monster_spawn.stat_growth_curve.value_at(turn)
-    reward_factor = definition.rules.monster_spawn.reward_growth_curve.value_at(turn)
+    spawn_rules = definition.rules.monster_spawn
+    count = spawn_rules.count_curve.value_at(turn)
+    stat_factor = spawn_rules.stat_growth_curve.value_at(turn)
+    reward_factor = spawn_rules.reward_growth_curve.value_at(turn)
     rng = random.Random(definition.rules.seed * 1_000_003 + turn)
     monsters: list[SpawnedMonster] = []
 
@@ -274,7 +278,10 @@ def spawn_monsters(definition: GameDefinition, turn: int) -> tuple[SpawnedMonste
         archetype = definition.content.monster_archetypes[
             rng.randrange(len(definition.content.monster_archetypes))
         ]
-        monsters.append(_spawn_monster(archetype, turn, index + 1, stat_factor, reward_factor))
+        tier = _roll_tier(rng, spawn_rules)
+        tc = _tier_config(spawn_rules, tier)
+        bonus_skills = _sample_bonus_skills(rng, tc)
+        monsters.append(_spawn_monster(archetype, turn, index + 1, stat_factor, reward_factor, tier, tc, bonus_skills))
     return tuple(monsters)
 
 
@@ -555,25 +562,72 @@ def _apply_hunt_action(
     )
 
 
+def _roll_tier(rng: random.Random, spawn_rules: MonsterSpawnRules) -> str:
+    boss = spawn_rules.boss
+    if boss.chance > 0 and rng.random() < boss.chance:
+        return "boss"
+    elite = spawn_rules.elite
+    if elite.chance > 0 and rng.random() < elite.chance:
+        return "elite"
+    return "normal"
+
+
+def _tier_config(spawn_rules: MonsterSpawnRules, tier: str) -> MonsterTierConfig | None:
+    if tier == "boss":
+        return spawn_rules.boss
+    if tier == "elite":
+        return spawn_rules.elite
+    return None
+
+
+def _sample_bonus_skills(rng: random.Random, tc: MonsterTierConfig | None) -> tuple[Skill, ...]:
+    if tc is None or tc.bonus_skill_count <= 0 or not tc.bonus_skill_pool:
+        return ()
+    count = min(tc.bonus_skill_count, len(tc.bonus_skill_pool))
+    return tuple(rng.sample(list(tc.bonus_skill_pool), count))
+
+
+def _scale_reward_bundle(reward: RewardBundle, multiplier: float) -> RewardBundle:
+    return RewardBundle(
+        gold=max(0, int(reward.gold * multiplier)),
+        experience=max(0, int(reward.experience * multiplier)),
+        materials={k: max(0, int(v * multiplier)) for k, v in reward.materials.items()},
+    )
+
+
 def _spawn_monster(
     archetype: MonsterArchetype,
     turn: int,
     index: int,
     stat_factor: int,
     reward_factor: int,
+    tier: str = "normal",
+    tc: MonsterTierConfig | None = None,
+    bonus_skills: tuple[Skill, ...] = (),
 ) -> SpawnedMonster:
     stats = apply_stat_modifier(
         archetype.base_stats,
         scale_stat_modifier(archetype.stat_growth, stat_factor),
     )
     reward = archetype.base_reward + _scale_reward(archetype.reward_growth, reward_factor)
+
+    if tc is not None:
+        stats = scale_combat_stats(stats, tc.stat_multiplier)
+        reward = _scale_reward_bundle(reward, tc.reward_multiplier) + _scale_reward(tc.bonus_reward_growth, reward_factor)
+        name = f"{tc.name_prefix}·{archetype.name}" if tc.name_prefix else archetype.name
+        skills = archetype.skills + bonus_skills
+    else:
+        name = archetype.name
+        skills = archetype.skills
+
     return SpawnedMonster(
         monster_id=f"turn_{turn}_monster_{index}",
         archetype_id=archetype.archetype_id,
-        name=archetype.name,
+        name=name,
         stats=stats,
         reward=reward,
-        skills=archetype.skills,
+        tier=tier,
+        skills=skills,
     )
 
 

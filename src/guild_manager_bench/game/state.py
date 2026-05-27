@@ -66,12 +66,51 @@ class IntCurve:
 
 
 @dataclass(frozen=True, slots=True)
+class MonsterTierConfig:
+    """怪物阶级（精英/首领）生成配置。"""
+
+    chance: float = 0.0
+    stat_multiplier: float = 1.0
+    reward_multiplier: float = 1.0
+    bonus_reward_growth: RewardBundle = field(default_factory=RewardBundle)
+    name_prefix: str = ""
+    bonus_skill_pool: tuple[Skill, ...] = ()
+    bonus_skill_count: int = 0
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.chance, (int, float)):
+            raise TypeError("chance must be a number")
+        if not (0.0 <= self.chance <= 1.0):
+            raise ValueError("chance must be between 0.0 and 1.0")
+        if not isinstance(self.stat_multiplier, (int, float)):
+            raise TypeError("stat_multiplier must be a number")
+        if self.stat_multiplier < 1.0:
+            raise ValueError("stat_multiplier must be >= 1.0")
+        if not isinstance(self.reward_multiplier, (int, float)):
+            raise TypeError("reward_multiplier must be a number")
+        if self.reward_multiplier < 1.0:
+            raise ValueError("reward_multiplier must be >= 1.0")
+        if not isinstance(self.bonus_reward_growth, RewardBundle):
+            raise TypeError("bonus_reward_growth must be RewardBundle")
+        if not isinstance(self.bonus_skill_count, int):
+            raise TypeError("bonus_skill_count must be an int")
+        if self.bonus_skill_count < 0:
+            raise ValueError("bonus_skill_count must be >= 0")
+        object.__setattr__(self, "bonus_skill_pool", tuple(self.bonus_skill_pool))
+        for skill in self.bonus_skill_pool:
+            if not isinstance(skill, Skill):
+                raise TypeError("bonus_skill_pool must contain Skill")
+
+
+@dataclass(frozen=True, slots=True)
 class MonsterSpawnRules:
     """每回合怪物刷新规则。"""
 
     count_curve: IntCurve
     stat_growth_curve: IntCurve = field(default_factory=lambda: IntCurve(base=0, per_turn=1))
     reward_growth_curve: IntCurve = field(default_factory=lambda: IntCurve(base=0, per_turn=1))
+    elite: MonsterTierConfig = field(default_factory=MonsterTierConfig)
+    boss: MonsterTierConfig = field(default_factory=MonsterTierConfig)
 
     def __post_init__(self) -> None:
         if not isinstance(self.count_curve, IntCurve):
@@ -80,6 +119,10 @@ class MonsterSpawnRules:
             raise TypeError("stat_growth_curve must be IntCurve")
         if not isinstance(self.reward_growth_curve, IntCurve):
             raise TypeError("reward_growth_curve must be IntCurve")
+        if not isinstance(self.elite, MonsterTierConfig):
+            raise TypeError("elite must be MonsterTierConfig")
+        if not isinstance(self.boss, MonsterTierConfig):
+            raise TypeError("boss must be MonsterTierConfig")
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,6 +203,7 @@ class SpawnedMonster:
     name: str
     stats: CombatStats
     reward: RewardBundle
+    tier: str = "normal"
     skills: tuple[Skill, ...] = ()
 
     def __post_init__(self) -> None:

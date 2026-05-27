@@ -29,18 +29,7 @@ upgrades:
       - training_ground
     stats:
       speed: 3
-    skills:
-      - id: coordinated_assault
-        name: 协同攻势
-        kind: passive
-        condition:
-          type: self_hp_pct_gte
-          value: 0.6
-        effects:
-          - type: stat_bonus
-            stat: attack
-            value: 4
-            target: self
+    skills: [coordinated_assault]
 
   - id: veteran_command
     name: 老兵指挥
@@ -82,34 +71,7 @@ upgrades:
       - field_medicine
     stats:
       mp: 6
-    skills:
-      - id: corrosive_vial
-        name: 腐蚀药瓶
-        kind: active
-        priority: 155
-        mp_cost: 5
-        once_per_battle: true
-        condition:
-          type: all
-          conditions:
-            - type: action_index_lte
-              value: 5
-            - type: self_mp_pct_gte
-              value: 0.25
-        effects:
-          - type: apply_status
-            target: target
-            status:
-              id: armor_break
-              name: 破甲
-              duration: 2
-              polarity: negative
-              stack_mode: refresh
-              effects:
-                - type: stat_multiplier
-                  stat: defense
-                  value: 0.8
-                  target: self
+    skills: [corrosive_vial]
 
   - id: rally_banner
     name: 集结旗帜
@@ -119,30 +81,4 @@ upgrades:
     stats:
       hp: 8
       speed: 1
-    skills:
-      - id: opening_rally
-        name: 开场鼓舞
-        kind: active
-        priority: 190
-        once_per_battle: true
-        condition:
-          type: action_index_lte
-          value: 3
-        effects:
-          - type: apply_status
-            target: self
-            status:
-              id: inspired
-              name: 鼓舞
-              duration: 2
-              polarity: positive
-              stack_mode: refresh
-              effects:
-                - type: stat_bonus
-                  stat: attack
-                  value: 4
-                  target: self
-                - type: stat_bonus
-                  stat: speed
-                  value: 2
-                  target: self
+    skills: [opening_rally]

@@ -25,6 +25,7 @@ from guild_manager_bench.game.state import (
     LlmToolRules,
     MonsterArchetype,
     MonsterSpawnRules,
+    MonsterTierConfig,
     RecruitableAdventurerTemplate,
     RecruitmentRules,
     RewardBundle,
@@ -38,28 +39,65 @@ class YamlLoadError(ValueError):
     """YAML 数据加载失败。"""
 
 
+def _build_skill_registry(data: Any) -> dict[str, Skill]:
+    if not data:
+        return {}
+    skills = _parse_skills(_list_section(data, "skills"), "skills")
+    registry: dict[str, Skill] = {}
+    for skill in skills:
+        if skill.skill_id in registry:
+            raise YamlLoadError(f"duplicate skill id: {skill.skill_id}")
+        registry[skill.skill_id] = skill
+    return registry
+
+
+def _resolve_skills(value: Any, registry: dict[str, Skill], path: str) -> tuple[Skill, ...]:
+    if not value:
+        return ()
+    items = _list(value, path)
+    if not items:
+        return ()
+    # If first item is a string, treat as ID references; otherwise parse inline.
+    if isinstance(items[0], str):
+        resolved: list[Skill] = []
+        for index, skill_id in enumerate(items):
+            skill = registry.get(skill_id)
+            if skill is None:
+                raise YamlLoadError(f"{path}[{index}]: unknown skill id '{skill_id}'")
+            resolved.append(skill)
+        return tuple(resolved)
+    return _parse_skills(value, path)
+
+
 def load_game_definition(data_dir: str | Path) -> GameDefinition:
     """从数据目录加载完整游戏定义。"""
 
     data_path = Path(data_dir)
     game_data = _load_mapping(data_path / "game.yaml")
+    skill_data = _load_yaml(data_path / "skills.yaml")
     adventurer_data = _load_yaml(data_path / "adventurers.yaml")
     monster_data = _load_yaml(data_path / "monsters.yaml")
     equipment_data = _load_yaml(data_path / "equipment.yaml")
     recipe_data = _load_yaml(data_path / "crafting_recipes.yaml")
     upgrade_data = _load_yaml(data_path / "global_upgrades.yaml")
+    tier_data = _load_yaml(data_path / "monster_tiers.yaml")
 
-    rules = _parse_game_rules(_mapping(_required(game_data, "rules"), "rules"))
+    skill_registry = _build_skill_registry(skill_data)
+    tier_configs = _parse_tier_configs(tier_data, skill_registry)
+    rules = _parse_game_rules(
+        _mapping(_required(game_data, "rules"), "rules"),
+        tier_configs=tier_configs,
+    )
     experience_rules = _parse_experience_rules(_mapping(game_data.get("experience", {}), "experience"))
     content = GameContent(
-        adventurers=_parse_adventurers(_list_section(adventurer_data, "adventurers")),
+        adventurers=_parse_adventurers(_list_section(adventurer_data, "adventurers"), skill_registry),
         recruitable_adventurers=_parse_recruitable_adventurers(
-            _list_section(adventurer_data, "recruitable_adventurers")
+            _list_section(adventurer_data, "recruitable_adventurers"), skill_registry
         ),
-        monster_archetypes=_parse_monsters(_list_section(monster_data, "monsters")),
-        equipment_templates=_parse_equipment(_list_section(equipment_data, "equipment")),
+        monster_archetypes=_parse_monsters(_list_section(monster_data, "monsters"), skill_registry),
+        equipment_templates=_parse_equipment(_list_section(equipment_data, "equipment"), skill_registry),
         crafting_recipes=_parse_recipes(_list_section(recipe_data, "recipes")),
-        global_upgrades=_parse_upgrades(_list_section(upgrade_data, "upgrades")),
+        global_upgrades=_parse_upgrades(_list_section(upgrade_data, "upgrades"), skill_registry),
         experience_rules=experience_rules,
     )
     starting = _mapping(game_data.get("starting", {}), "starting")
@@ -73,7 +111,7 @@ def load_game_definition(data_dir: str | Path) -> GameDefinition:
     )
 
 
-def _parse_adventurers(values: list[Any]) -> tuple[AdventurerState, ...]:
+def _parse_adventurers(values: list[Any], registry: dict[str, Skill]) -> tuple[AdventurerState, ...]:
     adventurers: list[AdventurerState] = []
     for index, value in enumerate(values):
         data = _mapping(value, f"adventurers[{index}]")
@@ -84,10 +122,11 @@ def _parse_adventurers(values: list[Any]) -> tuple[AdventurerState, ...]:
                 name=_str(_required(data, "name"), f"adventurers[{index}].name"),
                 base_stats=stats,
                 resources=CombatResources.full(stats),
-                skills=_parse_skills(data.get("skills", ()), f"adventurers[{index}].skills"),
+                skills=_resolve_skills(data.get("skills", ()), registry, f"adventurers[{index}].skills"),
                 level_skill_unlocks=_parse_level_skill_unlocks(
                     data.get("level_skill_unlocks", ()),
                     f"adventurers[{index}].level_skill_unlocks",
+                    registry,
                 ),
                 stat_growth_per_level=_parse_optional_stat_modifier(
                     data.get("stat_growth_per_level"),
@@ -100,7 +139,7 @@ def _parse_adventurers(values: list[Any]) -> tuple[AdventurerState, ...]:
     return tuple(adventurers)
 
 
-def _parse_recruitable_adventurers(values: list[Any]) -> tuple[RecruitableAdventurerTemplate, ...]:
+def _parse_recruitable_adventurers(values: list[Any], registry: dict[str, Skill]) -> tuple[RecruitableAdventurerTemplate, ...]:
     adventurers: list[RecruitableAdventurerTemplate] = []
     for index, value in enumerate(values):
         data = _mapping(value, f"recruitable_adventurers[{index}]")
@@ -115,13 +154,15 @@ def _parse_recruitable_adventurers(values: list[Any]) -> tuple[RecruitableAdvent
                 base_stats=_parse_combat_stats(
                     _mapping(_required(data, "stats"), f"recruitable_adventurers[{index}].stats")
                 ),
-                skills=_parse_skills(
+                skills=_resolve_skills(
                     data.get("skills", ()),
+                    registry,
                     f"recruitable_adventurers[{index}].skills",
                 ),
                 level_skill_unlocks=_parse_level_skill_unlocks(
                     data.get("level_skill_unlocks", ()),
                     f"recruitable_adventurers[{index}].level_skill_unlocks",
+                    registry,
                 ),
                 stat_growth_per_level=_parse_stat_modifier(
                     _mapping(
@@ -134,7 +175,7 @@ def _parse_recruitable_adventurers(values: list[Any]) -> tuple[RecruitableAdvent
     return tuple(adventurers)
 
 
-def _parse_monsters(values: list[Any]) -> tuple[MonsterArchetype, ...]:
+def _parse_monsters(values: list[Any], registry: dict[str, Skill]) -> tuple[MonsterArchetype, ...]:
     monsters: list[MonsterArchetype] = []
     for index, value in enumerate(values):
         data = _mapping(value, f"monsters[{index}]")
@@ -154,13 +195,13 @@ def _parse_monsters(values: list[Any]) -> tuple[MonsterArchetype, ...]:
                 reward_growth=_parse_reward(
                     _mapping(data.get("reward_growth", {}), f"monsters[{index}].reward_growth")
                 ),
-                skills=_parse_skills(data.get("skills", ()), f"monsters[{index}].skills"),
+                skills=_resolve_skills(data.get("skills", ()), registry, f"monsters[{index}].skills"),
             )
         )
     return tuple(monsters)
 
 
-def _parse_equipment(values: list[Any]) -> tuple[EquipmentTemplate, ...]:
+def _parse_equipment(values: list[Any], registry: dict[str, Skill]) -> tuple[EquipmentTemplate, ...]:
     equipment: list[EquipmentTemplate] = []
     for index, value in enumerate(values):
         data = _mapping(value, f"equipment[{index}]")
@@ -172,7 +213,7 @@ def _parse_equipment(values: list[Any]) -> tuple[EquipmentTemplate, ...]:
                 stat_modifier=_parse_stat_modifier(
                     _mapping(_stat_modifier_data(data), f"equipment[{index}].stats")
                 ),
-                skills=_parse_skills(data.get("skills", ()), f"equipment[{index}].skills"),
+                skills=_resolve_skills(data.get("skills", ()), registry, f"equipment[{index}].skills"),
             )
         )
     return tuple(equipment)
@@ -194,7 +235,7 @@ def _parse_recipes(values: list[Any]) -> tuple[CraftingRecipe, ...]:
     return tuple(recipes)
 
 
-def _parse_upgrades(values: list[Any]) -> tuple[GlobalUpgrade, ...]:
+def _parse_upgrades(values: list[Any], registry: dict[str, Skill]) -> tuple[GlobalUpgrade, ...]:
     upgrades: list[GlobalUpgrade] = []
     for index, value in enumerate(values):
         data = _mapping(value, f"upgrades[{index}]")
@@ -206,7 +247,7 @@ def _parse_upgrades(values: list[Any]) -> tuple[GlobalUpgrade, ...]:
                 stat_modifier=_parse_stat_modifier(
                     _mapping(_stat_modifier_data(data), f"upgrades[{index}].stats")
                 ),
-                skills=_parse_skills(data.get("skills", ()), f"upgrades[{index}].skills"),
+                skills=_resolve_skills(data.get("skills", ()), registry, f"upgrades[{index}].skills"),
                 required_upgrade_ids=tuple(
                     _str(item, f"upgrades[{index}].required[{required_index}]")
                     for required_index, item in enumerate(data.get("required", ()))
@@ -220,7 +261,7 @@ def _parse_upgrades(values: list[Any]) -> tuple[GlobalUpgrade, ...]:
     return tuple(upgrades)
 
 
-def _parse_game_rules(data: Mapping[str, Any]) -> GameRules:
+def _parse_game_rules(data: Mapping[str, Any], tier_configs: Mapping[str, MonsterTierConfig]) -> GameRules:
     spawn = _mapping(_required(data, "monster_spawn"), "rules.monster_spawn")
     return GameRules(
         max_turns=_int(_required(data, "max_turns"), "rules.max_turns"),
@@ -233,6 +274,8 @@ def _parse_game_rules(data: Mapping[str, Any]) -> GameRules:
             reward_growth_curve=_parse_int_curve(
                 _mapping(spawn.get("reward_growth_curve", {}), "rules.monster_spawn.reward_growth_curve")
             ),
+            elite=tier_configs.get("elite", MonsterTierConfig()),
+            boss=tier_configs.get("boss", MonsterTierConfig()),
         ),
         turn_recovery=_parse_turn_recovery(
             _mapping(data.get("turn_recovery", {}), "rules.turn_recovery")
@@ -323,6 +366,40 @@ def _parse_int_curve(data: Mapping[str, Any]) -> IntCurve:
     )
 
 
+def _parse_tier_configs(data: Any, registry: dict[str, Skill]) -> dict[str, MonsterTierConfig]:
+    if not data:
+        return {}
+    mapping = _mapping(data, "monster_tiers")
+    shared_pool = _resolve_skills(mapping.get("bonus_skill_pool", ()), registry, "monster_tiers.bonus_skill_pool")
+    tiers_data = _mapping(mapping.get("tiers", {}), "monster_tiers.tiers")
+    result: dict[str, MonsterTierConfig] = {}
+    for tier_name in ("elite", "boss"):
+        tier_data = tiers_data.get(tier_name)
+        if tier_data is None:
+            continue
+        td = _mapping(tier_data, f"monster_tiers.tiers.{tier_name}")
+        result[tier_name] = _parse_tier_config(td, f"monster_tiers.tiers.{tier_name}", shared_pool)
+    return result
+
+
+def _parse_tier_config(data: Mapping[str, Any], path: str, shared_pool: tuple[Skill, ...] = ()) -> MonsterTierConfig:
+    bonus_growth_data = data.get("bonus_reward_growth")
+    bonus_reward_growth = (
+        _parse_reward(_mapping(bonus_growth_data, f"{path}.bonus_reward_growth"))
+        if bonus_growth_data is not None
+        else RewardBundle()
+    )
+    return MonsterTierConfig(
+        chance=float(data.get("chance", 0.0)),
+        stat_multiplier=float(data.get("stat_multiplier", 1.0)),
+        reward_multiplier=float(data.get("reward_multiplier", 1.0)),
+        bonus_reward_growth=bonus_reward_growth,
+        name_prefix=str(data.get("name_prefix", "")),
+        bonus_skill_pool=shared_pool,
+        bonus_skill_count=_int(data.get("bonus_skill_count", 0), f"{path}.bonus_skill_count"),
+    )
+
+
 def _parse_combat_stats(data: Mapping[str, Any]) -> CombatStats:
     return CombatStats(
         hp=_int(_required(data, "hp"), "stats.hp"),
@@ -378,14 +455,14 @@ def _parse_skills(value: Any, path: str) -> tuple[Skill, ...]:
     return tuple(skills)
 
 
-def _parse_level_skill_unlocks(value: Any, path: str) -> tuple[LevelSkillUnlock, ...]:
+def _parse_level_skill_unlocks(value: Any, path: str, registry: dict[str, Skill]) -> tuple[LevelSkillUnlock, ...]:
     unlocks = []
     for index, item in enumerate(_list(value, path)):
         data = _mapping(item, f"{path}[{index}]")
         unlocks.append(
             LevelSkillUnlock(
                 level=_int(_required(data, "level"), f"{path}[{index}].level"),
-                skills=_parse_skills(_required(data, "skills"), f"{path}[{index}].skills"),
+                skills=_resolve_skills(_required(data, "skills"), registry, f"{path}[{index}].skills"),
             )
         )
     return tuple(unlocks)

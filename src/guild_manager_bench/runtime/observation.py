@@ -114,6 +114,7 @@ def _monster_to_dict(monster: SpawnedMonster) -> dict[str, Any]:
         "monster_id": monster.monster_id,
         "archetype_id": monster.archetype_id,
         "name": monster.name,
+        "tier": monster.tier,
         "stats": _stats_to_dict(monster.stats),
         "reward": _reward_to_dict(monster.reward),
         "skills": [_skill_to_dict(skill) for skill in monster.skills],

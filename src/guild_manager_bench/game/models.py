@@ -95,6 +95,19 @@ def scale_stat_modifier(modifier: CombatStatModifier, factor: int) -> CombatStat
     )
 
 
+def scale_combat_stats(stats: CombatStats, multiplier: float) -> CombatStats:
+    """按浮点倍率缩放战斗属性，结果取整。"""
+
+    return CombatStats(
+        hp=max(1, int(stats.hp * multiplier)),
+        mp=max(0, int(stats.mp * multiplier)),
+        attack=max(0, int(stats.attack * multiplier)),
+        defense=max(0, int(stats.defense * multiplier)),
+        speed=max(0, int(stats.speed * multiplier)),
+        recovery=max(0, int(stats.recovery * multiplier)),
+    )
+
+
 @dataclass(slots=True)
 class CombatResources:
     """战斗单位的可变当前资源。"""
