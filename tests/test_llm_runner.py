@@ -201,10 +201,11 @@ def test_run_llm_turn_emits_debug_events() -> None:
     assert tool_message["content"].startswith("OK get_observation")
     assert not tool_message["content"].lstrip().startswith("{")
     assert "seed 20260524" in tool_message["content"]
-    assert "scoring_seed 20260526" in tool_message["content"]
-    assert "adventurers:" in tool_message["content"]
-    assert "skills power_strike active" in tool_message["content"]
-    assert "effects dmgx2" in tool_message["content"]
+    assert "评分seed 20260526" in tool_message["content"]
+    assert "冒险者:" in tool_message["content"]
+    assert "EXP 0/" in tool_message["content"]
+    assert "技能 power_strike 主动" in tool_message["content"]
+    assert "效果 伤害倍率 2" in tool_message["content"]
 
 
 def test_turn_prompt_includes_compact_skill_summaries() -> None:
@@ -213,9 +214,19 @@ def test_turn_prompt_includes_compact_skill_summaries() -> None:
 
     prompt = build_turn_prompt(observation, max_tool_calls=3)
 
-    assert "技能 power_strike active" in prompt
+    assert "回合流程：准备阶段可调用查询工具读取信息" in prompt
+    assert "工具预算：本回合最多允许 3 次非 end_turn 工具调用" in prompt
+    assert "本回合概览：" in prompt
+    assert "可制作配方" in prompt
+    assert "可购买升级" in prompt
+    assert "空闲装备" in prompt
+    assert "当前怪物" in prompt
+    assert "总潜在奖励" not in prompt
+    assert "怪物最高攻击" not in prompt
+    assert "EXP 0/" in prompt
+    assert "技能 power_strike 主动" in prompt
     assert "随机种子：游戏 20260524，评分 20260526" in prompt
-    assert "effects dmgx1.8" in prompt
+    assert "效果 伤害倍率 1.8" in prompt
 
 
 def test_preview_battle_tool_returns_compact_model_visible_text() -> None:
@@ -254,9 +265,9 @@ def test_preview_battle_tool_returns_compact_model_visible_text() -> None:
         if message.get("role") == "tool" and message.get("name") == "preview_battle"
     )
     assert tool_message["content"].startswith("OK preview_battle")
-    assert "resources:" in tool_message["content"]
-    assert "combat:" in tool_message["content"]
-    assert "budget: 1/" in tool_message["content"]
+    assert "资源:" in tool_message["content"]
+    assert "战斗:" in tool_message["content"]
+    assert "预算: 已用 1/" in tool_message["content"]
     assert not tool_message["content"].lstrip().startswith("{")
 
 

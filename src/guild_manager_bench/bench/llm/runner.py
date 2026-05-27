@@ -725,7 +725,7 @@ def _format_tool_result_for_model(name: str, result: Mapping[str, Any]) -> str:
         lines.append(f"FAIL {name}: {result.get('error', 'unknown error')}")
         event = result.get("event")
         if isinstance(event, Mapping) and event.get("summary"):
-            lines.append(f"event: {event['summary']}")
+            lines.append(f"事件: {event['summary']}")
         return "\n".join(_append_budget_lines(lines, result))
 
     lines.append(f"OK {name}")
@@ -785,32 +785,32 @@ def _append_battle_preview_lines(lines: list[str], preview: Mapping[str, Any]) -
         f"{preview.get('adventurer_id')} vs {preview.get('monster_id')} {outcome}"
     )
     lines.append(
-        "resources: "
-        f"adventurer HP {before.get('current_hp')} -> {after.get('current_hp')}, "
+        "资源: "
+        f"冒险者 HP {before.get('current_hp')} -> {after.get('current_hp')}, "
         f"MP {before.get('current_mp')} -> {after.get('current_mp')}; "
-        f"monster HP left {monster_after.get('current_hp')}"
+        f"怪物剩余 HP {monster_after.get('current_hp')}"
     )
     lines.append(
-        "combat: "
-        f"outcome {preview.get('outcome')}; reason {preview.get('reason')}; "
-        f"actions {preview.get('actions_taken')}; time {preview.get('time_elapsed')}"
+        "战斗: "
+        f"结果 {preview.get('outcome')}; 原因 {preview.get('reason')}; "
+        f"动作数 {preview.get('actions_taken')}; 耗时 {preview.get('time_elapsed')}"
     )
-    lines.append(f"reward_if_win: {reward_text}")
+    lines.append(f"胜利奖励: {reward_text}")
 
 
 def _append_observation_lines(lines: list[str], observation: Mapping[str, Any]) -> None:
     scoring = observation.get("scoring")
     scoring_seed = scoring.get("seed") if isinstance(scoring, Mapping) else None
     lines.append(
-        "state: "
-        f"turn {observation.get('turn')}/{observation.get('max_turns')}; "
+        "状态: "
+        f"回合 {observation.get('turn')}/{observation.get('max_turns')}; "
         f"seed {observation.get('seed')}; "
-        f"scoring_seed {scoring_seed}; "
-        f"gold {observation.get('gold')}; "
-        f"exp_pool {observation.get('experience_pool')}; "
-        f"materials {_mapping_inline(observation.get('materials'))}"
+        f"评分seed {scoring_seed}; "
+        f"金币 {observation.get('gold')}; "
+        f"经验池 {observation.get('experience_pool')}; "
+        f"材料 {_mapping_inline(observation.get('materials'))}"
     )
-    lines.append("adventurers:")
+    lines.append("冒险者:")
     for adventurer in _sequence(observation.get("adventurers")):
         if isinstance(adventurer, Mapping):
             resources = adventurer.get("resources", {})
@@ -821,15 +821,17 @@ def _append_observation_lines(lines: list[str], observation: Mapping[str, Any]) 
                 stats = {}
             equipment = adventurer.get("equipment") or ()
             equipment_text = _equipment_inline(equipment)
+            exp_text = _experience_inline(adventurer)
             lines.append(
                 "- "
                 f"{adventurer.get('adventurer_id')} {adventurer.get('name')} "
                 f"Lv{adventurer.get('level')} "
+                f"EXP {exp_text} "
                 f"HP {resources.get('current_hp')}/{stats.get('hp')} "
                 f"MP {resources.get('current_mp')}/{stats.get('mp')} "
-                f"ATK {stats.get('attack')} DEF {stats.get('defense')} SPD {stats.get('speed')} "
-                f"equipment {equipment_text} "
-                f"skills {skill_summary(adventurer.get('skills'))}"
+                f"攻击 {stats.get('attack')} 防御 {stats.get('defense')} 速度 {stats.get('speed')} "
+                f"装备 {equipment_text} "
+                f"技能 {skill_summary(adventurer.get('skills'))}"
             )
 
     monsters = [
@@ -838,7 +840,7 @@ def _append_observation_lines(lines: list[str], observation: Mapping[str, Any]) 
         if isinstance(monster, Mapping)
     ]
     if monsters:
-        lines.append("monsters:")
+        lines.append("怪物:")
         for monster in monsters:
             stats = monster.get("stats", {})
             if not isinstance(stats, Mapping):
@@ -848,9 +850,9 @@ def _append_observation_lines(lines: list[str], observation: Mapping[str, Any]) 
             lines.append(
                 "- "
                 f"{monster.get('monster_id')} {monster.get('name')} "
-                f"HP {stats.get('hp')} ATK {stats.get('attack')} DEF {stats.get('defense')} SPD {stats.get('speed')} "
-                f"skills {skill_summary(monster.get('skills'))} "
-                f"reward {reward_text}"
+                f"HP {stats.get('hp')} 攻击 {stats.get('attack')} 防御 {stats.get('defense')} 速度 {stats.get('speed')} "
+                f"技能 {skill_summary(monster.get('skills'))} "
+                f"奖励 {reward_text}"
             )
 
     recipes = [
@@ -859,21 +861,21 @@ def _append_observation_lines(lines: list[str], observation: Mapping[str, Any]) 
         if isinstance(recipe, Mapping)
     ]
     if recipes:
-        lines.append("crafting_recipes:")
+        lines.append("制作配方:")
         for recipe in recipes:
-            availability = "can" if recipe.get("can_craft") else "cannot"
+            availability = "可制作" if recipe.get("can_craft") else "不可制作"
             missing = recipe.get("missing")
             missing_text = (
-                f"; missing {_mapping_inline(missing)}"
+                f"; 缺少 {_mapping_inline(missing)}"
                 if isinstance(missing, Mapping) and missing
                 else ""
             )
             lines.append(
                 "- "
                 f"{recipe.get('recipe_id')} {recipe.get('name')} -> {recipe.get('output_name')} "
-                f"stats {_mapping_inline(recipe.get('output_stats'))} "
-                f"skills {skill_summary(recipe.get('output_skills'))} "
-                f"cost gold {recipe.get('gold_cost')} materials {_mapping_inline(recipe.get('material_costs'))} "
+                f"属性 {_mapping_inline(recipe.get('output_stats'))} "
+                f"技能 {skill_summary(recipe.get('output_skills'))} "
+                f"成本 金币 {recipe.get('gold_cost')} 材料 {_mapping_inline(recipe.get('material_costs'))} "
                 f"{availability}{missing_text}"
             )
 
@@ -883,15 +885,15 @@ def _append_observation_lines(lines: list[str], observation: Mapping[str, Any]) 
         if isinstance(item, Mapping)
     ]
     if inventory:
-        lines.append("equipment_inventory:")
+        lines.append("装备库存:")
         for item in inventory:
-            equipped = item.get("equipped_by") or "free"
+            equipped = item.get("equipped_by") or "空闲"
             lines.append(
                 "- "
-                f"{item.get('instance_id')} {item.get('name')} slot {item.get('slot')} "
-                f"stats {_mapping_inline(item.get('stats'))} "
-                f"skills {skill_summary(item.get('skills'))} "
-                f"equipped_by {equipped}"
+                f"{item.get('instance_id')} {item.get('name')} 槽位 {item.get('slot')} "
+                f"属性 {_mapping_inline(item.get('stats'))} "
+                f"技能 {skill_summary(item.get('skills'))} "
+                f"装备者 {equipped}"
             )
 
     upgrades = [
@@ -900,29 +902,29 @@ def _append_observation_lines(lines: list[str], observation: Mapping[str, Any]) 
         if isinstance(upgrade, Mapping)
     ]
     if upgrades:
-        lines.append("global_upgrades:")
+        lines.append("全局升级:")
         for upgrade in upgrades:
             state = (
-                "unlocked"
+                "已解锁"
                 if upgrade.get("unlocked")
-                else "can"
+                else "可购买"
                 if upgrade.get("can_purchase")
-                else "cannot"
+                else "不可购买"
             )
             lines.append(
                 "- "
                 f"{upgrade.get('upgrade_id')} {upgrade.get('name')} "
-                f"gold {upgrade.get('gold_cost')} "
-                f"stats {_mapping_inline(upgrade.get('stats'))} "
-                f"skills {skill_summary(upgrade.get('skills'))} {state}"
+                f"金币 {upgrade.get('gold_cost')} "
+                f"属性 {_mapping_inline(upgrade.get('stats'))} "
+                f"技能 {skill_summary(upgrade.get('skills'))} {state}"
             )
 
 
 def _append_events_lines(lines: list[str], events: Sequence[Any]) -> None:
     if not events:
-        lines.append("events: none")
+        lines.append("事件: 无")
         return
-    lines.append("events:")
+    lines.append("事件:")
     for event in events:
         if isinstance(event, Mapping):
             lines.append(
@@ -930,6 +932,16 @@ def _append_events_lines(lines: list[str], events: Sequence[Any]) -> None:
                 f"#{event.get('sequence')} T{event.get('turn')} {event.get('type')}: "
                 f"{event.get('summary', '')}"
             )
+
+
+def _experience_inline(adventurer: Mapping[str, Any]) -> str:
+    current = adventurer.get("experience")
+    next_level = adventurer.get("next_level")
+    if not isinstance(next_level, Mapping):
+        return str(current)
+    if next_level.get("max_level"):
+        return f"{current}/MAX"
+    return f"{current}/{next_level.get('required')}"
 
 
 def _append_changes_lines(lines: list[str], changes: Any) -> None:
@@ -940,7 +952,7 @@ def _append_changes_lines(lines: list[str], changes: Any) -> None:
     ]
     if not values:
         return
-    lines.append("changes:")
+    lines.append("变化:")
     for change in values:
         label = change.get("label") or change.get("field") or change.get("type") or "change"
         if "before" in change:
@@ -957,15 +969,15 @@ def _append_battles_lines(lines: list[str], battles: Any) -> bool:
     ]
     if not values:
         return False
-    lines.append("battles:")
+    lines.append("战斗:")
     for battle in values:
-        outcome = "win" if battle.get("won") else "loss"
+        outcome = "胜" if battle.get("won") else "负"
         reward = battle.get("reward")
         reward_text = _reward_inline(reward) if isinstance(reward, Mapping) else "{}"
         lines.append(
             "- "
             f"{battle.get('adventurer_id')} vs {battle.get('monster_id')}: {outcome}; "
-            f"reward {reward_text}"
+            f"奖励 {reward_text}"
         )
     return True
 
@@ -973,11 +985,11 @@ def _append_battles_lines(lines: list[str], battles: Any) -> bool:
 def _append_budget_lines(lines: list[str], result: Mapping[str, Any]) -> list[str]:
     budget = result.get("tool_budget")
     if isinstance(budget, Mapping):
-        suffix = "; end_turn only" if budget.get("end_turn_required") else ""
+        suffix = "；仅允许 end_turn" if budget.get("end_turn_required") else ""
         lines.append(
-            "budget: "
-            f"{budget.get('used')}/{budget.get('max_tool_calls')} used, "
-            f"{budget.get('remaining')} remaining{suffix}"
+            "预算: "
+            f"已用 {budget.get('used')}/{budget.get('max_tool_calls')}，"
+            f"剩余 {budget.get('remaining')}{suffix}"
         )
     return lines
 
@@ -989,7 +1001,7 @@ def _equipment_inline(equipment: Any) -> str:
         if isinstance(item, Mapping)
     ]
     if not items:
-        return "none"
+        return "无"
     return ", ".join(
         f"{item.get('instance_id')}:{item.get('name')}"
         for item in items
@@ -999,9 +1011,9 @@ def _equipment_inline(equipment: Any) -> str:
 def _reward_inline(reward: Mapping[str, Any]) -> str:
     return (
         "{"
-        f"gold:{reward.get('gold', 0)}, "
-        f"exp:{reward.get('experience', 0)}, "
-        f"materials:{_mapping_inline(reward.get('materials'))}"
+        f"金币:{reward.get('gold', 0)}, "
+        f"经验:{reward.get('experience', 0)}, "
+        f"材料:{_mapping_inline(reward.get('materials'))}"
         "}"
     )
 
@@ -1009,7 +1021,19 @@ def _reward_inline(reward: Mapping[str, Any]) -> str:
 def _mapping_inline(value: Any) -> str:
     if not isinstance(value, Mapping) or not value:
         return "{}"
-    return "{" + ", ".join(f"{key}:{item}" for key, item in value.items()) + "}"
+    return "{" + ", ".join(f"{_mapping_key(key)}:{item}" for key, item in value.items()) + "}"
+
+
+def _mapping_key(value: Any) -> str:
+    labels = {
+        "hp": "HP",
+        "mp": "MP",
+        "attack": "攻击",
+        "defense": "防御",
+        "speed": "速度",
+        "recovery": "恢复",
+    }
+    return labels.get(value, str(value))
 
 
 def _join_values(value: Any) -> str:

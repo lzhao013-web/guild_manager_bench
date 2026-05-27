@@ -36,7 +36,7 @@ def tool_schemas(*, expose_battle_preview: bool = False) -> list[dict[str, Any]]
     schemas = list(_BASE_TOOL_SCHEMAS)
     if expose_battle_preview:
         schemas.append(_BATTLE_PREVIEW_SCHEMA)
-    return deepcopy(schemas)
+    return [_without_session_id(schema) for schema in schemas]
 
 
 class GuildManagerTools:
@@ -619,3 +619,24 @@ _BATTLE_PREVIEW_SCHEMA: dict[str, Any] = {
         "additionalProperties": False,
     },
 }
+
+
+def _without_session_id(schema: Mapping[str, Any]) -> dict[str, Any]:
+    data = deepcopy(schema)
+    parameters = data.get("parameters")
+    if isinstance(parameters, dict):
+        required = parameters.get("required")
+        if isinstance(required, list):
+            kept_required = [
+                item
+                for item in required
+                if item != "session_id"
+            ]
+            if kept_required:
+                parameters["required"] = kept_required
+            else:
+                parameters.pop("required", None)
+        properties = parameters.get("properties")
+        if isinstance(properties, dict):
+            properties.pop("session_id", None)
+    return data

@@ -13,7 +13,8 @@ from guild_manager_bench.game.state import LlmToolRules
 
 
 def test_tool_schemas_expose_agent_facing_tools() -> None:
-    names = {schema["name"] for schema in tool_schemas()}
+    schemas = tool_schemas()
+    names = {schema["name"] for schema in schemas}
 
     assert {
         "get_observation",
@@ -30,6 +31,10 @@ def test_tool_schemas_expose_agent_facing_tools() -> None:
     assert "list_sessions" not in names
     assert "get_score" not in names
     assert "preview_battle" not in names
+    for schema in schemas:
+        parameters = schema["parameters"]
+        assert "session_id" not in parameters.get("required", [])
+        assert "session_id" not in parameters.get("properties", {})
     assert "preview_battle" in {
         schema["name"]
         for schema in tool_schemas(expose_battle_preview=True)
@@ -103,9 +108,10 @@ def test_turn_tool_harness_enforces_budget_and_still_allows_end_turn() -> None:
     session_id = tools.start_session("budget-test")["session_id"]
     harness = TurnToolHarness(tools, session_id, max_tool_calls=1)
 
-    observed = harness.call_tool("get_observation")
+    observed = harness.call_tool("get_observation", {"session_id": "wrong-session"})
     assert observed["tool_budget"]["remaining"] == 0
     assert observed["tool_budget"]["end_turn_required"] is True
+    assert observed["observation"]["session_id"] == session_id
 
     blocked = harness.call_tool("get_events")
     assert blocked["ok"] is False
