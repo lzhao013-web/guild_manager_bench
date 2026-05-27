@@ -100,7 +100,7 @@ class TurnToolHarness:
         arguments: Mapping[str, Any] | None,
     ) -> dict[str, Any]:
         values = {} if arguments is None else dict(arguments)
-        values.setdefault("session_id", self.session_id)
+        values["session_id"] = self.session_id
         return values
 
     def _error(self, message: str) -> dict[str, Any]:
