@@ -164,6 +164,7 @@ class AdventurerState:
     base_stats: CombatStats
     resources: CombatResources
     skills: tuple[Skill, ...] = ()
+    level_skill_unlocks: tuple[LevelSkillUnlock, ...] = ()
     stat_growth_per_level: CombatStatModifier | None = None
     level: int = 1
     experience: int = 0
@@ -189,6 +190,27 @@ class AdventurerState:
         for skill in self.skills:
             if not isinstance(skill, Skill):
                 raise TypeError("skills must be Skill")
+        object.__setattr__(self, "level_skill_unlocks", tuple(self.level_skill_unlocks))
+        for unlock in self.level_skill_unlocks:
+            if not isinstance(unlock, LevelSkillUnlock):
+                raise TypeError("level_skill_unlocks must be LevelSkillUnlock")
+
+
+@dataclass(frozen=True, slots=True)
+class LevelSkillUnlock:
+    """冒险者达到指定等级时解锁的职业技能。"""
+
+    level: int
+    skills: tuple[Skill, ...]
+
+    def __post_init__(self) -> None:
+        _require_at_least("level", self.level, 1)
+        object.__setattr__(self, "skills", tuple(self.skills))
+        if not self.skills:
+            raise ValueError("level skill unlock must have at least one skill")
+        for skill in self.skills:
+            if not isinstance(skill, Skill):
+                raise TypeError("level unlock skills must be Skill")
 
 
 @dataclass(frozen=True, slots=True)

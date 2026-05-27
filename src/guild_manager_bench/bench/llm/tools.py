@@ -24,8 +24,8 @@ class ToolCallError(ValueError):
     """工具调用参数或会话状态不合法。"""
 
 
-def create_toolbox(data_dir: str | Path = "data") -> GuildManagerTools:
-    """从数据目录创建一组 LLM tool-use 工具。"""
+def create_toolbox(data_dir: str | Path = "data/presets/default") -> GuildManagerTools:
+    """从默认数据 preset 创建一组 LLM tool-use 工具。"""
 
     return GuildManagerTools(load_game_definition(data_dir))
 
@@ -53,8 +53,11 @@ class GuildManagerTools:
         self._lock = RLock()
 
     @classmethod
-    def from_data_dir(cls, data_dir: str | Path = "data") -> GuildManagerTools:
-        """从 YAML 数据目录加载游戏定义并创建工具层。"""
+    def from_data_dir(
+        cls,
+        data_dir: str | Path = "data/presets/default",
+    ) -> GuildManagerTools:
+        """从默认数据 preset 加载游戏定义并创建工具层。"""
 
         return cls(load_game_definition(data_dir))
 
@@ -460,6 +463,8 @@ def _compact_combat_event(event) -> dict[str, Any]:
         "skill_id": event.skill_id,
         "healing": event.healing,
         "healing_target_hp": event.healing_target_hp,
+        "status_id": event.status_id,
+        "status_name": event.status_name,
     }
 
 

@@ -6,14 +6,21 @@ from typing import Any, Mapping, Sequence
 def skill_summary(skills: Any) -> str:
     """Return a compact one-line skill summary for LLM-visible text."""
 
+    values = skill_summary_lines(skills)
+    if not values:
+        return "无"
+    return "; ".join(values)
+
+
+def skill_summary_lines(skills: Any) -> tuple[str, ...]:
+    """Return one formatted line per skill for LLM-visible text."""
+
     values = [
         skill
         for skill in _sequence(skills)
         if isinstance(skill, Mapping)
     ]
-    if not values:
-        return "无"
-    return "; ".join(_skill_text(skill) for skill in values)
+    return tuple(_skill_text(skill) for skill in values)
 
 
 def _skill_text(skill: Mapping[str, Any]) -> str:
@@ -75,6 +82,18 @@ def _condition_text(value: Any) -> str:
         return f"目标HP<={_percent(value.get('value'))}"
     if condition_type == "target_hp_pct_gte":
         return f"目标HP>={_percent(value.get('value'))}"
+    if condition_type == "self_mp_pct_lte":
+        return f"自身MP<={_percent(value.get('value'))}"
+    if condition_type == "self_mp_pct_gte":
+        return f"自身MP>={_percent(value.get('value'))}"
+    if condition_type == "target_mp_pct_lte":
+        return f"目标MP<={_percent(value.get('value'))}"
+    if condition_type == "target_mp_pct_gte":
+        return f"目标MP>={_percent(value.get('value'))}"
+    if condition_type == "action_index_lte":
+        return f"行动序号<={_number(value.get('value'))}"
+    if condition_type == "action_index_gte":
+        return f"行动序号>={_number(value.get('value'))}"
     condition_value = value.get("value")
     return raw if condition_value is None else f"{raw}:{condition_value}"
 
@@ -90,6 +109,21 @@ def _effect_text(effect: Mapping[str, Any]) -> str:
         return f"伤害倍率 {_number(value)}"
     if effect_type == "heal":
         return f"治疗 {_number(value)}"
+    if effect_type == "heal_percent":
+        return f"治疗 {_percent(value)}最大HP"
+    if effect_type == "mp_restore":
+        return f"{target_text}恢复MP {_number(value)}"
+    if effect_type == "damage_bonus":
+        return f"伤害+{_number(value)}"
+    if effect_type == "true_damage":
+        return f"真实伤害 {_number(value)}"
+    if effect_type == "self_damage":
+        return f"自身受伤 {_number(value)}"
+    if effect_type == "apply_status":
+        status = effect.get("status")
+        if isinstance(status, Mapping):
+            return f"施加状态 {_status_text(status)}"
+        return "施加状态"
     if effect_type == "stat_bonus":
         return f"{target_text}{stat_text}+{_number(value)}"
     if effect_type == "stat_multiplier":
@@ -97,6 +131,35 @@ def _effect_text(effect: Mapping[str, Any]) -> str:
     if stat is not None:
         return f"{effect_type}:{stat_text}:{_number(value)}"
     return f"{effect_type}:{_number(value)}"
+
+
+def _status_text(status: Mapping[str, Any]) -> str:
+    name = str(status.get("name") or status.get("status_id") or "状态")
+    duration = status.get("duration")
+    polarity = _status_polarity_text(status.get("polarity"))
+    effects = [
+        _effect_text(effect)
+        for effect in _sequence(status.get("effects"))
+        if isinstance(effect, Mapping)
+    ]
+    effect_text = ",".join(effect for effect in effects if effect)
+    parts = [name]
+    if isinstance(duration, int | float):
+        parts.append(f"{_number(duration)}行动")
+    if polarity:
+        parts.append(polarity)
+    if effect_text:
+        parts.append(effect_text)
+    return " ".join(parts)
+
+
+def _status_polarity_text(value: Any) -> str:
+    labels = {
+        "positive": "正面",
+        "negative": "负面",
+        "neutral": "",
+    }
+    return labels.get(value, str(value or ""))
 
 
 def _effect_target_text(value: Any) -> str:

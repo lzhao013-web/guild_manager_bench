@@ -13,7 +13,7 @@ from guild_manager_bench.bench.llm.archive import (
     resume_llm_run_archive,
     start_llm_run_archive,
 )
-from guild_manager_bench.bench.llm.formatting import skill_summary
+from guild_manager_bench.bench.llm.formatting import skill_summary, skill_summary_lines
 from guild_manager_bench.bench.llm.harness import (
     MemoStore,
     TurnToolHarness,
@@ -109,7 +109,7 @@ class LlmRunConfig:
 def run_llm_game(
     agent: LlmTurnAgent,
     *,
-    data_dir: str | Path = "data",
+    data_dir: str | Path = "data/presets/default",
     session_id: str | None = None,
     config: LlmRunConfig | None = None,
     event_sink: EventSink | None = None,
@@ -885,9 +885,10 @@ def _append_observation_lines(lines: list[str], observation: Mapping[str, Any]) 
                 f"HP {resources.get('current_hp')}/{stats.get('hp')} "
                 f"MP {resources.get('current_mp')}/{stats.get('mp')} "
                 f"攻击 {stats.get('attack')} 防御 {stats.get('defense')} 速度 {stats.get('speed')} "
-                f"装备 {equipment_text} "
-                f"技能 {skill_summary(adventurer.get('skills'))}"
+                f"装备 {equipment_text}"
             )
+            _append_skill_lines(lines, adventurer.get("skills"), indent="  ")
+            lines.append(f"  等级技能 {_level_skill_unlocks_inline(adventurer.get('level_skill_unlocks'))}")
 
     monsters = [
         monster
@@ -907,9 +908,9 @@ def _append_observation_lines(lines: list[str], observation: Mapping[str, Any]) 
                 f"{display_ref(refs, 'monster', monster.get('monster_id'))} "
                 f"{monster.get('name')} "
                 f"HP {stats.get('hp')} 攻击 {stats.get('attack')} 防御 {stats.get('defense')} 速度 {stats.get('speed')} "
-                f"技能 {skill_summary(monster.get('skills'))} "
                 f"奖励 {reward_text}"
             )
+            _append_skill_lines(lines, monster.get("skills"), indent="  ")
 
     recipes = [
         recipe
@@ -931,10 +932,10 @@ def _append_observation_lines(lines: list[str], observation: Mapping[str, Any]) 
                 f"{display_ref(refs, 'recipe', recipe.get('recipe_id'))} "
                 f"{recipe.get('name')} -> {recipe.get('output_name')} "
                 f"属性 {_mapping_inline(recipe.get('output_stats'))} "
-                f"技能 {skill_summary(recipe.get('output_skills'))} "
                 f"成本 金币 {recipe.get('gold_cost')} 材料 {_mapping_inline(recipe.get('material_costs'))} "
                 f"{availability}{missing_text}"
             )
+            _append_skill_lines(lines, recipe.get("output_skills"), label="产物技能", indent="  ")
 
     inventory = [
         item
@@ -954,9 +955,9 @@ def _append_observation_lines(lines: list[str], observation: Mapping[str, Any]) 
                 f"{display_ref(refs, 'equipment', item.get('instance_id'))} "
                 f"{item.get('name')} 槽位 {item.get('slot')} "
                 f"属性 {_mapping_inline(item.get('stats'))} "
-                f"技能 {skill_summary(item.get('skills'))} "
                 f"装备者 {equipped}"
             )
+            _append_skill_lines(lines, item.get("skills"), indent="  ")
 
     upgrades = [
         upgrade
@@ -979,8 +980,9 @@ def _append_observation_lines(lines: list[str], observation: Mapping[str, Any]) 
                 f"{upgrade.get('name')} "
                 f"金币 {upgrade.get('gold_cost')} "
                 f"属性 {_mapping_inline(upgrade.get('stats'))} "
-                f"技能 {skill_summary(upgrade.get('skills'))} {state}"
+                f"{state}"
             )
+            _append_skill_lines(lines, upgrade.get("skills"), indent="  ")
 
 
 def _append_party_result_lines(
@@ -1078,9 +1080,10 @@ def _append_adventurer_lines(
             f"MP {resources.get('current_mp')}/{stats.get('mp')} "
             f"攻击 {stats.get('attack')} 防御 {stats.get('defense')} 速度 {stats.get('speed')} "
             f"恢复 {stats.get('recovery')} "
-            f"装备 {equipment_text} "
-            f"技能 {skill_summary(adventurer.get('skills'))}"
+            f"装备 {equipment_text}"
         )
+        _append_skill_lines(lines, adventurer.get("skills"), indent="  ")
+        lines.append(f"  等级技能 {_level_skill_unlocks_inline(adventurer.get('level_skill_unlocks'))}")
 
 
 def _append_monster_lines(
@@ -1109,9 +1112,9 @@ def _append_monster_lines(
             f"HP {stats.get('hp')} MP {stats.get('mp')} "
             f"攻击 {stats.get('attack')} 防御 {stats.get('defense')} "
             f"速度 {stats.get('speed')} 恢复 {stats.get('recovery')} "
-            f"技能 {skill_summary(monster.get('skills'))} "
             f"奖励 {reward_text}"
         )
+        _append_skill_lines(lines, monster.get("skills"), indent="  ")
 
 
 def _append_recipe_lines(
@@ -1142,10 +1145,10 @@ def _append_recipe_lines(
             f"{recipe.get('name')} -> {recipe.get('output_name')} "
             f"槽位 {recipe.get('output_slot')} "
             f"属性 {_mapping_inline(recipe.get('output_stats'))} "
-            f"技能 {skill_summary(recipe.get('output_skills'))} "
             f"成本 金币 {recipe.get('gold_cost')} 材料 {_mapping_inline(recipe.get('material_costs'))} "
             f"{availability}{missing_text}"
         )
+        _append_skill_lines(lines, recipe.get("output_skills"), label="产物技能", indent="  ")
 
 
 def _append_inventory_lines(
@@ -1173,9 +1176,9 @@ def _append_inventory_lines(
             f"{display_ref(refs, 'equipment', item.get('instance_id'))} "
             f"{item.get('name')} 槽位 {item.get('slot')} "
             f"属性 {_mapping_inline(item.get('stats'))} "
-            f"技能 {skill_summary(item.get('skills'))} "
             f"装备者 {equipped}"
         )
+        _append_skill_lines(lines, item.get("skills"), indent="  ")
 
 
 def _append_upgrade_lines(
@@ -1212,9 +1215,9 @@ def _append_upgrade_lines(
             f"{upgrade.get('name')} "
             f"金币 {upgrade.get('gold_cost')} "
             f"属性 {_mapping_inline(upgrade.get('stats'))} "
-            f"技能 {skill_summary(upgrade.get('skills'))} "
             f"{state}{missing_text}"
         )
+        _append_skill_lines(lines, upgrade.get("skills"), indent="  ")
 
 
 def _append_events_lines(lines: list[str], events: Sequence[Any]) -> None:
@@ -1239,6 +1242,40 @@ def _experience_inline(adventurer: Mapping[str, Any]) -> str:
     if next_level.get("max_level"):
         return f"{current}/MAX"
     return f"{current}/{next_level.get('required')}"
+
+
+def _append_skill_lines(
+    lines: list[str],
+    skills: Any,
+    *,
+    label: str = "技能",
+    indent: str = "",
+) -> None:
+    values = skill_summary_lines(skills)
+    if not values:
+        lines.append(f"{indent}{label}: 无")
+        return
+    lines.append(f"{indent}{label}:")
+    for value in values:
+        lines.append(f"{indent}  - {value}")
+
+
+def _level_skill_unlocks_inline(unlocks: Any) -> str:
+    values = [
+        unlock
+        for unlock in _sequence(unlocks)
+        if isinstance(unlock, Mapping)
+    ]
+    if not values:
+        return "无"
+    parts = []
+    for unlock in values:
+        state = "已解锁" if unlock.get("unlocked") else "未解锁"
+        skills = " / ".join(skill_summary_lines(unlock.get("skills"))) or "无"
+        parts.append(
+            f"Lv{unlock.get('level')} {state} {skills}"
+        )
+    return "; ".join(parts)
 
 
 def _append_changes_lines(

@@ -72,20 +72,18 @@ def _state_summary(observation: Mapping[str, Any]) -> str:
         stats = adventurer["effective_stats"]
         equipment = adventurer.get("equipment") or ()
         exp_text = _experience_text(adventurer)
-        growth_text = _stat_modifier_text(adventurer.get("stat_growth_per_level"))
         lines.append(
             "- "
             f"{display_ref(refs, 'adventurer', adventurer['adventurer_id'])} "
             f"{adventurer['name']} "
             f"Lv{adventurer['level']} "
             f"EXP {exp_text} "
-            f"成长 {growth_text} "
             f"HP {resources['current_hp']}/{stats['hp']} "
             f"MP {resources['current_mp']}/{stats['mp']} "
             f"攻击 {stats['attack']} 防御 {stats['defense']} 速度 {stats['speed']} "
-            f"装备 {_equipment_refs_text(refs, equipment, equipment_names)} "
-            f"技能 {_skill_summary_zh(adventurer.get('skills'))}"
+            f"装备 {_equipment_refs_text(refs, equipment, equipment_names)}"
         )
+        _append_skill_lines_zh(lines, adventurer.get("skills"))
 
     lines.append("当前怪物：")
     for monster in monsters:
@@ -96,9 +94,9 @@ def _state_summary(observation: Mapping[str, Any]) -> str:
             f"{display_ref(refs, 'monster', monster['monster_id'])} "
             f"{monster['name']} "
             f"HP {stats['hp']} 攻击 {stats['attack']} 防御 {stats['defense']} 速度 {stats['speed']} "
-            f"技能 {_skill_summary_zh(monster.get('skills'))} "
             f"奖励 金币={reward['gold']} 经验={reward['experience']} 材料={_mapping_text(reward['materials'])}"
         )
+        _append_skill_lines_zh(lines, monster.get("skills"))
 
     return "\n".join(lines)
 
@@ -224,6 +222,20 @@ def _skill_summary_zh(skills: Any) -> str:
     return "；".join(_skill_text_zh(skill) for skill in values)
 
 
+def _append_skill_lines_zh(lines: list[str], skills: Any) -> None:
+    values = [
+        skill
+        for skill in _sequence(skills)
+        if isinstance(skill, Mapping)
+    ]
+    if not values:
+        lines.append("  技能: 无")
+        return
+    lines.append("  技能:")
+    for skill in values:
+        lines.append(f"    - {_skill_text_zh(skill)}")
+
+
 def _skill_text_zh(skill: Mapping[str, Any]) -> str:
     parts = [
         str(skill.get("name") or skill.get("skill_id") or "技能"),
@@ -282,6 +294,18 @@ def _condition_text_zh(value: Any) -> str:
         return f"目标HP<={_percent(value.get('value'))}"
     if condition_type == "target_hp_pct_gte":
         return f"目标HP>={_percent(value.get('value'))}"
+    if condition_type == "self_mp_pct_lte":
+        return f"自身MP<={_percent(value.get('value'))}"
+    if condition_type == "self_mp_pct_gte":
+        return f"自身MP>={_percent(value.get('value'))}"
+    if condition_type == "target_mp_pct_lte":
+        return f"目标MP<={_percent(value.get('value'))}"
+    if condition_type == "target_mp_pct_gte":
+        return f"目标MP>={_percent(value.get('value'))}"
+    if condition_type == "action_index_lte":
+        return f"行动序号<={_number(value.get('value'))}"
+    if condition_type == "action_index_gte":
+        return f"行动序号>={_number(value.get('value'))}"
     condition_value = value.get("value")
     raw = str(condition_type)
     return raw if condition_value is None else f"{raw}:{condition_value}"
@@ -298,6 +322,21 @@ def _effect_text_zh(effect: Mapping[str, Any]) -> str:
         return f"伤害倍率 {_number(value)}"
     if effect_type == "heal":
         return f"治疗 {_number(value)}"
+    if effect_type == "heal_percent":
+        return f"治疗 {_percent(value)}最大HP"
+    if effect_type == "mp_restore":
+        return f"{target_text}恢复MP {_number(value)}"
+    if effect_type == "damage_bonus":
+        return f"伤害+{_number(value)}"
+    if effect_type == "true_damage":
+        return f"真实伤害 {_number(value)}"
+    if effect_type == "self_damage":
+        return f"自身受伤 {_number(value)}"
+    if effect_type == "apply_status":
+        status = effect.get("status")
+        if isinstance(status, Mapping):
+            return f"施加状态 {_status_text_zh(status)}"
+        return "施加状态"
     if effect_type == "stat_bonus":
         return f"{target_text}{stat_text}+{_number(value)}"
     if effect_type == "stat_multiplier":
@@ -305,6 +344,35 @@ def _effect_text_zh(effect: Mapping[str, Any]) -> str:
     if stat is not None:
         return f"{effect_type}:{stat_text}:{_number(value)}"
     return f"{effect_type}:{_number(value)}"
+
+
+def _status_text_zh(status: Mapping[str, Any]) -> str:
+    name = str(status.get("name") or status.get("status_id") or "状态")
+    duration = status.get("duration")
+    polarity = _status_polarity_text(status.get("polarity"))
+    effects = [
+        _effect_text_zh(effect)
+        for effect in _sequence(status.get("effects"))
+        if isinstance(effect, Mapping)
+    ]
+    effect_text = "，".join(effect for effect in effects if effect)
+    parts = [name]
+    if isinstance(duration, int | float):
+        parts.append(f"{_number(duration)}行动")
+    if polarity:
+        parts.append(polarity)
+    if effect_text:
+        parts.append(effect_text)
+    return " ".join(parts)
+
+
+def _status_polarity_text(value: Any) -> str:
+    labels = {
+        "positive": "正面",
+        "negative": "负面",
+        "neutral": "",
+    }
+    return labels.get(value, str(value or ""))
 
 
 def _effect_target_text(value: Any) -> str:

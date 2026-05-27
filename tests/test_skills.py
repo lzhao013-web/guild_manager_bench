@@ -1,6 +1,11 @@
 import pytest
 
-from guild_manager_bench.game.skills import Skill, SkillCondition, SkillEffect
+from guild_manager_bench.game.skills import (
+    Skill,
+    SkillCondition,
+    SkillEffect,
+    StatusDefinition,
+)
 
 
 def test_hp_condition_accepts_ratio_value() -> None:
@@ -9,9 +14,23 @@ def test_hp_condition_accepts_ratio_value() -> None:
     assert condition.value == 0.5
 
 
+def test_mp_condition_accepts_ratio_value() -> None:
+    condition = SkillCondition(condition_type="target_mp_pct_gte", value=0.25)
+
+    assert condition.value == 0.25
+
+
 def test_hp_condition_rejects_out_of_range_ratio() -> None:
     with pytest.raises(ValueError):
         SkillCondition(condition_type="target_hp_pct_gte", value=1.1)
+
+
+def test_action_index_condition_requires_positive_integer() -> None:
+    assert SkillCondition(condition_type="action_index_lte", value=1).value == 1
+    with pytest.raises(TypeError):
+        SkillCondition(condition_type="action_index_gte", value=1.5)
+    with pytest.raises(ValueError):
+        SkillCondition(condition_type="action_index_gte", value=0)
 
 
 def test_condition_can_combine_multiple_child_conditions() -> None:
@@ -84,4 +103,65 @@ def test_active_skill_rejects_stat_effect() -> None:
             kind="active",
             condition=SkillCondition(condition_type="always"),
             effects=(SkillEffect(effect_type="stat_bonus", stat="attack", value=3, target="self"),),
+        )
+
+
+def test_active_skill_accepts_extended_active_effects() -> None:
+    skill = Skill(
+        skill_id="arcane_combo",
+        name="奥术连击",
+        kind="active",
+        condition=SkillCondition(condition_type="always"),
+        effects=(
+            SkillEffect(effect_type="heal_percent", value=0.2, target="self"),
+            SkillEffect(effect_type="mp_restore", value=3, target="self"),
+            SkillEffect(effect_type="damage_bonus", value=4),
+            SkillEffect(effect_type="true_damage", value=5),
+            SkillEffect(effect_type="self_damage", value=2),
+        ),
+    )
+
+    assert [effect.effect_type for effect in skill.effects] == [
+        "heal_percent",
+        "mp_restore",
+        "damage_bonus",
+        "true_damage",
+        "self_damage",
+    ]
+    assert skill.effects[-1].target == "self"
+
+
+def test_active_skill_accepts_apply_status_effect() -> None:
+    status = StatusDefinition(
+        status_id="regen",
+        name="再生",
+        duration=2,
+        polarity="positive",
+        effects=(SkillEffect(effect_type="heal", value=3, target="self"),),
+    )
+    skill = Skill(
+        skill_id="blessing",
+        name="祝福",
+        kind="active",
+        condition=SkillCondition(condition_type="always"),
+        effects=(SkillEffect(effect_type="apply_status", target="self", status=status),),
+    )
+
+    assert skill.effects[0].status == status
+
+
+def test_status_rejects_nested_status_effect() -> None:
+    nested = StatusDefinition(
+        status_id="nested",
+        name="嵌套",
+        duration=1,
+        effects=(SkillEffect(effect_type="heal", value=1, target="self"),),
+    )
+
+    with pytest.raises(ValueError):
+        StatusDefinition(
+            status_id="bad",
+            name="错误",
+            duration=1,
+            effects=(SkillEffect(effect_type="apply_status", status=nested),),
         )

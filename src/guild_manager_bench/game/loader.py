@@ -9,13 +9,19 @@ from guild_manager_bench.game.crafting import CraftingRecipe
 from guild_manager_bench.game.equipment import EquipmentTemplate
 from guild_manager_bench.game.models import CombatResources, CombatStatModifier, CombatStats
 from guild_manager_bench.game.progression import ExperienceRules
-from guild_manager_bench.game.skills import Skill, SkillCondition, SkillEffect
+from guild_manager_bench.game.skills import (
+    Skill,
+    SkillCondition,
+    SkillEffect,
+    StatusDefinition,
+)
 from guild_manager_bench.game.state import (
     AdventurerState,
     GameContent,
     GameDefinition,
     GameRules,
     IntCurve,
+    LevelSkillUnlock,
     LlmToolRules,
     MonsterArchetype,
     MonsterSpawnRules,
@@ -74,6 +80,10 @@ def _parse_adventurers(values: list[Any]) -> tuple[AdventurerState, ...]:
                 base_stats=stats,
                 resources=CombatResources.full(stats),
                 skills=_parse_skills(data.get("skills", ()), f"adventurers[{index}].skills"),
+                level_skill_unlocks=_parse_level_skill_unlocks(
+                    data.get("level_skill_unlocks", ()),
+                    f"adventurers[{index}].level_skill_unlocks",
+                ),
                 stat_growth_per_level=_parse_optional_stat_modifier(
                     data.get("stat_growth_per_level"),
                     f"adventurers[{index}].stat_growth_per_level",
@@ -300,6 +310,19 @@ def _parse_skills(value: Any, path: str) -> tuple[Skill, ...]:
     return tuple(skills)
 
 
+def _parse_level_skill_unlocks(value: Any, path: str) -> tuple[LevelSkillUnlock, ...]:
+    unlocks = []
+    for index, item in enumerate(_list(value, path)):
+        data = _mapping(item, f"{path}[{index}]")
+        unlocks.append(
+            LevelSkillUnlock(
+                level=_int(_required(data, "level"), f"{path}[{index}].level"),
+                skills=_parse_skills(_required(data, "skills"), f"{path}[{index}].skills"),
+            )
+        )
+    return tuple(unlocks)
+
+
 def _parse_condition(data: Mapping[str, Any]) -> SkillCondition:
     condition_type = _str(data.get("type", data.get("condition_type")), "condition.type")
     if condition_type in {"all", "any"}:
@@ -320,15 +343,37 @@ def _parse_effects(values: list[Any]) -> tuple[SkillEffect, ...]:
     effects = []
     for index, item in enumerate(values):
         data = _mapping(item, f"effects[{index}]")
+        effect_type = _str(data.get("type", data.get("effect_type")), f"effects[{index}].type")
         effects.append(
             SkillEffect(
-                effect_type=_str(data.get("type", data.get("effect_type")), f"effects[{index}].type"),
-                value=_number(_required(data, "value"), f"effects[{index}].value"),
+                effect_type=effect_type,
+                value=(
+                    0
+                    if effect_type == "apply_status" and data.get("value") is None
+                    else _number(_required(data, "value"), f"effects[{index}].value")
+                ),
                 stat=None if data.get("stat") is None else _str(data.get("stat"), f"effects[{index}].stat"),
                 target=_str(data.get("target", "target"), f"effects[{index}].target"),
+                status=(
+                    _parse_status(_mapping(_required(data, "status"), f"effects[{index}].status"))
+                    if effect_type == "apply_status"
+                    else None
+                ),
             )
         )
     return tuple(effects)
+
+
+def _parse_status(data: Mapping[str, Any]) -> StatusDefinition:
+    status_id = data.get("id", data.get("status_id"))
+    return StatusDefinition(
+        status_id=_str(status_id, "status.id"),
+        name=_str(_required(data, "name"), "status.name"),
+        duration=_int(_required(data, "duration"), "status.duration"),
+        effects=_parse_effects(_list(_required(data, "effects"), "status.effects")),
+        polarity=_str(data.get("polarity", "neutral"), "status.polarity"),
+        stack_mode=_str(data.get("stack_mode", "refresh"), "status.stack_mode"),
+    )
 
 
 def _load_yaml(path: Path) -> Any:

@@ -13,7 +13,12 @@ from guild_manager_bench.game.progression import (
     add_experience,
     required_experience_for_next_level,
 )
-from guild_manager_bench.game.skills import Skill, SkillCondition, SkillEffect
+from guild_manager_bench.game.skills import (
+    Skill,
+    SkillCondition,
+    SkillEffect,
+    StatusDefinition,
+)
 from guild_manager_bench.game.state import (
     AdventurerState,
     GameDefinition,
@@ -85,6 +90,7 @@ def _adventurer_to_dict(
         "effective_stats": _stats_to_dict(effective_stats),
         "resources": _resources_to_dict(adventurer.resources),
         "skills": [_skill_to_dict(skill) for skill in effective_skills],
+        "level_skill_unlocks": _level_skill_unlocks_to_dict(adventurer),
         "equipment": [
             {"slot": item.slot, "instance_id": item.instance_id}
             for item in adventurer.equipment.items
@@ -193,6 +199,22 @@ def _effect_to_dict(effect: SkillEffect) -> dict[str, Any]:
         "value": effect.value,
         "stat": effect.stat,
         "target": effect.target,
+        "status": (
+            _status_to_dict(effect.status)
+            if effect.status is not None
+            else None
+        ),
+    }
+
+
+def _status_to_dict(status: StatusDefinition) -> dict[str, Any]:
+    return {
+        "status_id": status.status_id,
+        "name": status.name,
+        "duration": status.duration,
+        "polarity": status.polarity,
+        "stack_mode": status.stack_mode,
+        "effects": [_effect_to_dict(effect) for effect in status.effects],
     }
 
 
@@ -265,6 +287,11 @@ def _next_level_info(
             "preview_stats": _stats_to_dict(
                 effective_adventurer_stats(definition, state, adventurer)
             ),
+            "preview_skills": [
+                _skill_to_dict(skill)
+                for skill in effective_adventurer_skills(definition, state, adventurer)
+            ],
+            "preview_level_skill_unlocks": [],
         }
 
     required = required_experience_for_next_level(adventurer.level, rules)
@@ -280,6 +307,7 @@ def _next_level_info(
         base_stats=adventurer.base_stats,
         resources=adventurer.resources,
         skills=adventurer.skills,
+        level_skill_unlocks=adventurer.level_skill_unlocks,
         stat_growth_per_level=adventurer.stat_growth_per_level,
         level=preview_level,
         experience=preview_experience,
@@ -295,6 +323,30 @@ def _next_level_info(
         "preview_stats": _stats_to_dict(
             effective_adventurer_stats(definition, state, preview_adventurer)
         ),
+        "preview_skills": [
+            _skill_to_dict(skill)
+            for skill in effective_adventurer_skills(definition, state, preview_adventurer)
+        ],
+        "preview_level_skill_unlocks": [
+            _level_skill_unlock_to_dict(unlock, adventurer.level)
+            for unlock in adventurer.level_skill_unlocks
+            if adventurer.level < unlock.level <= preview_level
+        ],
+    }
+
+
+def _level_skill_unlocks_to_dict(adventurer: AdventurerState) -> list[dict[str, Any]]:
+    return [
+        _level_skill_unlock_to_dict(unlock, adventurer.level)
+        for unlock in adventurer.level_skill_unlocks
+    ]
+
+
+def _level_skill_unlock_to_dict(unlock, current_level: int) -> dict[str, Any]:
+    return {
+        "level": unlock.level,
+        "unlocked": unlock.level <= current_level,
+        "skills": [_skill_to_dict(skill) for skill in unlock.skills],
     }
 
 

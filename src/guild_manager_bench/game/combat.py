@@ -8,12 +8,12 @@ from guild_manager_bench.game.models import (
     CombatResources,
     CombatStats,
 )
-from guild_manager_bench.game.skills import Skill, SkillCondition
+from guild_manager_bench.game.skills import Skill, SkillCondition, StatusDefinition
 
 
 CombatSide = Literal["left", "right"]
 CombatOutcome = Literal["left_win", "right_win", "draw"]
-CombatActionType = Literal["basic_attack", "skill"]
+CombatActionType = Literal["basic_attack", "skill", "status"]
 
 DEFAULT_ACTION_GAUGE_MAX = 100
 DEFAULT_MAX_ACTIONS = 1_000
@@ -47,6 +47,8 @@ class CombatEvent:
     healing: int = 0
     healing_target_side: CombatSide | None = None
     healing_target_hp: int | None = None
+    status_id: str | None = None
+    status_name: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,7 +74,14 @@ class _RuntimeCombatant:
     active_skills: tuple[Skill, ...]
     passive_skills: tuple[Skill, ...]
     used_once_skill_ids: set[str]
+    statuses: list[_RuntimeStatus]
     action_gauge: int = 0
+
+
+@dataclass(slots=True)
+class _RuntimeStatus:
+    definition: StatusDefinition
+    remaining_actions: int
 
 
 def run_auto_battle(
@@ -116,6 +125,7 @@ def run_auto_battle(
             left_runtime,
             right_runtime,
             action_gauge_max=action_gauge_max,
+            action_index=action_index,
         )
         if ready_actor is None:
             return _finish_result(
@@ -131,14 +141,49 @@ def run_auto_battle(
         time_elapsed += elapsed
         actor.action_gauge -= action_gauge_max
 
-        events.append(_perform_action(action_index, time_elapsed, actor, target))
+        active_statuses = list(actor.statuses)
+        status_event = _apply_status_ticks(action_index, time_elapsed, actor, target)
+        if status_event is not None:
+            events.append(status_event)
 
+        if not actor.resources.is_alive:
+            _decrement_statuses(actor, active_statuses)
+            return _finish_result(
+                left_runtime=left_runtime,
+                right_runtime=right_runtime,
+                winner_side=target.side,
+                reason="status_defeated_actor",
+                events=events,
+                time_elapsed=time_elapsed,
+            )
+
+        events.append(_perform_action(action_index, time_elapsed, actor, target))
+        _decrement_statuses(actor, active_statuses)
+
+        if not actor.resources.is_alive and not target.resources.is_alive:
+            return _finish_result(
+                left_runtime=left_runtime,
+                right_runtime=right_runtime,
+                winner_side=None,
+                reason="both_defeated",
+                events=events,
+                time_elapsed=time_elapsed,
+            )
         if not target.resources.is_alive:
             return _finish_result(
                 left_runtime=left_runtime,
                 right_runtime=right_runtime,
                 winner_side=actor.side,
                 reason="target_defeated",
+                events=events,
+                time_elapsed=time_elapsed,
+            )
+        if not actor.resources.is_alive:
+            return _finish_result(
+                left_runtime=left_runtime,
+                right_runtime=right_runtime,
+                winner_side=target.side,
+                reason="actor_defeated",
                 events=events,
                 time_elapsed=time_elapsed,
             )
@@ -165,9 +210,9 @@ def _perform_action(
     actor: _RuntimeCombatant,
     target: _RuntimeCombatant,
 ) -> CombatEvent:
-    active_skill = _select_active_skill(actor, target)
+    active_skill = _select_active_skill(actor, target, action_index=action_index)
     if active_skill is None:
-        damage = _apply_basic_attack(actor, target)
+        damage = _apply_basic_attack(actor, target, action_index=action_index)
         return CombatEvent(
             action_index=action_index,
             time_elapsed=time_elapsed,
@@ -184,7 +229,12 @@ def _perform_action(
     if active_skill.once_per_battle:
         actor.used_once_skill_ids.add(active_skill.skill_id)
 
-    damage, healing, healing_target = _apply_active_skill_effects(active_skill, actor, target)
+    damage, healing, healing_target = _apply_active_skill_effects(
+        active_skill,
+        actor,
+        target,
+        action_index=action_index,
+    )
     return CombatEvent(
         action_index=action_index,
         time_elapsed=time_elapsed,
@@ -205,10 +255,15 @@ def _perform_action(
     )
 
 
-def _apply_basic_attack(actor: _RuntimeCombatant, target: _RuntimeCombatant) -> int:
+def _apply_basic_attack(
+    actor: _RuntimeCombatant,
+    target: _RuntimeCombatant,
+    *,
+    action_index: int,
+) -> int:
     damage = calculate_basic_attack_damage(
-        _effective_stats(actor, target),
-        _effective_stats(target, actor),
+        _effective_stats(actor, target, action_index=action_index),
+        _effective_stats(target, actor, action_index=action_index),
     )
     _apply_damage(target, damage)
     return damage
@@ -218,10 +273,12 @@ def _apply_active_skill_effects(
     skill: Skill,
     actor: _RuntimeCombatant,
     target: _RuntimeCombatant,
+    *,
+    action_index: int,
 ) -> tuple[int, int, _RuntimeCombatant | None]:
     base_damage = calculate_basic_attack_damage(
-        _effective_stats(actor, target),
-        _effective_stats(target, actor),
+        _effective_stats(actor, target, action_index=action_index),
+        _effective_stats(target, actor, action_index=action_index),
     )
     total_damage = 0
     total_healing = 0
@@ -234,14 +291,52 @@ def _apply_active_skill_effects(
             total_damage += damage
             continue
 
+        if effect.effect_type == "damage_bonus":
+            damage = max(1, base_damage + int(effect.value))
+            _apply_damage(target, damage)
+            total_damage += damage
+            continue
+
+        if effect.effect_type == "true_damage":
+            damage = int(effect.value)
+            _apply_damage(target, damage)
+            total_damage += damage
+            continue
+
+        if effect.effect_type == "self_damage":
+            _apply_damage(actor, int(effect.value))
+            continue
+
+        if effect.effect_type == "apply_status" and effect.status is not None:
+            recipient = actor if effect.target == "self" else target
+            _apply_status(recipient, effect.status)
+            continue
+
         if effect.effect_type == "heal":
             recipient = actor if effect.target == "self" else target
             healing = _apply_heal(recipient, int(effect.value))
-            total_healing += healing
-            if healing_target is None or healing_target is recipient:
-                healing_target = recipient
-            else:
-                healing_target = None
+            total_healing, healing_target = _record_healing(
+                total_healing,
+                healing_target,
+                healing,
+                recipient,
+            )
+            continue
+
+        if effect.effect_type == "heal_percent":
+            recipient = actor if effect.target == "self" else target
+            healing = _apply_heal(recipient, int(recipient.stats.hp * float(effect.value)))
+            total_healing, healing_target = _record_healing(
+                total_healing,
+                healing_target,
+                healing,
+                recipient,
+            )
+            continue
+
+        if effect.effect_type == "mp_restore":
+            recipient = actor if effect.target == "self" else target
+            _apply_mp_restore(recipient, int(effect.value))
 
     return total_damage, total_healing, healing_target
 
@@ -256,12 +351,130 @@ def _apply_heal(target: _RuntimeCombatant, healing: int) -> int:
     return target.resources.current_hp - old_hp
 
 
+def _apply_mp_restore(target: _RuntimeCombatant, amount: int) -> int:
+    old_mp = target.resources.current_mp
+    target.resources.current_mp = min(target.stats.mp, target.resources.current_mp + amount)
+    return target.resources.current_mp - old_mp
+
+
+def _record_healing(
+    total_healing: int,
+    healing_target: _RuntimeCombatant | None,
+    healing: int,
+    recipient: _RuntimeCombatant,
+) -> tuple[int, _RuntimeCombatant | None]:
+    if healing_target is None or healing_target is recipient:
+        return total_healing + healing, recipient
+    return total_healing + healing, None
+
+
+def _apply_status(combatant: _RuntimeCombatant, status: StatusDefinition) -> None:
+    for runtime_status in combatant.statuses:
+        if runtime_status.definition.status_id != status.status_id:
+            continue
+        if status.stack_mode == "add_duration":
+            runtime_status.remaining_actions += status.duration
+        else:
+            runtime_status.definition = status
+            runtime_status.remaining_actions = status.duration
+        return
+    combatant.statuses.append(
+        _RuntimeStatus(definition=status, remaining_actions=status.duration)
+    )
+
+
+def _decrement_statuses(
+    combatant: _RuntimeCombatant,
+    statuses: list[_RuntimeStatus],
+) -> None:
+    for status in statuses:
+        status.remaining_actions -= 1
+    combatant.statuses = [
+        status
+        for status in combatant.statuses
+        if status.remaining_actions > 0
+    ]
+
+
+def _apply_status_ticks(
+    action_index: int,
+    time_elapsed: int,
+    actor: _RuntimeCombatant,
+    target: _RuntimeCombatant,
+) -> CombatEvent | None:
+    total_damage = 0
+    total_healing = 0
+    healing_target: _RuntimeCombatant | None = None
+    triggered: list[str] = []
+
+    for status in actor.statuses:
+        for effect in status.definition.effects:
+            if effect.effect_type == "true_damage":
+                damage = int(effect.value)
+                _apply_damage(actor, damage)
+                total_damage += damage
+                triggered.append(status.definition.name)
+                continue
+
+            if effect.effect_type == "heal":
+                healing = _apply_heal(actor, int(effect.value))
+                total_healing, healing_target = _record_healing(
+                    total_healing,
+                    healing_target,
+                    healing,
+                    actor,
+                )
+                triggered.append(status.definition.name)
+                continue
+
+            if effect.effect_type == "heal_percent":
+                healing = _apply_heal(actor, int(actor.stats.hp * float(effect.value)))
+                total_healing, healing_target = _record_healing(
+                    total_healing,
+                    healing_target,
+                    healing,
+                    actor,
+                )
+                triggered.append(status.definition.name)
+                continue
+
+            if effect.effect_type == "mp_restore":
+                _apply_mp_restore(actor, int(effect.value))
+                triggered.append(status.definition.name)
+
+    if not triggered:
+        return None
+
+    first_status = actor.statuses[0].definition
+    status_name = "，".join(dict.fromkeys(triggered))
+    return CombatEvent(
+        action_index=action_index,
+        time_elapsed=time_elapsed,
+        action_type="status",
+        actor_side=actor.side,
+        actor_id=actor.combatant_id,
+        target_side=target.side,
+        target_id=target.combatant_id,
+        damage=total_damage,
+        target_hp=actor.resources.current_hp,
+        healing=total_healing,
+        healing_target_side=healing_target.side if healing_target is not None else None,
+        healing_target_hp=(
+            healing_target.resources.current_hp if healing_target is not None else None
+        ),
+        status_id=first_status.status_id,
+        status_name=status_name,
+    )
+
+
 def _select_active_skill(
     actor: _RuntimeCombatant,
     target: _RuntimeCombatant,
+    *,
+    action_index: int,
 ) -> Skill | None:
     for skill in actor.active_skills:
-        if _can_use_active_skill(skill, actor, target):
+        if _can_use_active_skill(skill, actor, target, action_index=action_index):
             return skill
     return None
 
@@ -270,12 +483,14 @@ def _can_use_active_skill(
     skill: Skill,
     actor: _RuntimeCombatant,
     target: _RuntimeCombatant,
+    *,
+    action_index: int,
 ) -> bool:
     if actor.resources.current_mp < skill.mp_cost:
         return False
     if skill.once_per_battle and skill.skill_id in actor.used_once_skill_ids:
         return False
-    return _is_condition_met(skill.condition, actor, target)
+    return _is_condition_met(skill.condition, actor, target, action_index=action_index)
 
 
 def _build_runtime_combatant(side: CombatSide, combatant: Combatant) -> _RuntimeCombatant:
@@ -289,6 +504,7 @@ def _build_runtime_combatant(side: CombatSide, combatant: Combatant) -> _Runtime
         active_skills=_active_skills(combatant.skills),
         passive_skills=_passive_skills(combatant.skills),
         used_once_skill_ids=set(),
+        statuses=[],
     )
 
 
@@ -328,8 +544,10 @@ def _validate_resources(
 def _effective_stats(
     combatant: _RuntimeCombatant,
     target: _RuntimeCombatant,
+    *,
+    action_index: int,
 ) -> CombatStats:
-    if not combatant.passive_skills:
+    if not combatant.passive_skills and not combatant.statuses:
         return combatant.stats
 
     bonuses = {
@@ -346,9 +564,21 @@ def _effective_stats(
     }
 
     for skill in combatant.passive_skills:
-        if not _is_condition_met(skill.condition, combatant, target):
+        if not _is_condition_met(
+            skill.condition,
+            combatant,
+            target,
+            action_index=action_index,
+        ):
             continue
         for effect in skill.effects:
+            if effect.effect_type == "stat_bonus" and effect.stat is not None:
+                bonuses[effect.stat] += int(effect.value)
+            elif effect.effect_type == "stat_multiplier" and effect.stat is not None:
+                multipliers[effect.stat] *= float(effect.value)
+
+    for status in combatant.statuses:
+        for effect in status.definition.effects:
             if effect.effect_type == "stat_bonus" and effect.stat is not None:
                 bonuses[effect.stat] += int(effect.value)
             elif effect.effect_type == "stat_multiplier" and effect.stat is not None:
@@ -380,6 +610,8 @@ def _is_condition_met(
     condition: SkillCondition,
     actor: _RuntimeCombatant,
     target: _RuntimeCombatant,
+    *,
+    action_index: int,
 ) -> bool:
     if condition.condition_type == "always":
         return True
@@ -391,15 +623,39 @@ def _is_condition_met(
         return _hp_pct(target) <= condition.value
     if condition.condition_type == "target_hp_pct_gte":
         return _hp_pct(target) >= condition.value
+    if condition.condition_type == "self_mp_pct_lte":
+        return _mp_pct(actor) <= condition.value
+    if condition.condition_type == "self_mp_pct_gte":
+        return _mp_pct(actor) >= condition.value
+    if condition.condition_type == "target_mp_pct_lte":
+        return _mp_pct(target) <= condition.value
+    if condition.condition_type == "target_mp_pct_gte":
+        return _mp_pct(target) >= condition.value
+    if condition.condition_type == "action_index_lte":
+        return action_index <= condition.value
+    if condition.condition_type == "action_index_gte":
+        return action_index >= condition.value
     if condition.condition_type == "all":
-        return all(_is_condition_met(child, actor, target) for child in condition.conditions)
+        return all(
+            _is_condition_met(child, actor, target, action_index=action_index)
+            for child in condition.conditions
+        )
     if condition.condition_type == "any":
-        return any(_is_condition_met(child, actor, target) for child in condition.conditions)
+        return any(
+            _is_condition_met(child, actor, target, action_index=action_index)
+            for child in condition.conditions
+        )
     raise ValueError(f"unknown skill condition type: {condition.condition_type}")
 
 
 def _hp_pct(combatant: _RuntimeCombatant) -> float:
     return combatant.resources.current_hp / combatant.stats.hp
+
+
+def _mp_pct(combatant: _RuntimeCombatant) -> float:
+    if combatant.stats.mp == 0:
+        return 0.0
+    return combatant.resources.current_mp / combatant.stats.mp
 
 
 def _opponent(
@@ -428,9 +684,17 @@ def _advance_until_ready(
     right: _RuntimeCombatant,
     *,
     action_gauge_max: int,
+    action_index: int,
 ) -> tuple[_RuntimeCombatant, _RuntimeCombatant, int] | None:
     candidate_speeds = [
-        (combatant, _effective_stats(combatant, _opponent(combatant, left, right)).speed)
+        (
+            combatant,
+            _effective_stats(
+                combatant,
+                _opponent(combatant, left, right),
+                action_index=action_index,
+            ).speed,
+        )
         for combatant in (left, right)
     ]
     candidates = [
@@ -448,7 +712,12 @@ def _advance_until_ready(
     for combatant, speed in candidates:
         combatant.action_gauge += speed * elapsed
 
-    actor = _select_ready_actor(left, right, action_gauge_max=action_gauge_max)
+    actor = _select_ready_actor(
+        left,
+        right,
+        action_gauge_max=action_gauge_max,
+        action_index=action_index,
+    )
     if actor is None:
         return None
     target = right if actor.side == "left" else left
@@ -460,6 +729,7 @@ def _select_ready_actor(
     right: _RuntimeCombatant,
     *,
     action_gauge_max: int,
+    action_index: int,
 ) -> _RuntimeCombatant | None:
     ready = [
         combatant
@@ -468,7 +738,15 @@ def _select_ready_actor(
     ]
     if not ready:
         return None
-    return max(ready, key=lambda combatant: _action_priority(combatant, left, right))
+    return max(
+        ready,
+        key=lambda combatant: _action_priority(
+            combatant,
+            left,
+            right,
+            action_index=action_index,
+        ),
+    )
 
 
 def _ticks_until_ready(
@@ -486,11 +764,17 @@ def _action_priority(
     combatant: _RuntimeCombatant,
     left: _RuntimeCombatant,
     right: _RuntimeCombatant,
+    *,
+    action_index: int,
 ) -> tuple[int, int, int]:
     side_priority = 1 if combatant.side == "left" else 0
     return (
         combatant.action_gauge,
-        _effective_stats(combatant, _opponent(combatant, left, right)).speed,
+        _effective_stats(
+            combatant,
+            _opponent(combatant, left, right),
+            action_index=action_index,
+        ).speed,
         side_priority,
     )
 
@@ -520,7 +804,7 @@ def _finish_result(
         left_resources=left_runtime.resources,
         right_resources=right_runtime.resources,
         events=tuple(events),
-        actions_taken=len(events),
+        actions_taken=sum(1 for event in events if event.action_type != "status"),
         time_elapsed=time_elapsed,
     )
 

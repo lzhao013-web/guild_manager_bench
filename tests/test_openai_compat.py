@@ -391,7 +391,7 @@ def test_runner_messages_are_accepted_by_openai_agent_shape() -> None:
                 tool_calls=(LlmToolCall("end_turn", {"hunts": []}, call_id="call_2"),)
             )
 
-    tools = GuildManagerTools.from_data_dir("data")
+    tools = GuildManagerTools.from_data_dir()
     session_id = tools.start_session("openai-shape")["session_id"]
     trace = run_llm_turn(Agent(), tools, session_id)
 

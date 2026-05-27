@@ -70,3 +70,135 @@ equipment:
             stat: attack
             value: 5
             target: self
+
+  - id: venom_dagger
+    name: 淬毒匕首
+    slot: main_hand
+    stats:
+      attack: 7
+      speed: 4
+    skills:
+      - id: venom_cut
+        name: 淬毒切割
+        kind: active
+        priority: 180
+        once_per_battle: true
+        condition:
+          type: action_index_lte
+          value: 4
+        effects:
+          - type: damage_bonus
+            value: 2
+          - type: apply_status
+            target: target
+            status:
+              id: poison
+              name: 中毒
+              duration: 2
+              polarity: negative
+              stack_mode: refresh
+              effects:
+                - type: true_damage
+                  value: 4
+
+  - id: ember_talisman
+    name: 余烬符坠
+    slot: accessory
+    stats:
+      mp: 8
+      attack: 2
+    skills:
+      - id: mana_ember
+        name: 法力灼燃
+        kind: active
+        priority: 170
+        mp_cost: 4
+        once_per_battle: true
+        condition:
+          type: all
+          conditions:
+            - type: self_mp_pct_gte
+              value: 0.3
+            - type: target_mp_pct_gte
+              value: 0.25
+        effects:
+          - type: true_damage
+            value: 5
+          - type: apply_status
+            target: target
+            status:
+              id: burn
+              name: 灼伤
+              duration: 2
+              polarity: negative
+              stack_mode: add_duration
+              effects:
+                - type: true_damage
+                  value: 3
+
+  - id: sundering_maul
+    name: 破甲重锤
+    slot: two_hand
+    stats:
+      attack: 18
+    skills:
+      - id: sundering_blow
+        name: 裂甲重击
+        kind: active
+        priority: 145
+        mp_cost: 5
+        once_per_battle: true
+        condition:
+          type: target_hp_pct_gte
+          value: 0.45
+        effects:
+          - type: damage_multiplier
+            value: 1.2
+          - type: self_damage
+            value: 3
+          - type: apply_status
+            target: target
+            status:
+              id: armor_break
+              name: 破甲
+              duration: 2
+              polarity: negative
+              stack_mode: refresh
+              effects:
+                - type: stat_multiplier
+                  stat: defense
+                  value: 0.75
+                  target: self
+
+  - id: renewal_staff
+    name: 复苏木杖
+    slot: two_hand
+    stats:
+      mp: 14
+      attack: 5
+      recovery: 3
+    skills:
+      - id: renewal_flow
+        name: 复苏流转
+        kind: active
+        priority: 160
+        mp_cost: 6
+        condition:
+          type: self_hp_pct_lte
+          value: 0.65
+        effects:
+          - type: apply_status
+            target: self
+            status:
+              id: regeneration
+              name: 再生
+              duration: 2
+              polarity: positive
+              stack_mode: refresh
+              effects:
+                - type: heal_percent
+                  value: 0.1
+                  target: self
+                - type: mp_restore
+                  value: 2
+                  target: self

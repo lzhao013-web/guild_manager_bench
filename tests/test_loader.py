@@ -30,6 +30,8 @@ def test_load_game_definition_from_yaml_directory() -> None:
     assert definition.content.adventurers[0].adventurer_id == "a1"
     assert definition.content.adventurers[0].stat_growth_per_level is not None
     assert definition.content.adventurers[0].stat_growth_per_level.attack == 12
+    assert definition.content.adventurers[0].level_skill_unlocks[0].level == 2
+    assert definition.content.adventurers[0].level_skill_unlocks[0].skills[0].skill_id == "guard_break"
     assert definition.content.monster_archetypes[0].archetype_id == "slime"
     assert definition.content.equipment_templates[0].equipment_id == "iron_sword"
     assert definition.content.crafting_recipes[0].recipe_id == "iron_sword_recipe"
@@ -81,6 +83,57 @@ def test_load_game_definition_reads_scoring_rules() -> None:
     assert definition.scoring.wave_size == 3
     assert definition.scoring.difficulty_factors == (0, 2, 4)
     assert definition.scoring.resource_mode == "current"
+
+
+def test_load_game_definition_reads_apply_status_effects() -> None:
+    with _data_dir("status_effects") as data_dir:
+        _write_game_yaml_files(data_dir)
+        (data_dir / "adventurers.yaml").write_text(
+            dedent(
+                """
+                adventurers:
+                  - adventurer_id: a1
+                    name: 先锋
+                    stats:
+                      hp: 100
+                      mp: 10
+                      attack: 10
+                      defense: 1
+                      speed: 10
+                      recovery: 0
+                    skills:
+                      - id: poison_dart
+                        name: 毒镖
+                        kind: active
+                        condition:
+                          type: always
+                        effects:
+                          - type: apply_status
+                            target: target
+                            status:
+                              id: poison
+                              name: 中毒
+                              duration: 2
+                              polarity: negative
+                              stack_mode: refresh
+                              effects:
+                                - type: true_damage
+                                  value: 3
+                        mp_cost: 1
+                        priority: 100
+                """
+            ),
+            encoding="utf-8",
+        )
+
+        definition = load_game_definition(data_dir)
+
+    effect = definition.content.adventurers[0].skills[0].effects[0]
+    assert effect.effect_type == "apply_status"
+    assert effect.status is not None
+    assert effect.status.status_id == "poison"
+    assert effect.status.polarity == "negative"
+    assert effect.status.effects[0].effect_type == "true_damage"
 
 
 def test_loaded_definition_can_drive_turn_flow() -> None:
@@ -152,15 +205,30 @@ def test_resolve_data_preset_uses_named_preset_directory() -> None:
     assert len(preset.data_hash) == 64
 
 
-def test_resolve_default_preset_keeps_legacy_data_dir_compatible() -> None:
-    with _data_dir("preset_legacy_default") as data_dir:
-        _write_game_yaml_files(data_dir)
+def test_resolve_data_preset_uses_default_preset_directory() -> None:
+    with _data_dir("preset_default") as data_dir:
+        preset_dir = data_dir / "presets" / "default"
+        preset_dir.mkdir(parents=True)
+        _write_game_yaml_files(preset_dir)
 
         preset = resolve_data_preset(data_dir, "default")
 
     assert preset.name == "default"
-    assert preset.source == "legacy_data_dir"
-    assert preset.data_dir.name == "preset_legacy_default"
+    assert preset.source == "preset"
+    assert preset.data_dir.name == "default"
+
+
+def test_resolve_data_preset_defaults_to_default_preset() -> None:
+    with _data_dir("preset_implicit_default") as data_dir:
+        preset_dir = data_dir / "presets" / "default"
+        preset_dir.mkdir(parents=True)
+        _write_game_yaml_files(preset_dir)
+
+        preset = resolve_data_preset(data_dir)
+
+    assert preset.name == "default"
+    assert preset.source == "preset"
+    assert preset.data_dir.name == "default"
 
 
 def test_list_data_presets_returns_complete_presets_only() -> None:
@@ -246,6 +314,19 @@ def _write_game_yaml_files(path) -> None:
                         value: 2.0
                     mp_cost: 1
                     priority: 100
+                level_skill_unlocks:
+                  - level: 2
+                    skills:
+                      - id: guard_break
+                        name: 破防训练
+                        kind: passive
+                        condition:
+                          type: always
+                        effects:
+                          - type: stat_bonus
+                            stat: attack
+                            value: 3
+                            target: self
             """
         ),
         encoding="utf-8",

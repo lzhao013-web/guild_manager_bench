@@ -52,3 +52,37 @@ recipes:
     materials:
       herb: 4
       iron_ore: 1
+
+  - id: venom_dagger_recipe
+    name: 打造淬毒匕首
+    output: venom_dagger
+    gold: 18
+    materials:
+      iron_ore: 1
+      leather: 1
+      herb: 3
+
+  - id: ember_talisman_recipe
+    name: 制作余烬符坠
+    output: ember_talisman
+    gold: 22
+    materials:
+      iron_ore: 2
+      herb: 3
+
+  - id: sundering_maul_recipe
+    name: 打造破甲重锤
+    output: sundering_maul
+    gold: 26
+    materials:
+      iron_ore: 4
+      wood: 2
+      leather: 1
+
+  - id: renewal_staff_recipe
+    name: 制作复苏木杖
+    output: renewal_staff
+    gold: 24
+    materials:
+      wood: 4
+      herb: 4

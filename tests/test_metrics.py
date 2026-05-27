@@ -47,7 +47,9 @@ def test_score_final_state_rewards_stronger_final_team() -> None:
 
 
 def _small_scoring_definition():
-    definition = load_game_definition(Path(__file__).resolve().parents[1] / "data")
+    definition = load_game_definition(
+        Path(__file__).resolve().parents[1] / "data" / "presets" / "default"
+    )
     return replace(
         definition,
         scoring=ScoringRules(

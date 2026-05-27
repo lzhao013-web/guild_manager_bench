@@ -82,7 +82,7 @@ data/presets/<preset_name>/
 uv run guild-manager serve --preset default --host 127.0.0.1 --port 8000
 ```
 
-不传 `--preset` 时仍会读取顶层 `data/*.yaml`，用于兼容旧流程。LLM 留档会在 `replay.json` 顶层记录 `data.preset`、`data.data_dir` 和 `data.data_hash`；续跑时如果旧 replay 记录了 hash 且当前数据不一致，会拒绝恢复，避免用不同规则继续同一局。
+不传 `--preset` 时默认读取 `data/presets/default/`。LLM 留档会在 `replay.json` 顶层记录 `data.preset`、`data.data_dir` 和 `data.data_hash`；续跑时如果旧 replay 记录了 hash 且当前数据不一致，会拒绝恢复，避免用不同规则继续同一局。
 
 Preset 可以在 `game.yaml` 中控制 LLM 专用工具暴露：
 
@@ -108,7 +108,7 @@ scoring:
 
 评分结果会写入 `run.score` 和 `replay.json` 顶层 `score` 字段。
 
-等级经验规则仍在 `game.yaml` 的 `experience` 中配置；其中 `stat_growth_per_level` 是默认成长。冒险者可以在 `adventurers.yaml` 中用同名字段覆盖默认成长，用于区分职业定位：
+等级经验规则仍在 `game.yaml` 的 `experience` 中配置；其中 `stat_growth_per_level` 是默认成长。冒险者可以在 `adventurers.yaml` 中用同名字段覆盖默认成长，用于区分职业定位。冒险者还可以配置 `level_skill_unlocks`，达到指定等级后自动解锁该职业自己的技能：
 
 ```yaml
 adventurers:
@@ -128,6 +128,79 @@ adventurers:
       defense: 4
       speed: 1
       recovery: 2
+    level_skill_unlocks:
+      - level: 3
+        skills:
+          - id: bulwark_rally
+            name: 壁垒集结
+            kind: active
+            priority: 165
+            mp_cost: 4
+            once_per_battle: true
+            condition:
+              type: self_hp_pct_lte
+              value: 0.7
+            effects:
+              - type: apply_status
+                target: self
+                status:
+                  id: fortified
+                  name: 坚守
+                  duration: 2
+                  polarity: positive
+                  stack_mode: refresh
+                  effects:
+                    - type: stat_bonus
+                      stat: defense
+                      value: 5
+                      target: self
+```
+
+## 技能数据
+
+技能可以挂在冒险者、装备和全局升级上。`kind: passive` 只支持属性修正效果；`kind: active` 支持伤害、治疗、MP 恢复和自损等战斗效果。
+
+支持的条件：
+
+- `always`
+- `self_hp_pct_lte` / `self_hp_pct_gte`
+- `target_hp_pct_lte` / `target_hp_pct_gte`
+- `self_mp_pct_lte` / `self_mp_pct_gte`
+- `target_mp_pct_lte` / `target_mp_pct_gte`
+- `action_index_lte` / `action_index_gte`
+- `all` / `any`
+
+支持的主动效果：
+
+- `damage_multiplier`
+- `damage_bonus`
+- `true_damage`
+- `heal`
+- `heal_percent`
+- `mp_restore`
+- `self_damage`
+- `apply_status`
+
+支持的被动效果：
+
+- `stat_bonus`
+- `stat_multiplier`
+
+`apply_status` 用于施加单场战斗内状态。状态可以是负面状态，例如中毒、灼伤、破甲；也可以是正面状态，例如再生、鼓舞、专注。状态的 `duration` 表示未来多少次持有者行动内生效；伤害、治疗和 MP 恢复类状态会在持有者行动开始时结算，属性修正类状态会在持续期间影响持有者属性。
+
+```yaml
+effects:
+  - type: apply_status
+    target: target
+    status:
+      id: poison
+      name: 中毒
+      duration: 2
+      polarity: negative
+      stack_mode: refresh
+      effects:
+        - type: true_damage
+          value: 3
 ```
 
 ## HTTP 接口概览
@@ -183,7 +256,7 @@ LLM benchmark 使用 `bench/llm` 下的纯 Python 强类型工具层。工具层
 ```python
 from guild_manager_bench.bench.llm import GuildManagerTools
 
-tools = GuildManagerTools.from_data_dir("data")
+tools = GuildManagerTools.from_data_dir("data/presets/default")
 session = tools.start_session()
 session_id = session["session_id"]
 
@@ -232,7 +305,7 @@ class Agent:
 
 run = run_llm_game(
     Agent(),
-    data_dir="data",
+    data_dir="data/presets/default",
     config=LlmRunConfig(max_tool_calls_per_turn=20),
 )
 ```
@@ -243,7 +316,7 @@ OpenAI-compatible Chat Completions 接口可以直接使用内置适配器：
 from guild_manager_bench.bench.llm import OpenAIChatCompletionsAgent, run_llm_game
 
 agent = OpenAIChatCompletionsAgent.from_env(model="your-model-name")
-run = run_llm_game(agent, data_dir="data")
+run = run_llm_game(agent, data_dir="data/presets/default")
 ```
 
 默认会读取进程环境变量，也会解析项目根目录 `.env`。显式传入的参数或可视化页面中填写的值优先级最高，其次是进程环境变量，最后是 `.env`：

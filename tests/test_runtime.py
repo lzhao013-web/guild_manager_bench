@@ -46,6 +46,8 @@ def test_game_session_applies_actions_and_builds_observation() -> None:
     assert observation["crafting_recipes"][0]["can_craft"] is False
     assert observation["adventurers"][0]["stat_growth_per_level"]["defense"] == 4
     assert observation["adventurers"][0]["next_level"]["remaining"] > 0
+    assert observation["adventurers"][0]["level_skill_unlocks"][0]["level"] == 3
+    assert observation["adventurers"][0]["level_skill_unlocks"][0]["unlocked"] is False
     assert observation["adventurers"][0]["equipment_slots"][0]["slot"] == "main_hand"
 
     result, event = session.end_turn(decode_end_turn_action({"type": "end_turn"}))
@@ -68,4 +70,4 @@ def test_random_operator_runner_finishes_without_direct_engine_calls() -> None:
 
 
 def _data_dir() -> Path:
-    return Path(__file__).resolve().parents[1] / "data"
+    return Path(__file__).resolve().parents[1] / "data" / "presets" / "default"

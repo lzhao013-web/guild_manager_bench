@@ -23,26 +23,79 @@ CombatStatName = Literal["attack", "defense", "speed", "recovery"]
 SkillEffectType = Literal[
     "damage_multiplier",
     "heal",
+    "heal_percent",
+    "mp_restore",
+    "damage_bonus",
+    "true_damage",
+    "self_damage",
+    "apply_status",
     "stat_bonus",
     "stat_multiplier",
 ]
 SkillTarget = Literal["self", "target"]
+StatusPolarity = Literal["positive", "negative", "neutral"]
+StatusStackMode = Literal["refresh", "replace", "add_duration"]
 SkillConditionType = Literal[
     "always",
     "self_hp_pct_lte",
     "self_hp_pct_gte",
     "target_hp_pct_lte",
     "target_hp_pct_gte",
+    "self_mp_pct_lte",
+    "self_mp_pct_gte",
+    "target_mp_pct_lte",
+    "target_mp_pct_gte",
+    "action_index_lte",
+    "action_index_gte",
     "all",
     "any",
 ]
 
 
 @dataclass(frozen=True, slots=True)
+class StatusDefinition:
+    """战斗内状态定义。
+
+    状态只在单场战斗内生效。`duration` 表示状态持有者接下来多少次行动会
+    受到状态影响；tick 类效果在持有者行动开始时结算，属性类效果在持续期间
+    修改持有者属性。
+    """
+
+    status_id: str
+    name: str
+    duration: int
+    effects: tuple[SkillEffect, ...]
+    polarity: StatusPolarity = "neutral"
+    stack_mode: StatusStackMode = "refresh"
+
+    def __post_init__(self) -> None:
+        if not self.status_id:
+            raise ValueError("status_id must not be empty")
+        if not self.name:
+            raise ValueError("status name must not be empty")
+        _require_at_least("duration", self.duration, 1)
+        if self.polarity not in {"positive", "negative", "neutral"}:
+            raise ValueError(f"unknown status polarity: {self.polarity}")
+        if self.stack_mode not in {"refresh", "replace", "add_duration"}:
+            raise ValueError(f"unknown status stack_mode: {self.stack_mode}")
+        object.__setattr__(self, "effects", tuple(self.effects))
+        if not self.effects:
+            raise ValueError("status must have at least one effect")
+        for effect in self.effects:
+            if not isinstance(effect, SkillEffect):
+                raise TypeError("status effects must be SkillEffect")
+            if effect.effect_type == "apply_status":
+                raise ValueError("status effects must not apply another status")
+            if effect.effect_type in {"damage_multiplier", "damage_bonus", "self_damage"}:
+                raise ValueError(f"{effect.effect_type} is not supported in status effects")
+
+
+@dataclass(frozen=True, slots=True)
 class SkillCondition:
     """技能触发条件。
 
-    血量条件的 `value` 使用 0 到 1 的比例，例如 0.5 表示 50%。
+    HP/MP 条件的 `value` 使用 0 到 1 的比例，例如 0.5 表示 50%。
+    行动序号条件的 `value` 使用从 1 开始的整数。
     `all` 和 `any` 用 `conditions` 组合多个子条件。
     """
 
@@ -65,10 +118,22 @@ class SkillCondition:
             "self_hp_pct_gte",
             "target_hp_pct_lte",
             "target_hp_pct_gte",
+            "self_mp_pct_lte",
+            "self_mp_pct_gte",
+            "target_mp_pct_lte",
+            "target_mp_pct_gte",
         }:
             if self.value is None:
                 raise ValueError(f"{self.condition_type} condition requires value")
             _require_ratio("value", self.value)
+            if self.conditions:
+                raise ValueError(f"{self.condition_type} condition must not have child conditions")
+            return
+
+        if self.condition_type in {"action_index_lte", "action_index_gte"}:
+            if self.value is None:
+                raise ValueError(f"{self.condition_type} condition requires value")
+            _require_at_least("value", self.value, 1)
             if self.conditions:
                 raise ValueError(f"{self.condition_type} condition must not have child conditions")
             return
@@ -91,18 +156,27 @@ class SkillEffect:
     """技能效果定义。
 
     `damage_multiplier` 会基于普通攻击伤害乘倍率。
-    `heal` 会治疗指定目标。
+    `heal` 和 `heal_percent` 会治疗指定目标。
+    `mp_restore` 会恢复指定目标 MP。
+    `damage_bonus` 会在普通攻击伤害基础上增加固定伤害。
+    `true_damage` 会造成不受防御影响的固定伤害。
+    `self_damage` 会对技能使用者造成固定伤害。
+    `apply_status` 会施加一个单场战斗内状态。
     `stat_bonus` 和 `stat_multiplier` 用于被动技能的属性修正。
     """
 
     effect_type: SkillEffectType
-    value: int | float
+    value: int | float = 0
     stat: CombatStatName | None = None
     target: SkillTarget = "target"
+    status: StatusDefinition | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.value, int | float):
             raise TypeError("value must be a number")
+
+        if self.effect_type != "apply_status" and self.status is not None:
+            raise ValueError(f"{self.effect_type} must not have status")
 
         if self.effect_type == "damage_multiplier":
             if self.value <= 0:
@@ -122,6 +196,70 @@ class SkillEffect:
                 raise ValueError("heal must not have stat")
             if self.target not in {"self", "target"}:
                 raise ValueError("heal target must be self or target")
+            return
+
+        if self.effect_type == "heal_percent":
+            _require_ratio("value", self.value)
+            if self.stat is not None:
+                raise ValueError("heal_percent must not have stat")
+            if self.target not in {"self", "target"}:
+                raise ValueError("heal_percent target must be self or target")
+            return
+
+        if self.effect_type == "mp_restore":
+            if not isinstance(self.value, int):
+                raise TypeError("mp_restore value must be an int")
+            if self.value < 0:
+                raise ValueError("mp_restore value must be >= 0")
+            if self.stat is not None:
+                raise ValueError("mp_restore must not have stat")
+            if self.target not in {"self", "target"}:
+                raise ValueError("mp_restore target must be self or target")
+            return
+
+        if self.effect_type == "damage_bonus":
+            if not isinstance(self.value, int):
+                raise TypeError("damage_bonus value must be an int")
+            if self.value < 0:
+                raise ValueError("damage_bonus value must be >= 0")
+            if self.stat is not None:
+                raise ValueError("damage_bonus must not have stat")
+            if self.target != "target":
+                raise ValueError("damage_bonus target must be target")
+            return
+
+        if self.effect_type == "true_damage":
+            if not isinstance(self.value, int):
+                raise TypeError("true_damage value must be an int")
+            if self.value < 0:
+                raise ValueError("true_damage value must be >= 0")
+            if self.stat is not None:
+                raise ValueError("true_damage must not have stat")
+            if self.target != "target":
+                raise ValueError("true_damage target must be target")
+            return
+
+        if self.effect_type == "self_damage":
+            if not isinstance(self.value, int):
+                raise TypeError("self_damage value must be an int")
+            if self.value < 0:
+                raise ValueError("self_damage value must be >= 0")
+            if self.stat is not None:
+                raise ValueError("self_damage must not have stat")
+            object.__setattr__(self, "target", "self")
+            return
+
+        if self.effect_type == "apply_status":
+            if self.status is None:
+                raise ValueError("apply_status requires status")
+            if not isinstance(self.status, StatusDefinition):
+                raise TypeError("status must be StatusDefinition")
+            if self.value != 0:
+                raise ValueError("apply_status must not have value")
+            if self.stat is not None:
+                raise ValueError("apply_status must not have stat")
+            if self.target not in {"self", "target"}:
+                raise ValueError("apply_status target must be self or target")
             return
 
         if self.effect_type == "stat_bonus":

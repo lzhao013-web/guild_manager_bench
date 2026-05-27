@@ -167,6 +167,8 @@ def _battle_to_dict(
                     "healing": event.healing,
                     "healing_target_side": event.healing_target_side,
                     "healing_target_hp": event.healing_target_hp,
+                    "status_id": event.status_id,
+                    "status_name": event.status_name,
                 }
                 for event in result.events
             ],

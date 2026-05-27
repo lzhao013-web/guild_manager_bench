@@ -4,7 +4,12 @@ from guild_manager_bench.game.combat import (
     run_auto_battle,
 )
 from guild_manager_bench.game.models import CombatResources, CombatStats
-from guild_manager_bench.game.skills import Skill, SkillCondition, SkillEffect
+from guild_manager_bench.game.skills import (
+    Skill,
+    SkillCondition,
+    SkillEffect,
+    StatusDefinition,
+)
 
 
 def test_basic_attack_damage_has_minimum_one() -> None:
@@ -221,3 +226,256 @@ def test_active_heal_skill_supports_combined_conditions() -> None:
     assert result.events[0].healing_target_side == "left"
     assert result.left_resources.current_hp == 14
     assert result.left_resources.current_mp == 5
+
+
+def test_mp_condition_controls_active_skill_use() -> None:
+    left = Combatant(
+        combatant_id="left",
+        stats=CombatStats(hp=20, mp=10, attack=2, defense=0, speed=10, recovery=0),
+        resources=CombatResources(current_hp=20, current_mp=4),
+        skills=(
+            Skill(
+                skill_id="high_mp_burst",
+                name="满盈爆发",
+                kind="active",
+                condition=SkillCondition(condition_type="self_mp_pct_gte", value=0.5),
+                effects=(SkillEffect(effect_type="damage_multiplier", value=5.0),),
+                priority=100,
+            ),
+        ),
+    )
+    right = Combatant(
+        combatant_id="right",
+        stats=CombatStats(hp=20, mp=0, attack=0, defense=0, speed=0, recovery=0),
+    )
+
+    result = run_auto_battle(left, right, max_actions=1)
+
+    assert result.events[0].action_type == "basic_attack"
+    assert result.events[0].damage == 2
+
+
+def test_action_index_condition_limits_opening_skill() -> None:
+    left = Combatant(
+        combatant_id="left",
+        stats=CombatStats(hp=30, mp=0, attack=3, defense=0, speed=10, recovery=0),
+        skills=(
+            Skill(
+                skill_id="opening_strike",
+                name="开场打击",
+                kind="active",
+                condition=SkillCondition(condition_type="action_index_lte", value=1),
+                effects=(SkillEffect(effect_type="damage_bonus", value=2),),
+                priority=100,
+            ),
+        ),
+    )
+    right = Combatant(
+        combatant_id="right",
+        stats=CombatStats(hp=30, mp=0, attack=0, defense=0, speed=0, recovery=0),
+    )
+
+    result = run_auto_battle(left, right, max_actions=2)
+
+    assert [event.action_type for event in result.events] == ["skill", "basic_attack"]
+    assert [event.damage for event in result.events] == [5, 3]
+
+
+def test_extended_active_effects_apply_to_resources_and_damage() -> None:
+    left = Combatant(
+        combatant_id="left",
+        stats=CombatStats(hp=50, mp=10, attack=4, defense=0, speed=10, recovery=0),
+        resources=CombatResources(current_hp=20, current_mp=4),
+        skills=(
+            Skill(
+                skill_id="blood_channel",
+                name="血脉导流",
+                kind="active",
+                condition=SkillCondition(condition_type="always"),
+                effects=(
+                    SkillEffect(effect_type="heal_percent", value=0.2, target="self"),
+                    SkillEffect(effect_type="mp_restore", value=5, target="self"),
+                    SkillEffect(effect_type="damage_bonus", value=3),
+                    SkillEffect(effect_type="true_damage", value=6),
+                    SkillEffect(effect_type="self_damage", value=4),
+                ),
+                mp_cost=3,
+                priority=100,
+            ),
+        ),
+    )
+    right = Combatant(
+        combatant_id="right",
+        stats=CombatStats(hp=40, mp=0, attack=0, defense=10, speed=0, recovery=0),
+    )
+
+    result = run_auto_battle(left, right, max_actions=1)
+
+    assert result.events[0].action_type == "skill"
+    assert result.events[0].damage == 10
+    assert result.events[0].target_hp == 30
+    assert result.events[0].healing == 10
+    assert result.left_resources.current_hp == 26
+    assert result.left_resources.current_mp == 6
+
+
+def test_self_damage_can_defeat_actor() -> None:
+    left = Combatant(
+        combatant_id="left",
+        stats=CombatStats(hp=10, mp=0, attack=1, defense=0, speed=10, recovery=0),
+        resources=CombatResources(current_hp=3, current_mp=0),
+        skills=(
+            Skill(
+                skill_id="reckless_blow",
+                name="舍身击",
+                kind="active",
+                condition=SkillCondition(condition_type="always"),
+                effects=(SkillEffect(effect_type="self_damage", value=5),),
+            ),
+        ),
+    )
+    right = Combatant(
+        combatant_id="right",
+        stats=CombatStats(hp=10, mp=0, attack=0, defense=0, speed=0, recovery=0),
+    )
+
+    result = run_auto_battle(left, right, max_actions=1)
+
+    assert result.outcome == "right_win"
+    assert result.reason == "actor_defeated"
+
+
+def test_negative_status_deals_damage_on_holder_actions() -> None:
+    left = Combatant(
+        combatant_id="left",
+        stats=CombatStats(hp=30, mp=0, attack=1, defense=0, speed=10, recovery=0),
+        skills=(
+            Skill(
+                skill_id="poison_dart",
+                name="毒镖",
+                kind="active",
+                condition=SkillCondition(condition_type="action_index_lte", value=1),
+                effects=(
+                    SkillEffect(
+                        effect_type="apply_status",
+                        target="target",
+                        status=StatusDefinition(
+                            status_id="poison",
+                            name="中毒",
+                            duration=2,
+                            polarity="negative",
+                            effects=(
+                                SkillEffect(effect_type="true_damage", value=3),
+                            ),
+                        ),
+                    ),
+                ),
+                priority=100,
+            ),
+        ),
+    )
+    right = Combatant(
+        combatant_id="right",
+        stats=CombatStats(hp=20, mp=0, attack=1, defense=0, speed=10, recovery=0),
+    )
+
+    result = run_auto_battle(left, right, max_actions=4)
+    status_events = [event for event in result.events if event.action_type == "status"]
+
+    assert [event.damage for event in status_events] == [3, 3]
+    assert status_events[0].status_name == "中毒"
+    assert result.actions_taken == 4
+
+
+def test_negative_stat_status_changes_later_damage() -> None:
+    left = Combatant(
+        combatant_id="left",
+        stats=CombatStats(hp=30, mp=0, attack=10, defense=0, speed=10, recovery=0),
+        skills=(
+            Skill(
+                skill_id="armor_break",
+                name="破甲",
+                kind="active",
+                condition=SkillCondition(condition_type="action_index_lte", value=1),
+                effects=(
+                    SkillEffect(
+                        effect_type="apply_status",
+                        target="target",
+                        status=StatusDefinition(
+                            status_id="armor_break",
+                            name="破甲",
+                            duration=2,
+                            polarity="negative",
+                            effects=(
+                                SkillEffect(
+                                    effect_type="stat_multiplier",
+                                    stat="defense",
+                                    value=0.5,
+                                    target="self",
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+                priority=100,
+            ),
+        ),
+    )
+    right = Combatant(
+        combatant_id="right",
+        stats=CombatStats(hp=30, mp=0, attack=0, defense=8, speed=0, recovery=0),
+    )
+
+    result = run_auto_battle(left, right, max_actions=2)
+
+    assert [event.damage for event in result.events] == [0, 6]
+
+
+def test_positive_status_can_heal_and_buff_holder() -> None:
+    left = Combatant(
+        combatant_id="left",
+        stats=CombatStats(hp=30, mp=0, attack=4, defense=0, speed=10, recovery=0),
+        resources=CombatResources(current_hp=10, current_mp=0),
+        skills=(
+            Skill(
+                skill_id="battle_trance",
+                name="战斗专注",
+                kind="active",
+                condition=SkillCondition(condition_type="action_index_lte", value=1),
+                effects=(
+                    SkillEffect(
+                        effect_type="apply_status",
+                        target="self",
+                        status=StatusDefinition(
+                            status_id="trance",
+                            name="专注",
+                            duration=2,
+                            polarity="positive",
+                            effects=(
+                                SkillEffect(effect_type="heal", value=2, target="self"),
+                                SkillEffect(
+                                    effect_type="stat_bonus",
+                                    stat="attack",
+                                    value=3,
+                                    target="self",
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+                priority=100,
+            ),
+        ),
+    )
+    right = Combatant(
+        combatant_id="right",
+        stats=CombatStats(hp=30, mp=0, attack=0, defense=0, speed=0, recovery=0),
+    )
+
+    result = run_auto_battle(left, right, max_actions=3)
+    status_events = [event for event in result.events if event.action_type == "status"]
+    action_events = [event for event in result.events if event.action_type != "status"]
+
+    assert [event.healing for event in status_events] == [2, 2]
+    assert [event.damage for event in action_events] == [0, 7, 7]
+    assert result.left_resources.current_hp == 14

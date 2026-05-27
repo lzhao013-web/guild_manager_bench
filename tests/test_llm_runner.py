@@ -15,6 +15,7 @@ from guild_manager_bench.bench.llm import (
     run_llm_game,
     run_llm_turn,
 )
+from guild_manager_bench.bench.llm.formatting import skill_summary
 from guild_manager_bench.game.state import LlmToolRules
 
 
@@ -222,7 +223,7 @@ def test_run_llm_turn_emits_debug_events() -> None:
     assert "- 1 先锋" in tool_message["content"]
     assert "EXP 0/" in tool_message["content"]
     assert "成长 HP+18 MP+1 攻击+2 防御+4 速度+1 恢复+2" in tool_message["content"]
-    assert "技能 强力打击 主动" in tool_message["content"]
+    assert "  技能:\n    - 强力打击 主动" in tool_message["content"]
     assert "效果 伤害倍率 1.8" in tool_message["content"]
 
 
@@ -244,8 +245,10 @@ def test_turn_prompt_includes_compact_skill_summaries() -> None:
     assert "怪物最高攻击" not in prompt
     assert "- 1 先锋" in prompt
     assert "EXP 0/" in prompt
-    assert "成长 HP+18 MP+1 攻击+2 防御+4 速度+1 恢复+2" in prompt
-    assert "技能 强力打击 主动" in prompt
+    assert "成长 HP+18 MP+1 攻击+2 防御+4 速度+1 恢复+2" not in prompt
+    assert "  技能:\n    - 强力打击 主动" in prompt
+    assert "等级技能" not in prompt
+    assert "壁垒集结" not in prompt
     assert "随机种子：游戏 20260524，评分 20260526" in prompt
     assert "效果 伤害倍率 1.8" in prompt
 
@@ -273,6 +276,54 @@ def test_turn_prompt_shows_equipped_numeric_refs() -> None:
     assert "1 先锋" in prompt
     assert "装备 铁剑(id=1)" in prompt
     assert "装备 无" not in prompt.split("1 先锋", 1)[1].splitlines()[0]
+
+
+def test_skill_summary_formats_extended_conditions_and_effects() -> None:
+    text = skill_summary(
+        [
+            {
+                "name": "血焰",
+                "kind": "active",
+                "condition": {
+                    "type": "all",
+                    "conditions": [
+                        {"type": "self_mp_pct_gte", "value": 0.5},
+                        {"type": "action_index_lte", "value": 1},
+                    ],
+                },
+                "effects": [
+                    {"type": "heal_percent", "value": 0.25, "target": "self"},
+                    {"type": "mp_restore", "value": 3, "target": "self"},
+                    {"type": "damage_bonus", "value": 4, "target": "target"},
+                    {"type": "true_damage", "value": 5, "target": "target"},
+                    {"type": "self_damage", "value": 2, "target": "self"},
+                    {
+                        "type": "apply_status",
+                        "value": 0,
+                        "target": "target",
+                        "status": {
+                            "status_id": "burn",
+                            "name": "灼伤",
+                            "duration": 2,
+                            "polarity": "negative",
+                            "effects": [
+                                {"type": "true_damage", "value": 3, "target": "target"}
+                            ],
+                        },
+                    },
+                ],
+            }
+        ]
+    )
+
+    assert "自身MP>=50%" in text
+    assert "行动序号<=1" in text
+    assert "治疗 25%最大HP" in text
+    assert "自身恢复MP 3" in text
+    assert "伤害+4" in text
+    assert "真实伤害 5" in text
+    assert "自身受伤 2" in text
+    assert "施加状态 灼伤 2行动 负面 真实伤害 3" in text
 
 
 def test_memo_tool_content_appears_in_next_turn_prompt() -> None:
@@ -642,7 +693,7 @@ def test_run_llm_game_refuses_resume_when_data_hash_changed(tmp_path) -> None:
 
 
 def _data_dir() -> Path:
-    return Path(__file__).resolve().parents[1] / "data"
+    return Path(__file__).resolve().parents[1] / "data" / "presets" / "default"
 
 
 def _read_json(path: Path) -> dict[str, Any]:

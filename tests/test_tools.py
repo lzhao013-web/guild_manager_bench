@@ -250,4 +250,4 @@ def test_battle_preview_tool_is_controlled_by_definition_switch() -> None:
 
 
 def _data_dir() -> Path:
-    return Path(__file__).resolve().parents[1] / "data"
+    return Path(__file__).resolve().parents[1] / "data" / "presets" / "default"

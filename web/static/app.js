@@ -299,7 +299,8 @@ function renderAdventurers(obs) {
           <summary class="adv-summary">属性 · 技能 · 装备 · 升级</summary>
           <div class="adv-body">
             ${statGrid(adventurer.base_stats, adventurer.effective_stats)}
-            <div class="small muted">技能：${adventurer.skills.map((s) => skillTag(s)).join("")}</div>
+            ${skillList(adventurer.skills)}
+            ${levelSkillUnlocksBlock(adventurer)}
             <div class="slot-grid">
               ${adventurer.equipment_slots.map((slot) => equipmentSlotCell(adventurer, slot)).join("")}
             </div>
@@ -330,7 +331,8 @@ function renderCrafting(obs) {
         <span class="${recipe.can_craft ? "ok" : "danger"} small">${recipe.can_craft ? "可合成" : "资源不足"}</span>
       </div>
       <div class="small muted">${escapeHtml(recipe.output_name)} · ${slotName(recipe.output_slot)}</div>
-      <div class="small">产物：${statModifierText(recipe.output_stats)} · 技能：${names(recipe.output_skills)}</div>
+      <div class="small">产物：${statModifierText(recipe.output_stats)}</div>
+      ${skillList(recipe.output_skills)}
       <div class="small">消耗：金币 ${recipe.gold_cost} · ${materialsText(recipe.material_costs)}</div>
       ${recipe.can_craft ? "" : `<div class="small danger">缺少：${missingText(recipe.missing)}</div>`}
       <button type="button" ${disabled(!recipe.can_craft)} onclick="craft('${recipe.recipe_id}')">合成</button>
@@ -447,7 +449,7 @@ function renderModalHunts() {
           <strong>${escapeHtml(monster.name)}</strong>
           <div class="stat-inline">攻 ${monster.stats.attack} · 防 ${monster.stats.defense} · 速 ${monster.stats.speed}</div>
           <div class="small muted">奖励：${rewardText(monster.reward)}</div>
-          ${monster.skills.length ? `<div class="small muted">技能：${monster.skills.map((s) => skillTag(s)).join("")}</div>` : ""}
+          ${skillList(monster.skills)}
         </div>
         <select ${disabled()} onchange="selectHunt('${monster.monster_id}', this.value)">
           <option value="">不交战</option>
@@ -751,6 +753,7 @@ function levelText(adventurer) {
 function experienceBlock(obs, adventurer) {
   const next = adventurer.next_level;
   const percent = next.max_level ? 100 : Math.min(100, Math.floor((next.current / next.required) * 100));
+  const previewUnlocks = next.preview_level_skill_unlocks || [];
   return `
     <div class="xp-block">
       <div class="inline small">
@@ -760,6 +763,7 @@ function experienceBlock(obs, adventurer) {
       <div class="progress"><span style="width: ${percent}%"></span></div>
       <div class="small muted">下级成长：${statModifierText(obs.experience_rules.stat_growth_per_level)}</div>
       ${next.preview_level !== adventurer.level ? `<div class="small ok">投入全部经验池可到 Lv.${next.preview_level}</div>` : ""}
+      ${previewUnlocks.length ? `<div class="small ok">可解锁：${previewUnlocks.map((item) => levelPreviewUnlockText(item)).join(" · ")}</div>` : ""}
     </div>
     <div class="xp-form">
       <input id="xp-${adventurer.adventurer_id}" type="number" min="0" max="${obs.experience_pool}" value="0" ${disabled()} oninput="updateExperiencePreview('${adventurer.adventurer_id}')" />
@@ -767,6 +771,27 @@ function experienceBlock(obs, adventurer) {
     </div>
     <div id="xp-preview-${adventurer.adventurer_id}" class="small muted">${experiencePreviewText(adventurer, 0, obs.experience_rules)}</div>
   `;
+}
+
+function levelSkillUnlocksBlock(adventurer) {
+  const unlocks = adventurer.level_skill_unlocks || [];
+  if (!unlocks.length) {
+    return "";
+  }
+  return `
+    <div class="small muted">等级技能：
+      ${unlocks.map((unlock) => `<span class="skill-unlock ${unlock.unlocked ? "ok" : "muted"}">${levelUnlockText(unlock)}</span>`).join(" ")}
+    </div>
+  `;
+}
+
+function levelUnlockText(unlock) {
+  const stateText = unlock.unlocked ? "已解锁" : "未解锁";
+  return `Lv.${unlock.level} ${stateText} ${names(unlock.skills || [])}`;
+}
+
+function levelPreviewUnlockText(unlock) {
+  return `Lv.${unlock.level} ${names(unlock.skills || [])}`;
 }
 
 function equipmentSlotCell(adventurer, slot) {
@@ -822,9 +847,20 @@ function names(items) {
   return items.length ? items.map((item) => item.name).join(" · ") : "无";
 }
 
+function skillList(skills, label = "技能") {
+  const values = skills || [];
+  if (!values.length) {
+    return `<div class="small muted">${label}：无</div>`;
+  }
+  return `
+    <div class="small muted">${label}：</div>
+    <div class="skill-list">${values.map((skill) => skillTag(skill)).join("")}</div>
+  `;
+}
+
 function skillTag(skill) {
   const desc = skillDescText(skill);
-  return ` <span class="skill-tag" data-tip="${escapeHtml(desc)}">${escapeHtml(skill.name)}</span>`;
+  return `<span class="skill-tag" data-tip="${escapeHtml(desc)}">${escapeHtml(skill.name)}</span>`;
 }
 
 function skillDescText(skill) {

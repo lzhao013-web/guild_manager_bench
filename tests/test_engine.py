@@ -18,6 +18,7 @@ from guild_manager_bench.game.engine import (
     apply_preparation_action,
     apply_turn,
     end_turn,
+    effective_adventurer_skills,
     effective_adventurer_stats,
     new_game,
     spawn_monsters,
@@ -31,11 +32,13 @@ from guild_manager_bench.game.state import (
     GameDefinition,
     GameRules,
     IntCurve,
+    LevelSkillUnlock,
     MonsterArchetype,
     MonsterSpawnRules,
     RewardBundle,
     TurnRecoveryRules,
 )
+from guild_manager_bench.game.skills import Skill, SkillCondition, SkillEffect
 from guild_manager_bench.game.upgrades import GlobalUpgrade
 
 
@@ -245,6 +248,52 @@ def test_adventurer_specific_growth_overrides_global_growth() -> None:
     assert updated.level == 2
     assert stats.hp == 104
     assert stats.attack == 30
+
+
+def test_adventurer_unlocks_level_skills_after_level_up() -> None:
+    level_skill = Skill(
+        skill_id="guard_break",
+        name="破防训练",
+        kind="passive",
+        condition=SkillCondition(condition_type="always"),
+        effects=(
+            SkillEffect(
+                effect_type="stat_bonus",
+                stat="attack",
+                value=3,
+                target="self",
+            ),
+        ),
+    )
+    definition = _definition()
+    adventurer = replace(
+        definition.content.adventurers[0],
+        level_skill_unlocks=(
+            LevelSkillUnlock(level=2, skills=(level_skill,)),
+        ),
+    )
+    definition = replace(
+        definition,
+        content=replace(definition.content, adventurers=(adventurer,)),
+    )
+    state = new_game(definition)
+
+    assert [
+        skill.skill_id
+        for skill in effective_adventurer_skills(definition, state, state.adventurers[0])
+    ] == []
+
+    state = replace(state, experience_pool=50)
+    state = apply_preparation_action(
+        definition,
+        state,
+        AllocateExperienceAction(adventurer_id="a1", amount=50),
+    )
+
+    assert [
+        skill.skill_id
+        for skill in effective_adventurer_skills(definition, state, state.adventurers[0])
+    ] == ["guard_break"]
 
 
 def _definition() -> GameDefinition:

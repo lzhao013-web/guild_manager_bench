@@ -40,22 +40,14 @@ def resolve_data_preset(
     data_dir: str | Path = "data",
     preset: str | None = None,
 ) -> DataPreset:
-    """Resolve a game data directory, optionally through data/presets/<name>."""
+    """Resolve a game data preset under data/presets/<name>."""
 
     base_dir = Path(data_dir)
-    if preset is not None:
-        preset_name = _preset_name(preset)
-        preset_dir = base_dir / PRESETS_DIR / preset_name
-        if preset_dir.is_dir():
-            return _preset(preset_name, preset_dir, "preset")
-        if preset_name == DEFAULT_PRESET and _looks_like_data_dir(base_dir):
-            return _preset(preset_name, base_dir, "legacy_data_dir")
-        raise ValueError(f"unknown data preset: {preset_name}")
-
-    if _looks_like_data_dir(base_dir):
-        name = DEFAULT_PRESET if base_dir.name == "data" else None
-        return _preset(name, base_dir, "data_dir")
-    raise ValueError(f"data directory is missing required YAML files: {base_dir}")
+    preset_name = _preset_name(preset or DEFAULT_PRESET)
+    preset_dir = base_dir / PRESETS_DIR / preset_name
+    if preset_dir.is_dir():
+        return _preset(preset_name, preset_dir, "preset")
+    raise ValueError(f"unknown data preset: {preset_name}")
 
 
 def list_data_presets(data_dir: str | Path = "data") -> list[DataPreset]:

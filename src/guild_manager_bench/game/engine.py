@@ -275,7 +275,7 @@ def effective_adventurer_skills(
     """合并冒险者当前可用技能。"""
 
     skills = combine_equipment_skills(
-        adventurer.skills,
+        adventurer.skills + _unlocked_level_skills(adventurer),
         _equipped_templates(definition, state, adventurer),
     )
     return combine_upgrade_skills(skills, _unlocked_upgrades(definition, state))
@@ -482,6 +482,14 @@ def _adventurer_level_growth(
         if adventurer.stat_growth_per_level is not None
         else definition.content.experience_rules.stat_growth_per_level
     )
+
+
+def _unlocked_level_skills(adventurer: AdventurerState) -> tuple[Skill, ...]:
+    skills: list[Skill] = []
+    for unlock in adventurer.level_skill_unlocks:
+        if unlock.level <= adventurer.level:
+            skills.extend(unlock.skills)
+    return tuple(skills)
 
 
 def _apply_reward(state: GameState, reward: RewardBundle) -> GameState:
