@@ -78,6 +78,9 @@ def _adventurer_to_dict(
         "name": adventurer.name,
         "level": adventurer.level,
         "experience": adventurer.experience,
+        "stat_growth_per_level": _stat_modifier_to_dict(
+            _adventurer_level_growth(definition, adventurer)
+        ),
         "base_stats": _stats_to_dict(adventurer.base_stats),
         "effective_stats": _stats_to_dict(effective_stats),
         "resources": _resources_to_dict(adventurer.resources),
@@ -277,6 +280,7 @@ def _next_level_info(
         base_stats=adventurer.base_stats,
         resources=adventurer.resources,
         skills=adventurer.skills,
+        stat_growth_per_level=adventurer.stat_growth_per_level,
         level=preview_level,
         experience=preview_experience,
         equipment=adventurer.equipment,
@@ -343,6 +347,17 @@ def _equipment_slots_to_dict(
             }
         )
     return slots
+
+
+def _adventurer_level_growth(
+    definition: GameDefinition,
+    adventurer: AdventurerState,
+) -> CombatStatModifier:
+    return (
+        adventurer.stat_growth_per_level
+        if adventurer.stat_growth_per_level is not None
+        else definition.content.experience_rules.stat_growth_per_level
+    )
 
 
 def _blocked_equipment_slots(equipped: dict[str, str]) -> dict[str, str]:

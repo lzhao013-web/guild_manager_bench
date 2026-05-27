@@ -7,7 +7,7 @@ from guild_manager_bench.bench.llm.archive import (
     start_llm_run_archive,
     write_llm_run_archive,
 )
-from guild_manager_bench.bench.llm.harness import ToolBudget, TurnToolHarness
+from guild_manager_bench.bench.llm.harness import MemoStore, ToolBudget, TurnToolHarness
 from guild_manager_bench.bench.llm.openai_compat import (
     OpenAIChatCompletionsAgent,
     OpenAIChatCompletionsConfig,
@@ -39,6 +39,7 @@ __all__ = [
     "LlmRunConfig",
     "LlmToolCall",
     "LlmTurnAgent",
+    "MemoStore",
     "OpenAIChatCompletionsAgent",
     "OpenAIChatCompletionsConfig",
     "OpenAICompatibleError",

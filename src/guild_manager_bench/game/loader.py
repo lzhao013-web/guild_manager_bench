@@ -74,6 +74,10 @@ def _parse_adventurers(values: list[Any]) -> tuple[AdventurerState, ...]:
                 base_stats=stats,
                 resources=CombatResources.full(stats),
                 skills=_parse_skills(data.get("skills", ()), f"adventurers[{index}].skills"),
+                stat_growth_per_level=_parse_optional_stat_modifier(
+                    data.get("stat_growth_per_level"),
+                    f"adventurers[{index}].stat_growth_per_level",
+                ),
                 level=_int(data.get("level", 1), f"adventurers[{index}].level"),
                 experience=_int(data.get("experience", 0), f"adventurers[{index}].experience"),
             )
@@ -261,6 +265,12 @@ def _parse_stat_modifier(data: Mapping[str, Any]) -> CombatStatModifier:
         speed=_int(data.get("speed", 0), "stat_modifier.speed"),
         recovery=_int(data.get("recovery", 0), "stat_modifier.recovery"),
     )
+
+
+def _parse_optional_stat_modifier(value: Any, path: str) -> CombatStatModifier | None:
+    if value is None:
+        return None
+    return _parse_stat_modifier(_mapping(value, path))
 
 
 def _parse_reward(data: Mapping[str, Any]) -> RewardBundle:

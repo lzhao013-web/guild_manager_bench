@@ -2,6 +2,11 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Sequence
 
+from guild_manager_bench.bench.llm.refs import (
+    build_numeric_refs,
+    display_ref,
+)
+
 DEFAULT_OBJECTIVE = "最大化本局最终表现：尽量赢得战斗、提升队伍、积累有价值资源。"
 
 
@@ -11,6 +16,7 @@ def build_turn_prompt(
     objective: str = DEFAULT_OBJECTIVE,
     max_tool_calls: int,
     previous_turn_event: Mapping[str, Any] | None = None,
+    memo_entries: Sequence[str] = (),
 ) -> str:
     """构造单个游戏回合开始时给 LLM 的提示词。"""
 
@@ -21,7 +27,10 @@ def build_turn_prompt(
             "",
             "回合流程：准备阶段可调用查询工具读取信息，也可调用动作工具执行准备操作；回合结束通过 end_turn 提交讨伐列表。",
             f"工具预算：本回合最多允许 {max_tool_calls} 次非 end_turn 工具调用；查询、动作和非法调用均计入预算。预算耗尽后只接受 end_turn。",
+            "工具参数：所有对象 id 都使用下方列表左侧的数字 id。",
             "工具结果：返回 OK/FAIL、budget 和结果摘要。动作工具返回变更摘要，不自动附带完整状态；get_observation 返回当前完整可见状态。",
+            "",
+            _memo_summary(memo_entries),
             "",
             _state_summary(observation),
             "",
@@ -30,9 +39,24 @@ def build_turn_prompt(
     ).strip()
 
 
+def _memo_summary(memo_entries: Sequence[str]) -> str:
+    values = [
+        entry.strip()
+        for entry in memo_entries
+        if isinstance(entry, str) and entry.strip()
+    ]
+    if not values:
+        return "备忘录：无。"
+    lines = ["备忘录："]
+    lines.extend(f"- {entry}" for entry in values)
+    return "\n".join(lines)
+
+
 def _state_summary(observation: Mapping[str, Any]) -> str:
     adventurers = observation.get("adventurers", ())
     monsters = observation.get("monsters", ())
+    refs = build_numeric_refs(observation)
+    equipment_names = _equipment_name_index(observation)
     scoring = observation.get("scoring", {})
     if not isinstance(scoring, Mapping):
         scoring = {}
@@ -46,20 +70,20 @@ def _state_summary(observation: Mapping[str, Any]) -> str:
     for adventurer in adventurers:
         resources = adventurer["resources"]
         stats = adventurer["effective_stats"]
-        equipment = [
-            item["instance_id"]
-            for item in adventurer["equipment"]
-        ]
+        equipment = adventurer.get("equipment") or ()
         exp_text = _experience_text(adventurer)
+        growth_text = _stat_modifier_text(adventurer.get("stat_growth_per_level"))
         lines.append(
             "- "
-            f"{adventurer['adventurer_id']} {adventurer['name']} "
+            f"{display_ref(refs, 'adventurer', adventurer['adventurer_id'])} "
+            f"{adventurer['name']} "
             f"Lv{adventurer['level']} "
             f"EXP {exp_text} "
+            f"成长 {growth_text} "
             f"HP {resources['current_hp']}/{stats['hp']} "
             f"MP {resources['current_mp']}/{stats['mp']} "
             f"攻击 {stats['attack']} 防御 {stats['defense']} 速度 {stats['speed']} "
-            f"装备 {equipment or '无'} "
+            f"装备 {_equipment_refs_text(refs, equipment, equipment_names)} "
             f"技能 {_skill_summary_zh(adventurer.get('skills'))}"
         )
 
@@ -69,7 +93,8 @@ def _state_summary(observation: Mapping[str, Any]) -> str:
         reward = monster["reward"]
         lines.append(
             "- "
-            f"{monster['monster_id']} {monster['name']} "
+            f"{display_ref(refs, 'monster', monster['monster_id'])} "
+            f"{monster['name']} "
             f"HP {stats['hp']} 攻击 {stats['attack']} 防御 {stats['defense']} 速度 {stats['speed']} "
             f"技能 {_skill_summary_zh(monster.get('skills'))} "
             f"奖励 金币={reward['gold']} 经验={reward['experience']} 材料={_mapping_text(reward['materials'])}"
@@ -134,10 +159,58 @@ def _previous_turn_summary(previous_turn_event: Mapping[str, Any] | None) -> str
         reward = battle["reward"]
         lines.append(
             "- "
-            f"{battle['adventurer_id']} vs {battle['monster_id']}：{result}，"
+            f"{_battle_participant_name(battle, 'adventurer')} vs {_battle_participant_name(battle, 'monster')}：{result}，"
             f"奖励 金币={reward['gold']} 经验={reward['experience']} 材料={_mapping_text(reward['materials'])}"
         )
     return "\n".join(lines)
+
+
+def _equipment_refs_text(
+    refs: Mapping[str, Mapping[str, int]],
+    equipment: Sequence[Mapping[str, Any]],
+    names: Mapping[str, str],
+) -> str:
+    values = [
+        _equipment_display_text(refs, item, names)
+        for item in equipment
+        if isinstance(item, Mapping)
+    ]
+    return ", ".join(values) if values else "无"
+
+
+def _equipment_name_index(observation: Mapping[str, Any]) -> dict[str, str]:
+    names: dict[str, str] = {}
+    for item in _sequence(observation.get("equipment_inventory")):
+        if not isinstance(item, Mapping):
+            continue
+        instance_id = item.get("instance_id")
+        name = item.get("name")
+        if isinstance(instance_id, str) and isinstance(name, str) and name:
+            names[instance_id] = name
+    return names
+
+
+def _equipment_display_text(
+    refs: Mapping[str, Mapping[str, int]],
+    item: Mapping[str, Any],
+    names: Mapping[str, str],
+) -> str:
+    instance_id = item.get("instance_id")
+    ref = display_ref(refs, "equipment", instance_id)
+    name = item.get("name")
+    if not isinstance(name, str) or not name:
+        name = names.get(str(instance_id))
+    if isinstance(name, str) and name:
+        return f"{name}(id={ref})"
+    return f"id={ref}" if ref else "未知装备"
+
+
+def _battle_participant_name(battle: Mapping[str, Any], role: str) -> str:
+    name = battle.get(f"{role}_name")
+    if isinstance(name, str) and name:
+        return name
+    value = battle.get(f"{role}_id")
+    return str(value)
 
 
 def _skill_summary_zh(skills: Any) -> str:
@@ -153,7 +226,7 @@ def _skill_summary_zh(skills: Any) -> str:
 
 def _skill_text_zh(skill: Mapping[str, Any]) -> str:
     parts = [
-        str(skill.get("skill_id") or skill.get("name") or "skill"),
+        str(skill.get("name") or skill.get("skill_id") or "技能"),
         _skill_kind_text(skill.get("kind")),
     ]
     mp_cost = skill.get("mp_cost")
@@ -261,6 +334,24 @@ def _mapping_text(value: Any) -> str:
     if not isinstance(value, Mapping) or not value:
         return "{}"
     return "{" + ", ".join(f"{key}: {value}" for key, value in value.items()) + "}"
+
+
+def _stat_modifier_text(value: Any) -> str:
+    if not isinstance(value, Mapping):
+        return "无"
+    parts = []
+    for key, label in (
+        ("hp", "HP"),
+        ("mp", "MP"),
+        ("attack", "攻击"),
+        ("defense", "防御"),
+        ("speed", "速度"),
+        ("recovery", "恢复"),
+    ):
+        amount = value.get(key, 0)
+        if isinstance(amount, int | float) and amount:
+            parts.append(f"{label}+{_number(amount)}")
+    return " ".join(parts) if parts else "无"
 
 
 def _percent(value: Any) -> str:

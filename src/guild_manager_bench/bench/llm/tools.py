@@ -446,12 +446,29 @@ _SESSION_ID = {
     "description": "会话 id，由 start_session 返回。",
 }
 _ADVENTURER_ID = {
-    "type": "string",
-    "description": "冒险者 id，可从 observation.adventurers 读取。",
+    "type": "integer",
+    "minimum": 1,
+    "description": "冒险者数字 id，使用提示词或 get_observation 中“冒险者”列表左侧的数字。",
 }
 _MONSTER_ID = {
-    "type": "string",
-    "description": "怪物 id，可从 observation.monsters 读取。",
+    "type": "integer",
+    "minimum": 1,
+    "description": "怪物数字 id，使用提示词或 get_observation 中“怪物”列表左侧的数字。",
+}
+_RECIPE_ID = {
+    "type": "integer",
+    "minimum": 1,
+    "description": "配方数字 id，使用 get_observation 中“制作配方”列表左侧的数字。",
+}
+_UPGRADE_ID = {
+    "type": "integer",
+    "minimum": 1,
+    "description": "升级数字 id，使用 get_observation 中“全局升级”列表左侧的数字。",
+}
+_EQUIPMENT_INSTANCE_ID = {
+    "type": "integer",
+    "minimum": 1,
+    "description": "装备数字 id，使用 get_observation 中“装备库存”列表左侧的数字。",
 }
 
 
@@ -474,10 +491,7 @@ _BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
             "required": ["session_id", "recipe_id"],
             "properties": {
                 "session_id": _SESSION_ID,
-                "recipe_id": {
-                    "type": "string",
-                    "description": "配方 id，可从 observation.crafting_recipes 读取。",
-                },
+                "recipe_id": _RECIPE_ID,
             },
             "additionalProperties": False,
         },
@@ -490,10 +504,7 @@ _BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
             "required": ["session_id", "upgrade_id"],
             "properties": {
                 "session_id": _SESSION_ID,
-                "upgrade_id": {
-                    "type": "string",
-                    "description": "全局加成 id，可从 observation.global_upgrades 读取。",
-                },
+                "upgrade_id": _UPGRADE_ID,
             },
             "additionalProperties": False,
         },
@@ -525,10 +536,7 @@ _BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
             "properties": {
                 "session_id": _SESSION_ID,
                 "adventurer_id": _ADVENTURER_ID,
-                "equipment_instance_id": {
-                    "type": "string",
-                    "description": "装备实例 id，可从 observation.equipment_inventory 读取。",
-                },
+                "equipment_instance_id": _EQUIPMENT_INSTANCE_ID,
             },
             "additionalProperties": False,
         },

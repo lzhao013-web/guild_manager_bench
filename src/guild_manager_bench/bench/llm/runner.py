@@ -14,8 +14,13 @@ from guild_manager_bench.bench.llm.archive import (
     start_llm_run_archive,
 )
 from guild_manager_bench.bench.llm.formatting import skill_summary
-from guild_manager_bench.bench.llm.harness import TurnToolHarness
+from guild_manager_bench.bench.llm.harness import (
+    MemoStore,
+    TurnToolHarness,
+    memo_entries_from_tool_steps,
+)
 from guild_manager_bench.bench.llm.prompts import DEFAULT_OBJECTIVE, build_turn_prompt
+from guild_manager_bench.bench.llm.refs import build_numeric_refs, display_ref
 from guild_manager_bench.bench.llm.tools import GuildManagerTools
 from guild_manager_bench.bench.llm.trace import (
     LlmGameRun,
@@ -131,11 +136,13 @@ def run_llm_game(
         session = tools.start_session(session_id)
         session_id = session["session_id"]
         traces: list[TurnTrace] = []
+        memo_store = MemoStore()
         archive_writer = _start_archive(config, agent, session_id, data_source)
         initial_observation = session["observation"]
     else:
         session_id = resume["session_id"]
         traces = list(resume["traces"])
+        memo_store = MemoStore(entries=list(resume["memo_entries"]))
         archive_writer = _resume_archive(
             config,
             agent,
@@ -224,6 +231,7 @@ def run_llm_game(
                 tools,
                 session_id,
                 config=config,
+                memo_store=memo_store,
                 event_sink=emit,
                 trace_update=update_replay,
             )
@@ -282,12 +290,14 @@ def run_llm_turn(
     session_id: str,
     *,
     config: LlmRunConfig | None = None,
+    memo_store: MemoStore | None = None,
     event_sink: EventSink | None = None,
     trace_update: Callable[[TurnTrace], None] | None = None,
 ) -> TurnTrace:
     """运行单个游戏回合，直到 end_turn 成功或判定失败。"""
 
     config = config or LlmRunConfig()
+    memo_store = memo_store or MemoStore()
     observation = tools.get_observation(session_id)["observation"]
     previous_turn_event = _previous_turn_event(tools, session_id)
     prompt = build_turn_prompt(
@@ -295,6 +305,7 @@ def run_llm_turn(
         objective=config.objective,
         max_tool_calls=config.max_tool_calls_per_turn,
         previous_turn_event=previous_turn_event,
+        memo_entries=memo_store.snapshot(),
     )
     turn_trace = TurnTrace(
         turn=observation["turn"],
@@ -313,6 +324,7 @@ def run_llm_turn(
         tools,
         session_id,
         max_tool_calls=config.max_tool_calls_per_turn,
+        memo_store=memo_store,
     )
 
     empty_responses = 0
@@ -509,6 +521,7 @@ def _restore_from_replay_archive(
         "session_id": session_id,
         "replay": replay,
         "traces": _traces_from_replay(replay),
+        "memo_entries": memo_entries_from_tool_steps(_sequence(replay.get("turns"))),
     }
 
 
@@ -535,8 +548,8 @@ def _replay_confirmed_tool_result(
         return
 
     arguments = _replay_tool_arguments(step)
-    arguments["session_id"] = session_id
-    replayed = tools.call_tool(str(name), arguments)
+    replay_harness = TurnToolHarness(tools, session_id, max_tool_calls=1_000_000)
+    replayed = replay_harness.call_tool(str(name), arguments)
     if replayed.get("ok") is not True:
         raise ValueError(
             f"failed to replay confirmed tool result {name}: {replayed.get('error')}"
@@ -734,33 +747,60 @@ def _format_tool_result_for_model(name: str, result: Mapping[str, Any]) -> str:
     elif name == "get_events" and isinstance(result.get("events"), Sequence):
         _append_events_lines(lines, result["events"])
     elif name == "preview_battle" and isinstance(result.get("preview"), Mapping):
-        _append_battle_preview_lines(lines, result["preview"])
+        _append_battle_preview_lines(lines, result["preview"], _result_refs(result))
+    elif name == "write_memo" and isinstance(result.get("memo"), Mapping):
+        memo = result["memo"]
+        lines[0] = (
+            "OK write_memo: "
+            f"已记录备忘 {memo.get('count')} 条，下回合开始会出现在提示词中"
+        )
+        dropped = memo.get("dropped_oldest")
+        if isinstance(dropped, int) and dropped:
+            lines.append(f"已丢弃最早 {dropped} 条备忘")
     else:
         event = result.get("event")
         if isinstance(event, Mapping):
             summary = event.get("summary")
             if summary:
                 lines[0] = f"OK {name}: {summary}"
-            _append_changes_lines(lines, event.get("changes"))
-            has_event_battles = _append_battles_lines(lines, event.get("battles"))
+            _append_changes_lines(lines, event.get("changes"), _result_refs(result))
+            has_event_battles = _append_battles_lines(
+                lines,
+                event.get("battles"),
+                _result_refs(result),
+            )
         else:
             has_event_battles = False
         turn_result = result.get("turn_result")
         if isinstance(turn_result, Mapping):
             if not has_event_battles:
-                _append_battles_lines(lines, turn_result.get("battles"))
+                _append_battles_lines(
+                    lines,
+                    turn_result.get("battles"),
+                    _result_refs(result),
+                )
             crafted = turn_result.get("crafted_equipment_ids")
             purchased = turn_result.get("purchased_upgrade_ids")
             if crafted:
-                lines.append(f"crafted_equipment_ids: {_join_values(crafted)}")
+                lines.append(
+                    "新装备: "
+                    f"{_join_refs(crafted, 'equipment', _result_refs(result))}"
+                )
             if purchased:
-                lines.append(f"purchased_upgrade_ids: {_join_values(purchased)}")
+                lines.append(
+                    "已购买升级: "
+                    f"{_join_refs(purchased, 'upgrade', _result_refs(result))}"
+                )
 
     return "\n".join(_append_budget_lines(lines, result))
 
 
-def _append_battle_preview_lines(lines: list[str], preview: Mapping[str, Any]) -> None:
-    outcome = "win" if preview.get("won") else "loss"
+def _append_battle_preview_lines(
+    lines: list[str],
+    preview: Mapping[str, Any],
+    refs: Mapping[str, Mapping[str, int]],
+) -> None:
+    outcome = "胜" if preview.get("won") else "负"
     adventurer_resources = preview.get("adventurer_resources")
     monster_resources = preview.get("monster_resources")
     before = (
@@ -782,7 +822,10 @@ def _append_battle_preview_lines(lines: list[str], preview: Mapping[str, Any]) -
     reward_text = _reward_inline(reward) if isinstance(reward, Mapping) else "{}"
     lines[0] = (
         "OK preview_battle: "
-        f"{preview.get('adventurer_id')} vs {preview.get('monster_id')} {outcome}"
+        f"冒险者 {display_ref(refs, 'adventurer', preview.get('adventurer_id'))} "
+        f"{preview.get('adventurer_name')} vs "
+        f"怪物 {display_ref(refs, 'monster', preview.get('monster_id'))} "
+        f"{preview.get('monster_name')} {outcome}"
     )
     lines.append(
         "资源: "
@@ -799,6 +842,7 @@ def _append_battle_preview_lines(lines: list[str], preview: Mapping[str, Any]) -
 
 
 def _append_observation_lines(lines: list[str], observation: Mapping[str, Any]) -> None:
+    refs = build_numeric_refs(observation)
     scoring = observation.get("scoring")
     scoring_seed = scoring.get("seed") if isinstance(scoring, Mapping) else None
     lines.append(
@@ -820,13 +864,16 @@ def _append_observation_lines(lines: list[str], observation: Mapping[str, Any]) 
             if not isinstance(stats, Mapping):
                 stats = {}
             equipment = adventurer.get("equipment") or ()
-            equipment_text = _equipment_inline(equipment)
+            equipment_text = _equipment_inline(equipment, refs)
             exp_text = _experience_inline(adventurer)
+            growth_text = _stat_modifier_inline(adventurer.get("stat_growth_per_level"))
             lines.append(
                 "- "
-                f"{adventurer.get('adventurer_id')} {adventurer.get('name')} "
+                f"{display_ref(refs, 'adventurer', adventurer.get('adventurer_id'))} "
+                f"{adventurer.get('name')} "
                 f"Lv{adventurer.get('level')} "
                 f"EXP {exp_text} "
+                f"成长 {growth_text} "
                 f"HP {resources.get('current_hp')}/{stats.get('hp')} "
                 f"MP {resources.get('current_mp')}/{stats.get('mp')} "
                 f"攻击 {stats.get('attack')} 防御 {stats.get('defense')} 速度 {stats.get('speed')} "
@@ -849,7 +896,8 @@ def _append_observation_lines(lines: list[str], observation: Mapping[str, Any]) 
             reward_text = _reward_inline(reward) if isinstance(reward, Mapping) else "{}"
             lines.append(
                 "- "
-                f"{monster.get('monster_id')} {monster.get('name')} "
+                f"{display_ref(refs, 'monster', monster.get('monster_id'))} "
+                f"{monster.get('name')} "
                 f"HP {stats.get('hp')} 攻击 {stats.get('attack')} 防御 {stats.get('defense')} 速度 {stats.get('speed')} "
                 f"技能 {skill_summary(monster.get('skills'))} "
                 f"奖励 {reward_text}"
@@ -872,7 +920,8 @@ def _append_observation_lines(lines: list[str], observation: Mapping[str, Any]) 
             )
             lines.append(
                 "- "
-                f"{recipe.get('recipe_id')} {recipe.get('name')} -> {recipe.get('output_name')} "
+                f"{display_ref(refs, 'recipe', recipe.get('recipe_id'))} "
+                f"{recipe.get('name')} -> {recipe.get('output_name')} "
                 f"属性 {_mapping_inline(recipe.get('output_stats'))} "
                 f"技能 {skill_summary(recipe.get('output_skills'))} "
                 f"成本 金币 {recipe.get('gold_cost')} 材料 {_mapping_inline(recipe.get('material_costs'))} "
@@ -887,10 +936,15 @@ def _append_observation_lines(lines: list[str], observation: Mapping[str, Any]) 
     if inventory:
         lines.append("装备库存:")
         for item in inventory:
-            equipped = item.get("equipped_by") or "空闲"
+            equipped = (
+                display_ref(refs, "adventurer", item.get("equipped_by"))
+                if item.get("equipped_by")
+                else "空闲"
+            )
             lines.append(
                 "- "
-                f"{item.get('instance_id')} {item.get('name')} 槽位 {item.get('slot')} "
+                f"{display_ref(refs, 'equipment', item.get('instance_id'))} "
+                f"{item.get('name')} 槽位 {item.get('slot')} "
                 f"属性 {_mapping_inline(item.get('stats'))} "
                 f"技能 {skill_summary(item.get('skills'))} "
                 f"装备者 {equipped}"
@@ -913,7 +967,8 @@ def _append_observation_lines(lines: list[str], observation: Mapping[str, Any]) 
             )
             lines.append(
                 "- "
-                f"{upgrade.get('upgrade_id')} {upgrade.get('name')} "
+                f"{display_ref(refs, 'upgrade', upgrade.get('upgrade_id'))} "
+                f"{upgrade.get('name')} "
                 f"金币 {upgrade.get('gold_cost')} "
                 f"属性 {_mapping_inline(upgrade.get('stats'))} "
                 f"技能 {skill_summary(upgrade.get('skills'))} {state}"
@@ -944,7 +999,11 @@ def _experience_inline(adventurer: Mapping[str, Any]) -> str:
     return f"{current}/{next_level.get('required')}"
 
 
-def _append_changes_lines(lines: list[str], changes: Any) -> None:
+def _append_changes_lines(
+    lines: list[str],
+    changes: Any,
+    refs: Mapping[str, Mapping[str, int]],
+) -> None:
     values = [
         change
         for change in _sequence(changes)
@@ -956,12 +1015,20 @@ def _append_changes_lines(lines: list[str], changes: Any) -> None:
     for change in values:
         label = change.get("label") or change.get("field") or change.get("type") or "change"
         if "before" in change:
-            lines.append(f"- {label}: {change.get('before')} -> {change.get('after')}")
+            lines.append(
+                f"- {label}: "
+                f"{_change_value_text(change.get('before'), refs)} -> "
+                f"{_change_value_text(change.get('after'), refs)}"
+            )
         else:
-            lines.append(f"- {label}: {change.get('after')}")
+            lines.append(f"- {label}: {_change_value_text(change.get('after'), refs)}")
 
 
-def _append_battles_lines(lines: list[str], battles: Any) -> bool:
+def _append_battles_lines(
+    lines: list[str],
+    battles: Any,
+    refs: Mapping[str, Mapping[str, int]],
+) -> bool:
     values = [
         battle
         for battle in _sequence(battles)
@@ -976,10 +1043,41 @@ def _append_battles_lines(lines: list[str], battles: Any) -> bool:
         reward_text = _reward_inline(reward) if isinstance(reward, Mapping) else "{}"
         lines.append(
             "- "
-            f"{battle.get('adventurer_id')} vs {battle.get('monster_id')}: {outcome}; "
+            f"{_battle_participant_text(battle, 'adventurer', refs)} vs "
+            f"{_battle_participant_text(battle, 'monster', refs)}: {outcome}; "
             f"奖励 {reward_text}"
         )
     return True
+
+
+def _change_value_text(
+    value: Any,
+    refs: Mapping[str, Mapping[str, int]],
+) -> str:
+    if isinstance(value, str):
+        return _replace_known_ids(value, refs)
+    return str(value)
+
+
+def _replace_known_ids(
+    value: str,
+    refs: Mapping[str, Mapping[str, int]],
+) -> str:
+    text = value
+    labels = {
+        "adventurer": "冒险者",
+        "monster": "怪物",
+        "recipe": "配方",
+        "upgrade": "升级",
+        "equipment": "装备",
+    }
+    for category, category_refs in refs.items():
+        label = labels.get(category, category)
+        if not isinstance(category_refs, Mapping):
+            continue
+        for canonical_id, ref in category_refs.items():
+            text = text.replace(str(canonical_id), f"{label}{ref}")
+    return text
 
 
 def _append_budget_lines(lines: list[str], result: Mapping[str, Any]) -> list[str]:
@@ -994,7 +1092,24 @@ def _append_budget_lines(lines: list[str], result: Mapping[str, Any]) -> list[st
     return lines
 
 
-def _equipment_inline(equipment: Any) -> str:
+def _battle_participant_text(
+    battle: Mapping[str, Any],
+    role: str,
+    refs: Mapping[str, Mapping[str, int]],
+) -> str:
+    name = battle.get(f"{role}_name")
+    category = "adventurer" if role == "adventurer" else "monster"
+    raw_id = battle.get(f"{role}_id")
+    ref = refs.get(category, {}).get(str(raw_id))
+    if isinstance(name, str) and name:
+        return f"{ref} {name}" if ref is not None else name
+    return str(ref) if ref is not None else str(raw_id)
+
+
+def _equipment_inline(
+    equipment: Any,
+    refs: Mapping[str, Mapping[str, int]],
+) -> str:
     items = [
         item
         for item in _sequence(equipment)
@@ -1003,7 +1118,7 @@ def _equipment_inline(equipment: Any) -> str:
     if not items:
         return "无"
     return ", ".join(
-        f"{item.get('instance_id')}:{item.get('name')}"
+        display_ref(refs, "equipment", item.get("instance_id"))
         for item in items
     )
 
@@ -1024,6 +1139,23 @@ def _mapping_inline(value: Any) -> str:
     return "{" + ", ".join(f"{_mapping_key(key)}:{item}" for key, item in value.items()) + "}"
 
 
+def _stat_modifier_inline(value: Any) -> str:
+    if not isinstance(value, Mapping):
+        return "无"
+    parts = []
+    for key in ("hp", "mp", "attack", "defense", "speed", "recovery"):
+        amount = value.get(key, 0)
+        if isinstance(amount, int | float) and amount:
+            parts.append(f"{_mapping_key(key)}+{_number_inline(amount)}")
+    return " ".join(parts) if parts else "无"
+
+
+def _number_inline(value: int | float) -> str:
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
+
+
 def _mapping_key(value: Any) -> str:
     labels = {
         "hp": "HP",
@@ -1038,6 +1170,22 @@ def _mapping_key(value: Any) -> str:
 
 def _join_values(value: Any) -> str:
     return ", ".join(str(item) for item in _sequence(value))
+
+
+def _join_refs(
+    value: Any,
+    category: str,
+    refs: Mapping[str, Mapping[str, int]],
+) -> str:
+    return ", ".join(
+        display_ref(refs, category, item)
+        for item in _sequence(value)
+    )
+
+
+def _result_refs(result: Mapping[str, Any]) -> Mapping[str, Mapping[str, int]]:
+    refs = result.get("_llm_refs")
+    return refs if isinstance(refs, Mapping) else {}
 
 
 def _response_with_call_ids(

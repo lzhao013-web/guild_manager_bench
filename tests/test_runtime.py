@@ -44,6 +44,7 @@ def test_game_session_applies_actions_and_builds_observation() -> None:
     assert observation["scoring"]["seed"] == definition.scoring.seed
     assert observation["equipment_inventory"][0]["template_id"] == "iron_sword"
     assert observation["crafting_recipes"][0]["can_craft"] is False
+    assert observation["adventurers"][0]["stat_growth_per_level"]["defense"] == 4
     assert observation["adventurers"][0]["next_level"]["remaining"] > 0
     assert observation["adventurers"][0]["equipment_slots"][0]["slot"] == "main_hand"
 

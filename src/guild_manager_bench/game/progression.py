@@ -59,12 +59,20 @@ def add_experience(
     return level, experience
 
 
-def level_stat_modifier(level: int, rules: ExperienceRules) -> CombatStatModifier:
+def level_stat_modifier(
+    level: int,
+    rules: ExperienceRules,
+    *,
+    stat_growth_per_level: CombatStatModifier | None = None,
+) -> CombatStatModifier:
     """返回指定等级相对 1 级的属性成长。"""
 
     _require_at_least("level", level, 1)
     _validate_rules(rules)
-    return scale_stat_modifier(rules.stat_growth_per_level, level - 1)
+    growth = rules.stat_growth_per_level if stat_growth_per_level is None else stat_growth_per_level
+    if not isinstance(growth, CombatStatModifier):
+        raise TypeError("stat_growth_per_level must be CombatStatModifier or None")
+    return scale_stat_modifier(growth, level - 1)
 
 
 def _validate_rules(rules: ExperienceRules) -> None:

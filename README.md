@@ -108,6 +108,28 @@ scoring:
 
 评分结果会写入 `run.score` 和 `replay.json` 顶层 `score` 字段。
 
+等级经验规则仍在 `game.yaml` 的 `experience` 中配置；其中 `stat_growth_per_level` 是默认成长。冒险者可以在 `adventurers.yaml` 中用同名字段覆盖默认成长，用于区分职业定位：
+
+```yaml
+adventurers:
+  - id: vanguard
+    name: 先锋
+    stats:
+      hp: 120
+      mp: 10
+      attack: 16
+      defense: 9
+      speed: 9
+      recovery: 6
+    stat_growth_per_level:
+      hp: 18
+      mp: 1
+      attack: 2
+      defense: 4
+      speed: 1
+      recovery: 2
+```
+
 ## HTTP 接口概览
 
 创建会话：
@@ -178,12 +200,16 @@ tools.end_turn(
 可注册给 agent 的工具 schema：
 
 ```python
-from guild_manager_bench.bench.llm import TurnToolHarness, tool_schemas
+from guild_manager_bench.bench.llm import TurnToolHarness
 
-schemas = tool_schemas()
 harness = TurnToolHarness(tools, session_id, max_tool_calls=20)
+schemas = harness.tool_schemas()
 result = harness.call_tool("get_observation")
 ```
+
+`TurnToolHarness` 暴露给 LLM 的工具参数使用当前回合可见列表左侧的数字 id；harness 会在内部映射回真实 `adventurer_id`、`monster_id`、`recipe_id`、`upgrade_id` 和 `equipment_instance_id`。
+
+Harness 还提供 `write_memo(content)`。模型可以用它记录任意重要文字；这些备忘会保存在当前 LLM run 中，并在下回合开始的 prompt 里以“备忘录”形式出现。调用该工具会消耗一次非 `end_turn` 工具预算。
 
 完整跑局使用模型无关的 runner。模型适配器只需要实现 `respond(messages, tools)`，返回 `LlmAgentResponse`：
 
@@ -255,6 +281,7 @@ Harness 内部方法：
 可注册给 agent 的工具：
 
 - `get_observation`
+- `write_memo`
 - `craft_equipment`
 - `purchase_upgrade`
 - `allocate_experience`

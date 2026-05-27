@@ -28,6 +28,8 @@ def test_load_game_definition_from_yaml_directory() -> None:
     assert definition.starting_gold == 20
     assert dict(definition.starting_materials) == {"iron_ore": 1}
     assert definition.content.adventurers[0].adventurer_id == "a1"
+    assert definition.content.adventurers[0].stat_growth_per_level is not None
+    assert definition.content.adventurers[0].stat_growth_per_level.attack == 12
     assert definition.content.monster_archetypes[0].archetype_id == "slime"
     assert definition.content.equipment_templates[0].equipment_id == "iron_sword"
     assert definition.content.crafting_recipes[0].recipe_id == "iron_sword_recipe"
@@ -230,6 +232,9 @@ def _write_game_yaml_files(path) -> None:
                   defense: 1
                   speed: 10
                   recovery: 0
+                stat_growth_per_level:
+                  hp: 8
+                  attack: 12
                 skills:
                   - id: power_strike
                     name: 强力打击

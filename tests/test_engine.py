@@ -18,6 +18,7 @@ from guild_manager_bench.game.engine import (
     apply_preparation_action,
     apply_turn,
     end_turn,
+    effective_adventurer_stats,
     new_game,
     spawn_monsters,
 )
@@ -219,6 +220,31 @@ def test_preparation_actions_can_be_applied_before_ending_turn() -> None:
 
     assert result.state.turn == 2
     assert result.battles[0].won
+
+
+def test_adventurer_specific_growth_overrides_global_growth() -> None:
+    definition = _definition()
+    adventurer = replace(
+        definition.content.adventurers[0],
+        stat_growth_per_level=CombatStatModifier(hp=4, attack=20),
+    )
+    definition = replace(
+        definition,
+        content=replace(definition.content, adventurers=(adventurer,)),
+    )
+    state = replace(new_game(definition), experience_pool=50)
+
+    state = apply_preparation_action(
+        definition,
+        state,
+        AllocateExperienceAction(adventurer_id="a1", amount=50),
+    )
+
+    updated = state.adventurers[0]
+    stats = effective_adventurer_stats(definition, state, updated)
+    assert updated.level == 2
+    assert stats.hp == 104
+    assert stats.attack == 30
 
 
 def _definition() -> GameDefinition:

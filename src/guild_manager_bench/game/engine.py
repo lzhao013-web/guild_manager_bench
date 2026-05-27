@@ -257,7 +257,11 @@ def effective_adventurer_stats(
 
     stats = apply_stat_modifier(
         adventurer.base_stats,
-        level_stat_modifier(adventurer.level, definition.content.experience_rules),
+        level_stat_modifier(
+            adventurer.level,
+            definition.content.experience_rules,
+            stat_growth_per_level=_adventurer_level_growth(definition, adventurer),
+        ),
     )
     stats = apply_equipment_stats(stats, _equipped_templates(definition, state, adventurer))
     return apply_upgrade_stats(stats, _unlocked_upgrades(definition, state))
@@ -466,6 +470,17 @@ def _scale_reward(reward: RewardBundle, factor: int) -> RewardBundle:
         gold=reward.gold * factor,
         experience=reward.experience * factor,
         materials=materials,
+    )
+
+
+def _adventurer_level_growth(
+    definition: GameDefinition,
+    adventurer: AdventurerState,
+) -> CombatStatModifier:
+    return (
+        adventurer.stat_growth_per_level
+        if adventurer.stat_growth_per_level is not None
+        else definition.content.experience_rules.stat_growth_per_level
     )
 
 

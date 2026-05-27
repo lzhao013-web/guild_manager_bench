@@ -10,6 +10,7 @@ from guild_manager_bench.bench.llm import (
     LlmAgentResponse,
     LlmRunConfig,
     LlmToolCall,
+    TurnToolHarness,
     build_turn_prompt,
     run_llm_game,
     run_llm_turn,
@@ -46,6 +47,22 @@ class SequenceAgent:
         response = self.responses[self.index]
         self.index += 1
         return response
+
+
+class RecordingSequenceAgent(SequenceAgent):
+    def __init__(self, responses: Sequence[LlmAgentResponse]) -> None:
+        super().__init__(responses)
+        self.prompts: list[str] = []
+
+    def respond(
+        self,
+        *,
+        messages: Sequence[Mapping[str, Any]],
+        tools: Sequence[Mapping[str, Any]],
+    ) -> LlmAgentResponse:
+        if messages:
+            self.prompts.append(str(messages[0].get("content", "")))
+        return super().respond(messages=messages, tools=tools)
 
 
 def test_run_llm_game_completes_when_agent_ends_each_turn() -> None:
@@ -203,8 +220,10 @@ def test_run_llm_turn_emits_debug_events() -> None:
     assert "seed 20260524" in tool_message["content"]
     assert "评分seed 20260526" in tool_message["content"]
     assert "冒险者:" in tool_message["content"]
+    assert "- 1 先锋" in tool_message["content"]
     assert "EXP 0/" in tool_message["content"]
-    assert "技能 power_strike 主动" in tool_message["content"]
+    assert "成长 HP+18 MP+1 攻击+2 防御+4 速度+1 恢复+2" in tool_message["content"]
+    assert "技能 强力打击 主动" in tool_message["content"]
     assert "效果 伤害倍率 2" in tool_message["content"]
 
 
@@ -216,6 +235,7 @@ def test_turn_prompt_includes_compact_skill_summaries() -> None:
 
     assert "回合流程：准备阶段可调用查询工具读取信息" in prompt
     assert "工具预算：本回合最多允许 3 次非 end_turn 工具调用" in prompt
+    assert "工具参数：所有对象 id 都使用下方列表左侧的数字 id" in prompt
     assert "本回合概览：" in prompt
     assert "可制作配方" in prompt
     assert "可购买升级" in prompt
@@ -223,10 +243,68 @@ def test_turn_prompt_includes_compact_skill_summaries() -> None:
     assert "当前怪物" in prompt
     assert "总潜在奖励" not in prompt
     assert "怪物最高攻击" not in prompt
+    assert "- 1 先锋" in prompt
     assert "EXP 0/" in prompt
-    assert "技能 power_strike 主动" in prompt
+    assert "成长 HP+18 MP+1 攻击+2 防御+4 速度+1 恢复+2" in prompt
+    assert "技能 强力打击 主动" in prompt
     assert "随机种子：游戏 20260524，评分 20260526" in prompt
     assert "效果 伤害倍率 1.8" in prompt
+
+
+def test_turn_prompt_shows_equipped_numeric_refs() -> None:
+    tools = GuildManagerTools.from_data_dir(_data_dir())
+    session_id = tools.start_session("equipped-prompt")["session_id"]
+    harness = TurnToolHarness(tools, session_id, max_tool_calls=3)
+
+    assert harness.call_tool("craft_equipment", {"recipe_id": 1})["ok"] is True
+    assert (
+        harness.call_tool(
+            "equip_item",
+            {
+                "adventurer_id": 1,
+                "equipment_instance_id": 1,
+            },
+        )["ok"]
+        is True
+    )
+
+    observation = tools.get_observation(session_id)["observation"]
+    prompt = build_turn_prompt(observation, max_tool_calls=3)
+
+    assert "1 先锋" in prompt
+    assert "装备 铁剑(id=1)" in prompt
+    assert "装备 无" not in prompt.split("1 先锋", 1)[1].splitlines()[0]
+
+
+def test_memo_tool_content_appears_in_next_turn_prompt() -> None:
+    memo_text = "下回合优先把经验给先锋。"
+    agent = RecordingSequenceAgent(
+        (
+            LlmAgentResponse(
+                tool_calls=(LlmToolCall("write_memo", {"content": memo_text}),)
+            ),
+            LlmAgentResponse(tool_calls=(LlmToolCall("end_turn", {"hunts": []}),)),
+        )
+    )
+
+    run = run_llm_game(
+        agent,
+        data_dir=_data_dir(),
+        config=LlmRunConfig(max_tool_calls_per_turn=2, archive_dir=None),
+    )
+
+    assert run.status == "completed"
+    assert any(
+        "当前回合：2/" in prompt and memo_text in prompt
+        for prompt in agent.prompts
+    )
+    assert all(
+        memo_text not in prompt
+        for prompt in agent.prompts
+        if "当前回合：1/" in prompt
+    )
+    assert run.turns[0].tool_calls[0].name == "write_memo"
+    assert run.turns[0].messages[2]["content"].startswith("OK write_memo")
 
 
 def test_preview_battle_tool_returns_compact_model_visible_text() -> None:

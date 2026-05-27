@@ -164,6 +164,7 @@ class AdventurerState:
     base_stats: CombatStats
     resources: CombatResources
     skills: tuple[Skill, ...] = ()
+    stat_growth_per_level: CombatStatModifier | None = None
     level: int = 1
     experience: int = 0
     equipment: EquipmentLoadout = field(default_factory=EquipmentLoadout)
@@ -177,6 +178,11 @@ class AdventurerState:
             raise TypeError("base_stats must be CombatStats")
         if not isinstance(self.resources, CombatResources):
             raise TypeError("resources must be CombatResources")
+        if self.stat_growth_per_level is not None and not isinstance(
+            self.stat_growth_per_level,
+            CombatStatModifier,
+        ):
+            raise TypeError("stat_growth_per_level must be CombatStatModifier or None")
         if not isinstance(self.equipment, EquipmentLoadout):
             raise TypeError("equipment must be EquipmentLoadout")
         object.__setattr__(self, "skills", tuple(self.skills))

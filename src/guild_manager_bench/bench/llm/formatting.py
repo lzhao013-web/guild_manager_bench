@@ -18,7 +18,7 @@ def skill_summary(skills: Any) -> str:
 
 def _skill_text(skill: Mapping[str, Any]) -> str:
     parts = [
-        str(skill.get("skill_id") or skill.get("name") or "skill"),
+        str(skill.get("name") or skill.get("skill_id") or "技能"),
         _skill_kind_text(skill.get("kind")),
     ]
     mp_cost = skill.get("mp_cost")

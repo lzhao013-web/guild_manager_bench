@@ -35,6 +35,17 @@ def test_tool_schemas_expose_agent_facing_tools() -> None:
         parameters = schema["parameters"]
         assert "session_id" not in parameters.get("required", [])
         assert "session_id" not in parameters.get("properties", {})
+    by_name = {schema["name"]: schema for schema in schemas}
+    assert (
+        by_name["allocate_experience"]["parameters"]["properties"]["adventurer_id"]["type"]
+        == "integer"
+    )
+    assert (
+        "数字 id"
+        in by_name["equip_item"]["parameters"]["properties"]["equipment_instance_id"][
+            "description"
+        ]
+    )
     assert "preview_battle" in {
         schema["name"]
         for schema in tool_schemas(expose_battle_preview=True)
@@ -59,6 +70,7 @@ def test_toolbox_runs_actions_through_typed_tools() -> None:
 
     observation = tools.get_observation(session_id)["observation"]
     assert observation["adventurers"][0]["equipment"][0]["instance_id"] == "eq_0001"
+
     ended = tools.end_turn(
         session_id,
         [
@@ -121,6 +133,48 @@ def test_turn_tool_harness_enforces_budget_and_still_allows_end_turn() -> None:
     assert ended["ok"] is True
     assert "next_state_summary" not in ended
     assert ended["tool_budget"]["allowed_tools"] == []
+
+
+def test_turn_tool_harness_records_memo() -> None:
+    tools = GuildManagerTools.from_data_dir(_data_dir())
+    session_id = tools.start_session("memo-test")["session_id"]
+    harness = TurnToolHarness(tools, session_id, max_tool_calls=2)
+
+    assert "write_memo" in {schema["name"] for schema in harness.tool_schemas()}
+
+    result = harness.call_tool("write_memo", {"content": "下回合优先处理装备。"})
+
+    assert result["ok"] is True
+    assert result["memo"]["count"] == 1
+    assert result["tool_budget"]["used"] == 1
+    assert harness.memo_store.snapshot() == ("下回合优先处理装备。",)
+
+
+def test_turn_tool_harness_resolves_numeric_ids() -> None:
+    tools = GuildManagerTools.from_data_dir(_data_dir())
+    session_id = tools.start_session("numeric-refs")["session_id"]
+    harness = TurnToolHarness(tools, session_id, max_tool_calls=3)
+
+    crafted = harness.call_tool("craft_equipment", {"recipe_id": 1})
+    assert crafted["ok"] is True
+
+    equipped = harness.call_tool(
+        "equip_item",
+        {
+            "adventurer_id": 1,
+            "equipment_instance_id": 1,
+        },
+    )
+    assert equipped["ok"] is True
+
+    observation = tools.get_observation(session_id)["observation"]
+    assert observation["adventurers"][0]["equipment"][0]["instance_id"] == "eq_0001"
+
+    ended = harness.call_tool(
+        "end_turn",
+        {"hunts": [{"adventurer_id": 1, "monster_id": 1}]},
+    )
+    assert ended["ok"] is True
 
 
 def test_battle_preview_tool_is_controlled_by_definition_switch() -> None:
