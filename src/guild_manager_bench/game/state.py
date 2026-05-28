@@ -145,6 +145,39 @@ class TurnRecoveryRules:
 
 
 @dataclass(frozen=True, slots=True)
+class StatSuffixMapping:
+    """单项属性成长浮动对应的名称后缀。"""
+
+    positive: str = ""
+    negative: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class RecruitVariationConfig:
+    """招募候选的浮动参数。"""
+
+    price_factor_range: tuple[float, float] = (0.85, 1.15)
+    stats_to_vary: int = 2
+    stat_variation_ratio: float = 0.12
+    hp_variation_ratio: float = 0.08
+    hp_min_variation: int = 4
+    stat_min_variation: int = 1
+    growth_to_vary: int = 1
+    growth_variation_amount: int = 1
+    price_stat_adjustment_ratio: float = 0.0
+    suffix_mapping: dict[str, StatSuffixMapping] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        _require_at_least("stats_to_vary", self.stats_to_vary, 0)
+        _require_at_least("growth_to_vary", self.growth_to_vary, 0)
+        _require_at_least("growth_variation_amount", self.growth_variation_amount, 0)
+        lo, hi = self.price_factor_range
+        if lo < 0 or hi < 0 or lo > hi:
+            raise ValueError("price_factor_range must be [non-negative, non-negative] with lo <= hi")
+        object.__setattr__(self, "suffix_mapping", dict(self.suffix_mapping))
+
+
+@dataclass(frozen=True, slots=True)
 class RecruitmentRules:
     """每回合招募候选与队伍人数上限规则。"""
 
@@ -152,6 +185,7 @@ class RecruitmentRules:
     first_turn_candidate_count: int | None = None
     initial_party_size_limit: int = 3
     maximum_party_size_limit: int = 6
+    variation: RecruitVariationConfig = RecruitVariationConfig()
 
     def __post_init__(self) -> None:
         _require_at_least("candidate_count", self.candidate_count, 0)
@@ -163,6 +197,8 @@ class RecruitmentRules:
             self.maximum_party_size_limit,
             self.initial_party_size_limit,
         )
+        if not isinstance(self.variation, RecruitVariationConfig):
+            raise TypeError("variation must be RecruitVariationConfig")
 
 
 @dataclass(frozen=True, slots=True)

@@ -44,6 +44,7 @@ from guild_manager_bench.game.state import (
     MonsterTierConfig,
     RecruitCandidate,
     RecruitableAdventurerTemplate,
+    RecruitVariationConfig,
     RewardBundle,
     SpawnedMonster,
 )
@@ -305,9 +306,10 @@ def spawn_recruit_candidates(definition: GameDefinition, turn: int) -> tuple[Rec
         selected = [rng.randrange(len(templates)) for _ in range(count)]
 
     candidates: list[RecruitCandidate] = []
+    config = definition.rules.recruitment.variation
     for index, template_index in enumerate(selected, start=1):
         template = templates[template_index]
-        candidates.append(_spawn_recruit_candidate(template, turn, index, rng))
+        candidates.append(_spawn_recruit_candidate(template, turn, index, rng, config))
     return tuple(candidates)
 
 
@@ -636,28 +638,43 @@ def _spawn_recruit_candidate(
     turn: int,
     index: int,
     rng: random.Random,
+    config: RecruitVariationConfig,
 ) -> RecruitCandidate:
-    price_factor = rng.uniform(0.85, 1.15)
-    recruit_gold = max(0, int(round(template.recruit_gold * price_factor)))
+    varied_stats = _vary_combat_stats(template.base_stats, rng, config)
+    varied_growth, growth_key, growth_delta = _vary_stat_modifier(
+        template.stat_growth_per_level, rng, config,
+    )
+
+    # Price: base → stat adjustment → random factor
+    template_total = sum(_stat_values(template.base_stats).values())
+    varied_total = sum(_stat_values(varied_stats).values())
+    stat_adjustment = (varied_total - template_total) / max(1, template_total) * config.price_stat_adjustment_ratio
+    adjusted_gold = template.recruit_gold * (1 + stat_adjustment)
+    lo, hi = config.price_factor_range
+    price_factor = rng.uniform(lo, hi)
+    recruit_gold = max(0, int(round(adjusted_gold * price_factor)))
+
+    # Suffix from growth variation
+    suffix = ""
+    if growth_key and growth_delta != 0 and growth_key in config.suffix_mapping:
+        mapping = config.suffix_mapping[growth_key]
+        suffix = mapping.positive if growth_delta > 0 else mapping.negative
+    name = f"{template.name}{suffix}"
+
     return RecruitCandidate(
         candidate_id=f"turn_{turn}_recruit_{index}",
         template_id=template.template_id,
-        name=_variant_candidate_name(template.name, rng),
+        name=name,
         recruit_gold=recruit_gold,
-        base_stats=_vary_combat_stats(template.base_stats, rng),
-        stat_growth_per_level=_vary_stat_modifier(template.stat_growth_per_level, rng),
+        base_stats=varied_stats,
+        stat_growth_per_level=varied_growth,
         skills=template.skills,
         level_skill_unlocks=template.level_skill_unlocks,
     )
 
 
-def _variant_candidate_name(name: str, rng: random.Random) -> str:
-    suffixes = ("", "", "", "·锐意", "·稳健", "·灵巧")
-    return f"{name}{suffixes[rng.randrange(len(suffixes))]}"
-
-
-def _vary_combat_stats(stats: CombatStats, rng: random.Random) -> CombatStats:
-    values = {
+def _stat_values(stats: CombatStats) -> dict[str, int]:
+    return {
         "hp": stats.hp,
         "mp": stats.mp,
         "attack": stats.attack,
@@ -665,15 +682,24 @@ def _vary_combat_stats(stats: CombatStats, rng: random.Random) -> CombatStats:
         "speed": stats.speed,
         "recovery": stats.recovery,
     }
+
+
+def _vary_combat_stats(
+    stats: CombatStats, rng: random.Random, config: RecruitVariationConfig,
+) -> CombatStats:
+    values = _stat_values(stats)
     keys = list(values)
     rng.shuffle(keys)
-    for key in keys[:2]:
-        magnitude = _stat_variation_amount(key, values[key])
+    for key in keys[: config.stats_to_vary]:
+        magnitude = _stat_variation_amount(key, values[key], config)
         values[key] = _clamp_stat_value(key, values[key] + rng.randint(-magnitude, magnitude))
     return CombatStats(**values)
 
 
-def _vary_stat_modifier(modifier: CombatStatModifier, rng: random.Random) -> CombatStatModifier:
+def _vary_stat_modifier(
+    modifier: CombatStatModifier, rng: random.Random, config: RecruitVariationConfig,
+) -> tuple[CombatStatModifier, str, int]:
+    """Return (varied_modifier, varied_key, delta). delta is -1/0/+1."""
     values = {
         "hp": modifier.hp,
         "mp": modifier.mp,
@@ -682,17 +708,18 @@ def _vary_stat_modifier(modifier: CombatStatModifier, rng: random.Random) -> Com
         "speed": modifier.speed,
         "recovery": modifier.recovery,
     }
-    key = rng.choice(tuple(values))
-    values[key] = max(0, values[key] + rng.randint(-1, 1))
-    return CombatStatModifier(**values)
+    keys = list(values)
+    rng.shuffle(keys)
+    varied_key = keys[0]
+    delta = rng.randint(-config.growth_variation_amount, config.growth_variation_amount)
+    values[varied_key] = max(0, values[varied_key] + delta)
+    return CombatStatModifier(**values), varied_key, delta
 
 
-def _stat_variation_amount(key: str, value: int) -> int:
+def _stat_variation_amount(key: str, value: int, config: RecruitVariationConfig) -> int:
     if key == "hp":
-        return max(4, round(value * 0.08))
-    if key == "mp":
-        return max(1, round(max(value, 1) * 0.12))
-    return max(1, round(max(value, 1) * 0.12))
+        return max(config.hp_min_variation, round(value * config.hp_variation_ratio))
+    return max(config.stat_min_variation, round(max(value, 1) * config.stat_variation_ratio))
 
 
 def _clamp_stat_value(key: str, value: int) -> int:

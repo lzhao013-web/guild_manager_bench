@@ -1,0 +1,15 @@
+rules:
+  max_turns: 30
+  monster_spawn:
+    count_curve:
+      base: 3
+  recruitment:
+    initial_party_size_limit: 3
+    maximum_party_size_limit: 6
+
+starting:
+  gold: 175
+
+experience:
+  base_required_experience: 60
+  required_experience_growth: 20

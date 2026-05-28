@@ -39,8 +39,10 @@ from guild_manager_bench.game.state import (
     MonsterArchetype,
     MonsterSpawnRules,
     RecruitableAdventurerTemplate,
+    RecruitVariationConfig,
     RecruitmentRules,
     RewardBundle,
+    StatSuffixMapping,
     TurnRecoveryRules,
 )
 from guild_manager_bench.game.skills import Skill, SkillCondition, SkillEffect
@@ -517,3 +519,109 @@ def _template_by_id(
         if template.template_id == template_id:
             return template
     raise AssertionError(f"unknown template {template_id}")
+
+
+def _definition_with_variation(**overrides) -> GameDefinition:
+    definition = _definition_with_recruitment()
+    variation = RecruitVariationConfig(**overrides)
+    return replace(
+        definition,
+        rules=replace(
+            definition.rules,
+            recruitment=replace(definition.rules.recruitment, variation=variation),
+        ),
+    )
+
+
+def test_price_adjusts_with_stat_variation() -> None:
+    definition = _definition_with_variation(price_stat_adjustment_ratio=1.0)
+    candidates = spawn_recruit_candidates(definition, 1)
+
+    for candidate in candidates:
+        template = _template_by_id(definition, candidate.template_id)
+        template_total = sum([
+            template.base_stats.hp, template.base_stats.mp,
+            template.base_stats.attack, template.base_stats.defense,
+            template.base_stats.speed, template.base_stats.recovery,
+        ])
+        candidate_total = sum([
+            candidate.base_stats.hp, candidate.base_stats.mp,
+            candidate.base_stats.attack, candidate.base_stats.defense,
+            candidate.base_stats.speed, candidate.base_stats.recovery,
+        ])
+        # Price should differ from pure random factor due to stat adjustment
+        stat_ratio = (candidate_total - template_total) / max(1, template_total)
+        expected_base = template.recruit_gold * (1 + stat_ratio)
+        # recruit_gold should be within price_factor_range of expected_base
+        assert candidate.recruit_gold >= int(round(expected_base * 0.85)) - 2
+        assert candidate.recruit_gold <= int(round(expected_base * 1.15)) + 2
+
+
+def test_suffix_from_growth_variation() -> None:
+    suffix_map = {
+        "hp": StatSuffixMapping(positive="·坚壁", negative="·脆弱"),
+        "mp": StatSuffixMapping(positive="·灵感", negative="·枯竭"),
+        "attack": StatSuffixMapping(positive="·锐利", negative="·迟钝"),
+        "defense": StatSuffixMapping(positive="·铁壁", negative="·破绽"),
+        "speed": StatSuffixMapping(positive="·疾风", negative="·迟缓"),
+        "recovery": StatSuffixMapping(positive="·生机", negative="·萎靡"),
+    }
+    definition = _definition_with_variation(suffix_mapping=suffix_map)
+    candidates = spawn_recruit_candidates(definition, 1)
+
+    # At least one candidate should have a suffix (out of 4 candidates on turn 1)
+    names = [c.name for c in candidates]
+    has_suffix = any(
+        any(s in name for s in ["·坚壁", "·脆弱", "·灵感", "·枯竭", "·锐利", "·迟钝",
+                                  "·铁壁", "·破绽", "·疾风", "·迟缓", "·生机", "·萎靡"])
+        for name in names
+    )
+    assert has_suffix, f"No candidates have growth suffixes: {names}"
+
+    # Suffixes should be valid ones from the mapping
+    valid_suffixes = set()
+    for m in suffix_map.values():
+        if m.positive:
+            valid_suffixes.add(m.positive)
+        if m.negative:
+            valid_suffixes.add(m.negative)
+
+    for candidate in candidates:
+        template = _template_by_id(definition, candidate.template_id)
+        base_name = template.name
+        if candidate.name != base_name:
+            suffix = candidate.name.removeprefix(base_name)
+            assert suffix in valid_suffixes, f"Unexpected suffix '{suffix}' for {candidate.name}"
+
+
+def test_custom_stats_to_vary() -> None:
+    definition = _definition_with_variation(stats_to_vary=4)
+    candidates = spawn_recruit_candidates(definition, 1)
+
+    # With 4 stats varied, almost all candidates should differ from template
+    for candidate in candidates:
+        template = _template_by_id(definition, candidate.template_id)
+        stat_diffs = sum(
+            1 for a, b in [
+                (candidate.base_stats.hp, template.base_stats.hp),
+                (candidate.base_stats.mp, template.base_stats.mp),
+                (candidate.base_stats.attack, template.base_stats.attack),
+                (candidate.base_stats.defense, template.base_stats.defense),
+                (candidate.base_stats.speed, template.base_stats.speed),
+                (candidate.base_stats.recovery, template.base_stats.recovery),
+            ]
+            if a != b
+        )
+        # With 4 of 6 stats varied, should have at least 1 difference
+        assert stat_diffs >= 1
+
+
+def test_zero_stat_adjustment_gives_old_price_behavior() -> None:
+    definition = _definition_with_variation(price_stat_adjustment_ratio=0.0)
+    candidates = spawn_recruit_candidates(definition, 1)
+
+    for candidate in candidates:
+        template = _template_by_id(definition, candidate.template_id)
+        # Without stat adjustment, price is just template.recruit_gold * [0.85, 1.15]
+        assert candidate.recruit_gold >= int(round(template.recruit_gold * 0.85)) - 1
+        assert candidate.recruit_gold <= int(round(template.recruit_gold * 1.15)) + 1

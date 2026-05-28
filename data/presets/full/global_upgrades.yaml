@@ -1,0 +1,12 @@
+upgrades:
+  - id: roster_expansion_1
+    name: 扩编 I
+    gold: 250
+    party_size_bonus: 1
+
+  - id: roster_expansion_2
+    name: 扩编 II
+    gold: 700
+    required:
+      - roster_expansion_1
+    party_size_bonus: 2

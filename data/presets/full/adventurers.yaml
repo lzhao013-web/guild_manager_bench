@@ -1,0 +1,18 @@
+recruitable_adventurers:
+  - id: warrior
+    name: 战士
+    recruit_gold: 50
+    stats:
+      hp: 120
+      mp: 0
+      attack: 18
+      defense: 8
+      speed: 10
+      recovery: 5
+    stat_growth_per_level:
+      hp: 14
+      mp: 0
+      attack: 3
+      defense: 2
+      speed: 1
+      recovery: 1

@@ -27,9 +27,11 @@ from guild_manager_bench.game.state import (
     MonsterSpawnRules,
     MonsterTierConfig,
     RecruitableAdventurerTemplate,
+    RecruitVariationConfig,
     RecruitmentRules,
     RewardBundle,
     ScoringRules,
+    StatSuffixMapping,
     TurnRecoveryRules,
 )
 from guild_manager_bench.game.upgrades import GlobalUpgrade
@@ -305,6 +307,34 @@ def _parse_recruitment_rules(data: Mapping[str, Any]) -> RecruitmentRules:
             data.get("maximum_party_size_limit", 6),
             "rules.recruitment.maximum_party_size_limit",
         ),
+        variation=_parse_variation_config(_mapping(data.get("variation", {}), "rules.recruitment.variation")),
+    )
+
+
+def _parse_variation_config(data: Mapping[str, Any]) -> RecruitVariationConfig:
+    raw_range = data.get("price_factor_range", [0.85, 1.15])
+    if not isinstance(raw_range, (list, tuple)) or len(raw_range) != 2:
+        raise ValueError("variation.price_factor_range must be a 2-element list")
+    suffix_data = data.get("suffix_mapping", {})
+    suffix_mapping: dict[str, StatSuffixMapping] = {}
+    if isinstance(suffix_data, Mapping):
+        for stat_key, entry in suffix_data.items():
+            if isinstance(entry, Mapping):
+                suffix_mapping[stat_key] = StatSuffixMapping(
+                    positive=str(entry.get("positive", "")),
+                    negative=str(entry.get("negative", "")),
+                )
+    return RecruitVariationConfig(
+        price_factor_range=(float(raw_range[0]), float(raw_range[1])),
+        stats_to_vary=_int(data.get("stats_to_vary", 2), "rules.recruitment.variation.stats_to_vary"),
+        stat_variation_ratio=float(data.get("stat_variation_ratio", 0.12)),
+        hp_variation_ratio=float(data.get("hp_variation_ratio", 0.08)),
+        hp_min_variation=_int(data.get("hp_min_variation", 4), "rules.recruitment.variation.hp_min_variation"),
+        stat_min_variation=_int(data.get("stat_min_variation", 1), "rules.recruitment.variation.stat_min_variation"),
+        growth_to_vary=_int(data.get("growth_to_vary", 1), "rules.recruitment.variation.growth_to_vary"),
+        growth_variation_amount=_int(data.get("growth_variation_amount", 1), "rules.recruitment.variation.growth_variation_amount"),
+        price_stat_adjustment_ratio=float(data.get("price_stat_adjustment_ratio", 0.0)),
+        suffix_mapping=suffix_mapping,
     )
 
 

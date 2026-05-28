@@ -23,6 +23,23 @@ rules:
     first_turn_candidate_count: 6
     initial_party_size_limit: 3
     maximum_party_size_limit: 6
+    variation:
+      price_factor_range: [0.85, 1.15]
+      stats_to_vary: 2
+      stat_variation_ratio: 0.12
+      hp_variation_ratio: 0.08
+      hp_min_variation: 4
+      stat_min_variation: 1
+      growth_to_vary: 1
+      growth_variation_amount: 1
+      price_stat_adjustment_ratio: 1.0
+      suffix_mapping:
+        hp: { positive: "·坚壁", negative: "·脆弱" }
+        mp: { positive: "·灵感", negative: "·枯竭" }
+        attack: { positive: "·锐利", negative: "·迟钝" }
+        defense: { positive: "·铁壁", negative: "·破绽" }
+        speed: { positive: "·疾风", negative: "·迟缓" }
+        recovery: { positive: "·生机", negative: "·萎靡" }
 
 starting:
   gold: 150
