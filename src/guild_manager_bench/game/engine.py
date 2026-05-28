@@ -270,15 +270,19 @@ def spawn_monsters(definition: GameDefinition, turn: int) -> tuple[SpawnedMonste
         return ()
     spawn_rules = definition.rules.monster_spawn
     count = spawn_rules.count_curve.value_at(turn)
+    if count == 0:
+        return ()
     stat_factor = spawn_rules.stat_growth_curve.value_at(turn)
     reward_factor = spawn_rules.reward_growth_curve.value_at(turn)
     rng = random.Random(definition.rules.seed * 1_000_003 + turn)
+    eligible_archetypes = _eligible_monster_archetypes(
+        definition.content.monster_archetypes,
+        turn,
+    )
     monsters: list[SpawnedMonster] = []
 
     for index in range(count):
-        archetype = definition.content.monster_archetypes[
-            rng.randrange(len(definition.content.monster_archetypes))
-        ]
+        archetype = _select_monster_archetype(rng, eligible_archetypes)
         tier = _roll_tier(rng, spawn_rules)
         tc = _tier_config(spawn_rules, tier)
         bonus_skills = _sample_bonus_skills(rng, tc)
@@ -318,6 +322,30 @@ def _recruit_candidate_count(definition: GameDefinition, turn: int) -> int:
     if turn == 1 and rules.first_turn_candidate_count is not None:
         return rules.first_turn_candidate_count
     return rules.candidate_count
+
+
+def _eligible_monster_archetypes(
+    archetypes: tuple[MonsterArchetype, ...],
+    turn: int,
+) -> tuple[MonsterArchetype, ...]:
+    unlocked = tuple(archetype for archetype in archetypes if archetype.min_turn <= turn)
+    if not unlocked:
+        raise ValueError(f"no monster archetypes unlocked on turn {turn}")
+    eligible = tuple(archetype for archetype in unlocked if archetype.spawn_weight > 0)
+    if not eligible:
+        raise ValueError(f"no monster archetypes with positive spawn weight on turn {turn}")
+    return eligible
+
+
+def _select_monster_archetype(
+    rng: random.Random,
+    archetypes: tuple[MonsterArchetype, ...],
+) -> MonsterArchetype:
+    return rng.choices(
+        archetypes,
+        weights=[archetype.spawn_weight for archetype in archetypes],
+        k=1,
+    )[0]
 
 
 def effective_adventurer_stats(

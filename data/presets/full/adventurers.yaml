@@ -1,6 +1,6 @@
 recruitable_adventurers:
-  - id: warrior
-    name: 战士
+  - id: mercenary_warrior
+    name: 佣兵战士
     recruit_gold: 50
     stats:
       hp: 120
@@ -16,3 +16,242 @@ recruitable_adventurers:
       defense: 2
       speed: 1
       recovery: 1
+    level_skill_unlocks:
+      - level: 3
+        skills: [power_strike]
+      - level: 6
+        skills: [battle_fury]
+      - level: 9
+        skills: [crushing_blow]
+
+  - id: foot_knight
+    name: 步行骑士
+    recruit_gold: 50
+    stats:
+      hp: 150
+      mp: 0
+      attack: 14
+      defense: 12
+      speed: 7
+      recovery: 6
+    stat_growth_per_level:
+      hp: 18
+      mp: 0
+      attack: 2
+      defense: 3
+      speed: 1
+      recovery: 1
+    level_skill_unlocks:
+      - level: 3
+        skills: [shield_stance]
+      - level: 6
+        skills: [iron_bastion]
+      - level: 9
+        skills: [last_stand]
+
+  - id: woodland_archer
+    name: 林地射手
+    recruit_gold: 50
+    stats:
+      hp: 95
+      mp: 0
+      attack: 19
+      defense: 5
+      speed: 15
+      recovery: 4
+    stat_growth_per_level:
+      hp: 10
+      mp: 0
+      attack: 3
+      defense: 1
+      speed: 3
+      recovery: 1
+    level_skill_unlocks:
+      - level: 3
+        skills: [opening_shot]
+      - level: 6
+        skills: [hunter_instinct]
+      - level: 9
+        skills: [precision_shot]
+
+  - id: spellshot_mage
+    name: 魔弹法师
+    recruit_gold: 50
+    stats:
+      hp: 85
+      mp: 24
+      attack: 15
+      defense: 4
+      speed: 10
+      recovery: 4
+    stat_growth_per_level:
+      hp: 8
+      mp: 4
+      attack: 4
+      defense: 1
+      speed: 1
+      recovery: 1
+    skills: [arcane_bolt]
+    level_skill_unlocks:
+      - level: 3
+        skills: [arcane_focus]
+      - level: 6
+        skills: [mana_burst]
+      - level: 9
+        skills: [arcane_barrage]
+
+  - id: cleric
+    name: 神官
+    recruit_gold: 50
+    stats:
+      hp: 110
+      mp: 36
+      attack: 13
+      defense: 8
+      speed: 8
+      recovery: 8
+    stat_growth_per_level:
+      hp: 12
+      mp: 5
+      attack: 2
+      defense: 2
+      speed: 1
+      recovery: 2
+    skills: [minor_heal]
+    level_skill_unlocks:
+      - level: 3
+        skills: [soothing_light]
+      - level: 6
+        skills: [holy_smite]
+      - level: 9
+        skills: [divine_protection]
+
+  - id: jester
+    name: 小丑
+    recruit_gold: 50
+    stats:
+      hp: 90
+      mp: 18
+      attack: 16
+      defense: 5
+      speed: 14
+      recovery: 4
+    stat_growth_per_level:
+      hp: 9
+      mp: 2
+      attack: 3
+      defense: 1
+      speed: 3
+      recovery: 1
+    skills: [opening_trick]
+    level_skill_unlocks:
+      - level: 3
+        skills: [trick_escape]
+      - level: 6
+        skills: [chaotic_strike]
+      - level: 9
+        skills: [grand_finale]
+
+  - id: ascetic_monk
+    name: 苦行僧
+    recruit_gold: 50
+    stats:
+      hp: 125
+      mp: 0
+      attack: 13
+      defense: 9
+      speed: 8
+      recovery: 7
+    stat_growth_per_level:
+      hp: 15
+      mp: 0
+      attack: 3
+      defense: 2
+      speed: 1
+      recovery: 2
+    skills: [enduring_focus]
+    level_skill_unlocks:
+      - level: 3
+        skills: [steady_breath]
+      - level: 6
+        skills: [iron_body]
+      - level: 9
+        skills: [inner_force]
+
+  - id: bloodfiend
+    name: 吸血魔
+    recruit_gold: 50
+    stats:
+      hp: 105
+      mp: 22
+      attack: 17
+      defense: 5
+      speed: 11
+      recovery: 3
+    stat_growth_per_level:
+      hp: 12
+      mp: 3
+      attack: 4
+      defense: 1
+      speed: 2
+      recovery: 1
+    skills: [blood_drain]
+    level_skill_unlocks:
+      - level: 3
+        skills: [crimson_pact]
+      - level: 6
+        skills: [blood_frenzy]
+      - level: 9
+        skills: [life_tap]
+
+  - id: cannoneer
+    name: 炮手
+    recruit_gold: 50
+    stats:
+      hp: 100
+      mp: 18
+      attack: 13
+      defense: 6
+      speed: 7
+      recovery: 4
+    stat_growth_per_level:
+      hp: 11
+      mp: 2
+      attack: 3
+      defense: 2
+      speed: 1
+      recovery: 1
+    skills: [armor_piercing_shot]
+    level_skill_unlocks:
+      - level: 3
+        skills: [shrapnel_burst]
+      - level: 6
+        skills: [loading_drill]
+      - level: 9
+        skills: [siege_cannon]
+
+  - id: plague_mage
+    name: 瘟疫法师
+    recruit_gold: 50
+    stats:
+      hp: 82
+      mp: 30
+      attack: 11
+      defense: 4
+      speed: 9
+      recovery: 4
+    stat_growth_per_level:
+      hp: 8
+      mp: 5
+      attack: 2
+      defense: 1
+      speed: 1
+      recovery: 1
+    skills: [plague_curse]
+    level_skill_unlocks:
+      - level: 3
+        skills: [withering_touch]
+      - level: 6
+        skills: [epidemic]
+      - level: 9
+        skills: [necrotic_blast]

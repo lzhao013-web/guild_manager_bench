@@ -185,7 +185,7 @@ class RecruitmentRules:
     first_turn_candidate_count: int | None = None
     initial_party_size_limit: int = 3
     maximum_party_size_limit: int = 6
-    variation: RecruitVariationConfig = RecruitVariationConfig()
+    variation: RecruitVariationConfig = field(default_factory=RecruitVariationConfig)
 
     def __post_init__(self) -> None:
         _require_at_least("candidate_count", self.candidate_count, 0)
@@ -209,6 +209,8 @@ class MonsterArchetype:
     name: str
     base_stats: CombatStats
     base_reward: RewardBundle
+    spawn_weight: int = 1
+    min_turn: int = 1
     stat_growth: CombatStatModifier = field(default_factory=CombatStatModifier)
     reward_growth: RewardBundle = field(default_factory=RewardBundle)
     skills: tuple[Skill, ...] = ()
@@ -216,6 +218,8 @@ class MonsterArchetype:
     def __post_init__(self) -> None:
         _require_non_empty("archetype_id", self.archetype_id)
         _require_non_empty("name", self.name)
+        _require_at_least("spawn_weight", self.spawn_weight, 0)
+        _require_at_least("min_turn", self.min_turn, 1)
         if not isinstance(self.base_stats, CombatStats):
             raise TypeError("base_stats must be CombatStats")
         if not isinstance(self.base_reward, RewardBundle):

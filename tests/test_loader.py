@@ -40,6 +40,8 @@ def test_load_game_definition_from_yaml_directory() -> None:
     assert definition.content.recruitable_adventurers[0].recruit_gold == 30
     assert definition.content.recruitable_adventurers[0].stat_growth_per_level.defense == 2
     assert definition.content.monster_archetypes[0].archetype_id == "slime"
+    assert definition.content.monster_archetypes[0].spawn_weight == 7
+    assert definition.content.monster_archetypes[0].min_turn == 1
     assert definition.content.equipment_templates[0].equipment_id == "iron_sword"
     assert definition.content.crafting_recipes[0].recipe_id == "iron_sword_recipe"
     assert definition.content.global_upgrades[0].upgrade_id == "weapon_training"
@@ -387,6 +389,8 @@ def _write_game_yaml_files(path) -> None:
                 experience: 60
                 materials:
                   slime_gel: 1
+              spawn_weight: 7
+              min_turn: 1
               stat_growth:
                 hp: 10
                 attack: 1

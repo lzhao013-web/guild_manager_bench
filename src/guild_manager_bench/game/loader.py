@@ -191,6 +191,8 @@ def _parse_monsters(values: list[Any], registry: dict[str, Skill]) -> tuple[Mons
                 base_reward=_parse_reward(
                     _mapping(_required(data, "base_reward"), f"monsters[{index}].base_reward")
                 ),
+                spawn_weight=_int(data.get("spawn_weight", 1), f"monsters[{index}].spawn_weight"),
+                min_turn=_int(data.get("min_turn", 1), f"monsters[{index}].min_turn"),
                 stat_growth=_parse_stat_modifier(
                     _mapping(data.get("stat_growth", {}), f"monsters[{index}].stat_growth")
                 ),

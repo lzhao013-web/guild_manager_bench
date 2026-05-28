@@ -93,6 +93,26 @@ llm:
 
 开启后，LLM harness 会额外注册 `preview_battle`。该工具每次只能预览一名冒险者和一个怪物的 1v1 战斗，不改变游戏状态，但会消耗一次非 `end_turn` 工具预算。
 
+`monsters.yaml` 可以给每个怪物配置刷新权重和最早刷新回合。未配置时默认 `spawn_weight: 1`、`min_turn: 1`；`spawn_weight: 0` 表示不会被随机刷新：
+
+```yaml
+monsters:
+  - id: ogre
+    name: 食人魔
+    spawn_weight: 1
+    min_turn: 4
+    base_stats:
+      hp: 115
+      mp: 0
+      attack: 19
+      defense: 9
+      speed: 5
+      recovery: 0
+    base_reward:
+      gold: 34
+      experience: 78
+```
+
 Preset 也可以在 `game.yaml` 中配置终局评分。默认评分器会在游戏结束后生成固定 Arena 波次，模拟大量 1v1 战斗，并按队伍在每波中的最优分配聚合为 0-100 分：
 
 ```yaml

@@ -27,6 +27,7 @@ SkillEffectType = Literal[
     "mp_restore",
     "damage_bonus",
     "true_damage",
+    "atk_ratio_damage",
     "self_damage",
     "apply_status",
     "stat_bonus",
@@ -160,6 +161,7 @@ class SkillEffect:
     `mp_restore` 会恢复指定目标 MP。
     `damage_bonus` 会在普通攻击伤害基础上增加固定伤害。
     `true_damage` 会造成不受防御影响的固定伤害。
+    `atk_ratio_damage` 会造成 int(攻击力 × value) 的无视防御伤害。
     `self_damage` 会对技能使用者造成固定伤害。
     `apply_status` 会施加一个单场战斗内状态。
     `stat_bonus` 和 `stat_multiplier` 用于被动技能的属性修正。
@@ -237,6 +239,17 @@ class SkillEffect:
                 raise ValueError("true_damage must not have stat")
             if self.target != "target":
                 raise ValueError("true_damage target must be target")
+            return
+
+        if self.effect_type == "atk_ratio_damage":
+            if not isinstance(self.value, int | float):
+                raise TypeError("atk_ratio_damage value must be a number")
+            if self.value <= 0:
+                raise ValueError("atk_ratio_damage value must be > 0")
+            if self.stat is not None:
+                raise ValueError("atk_ratio_damage must not have stat")
+            if self.target != "target":
+                raise ValueError("atk_ratio_damage target must be target")
             return
 
         if self.effect_type == "self_damage":

@@ -303,6 +303,13 @@ def _apply_active_skill_effects(
             total_damage += damage
             continue
 
+        if effect.effect_type == "atk_ratio_damage":
+            actor_attack = _effective_stats(actor, target, action_index=action_index).attack
+            damage = int(actor_attack * effect.value)
+            _apply_damage(target, damage)
+            total_damage += damage
+            continue
+
         if effect.effect_type == "self_damage":
             _apply_damage(actor, int(effect.value))
             continue

@@ -75,6 +75,61 @@ def test_spawn_monsters_uses_count_and_growth_curves() -> None:
     assert dict(monsters[0].reward.materials) == {"slime_gel": 2}
 
 
+def test_spawn_monsters_filters_archetypes_by_min_turn() -> None:
+    definition = _definition()
+    early = definition.content.monster_archetypes[0]
+    late = MonsterArchetype(
+        archetype_id="late_ogre",
+        name="迟来的食人魔",
+        base_stats=CombatStats(hp=80, mp=0, attack=12, defense=5, speed=4, recovery=0),
+        base_reward=RewardBundle(gold=15, experience=30),
+        spawn_weight=100,
+        min_turn=3,
+    )
+    definition = replace(
+        definition,
+        rules=replace(
+            definition.rules,
+            max_turns=3,
+            monster_spawn=MonsterSpawnRules(count_curve=IntCurve(base=6)),
+        ),
+        content=replace(
+            definition.content,
+            monster_archetypes=(early, late),
+        ),
+    )
+
+    monsters = spawn_monsters(definition, 1)
+
+    assert {monster.archetype_id for monster in monsters} == {"slime"}
+
+
+def test_spawn_monsters_skips_zero_weight_archetypes() -> None:
+    definition = _definition()
+    disabled = replace(definition.content.monster_archetypes[0], spawn_weight=0)
+    enabled = MonsterArchetype(
+        archetype_id="enabled",
+        name="可刷新怪物",
+        base_stats=CombatStats(hp=20, mp=0, attack=2, defense=1, speed=1, recovery=0),
+        base_reward=RewardBundle(gold=3, experience=5),
+    )
+    definition = replace(
+        definition,
+        rules=replace(
+            definition.rules,
+            monster_spawn=MonsterSpawnRules(count_curve=IntCurve(base=6)),
+        ),
+        content=replace(
+            definition.content,
+            monster_archetypes=(disabled, enabled),
+        ),
+    )
+
+    monsters = spawn_monsters(definition, 1)
+
+    assert {monster.archetype_id for monster in monsters} == {"enabled"}
+
+
 def test_apply_turn_runs_preparation_battle_rewards_and_next_turn_spawn() -> None:
     definition = _definition()
     state = replace(new_game(definition), experience_pool=50)

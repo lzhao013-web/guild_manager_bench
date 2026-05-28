@@ -33,3 +33,6 @@ runs/
 Thumbs.db
 .DS_Store
 
+# Simulation scripts
+sim_*.py
+

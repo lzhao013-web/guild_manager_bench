@@ -1,11 +1,24 @@
 rules:
   max_turns: 30
+  seed: 42
   monster_spawn:
     count_curve:
       base: 3
+    stat_growth_curve:
+      base: 0
+      per_turn: 1
+    reward_growth_curve:
+      base: 0
+      per_turn: 1
   recruitment:
     initial_party_size_limit: 3
     maximum_party_size_limit: 6
+  turn_recovery:
+    hp: 5
+    mp: 4
+    hp_percent: 0.08
+    mp_percent: 0.15
+    use_recovery_stat: true
 
 starting:
   gold: 175

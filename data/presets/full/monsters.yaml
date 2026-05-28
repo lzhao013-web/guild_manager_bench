@@ -1,6 +1,9 @@
 monsters:
+  # ===== Early (min_turn: 1) =====
   - id: goblin
     name: 哥布林
+    spawn_weight: 15
+    min_turn: 1
     base_stats:
       hp: 65
       mp: 0
@@ -11,3 +14,298 @@ monsters:
     base_reward:
       gold: 20
       experience: 45
+    stat_growth:
+      hp: 3
+      attack: 1
+    reward_growth:
+      gold: 1
+      experience: 2
+
+  - id: bat
+    name: 蝙蝠
+    spawn_weight: 10
+    min_turn: 1
+    base_stats:
+      hp: 42
+      mp: 0
+      attack: 14
+      defense: 2
+      speed: 17
+      recovery: 0
+    base_reward:
+      gold: 14
+      experience: 32
+    stat_growth:
+      hp: 2
+      attack: 1
+    reward_growth:
+      gold: 1
+      experience: 1
+
+  - id: ogre
+    name: 食人魔
+    spawn_weight: 5
+    min_turn: 1
+    base_stats:
+      hp: 115
+      mp: 0
+      attack: 19
+      defense: 9
+      speed: 5
+      recovery: 0
+    base_reward:
+      gold: 34
+      experience: 78
+    stat_growth:
+      hp: 4
+      attack: 1
+      defense: 1
+    reward_growth:
+      gold: 2
+      experience: 3
+
+  - id: orc_warrior
+    name: 兽人战士
+    spawn_weight: 10
+    min_turn: 1
+    base_stats:
+      hp: 84
+      mp: 0
+      attack: 20
+      defense: 6
+      speed: 10
+      recovery: 0
+    base_reward:
+      gold: 28
+      experience: 64
+    stat_growth:
+      hp: 3
+      attack: 1
+    reward_growth:
+      gold: 1
+      experience: 2
+
+  - id: warg
+    name: 座狼
+    spawn_weight: 10
+    min_turn: 1
+    base_stats:
+      hp: 66
+      mp: 0
+      attack: 22
+      defense: 3
+      speed: 12
+      recovery: 0
+    base_reward:
+      gold: 26
+      experience: 58
+    stat_growth:
+      hp: 3
+      attack: 1
+    reward_growth:
+      gold: 1
+      experience: 2
+
+  - id: goblin_shaman
+    name: 哥布林萨满
+    spawn_weight: 10
+    min_turn: 1
+    base_stats:
+      hp: 60
+      mp: 18
+      attack: 13
+      defense: 3
+      speed: 8
+      recovery: 0
+    skills: [shaman_spark]
+    base_reward:
+      gold: 24
+      experience: 55
+    stat_growth:
+      hp: 2
+      attack: 1
+    reward_growth:
+      gold: 1
+      experience: 2
+
+  # ===== Mid (min_turn: 8) =====
+  - id: orc_captain
+    name: 兽人队长
+    spawn_weight: 15
+    min_turn: 8
+    base_stats:
+      hp: 130
+      mp: 0
+      attack: 24
+      defense: 12
+      speed: 8
+      recovery: 0
+    base_reward:
+      gold: 38
+      experience: 85
+    stat_growth:
+      hp: 4
+      attack: 1
+      defense: 1
+    reward_growth:
+      gold: 2
+      experience: 3
+    skills: [war_cry]
+
+  - id: dark_mage
+    name: 暗黑法师
+    spawn_weight: 15
+    min_turn: 8
+    base_stats:
+      hp: 90
+      mp: 24
+      attack: 18
+      defense: 6
+      speed: 11
+      recovery: 0
+    base_reward:
+      gold: 36
+      experience: 80
+    stat_growth:
+      hp: 3
+      attack: 1
+    reward_growth:
+      gold: 2
+      experience: 3
+    skills: [dark_bolt]
+
+  - id: giant_spider
+    name: 巨蛛
+    spawn_weight: 15
+    min_turn: 8
+    base_stats:
+      hp: 95
+      mp: 0
+      attack: 20
+      defense: 5
+      speed: 14
+      recovery: 0
+    base_reward:
+      gold: 34
+      experience: 76
+    stat_growth:
+      hp: 3
+      attack: 1
+    reward_growth:
+      gold: 2
+      experience: 3
+    skills: [poison_spit]
+
+  - id: skeleton_knight
+    name: 骷髅骑士
+    spawn_weight: 15
+    min_turn: 8
+    base_stats:
+      hp: 110
+      mp: 0
+      attack: 22
+      defense: 10
+      speed: 9
+      recovery: 0
+    base_reward:
+      gold: 36
+      experience: 82
+    stat_growth:
+      hp: 3
+      attack: 1
+      defense: 1
+    reward_growth:
+      gold: 2
+      experience: 3
+    skills: [bone_armor]
+
+  # ===== Late (min_turn: 18) =====
+  - id: gargoyle
+    name: 石像鬼
+    spawn_weight: 20
+    min_turn: 18
+    base_stats:
+      hp: 150
+      mp: 0
+      attack: 26
+      defense: 14
+      speed: 6
+      recovery: 0
+    base_reward:
+      gold: 48
+      experience: 108
+    stat_growth:
+      hp: 3
+      attack: 1
+      defense: 1
+    reward_growth:
+      gold: 2
+      experience: 4
+    skills: [stone_hide]
+
+  - id: wyvern
+    name: 双足飞龙
+    spawn_weight: 20
+    min_turn: 18
+    base_stats:
+      hp: 130
+      mp: 0
+      attack: 28
+      defense: 6
+      speed: 16
+      recovery: 0
+    base_reward:
+      gold: 52
+      experience: 115
+    stat_growth:
+      hp: 3
+      attack: 1
+    reward_growth:
+      gold: 2
+      experience: 4
+    skills: [dragon_breath]
+
+  - id: lich
+    name: 巫妖
+    spawn_weight: 20
+    min_turn: 18
+    base_stats:
+      hp: 110
+      mp: 30
+      attack: 20
+      defense: 6
+      speed: 12
+      recovery: 0
+    base_reward:
+      gold: 54
+      experience: 120
+    stat_growth:
+      hp: 3
+      attack: 1
+    reward_growth:
+      gold: 2
+      experience: 4
+    skills: [soul_drain]
+
+  - id: demon_guard
+    name: 恶魔卫士
+    spawn_weight: 20
+    min_turn: 18
+    base_stats:
+      hp: 160
+      mp: 0
+      attack: 30
+      defense: 12
+      speed: 10
+      recovery: 0
+    base_reward:
+      gold: 56
+      experience: 128
+    stat_growth:
+      hp: 4
+      attack: 1
+      defense: 1
+    reward_growth:
+      gold: 3
+      experience: 5
+    skills: [demon_slam]
