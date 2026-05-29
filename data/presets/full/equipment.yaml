@@ -1,1 +1,335 @@
-equipment: []
+equipment:
+  # ===== T1 Heavy Set =====
+  - id: t1_heavy_sword
+    name: 铁剑
+    slot: main_hand
+    stats:
+      attack: 5
+
+  - id: t1_heavy_shield
+    name: 兽骨盾
+    slot: off_hand
+    stats:
+      defense: 4
+      hp: 10
+
+  - id: t1_heavy_armor
+    name: 链甲
+    slot: armor
+    stats:
+      defense: 5
+      hp: 20
+
+  - id: t1_heavy_helmet
+    name: 爪冠盔
+    slot: helmet
+    stats:
+      defense: 3
+      hp: 8
+
+  - id: t1_heavy_boots
+    name: 厚皮靴
+    slot: boots
+    stats:
+      defense: 2
+      hp: 5
+      speed: 1
+
+  # ===== T1 Light Set =====
+  - id: t1_light_bow
+    name: 猎弓
+    slot: two_hand
+    stats:
+      attack: 7
+      speed: 2
+
+  - id: t1_light_armor
+    name: 皮甲
+    slot: armor
+    stats:
+      defense: 2
+      speed: 2
+      hp: 10
+
+  - id: t1_light_helmet
+    name: 羽饰帽
+    slot: helmet
+    stats:
+      speed: 1
+      attack: 2
+      hp: 5
+
+  - id: t1_light_boots
+    name: 皮靴
+    slot: boots
+    stats:
+      speed: 3
+      defense: 1
+
+  - id: t1_light_charm
+    name: 草药护符
+    slot: accessory
+    stats:
+      recovery: 3
+      mp: 5
+
+  # ===== T1 Specials =====
+  - id: t1_staff
+    name: 学徒法杖
+    slot: two_hand
+    stats:
+      attack: 3
+      mp: 15
+    allowed_classes: [spellshot_mage, plague_mage]
+
+  - id: t1_prayer_beads
+    name: 疗愈符印
+    slot: accessory
+    stats:
+      recovery: 6
+      defense: 2
+      mp: 3
+    skills: [healing_pulse]
+    allowed_classes: [cleric, ascetic_monk]
+
+  - id: t1_hunter_bracer
+    name: 猎手护腕
+    slot: accessory
+    stats:
+      attack: 3
+      speed: 4
+    allowed_classes: [woodland_archer, cannoneer]
+
+  # ===== T2 Heavy Set =====
+  - id: t2_heavy_sword
+    name: 秘银长剑
+    slot: main_hand
+    stats:
+      attack: 10
+      defense: 2
+
+  - id: t2_heavy_shield
+    name: 秘银盾
+    slot: off_hand
+    stats:
+      defense: 7
+      hp: 20
+
+  - id: t2_heavy_armor
+    name: 锁子甲
+    slot: armor
+    stats:
+      defense: 8
+      hp: 30
+    skills: [steady_stance]
+
+  - id: t2_heavy_helmet
+    name: 战盔
+    slot: helmet
+    stats:
+      defense: 5
+      hp: 15
+
+  - id: t2_heavy_boots
+    name: 秘银靴
+    slot: boots
+    stats:
+      defense: 4
+      hp: 10
+      speed: 2
+
+  # ===== T2 Light Set =====
+  - id: t2_light_bow
+    name: 复合弓
+    slot: two_hand
+    stats:
+      attack: 12
+      speed: 4
+
+  - id: t2_light_armor
+    name: 蛛丝甲
+    slot: armor
+    stats:
+      defense: 4
+      speed: 3
+      hp: 15
+
+  - id: t2_light_helmet
+    name: 游侠盔
+    slot: helmet
+    stats:
+      speed: 2
+      attack: 3
+      hp: 8
+
+  - id: t2_light_boots
+    name: 附魔靴
+    slot: boots
+    stats:
+      speed: 5
+      defense: 2
+      mp: 5
+
+  - id: t2_light_charm
+    name: 魔力护符
+    slot: accessory
+    stats:
+      attack: 4
+      mp: 10
+
+  # ===== T2 Specials =====
+  - id: t2_warhammer
+    name: 破甲战锤
+    slot: two_hand
+    stats:
+      attack: 18
+    skills: [shatter_strike]
+    allowed_classes: [foot_knight, mercenary_warrior]
+
+  - id: t2_mage_orb
+    name: 法师宝珠
+    slot: accessory
+    stats:
+      attack: 3
+      mp: 20
+    skills: [arcane_surge]
+    allowed_classes: [spellshot_mage, plague_mage]
+
+  - id: t2_cannon_kit
+    name: 炮手弹药箱
+    slot: off_hand
+    stats:
+      attack: 4
+      mp: 12
+    skills: [rapid_reload]
+    allowed_classes: [cannoneer]
+
+  - id: t2_blood_ring
+    name: 暗杀者戒指
+    slot: accessory
+    stats:
+      attack: 8
+      speed: 3
+    skills: [venom_coat]
+    allowed_classes: [bloodfiend, jester]
+
+  # ===== T3 Heavy Set =====
+  - id: t3_heavy_sword
+    name: 龙鳞大剑
+    slot: main_hand
+    stats:
+      attack: 16
+      defense: 4
+      hp: 10
+
+  - id: t3_heavy_shield
+    name: 龙鳞盾
+    slot: off_hand
+    stats:
+      defense: 12
+      hp: 35
+      recovery: 3
+
+  - id: t3_heavy_armor
+    name: 龙鳞甲
+    slot: armor
+    stats:
+      defense: 14
+      hp: 50
+    skills: [dragon_hide]
+
+  - id: t3_heavy_helmet
+    name: 龙骨盔
+    slot: helmet
+    stats:
+      defense: 7
+      hp: 20
+      recovery: 2
+
+  - id: t3_heavy_boots
+    name: 龙鳞靴
+    slot: boots
+    stats:
+      defense: 5
+      hp: 15
+      speed: 2
+
+  # ===== T3 Light Set =====
+  - id: t3_light_bow
+    name: 暗影长弓
+    slot: two_hand
+    stats:
+      attack: 18
+      speed: 5
+
+  - id: t3_light_armor
+    name: 暗影外套
+    slot: armor
+    stats:
+      defense: 6
+      speed: 5
+      hp: 25
+
+  - id: t3_light_helmet
+    name: 夜翼盔
+    slot: helmet
+    stats:
+      speed: 3
+      attack: 5
+      mp: 8
+
+  - id: t3_light_boots
+    name: 暗影靴
+    slot: boots
+    stats:
+      speed: 8
+      defense: 3
+      hp: 10
+    skills: [shadow_step]
+
+  - id: t3_light_charm
+    name: 龙心坠饰
+    slot: accessory
+    stats:
+      attack: 6
+      hp: 15
+      recovery: 4
+
+  # ===== T3 Specials =====
+  - id: t3_dragon_greatsword
+    name: 龙牙巨剑
+    slot: two_hand
+    stats:
+      attack: 28
+      speed: 1
+    skills: [dragon_cleave]
+    allowed_classes: [mercenary_warrior]
+
+  - id: t3_wisdom_crown
+    name: 智慧之冠
+    slot: helmet
+    stats:
+      attack: 5
+      mp: 35
+      recovery: 5
+    skills: [plague_touch]
+    allowed_classes: [spellshot_mage, plague_mage]
+
+  - id: t3_siege_cannon
+    name: 传奇火炮
+    slot: two_hand
+    stats:
+      attack: 22
+      mp: 15
+    skills: [siege_barrage]
+    allowed_classes: [cannoneer]
+
+  - id: t3_dragon_resolve
+    name: 龙魂战铠
+    slot: armor
+    stats:
+      defense: 20
+      hp: 70
+      recovery: 4
+    skills: [fortify]
+    allowed_classes: [foot_knight, ascetic_monk]

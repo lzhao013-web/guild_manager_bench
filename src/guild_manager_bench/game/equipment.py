@@ -43,6 +43,7 @@ class EquipmentTemplate:
     slot: EquipmentSlot
     stat_modifier: CombatStatModifier = field(default_factory=CombatStatModifier)
     skills: tuple[Skill, ...] = ()
+    allowed_classes: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         _require_non_empty("equipment_id", self.equipment_id)
@@ -54,6 +55,7 @@ class EquipmentTemplate:
         for skill in self.skills:
             if not isinstance(skill, Skill):
                 raise TypeError("skills must be Skill")
+        object.__setattr__(self, "allowed_classes", tuple(self.allowed_classes))
 
 
 @dataclass(frozen=True, slots=True)

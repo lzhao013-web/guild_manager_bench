@@ -14,12 +14,17 @@ monsters:
     base_reward:
       gold: 20
       experience: 45
+      materials:
+        iron_ore: 1
+        bone: 1
     stat_growth:
       hp: 3
       attack: 1
     reward_growth:
       gold: 1
       experience: 2
+      materials:
+        bone: 1
 
   - id: bat
     name: 蝙蝠
@@ -35,12 +40,17 @@ monsters:
     base_reward:
       gold: 14
       experience: 32
+      materials:
+        beast_hide: 1
+        bone: 1
     stat_growth:
       hp: 2
       attack: 1
     reward_growth:
       gold: 1
       experience: 1
+      materials:
+        beast_hide: 1
 
   - id: ogre
     name: 食人魔
@@ -56,6 +66,9 @@ monsters:
     base_reward:
       gold: 34
       experience: 78
+      materials:
+        iron_ore: 1
+        sharp_claw: 1
     stat_growth:
       hp: 4
       attack: 1
@@ -63,6 +76,8 @@ monsters:
     reward_growth:
       gold: 2
       experience: 3
+      materials:
+        sharp_claw: 1
 
   - id: orc_warrior
     name: 兽人战士
@@ -78,12 +93,17 @@ monsters:
     base_reward:
       gold: 28
       experience: 64
+      materials:
+        iron_ore: 1
+        sharp_claw: 1
     stat_growth:
       hp: 3
       attack: 1
     reward_growth:
       gold: 1
       experience: 2
+      materials:
+        iron_ore: 1
 
   - id: warg
     name: 座狼
@@ -99,12 +119,17 @@ monsters:
     base_reward:
       gold: 26
       experience: 58
+      materials:
+        beast_hide: 1
+        sharp_claw: 1
     stat_growth:
       hp: 3
       attack: 1
     reward_growth:
       gold: 1
       experience: 2
+      materials:
+        sharp_claw: 1
 
   - id: goblin_shaman
     name: 哥布林萨满
@@ -121,12 +146,17 @@ monsters:
     base_reward:
       gold: 24
       experience: 55
+      materials:
+        herb: 1
+        arcane_dust: 1
     stat_growth:
       hp: 2
       attack: 1
     reward_growth:
       gold: 1
       experience: 2
+      materials:
+        herb: 1
 
   # ===== Mid (min_turn: 8) =====
   - id: orc_captain
@@ -143,6 +173,9 @@ monsters:
     base_reward:
       gold: 38
       experience: 85
+      materials:
+        mithril_shard: 1
+        sharp_claw: 1
     stat_growth:
       hp: 4
       attack: 1
@@ -150,6 +183,8 @@ monsters:
     reward_growth:
       gold: 2
       experience: 3
+      materials:
+        mithril_shard: 1
     skills: [war_cry]
 
   - id: dark_mage
@@ -166,12 +201,17 @@ monsters:
     base_reward:
       gold: 36
       experience: 80
+      materials:
+        arcane_dust: 1
+        herb: 1
     stat_growth:
       hp: 3
       attack: 1
     reward_growth:
       gold: 2
       experience: 3
+      materials:
+        arcane_dust: 1
     skills: [dark_bolt]
 
   - id: giant_spider
@@ -188,12 +228,17 @@ monsters:
     base_reward:
       gold: 34
       experience: 76
+      materials:
+        spider_silk: 1
+        beast_hide: 1
     stat_growth:
       hp: 3
       attack: 1
     reward_growth:
       gold: 2
       experience: 3
+      materials:
+        spider_silk: 1
     skills: [poison_spit]
 
   - id: skeleton_knight
@@ -210,6 +255,9 @@ monsters:
     base_reward:
       gold: 36
       experience: 82
+      materials:
+        mithril_shard: 1
+        bone: 1
     stat_growth:
       hp: 3
       attack: 1
@@ -217,6 +265,8 @@ monsters:
     reward_growth:
       gold: 2
       experience: 3
+      materials:
+        bone: 1
     skills: [bone_armor]
 
   # ===== Late (min_turn: 18) =====
@@ -234,6 +284,9 @@ monsters:
     base_reward:
       gold: 48
       experience: 108
+      materials:
+        dragon_scale: 1
+        mithril_shard: 1
     stat_growth:
       hp: 3
       attack: 1
@@ -241,6 +294,8 @@ monsters:
     reward_growth:
       gold: 2
       experience: 4
+      materials:
+        dragon_scale: 1
     skills: [stone_hide]
 
   - id: wyvern
@@ -257,12 +312,17 @@ monsters:
     base_reward:
       gold: 52
       experience: 115
+      materials:
+        dragon_scale: 1
+        dragon_blood: 1
     stat_growth:
       hp: 3
       attack: 1
     reward_growth:
       gold: 2
       experience: 4
+      materials:
+        dragon_blood: 1
     skills: [dragon_breath]
 
   - id: lich
@@ -279,12 +339,17 @@ monsters:
     base_reward:
       gold: 54
       experience: 120
+      materials:
+        soul_shard: 1
+        arcane_dust: 1
     stat_growth:
       hp: 3
       attack: 1
     reward_growth:
       gold: 2
       experience: 4
+      materials:
+        soul_shard: 1
     skills: [soul_drain]
 
   - id: demon_guard
@@ -301,6 +366,9 @@ monsters:
     base_reward:
       gold: 56
       experience: 128
+      materials:
+        demon_core: 1
+        dragon_scale: 1
     stat_growth:
       hp: 4
       attack: 1
@@ -308,4 +376,6 @@ monsters:
     reward_growth:
       gold: 3
       experience: 5
+      materials:
+        demon_core: 1
     skills: [demon_slam]

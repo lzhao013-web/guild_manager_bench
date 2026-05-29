@@ -3,16 +3,37 @@ rules:
   seed: 42
   monster_spawn:
     count_curve:
-      base: 3
+      base: 5.0
+      per_turn: 0.5
+      maximum: 10.0
     stat_growth_curve:
       base: 0
       per_turn: 1
     reward_growth_curve:
-      base: 0
-      per_turn: 1
+      base: 0.0
+      per_turn: 0.3
   recruitment:
+    candidate_count: 3
+    first_turn_candidate_count: 6
     initial_party_size_limit: 3
     maximum_party_size_limit: 6
+    variation:
+      price_factor_range: [0.8, 1.2]
+      stats_to_vary: 3
+      stat_variation_ratio: 0.15
+      hp_variation_ratio: 0.10
+      hp_min_variation: 5
+      stat_min_variation: 1
+      growth_to_vary: 2
+      growth_variation_amount: 1
+      price_stat_adjustment_ratio: 0.8
+      suffix_mapping:
+        hp: { positive: "·坚壁", negative: "·脆弱" }
+        mp: { positive: "·灵感", negative: "·枯竭" }
+        attack: { positive: "·锐利", negative: "·迟钝" }
+        defense: { positive: "·铁壁", negative: "·破绽" }
+        speed: { positive: "·疾风", negative: "·迟缓" }
+        recovery: { positive: "·生机", negative: "·萎靡" }
   turn_recovery:
     hp: 5
     mp: 4
@@ -22,7 +43,24 @@ rules:
 
 starting:
   gold: 175
+  materials:
+    iron_ore: 1
+    bone: 1
+    herb: 1
 
 experience:
   base_required_experience: 60
   required_experience_growth: 20
+  max_level: 10
+
+scoring:
+  mode: endgame_arena
+  seed: 20260529
+  waves: 1000
+  wave_size: 6
+  difficulty_factors: [30, 32, 35, 40, 45, 50]
+  resource_mode: full
+  aggregation: best_assignment
+
+llm:
+  expose_battle_preview: true

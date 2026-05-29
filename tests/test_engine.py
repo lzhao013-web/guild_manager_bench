@@ -34,6 +34,7 @@ from guild_manager_bench.game.state import (
     GameContent,
     GameDefinition,
     GameRules,
+    FloatCurve,
     IntCurve,
     LevelSkillUnlock,
     MonsterArchetype,
@@ -91,7 +92,7 @@ def test_spawn_monsters_filters_archetypes_by_min_turn() -> None:
         rules=replace(
             definition.rules,
             max_turns=3,
-            monster_spawn=MonsterSpawnRules(count_curve=IntCurve(base=6)),
+            monster_spawn=MonsterSpawnRules(count_curve=FloatCurve(base=6.0)),
         ),
         content=replace(
             definition.content,
@@ -117,7 +118,7 @@ def test_spawn_monsters_skips_zero_weight_archetypes() -> None:
         definition,
         rules=replace(
             definition.rules,
-            monster_spawn=MonsterSpawnRules(count_curve=IntCurve(base=6)),
+            monster_spawn=MonsterSpawnRules(count_curve=FloatCurve(base=6.0)),
         ),
         content=replace(
             definition.content,
@@ -513,7 +514,7 @@ def _definition() -> GameDefinition:
             max_turns=2,
             seed=1,
             monster_spawn=MonsterSpawnRules(
-                count_curve=IntCurve(base=2, per_turn=1),
+                count_curve=FloatCurve(base=2.0, per_turn=1.0),
             ),
         ),
         starting_gold=20,

@@ -10,3 +10,39 @@ upgrades:
     required:
       - roster_expansion_1
     party_size_bonus: 2
+
+  - id: iron_fortress
+    name: 钢铁堡垒
+    gold: 80
+    stats:
+      hp: 15
+      defense: 6
+    skills: [fortifying_shout]
+
+  - id: shadow_guild
+    name: 暗影公会
+    gold: 70
+    stats:
+      speed: 4
+      attack: 2
+    skills: [shadow_retreat]
+
+  - id: arcane_forge
+    name: 奥术锻造
+    gold: 90
+    stats:
+      mp: 8
+      attack: 3
+    skills: [mana_surge]
+
+  - id: war_college
+    name: 战争学院
+    gold: 100
+    required:
+      - iron_fortress
+    stats:
+      hp: 12
+      attack: 5
+      defense: 3
+      speed: 2
+    skills: [battle_hymn]

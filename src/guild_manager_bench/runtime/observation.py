@@ -90,6 +90,7 @@ def _adventurer_to_dict(
     return {
         "adventurer_id": adventurer.adventurer_id,
         "name": adventurer.name,
+        "template_id": adventurer.template_id,
         "level": adventurer.level,
         "experience": adventurer.experience,
         "stat_growth_per_level": _stat_modifier_to_dict(
@@ -160,6 +161,7 @@ def _equipment_instance_to_dict(item, equipment_templates, equipped_by: str | No
         "slot": template.slot,
         "stats": _stat_modifier_to_dict(template.stat_modifier),
         "skills": [_skill_to_dict(skill) for skill in template.skills],
+        "allowed_classes": list(template.allowed_classes),
         "equipped_by": equipped_by,
     }
 
@@ -180,6 +182,7 @@ def _recipe_to_dict(definition, state, recipe) -> dict[str, Any]:
         "output_slot": template.slot,
         "output_stats": _stat_modifier_to_dict(template.stat_modifier),
         "output_skills": [_skill_to_dict(skill) for skill in template.skills],
+        "output_allowed_classes": list(template.allowed_classes),
         "gold_cost": recipe.gold_cost,
         "material_costs": {
             cost.material_id: cost.quantity

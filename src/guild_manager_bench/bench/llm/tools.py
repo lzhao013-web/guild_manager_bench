@@ -789,7 +789,7 @@ _BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
 _BATTLE_PREVIEW_SCHEMA: dict[str, Any] = {
     "name": "preview_battle",
     "description": (
-        "预览一场单独的 1v1 战斗，不改变状态；每次只能传入一个冒险者和一个怪物。"
+        "预览一场单独的 1v1 战斗，不改变状态；每次只能传入一个冒险者和一个怪物。只能传入已经招募成功的冒险者，传入招募候选中的冒险者会失败。"
     ),
     "parameters": {
         "type": "object",

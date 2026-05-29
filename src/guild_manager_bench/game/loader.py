@@ -17,6 +17,7 @@ from guild_manager_bench.game.skills import (
 )
 from guild_manager_bench.game.state import (
     AdventurerState,
+    FloatCurve,
     GameContent,
     GameDefinition,
     GameRules,
@@ -218,6 +219,10 @@ def _parse_equipment(values: list[Any], registry: dict[str, Skill]) -> tuple[Equ
                     _mapping(_stat_modifier_data(data), f"equipment[{index}].stats")
                 ),
                 skills=_resolve_skills(data.get("skills", ()), registry, f"equipment[{index}].skills"),
+                allowed_classes=tuple(
+                    _str(item, f"equipment[{index}].allowed_classes[{ci}]")
+                    for ci, item in enumerate(data.get("allowed_classes", ()))
+                ),
             )
         )
     return tuple(equipment)
@@ -271,11 +276,11 @@ def _parse_game_rules(data: Mapping[str, Any], tier_configs: Mapping[str, Monste
         max_turns=_int(_required(data, "max_turns"), "rules.max_turns"),
         seed=_int(data.get("seed", 0), "rules.seed"),
         monster_spawn=MonsterSpawnRules(
-            count_curve=_parse_int_curve(_mapping(_required(spawn, "count_curve"), "rules.monster_spawn.count_curve")),
+            count_curve=_parse_float_curve(_mapping(_required(spawn, "count_curve"), "rules.monster_spawn.count_curve")),
             stat_growth_curve=_parse_int_curve(
                 _mapping(spawn.get("stat_growth_curve", {}), "rules.monster_spawn.stat_growth_curve")
             ),
-            reward_growth_curve=_parse_int_curve(
+            reward_growth_curve=_parse_float_curve(
                 _mapping(spawn.get("reward_growth_curve", {}), "rules.monster_spawn.reward_growth_curve")
             ),
             elite=tier_configs.get("elite", MonsterTierConfig()),
@@ -395,6 +400,15 @@ def _parse_int_curve(data: Mapping[str, Any]) -> IntCurve:
         per_turn=_int(data.get("per_turn", 0), "curve.per_turn"),
         minimum=_int(data.get("minimum", 0), "curve.minimum"),
         maximum=None if data.get("maximum") is None else _int(data.get("maximum"), "curve.maximum"),
+    )
+
+
+def _parse_float_curve(data: Mapping[str, Any]) -> FloatCurve:
+    return FloatCurve(
+        base=float(data.get("base", 0.0)),
+        per_turn=float(data.get("per_turn", 0.0)),
+        minimum=float(data.get("minimum", 0.0)),
+        maximum=None if data.get("maximum") is None else float(data.get("maximum")),
     )
 
 

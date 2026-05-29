@@ -66,6 +66,33 @@ class IntCurve:
 
 
 @dataclass(frozen=True, slots=True)
+class FloatCurve:
+    """基于回合数的浮点曲线。"""
+
+    base: float
+    per_turn: float = 0.0
+    minimum: float = 0.0
+    maximum: float | None = None
+
+    def __post_init__(self) -> None:
+        _require_number_at_least("base", self.base, 0)
+        _require_number_at_least("per_turn", self.per_turn, 0)
+        _require_number_at_least("minimum", self.minimum, 0)
+        if self.maximum is not None:
+            _require_number_at_least("maximum", self.maximum, self.minimum)
+
+    def value_at(self, turn: int) -> float:
+        """返回指定回合的曲线值。"""
+
+        _require_at_least("turn", turn, 1)
+        value = self.base + self.per_turn * (turn - 1)
+        value = max(self.minimum, value)
+        if self.maximum is not None:
+            value = min(self.maximum, value)
+        return value
+
+
+@dataclass(frozen=True, slots=True)
 class MonsterTierConfig:
     """怪物阶级（精英/首领）生成配置。"""
 
@@ -106,19 +133,19 @@ class MonsterTierConfig:
 class MonsterSpawnRules:
     """每回合怪物刷新规则。"""
 
-    count_curve: IntCurve
+    count_curve: FloatCurve
     stat_growth_curve: IntCurve = field(default_factory=lambda: IntCurve(base=0, per_turn=1))
-    reward_growth_curve: IntCurve = field(default_factory=lambda: IntCurve(base=0, per_turn=1))
+    reward_growth_curve: FloatCurve = field(default_factory=lambda: FloatCurve(base=0.0, per_turn=1.0))
     elite: MonsterTierConfig = field(default_factory=MonsterTierConfig)
     boss: MonsterTierConfig = field(default_factory=MonsterTierConfig)
 
     def __post_init__(self) -> None:
-        if not isinstance(self.count_curve, IntCurve):
-            raise TypeError("count_curve must be IntCurve")
+        if not isinstance(self.count_curve, FloatCurve):
+            raise TypeError("count_curve must be FloatCurve")
         if not isinstance(self.stat_growth_curve, IntCurve):
             raise TypeError("stat_growth_curve must be IntCurve")
-        if not isinstance(self.reward_growth_curve, IntCurve):
-            raise TypeError("reward_growth_curve must be IntCurve")
+        if not isinstance(self.reward_growth_curve, FloatCurve):
+            raise TypeError("reward_growth_curve must be FloatCurve")
         if not isinstance(self.elite, MonsterTierConfig):
             raise TypeError("elite must be MonsterTierConfig")
         if not isinstance(self.boss, MonsterTierConfig):
@@ -274,6 +301,7 @@ class AdventurerState:
     level: int = 1
     experience: int = 0
     equipment: EquipmentLoadout = field(default_factory=EquipmentLoadout)
+    template_id: str = ""
 
     def __post_init__(self) -> None:
         _require_non_empty("adventurer_id", self.adventurer_id)
@@ -571,6 +599,13 @@ def _validate_unique_ids(name: str, values: object) -> None:
 def _require_at_least(name: str, value: int, minimum: int) -> None:
     if not isinstance(value, int):
         raise TypeError(f"{name} must be an int")
+    if value < minimum:
+        raise ValueError(f"{name} must be >= {minimum}")
+
+
+def _require_number_at_least(name: str, value: float, minimum: float) -> None:
+    if not isinstance(value, int | float):
+        raise TypeError(f"{name} must be a number")
     if value < minimum:
         raise ValueError(f"{name} must be >= {minimum}")
 

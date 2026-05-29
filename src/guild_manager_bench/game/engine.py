@@ -269,7 +269,7 @@ def spawn_monsters(definition: GameDefinition, turn: int) -> tuple[SpawnedMonste
     if turn > definition.rules.max_turns:
         return ()
     spawn_rules = definition.rules.monster_spawn
-    count = spawn_rules.count_curve.value_at(turn)
+    count = int(spawn_rules.count_curve.value_at(turn))
     if count == 0:
         return ()
     stat_factor = spawn_rules.stat_growth_curve.value_at(turn)
@@ -491,6 +491,7 @@ def _apply_recruit_action(
         skills=candidate.skills,
         level_skill_unlocks=candidate.level_skill_unlocks,
         stat_growth_per_level=candidate.stat_growth_per_level,
+        template_id=candidate.template_id,
     )
     updated_state = replace(
         state,
@@ -517,7 +518,12 @@ def _apply_equip_action(
 ) -> GameState:
     instance = _equipment_instance_by_id(state, equip_action.equipment_instance_id)
     template = _equipment_template_by_id(definition, instance.template_id)
-    _adventurer_by_id(state, equip_action.adventurer_id)
+    adventurer = _adventurer_by_id(state, equip_action.adventurer_id)
+    if template.allowed_classes and adventurer.template_id not in template.allowed_classes:
+        raise GameError(
+            f"adventurer class '{adventurer.template_id}' cannot equip "
+            f"'{template.equipment_id}' (requires: {template.allowed_classes})"
+        )
     old_stats = _effective_stats_by_adventurer_id(definition, state)
 
     updated_adventurers: list[AdventurerState] = []
@@ -630,7 +636,7 @@ def _spawn_monster(
     turn: int,
     index: int,
     stat_factor: int,
-    reward_factor: int,
+    reward_factor: float,
     tier: str = "normal",
     tc: MonsterTierConfig | None = None,
     bonus_skills: tuple[Skill, ...] = (),
@@ -755,14 +761,14 @@ def _clamp_stat_value(key: str, value: int) -> int:
     return max(minimum, value)
 
 
-def _scale_reward(reward: RewardBundle, factor: int) -> RewardBundle:
+def _scale_reward(reward: RewardBundle, factor: float) -> RewardBundle:
     materials = {
-        material_id: quantity * factor
+        material_id: max(0, int(quantity * factor))
         for material_id, quantity in reward.materials.items()
     }
     return RewardBundle(
-        gold=reward.gold * factor,
-        experience=reward.experience * factor,
+        gold=max(0, int(reward.gold * factor)),
+        experience=max(0, int(reward.experience * factor)),
         materials=materials,
     )
 
