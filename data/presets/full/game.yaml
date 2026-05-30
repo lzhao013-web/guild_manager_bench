@@ -11,7 +11,7 @@ rules:
       per_turn: 1
     reward_growth_curve:
       base: 0.0
-      per_turn: 0.3
+      per_turn: 0.15
   recruitment:
     candidate_count: 3
     first_turn_candidate_count: 6
@@ -49,8 +49,8 @@ starting:
     herb: 1
 
 experience:
-  base_required_experience: 60
-  required_experience_growth: 20
+  base_required_experience: 100
+  required_experience_growth: 35
   max_level: 10
 
 scoring:

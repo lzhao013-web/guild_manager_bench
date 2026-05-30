@@ -1,4 +1,5 @@
 upgrades:
+  # === Roster Expansion (existing, kept as-is) ===
   - id: roster_expansion_1
     name: 扩编 I
     gold: 250
@@ -11,38 +12,152 @@ upgrades:
       - roster_expansion_1
     party_size_bonus: 2
 
-  - id: iron_fortress
-    name: 钢铁堡垒
-    gold: 80
+  # === Early Game (5 upgrades, ~40-80g, no prerequisites) ===
+  - id: training_grounds
+    name: 训练场
+    gold: 50
     stats:
-      hp: 15
-      defense: 6
-    skills: [fortifying_shout]
+      attack: 3
+      hp: 5
 
-  - id: shadow_guild
-    name: 暗影公会
-    gold: 70
+  - id: herb_garden
+    name: 草药园
+    gold: 45
+    stats:
+      hp: 6
+      mp: 4
+      recovery: 2
+
+  - id: blacksmith
+    name: 铁匠铺
+    gold: 60
+    stats:
+      attack: 4
+      defense: 2
+
+  - id: scout_network
+    name: 侦查网
+    gold: 55
+    stats:
+      speed: 3
+      attack: 2
+
+  - id: supply_post
+    name: 补给站
+    gold: 50
+    stats:
+      hp: 4
+      recovery: 3
+      defense: 1
+
+  # === Mid Game (5 upgrades, ~120-250g, require early upgrades) ===
+  - id: armory
+    name: 军械库
+    gold: 150
+    required:
+      - blacksmith
+    stats:
+      attack: 6
+      defense: 4
+      hp: 8
+
+  - id: field_hospital
+    name: 野战医院
+    gold: 130
+    required:
+      - herb_garden
+    stats:
+      hp: 10
+      mp: 6
+      recovery: 4
+
+  - id: tactics_academy
+    name: 战术学院
+    gold: 180
+    required:
+      - scout_network
+      - training_grounds
     stats:
       speed: 4
-      attack: 2
-    skills: [shadow_retreat]
+      attack: 4
+      defense: 3
 
-  - id: arcane_forge
-    name: 奥术锻造
-    gold: 90
+  - id: reinforced_forge
+    name: 强化锻造
+    gold: 200
+    required:
+      - blacksmith
+      - training_grounds
+    stats:
+      attack: 7
+      defense: 5
+
+  - id: meditation_hall
+    name: 精神修炼堂
+    gold: 160
+    required:
+      - herb_garden
+      - supply_post
     stats:
       mp: 8
-      attack: 3
-    skills: [mana_surge]
+      speed: 3
+      recovery: 3
 
-  - id: war_college
-    name: 战争学院
-    gold: 100
+  # === Late Game (5 upgrades, ~350-600g, require multiple mid upgrades) ===
+  - id: veteran_command
+    name: 老兵指挥部
+    gold: 380
     required:
-      - iron_fortress
+      - armory
+      - tactics_academy
     stats:
+      hp: 18
+      attack: 7
+      defense: 6
+      speed: 3
+
+  - id: paladin_order
+    name: 圣殿骑士团
+    gold: 420
+    required:
+      - field_hospital
+      - armory
+    stats:
+      hp: 22
+      defense: 8
+      recovery: 5
+
+  - id: elite_hunters
+    name: 精锐猎兵团
+    gold: 450
+    required:
+      - reinforced_forge
+      - tactics_academy
+    stats:
+      attack: 9
+      speed: 5
       hp: 12
+
+  - id: arcane_council
+    name: 秘法结社
+    gold: 400
+    required:
+      - meditation_hall
+      - reinforced_forge
+    stats:
+      mp: 10
       attack: 5
-      defense: 3
-      speed: 2
-    skills: [battle_hymn]
+      speed: 4
+
+  - id: war_academy
+    name: 战争学院
+    gold: 550
+    required:
+      - veteran_command
+      - paladin_order
+    stats:
+      attack: 10
+      defense: 7
+      hp: 20
+      speed: 4
+      mp: 5

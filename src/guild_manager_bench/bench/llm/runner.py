@@ -305,7 +305,7 @@ def run_llm_turn(
         objective=config.objective,
         max_tool_calls=config.max_tool_calls_per_turn,
         previous_turn_event=previous_turn_event,
-        memo_entries=memo_store.snapshot(),
+        memo_entries=memo_store.consume(),
     )
     turn_trace = TurnTrace(
         turn=observation["turn"],
@@ -762,7 +762,7 @@ def _format_tool_result_for_model(name: str, result: Mapping[str, Any]) -> str:
         memo = result["memo"]
         lines[0] = (
             "OK write_memo: "
-            f"已记录备忘 {memo.get('count')} 条，下回合开始会出现在提示词中"
+            f"已记录备忘 {memo.get('count')} 条，仅下回合出现在提示词中，之后自动消失"
         )
         dropped = memo.get("dropped_oldest")
         if isinstance(dropped, int) and dropped:

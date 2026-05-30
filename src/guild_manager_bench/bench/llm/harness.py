@@ -87,6 +87,15 @@ class MemoStore:
     def snapshot(self) -> tuple[str, ...]:
         return tuple(self.entries)
 
+    def consume(self) -> tuple[str, ...]:
+        """返回所有现有备忘录条目并清空。"""
+        entries = tuple(self.entries)
+        self.entries.clear()
+        return entries
+
+    def clear(self) -> None:
+        self.entries.clear()
+
 
 class TurnToolHarness:
     """单个游戏回合内的 LLM 工具调用包装器。
@@ -200,7 +209,7 @@ class TurnToolHarness:
 
 _WRITE_MEMO_SCHEMA: dict[str, Any] = {
     "name": "write_memo",
-    "description": "写入一条跨回合备忘录。下回合开始时，已记录的备忘录会出现在提示词中。",
+    "description": "写入一条跨回合备忘录。备忘录仅在下回合开始时出现在提示词中，之后自动消失。",
     "parameters": {
         "type": "object",
         "required": ["content"],
@@ -218,10 +227,10 @@ _WRITE_MEMO_SCHEMA: dict[str, Any] = {
 
 
 def memo_entries_from_tool_steps(turns: Sequence[Any]) -> tuple[str, ...]:
-    """从 replay turn steps 中恢复成功写入的备忘录。"""
+    """从 replay turn steps 中恢复成功写入的备忘录（仅最后一回合）。"""
 
     store = MemoStore()
-    for turn in turns:
+    for turn in reversed(list(turns)):
         if not isinstance(turn, Mapping):
             continue
         for step in _sequence(turn.get("steps")):
@@ -238,6 +247,7 @@ def memo_entries_from_tool_steps(turns: Sequence[Any]) -> tuple[str, ...]:
                     store.write(arguments.get("content"))
                 except ValueError:
                     continue
+        break
     return store.snapshot()
 
 
