@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Guild Manager Bench · Replay</title>
+  <link rel="stylesheet" href="/replay/styles.css" />
+</head>
+<body>
+  <!-- ===== Top Bar ===== -->
+  <header class="topbar">
+    <div class="topbar-brand">
+      <h1>Guild Manager Bench</h1>
+      <span class="brand-badge">Replay</span>
+    </div>
+    <div class="topbar-meta" id="runMeta">
+      <span class="muted">选择存档以开始</span>
+    </div>
+    <div class="topbar-actions">
+      <select id="runSelector" class="run-select">
+        <option value="">— 选择 LLM 跑局 —</option>
+      </select>
+      <button id="loadButton" class="btn btn-primary" type="button">加载</button>
+      <a href="/" class="btn btn-ghost" title="返回操作面板">← 面板</a>
+    </div>
+  </header>
+
+  <!-- ===== Main Layout ===== -->
+  <div class="replay-layout" id="replayLayout">
+
+    <!-- Left: Timeline + Controls -->
+    <aside class="timeline-panel" id="timelinePanel">
+      <div class="panel-header">
+        <h2>回合时间线</h2>
+        <span class="badge" id="turnBadge">—</span>
+      </div>
+      <div class="timeline-scroll" id="timelineScroll">
+        <div class="timeline-empty muted">加载存档后显示</div>
+      </div>
+      <div class="playback-controls">
+        <button class="ctrl-btn" id="btnFirst" title="第一回合" disabled>⏮</button>
+        <button class="ctrl-btn" id="btnPrevTurn" title="上一回合" disabled>◀</button>
+        <button class="ctrl-btn ctrl-play" id="btnPlay" title="播放/暂停" disabled>▶</button>
+        <button class="ctrl-btn" id="btnNextTurn" title="下一回合" disabled>▶</button>
+        <button class="ctrl-btn" id="btnLast" title="最后回合" disabled>⏭</button>
+        <span class="ctrl-divider"></span>
+        <label class="speed-label">
+          速度
+          <select id="speedSelect" class="speed-select">
+            <option value="0.5">0.5×</option>
+            <option value="1" selected>1×</option>
+            <option value="2">2×</option>
+            <option value="4">4×</option>
+          </select>
+        </label>
+      </div>
+      <div class="step-indicator" id="stepIndicator">
+        <span class="muted">步骤 0/0</span>
+        <div class="step-bar"><div class="step-bar-fill" id="stepBarFill"></div></div>
+      </div>
+    </aside>
+
+    <!-- Center: Game State -->
+    <section class="state-panel" id="statePanel">
+      <!-- Overview Band -->
+      <div class="band" id="overviewBand">
+        <div class="stat-chip">回合 <strong id="ovTurn">—</strong> / <span id="ovMaxTurn">—</span></div>
+        <div class="stat-chip">💰 <strong id="ovGold">—</strong></div>
+        <div class="stat-chip">⭐ <strong id="ovExp">—</strong></div>
+        <div class="stat-chip" id="ovMaterials">—</div>
+        <div class="stat-chip">👥 <strong id="ovParty">—</strong></div>
+        <div class="stat-chip">⚔️ <strong id="ovScore">—</strong> 分</div>
+      </div>
+
+      <!-- Tab Bar -->
+      <nav class="tabs" id="stateTabs">
+        <button class="tab active" data-tab="adventurers">冒险者</button>
+        <button class="tab" data-tab="monsters">怪物</button>
+        <button class="tab" data-tab="inventory">装备库存</button>
+        <button class="tab" data-tab="crafting">合成 & 升级</button>
+      </nav>
+
+      <!-- Tab Panels -->
+      <div class="tab-content active" data-panel="adventurers" id="adventurersPanel">
+        <div class="card-grid" id="adventurerCards"></div>
+      </div>
+      <div class="tab-content" data-panel="monsters" id="monstersPanel">
+        <div class="card-grid" id="monsterCards"></div>
+      </div>
+      <div class="tab-content" data-panel="inventory" id="inventoryPanel">
+        <div class="card-grid" id="inventoryCards"></div>
+      </div>
+      <div class="tab-content" data-panel="crafting" id="craftingPanel">
+        <div class="grid two">
+          <div>
+            <h3>合成配方</h3>
+            <div id="recipeList"></div>
+          </div>
+          <div>
+            <h3>全局升级</h3>
+            <div id="upgradeList"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right: LLM Trace -->
+    <aside class="llm-panel" id="llmPanel">
+      <div class="panel-header">
+        <h2>LLM 轨迹</h2>
+        <span class="badge" id="stepBadge">—</span>
+      </div>
+      <div class="llm-scroll" id="llmScroll">
+        <div class="llm-empty muted">加载存档后显示</div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- ===== Bottom Status Bar ===== -->
+  <footer class="statusbar" id="statusBar">
+    <span id="statusText" class="muted">就绪</span>
+  </footer>
+
+  <!-- ===== Action Toast ===== -->
+  <div class="action-toast" id="actionToast" aria-hidden="true"></div>
+
+  <!-- ===== Battle Overlay ===== -->
+  <div class="battle-overlay" id="battleOverlay" aria-hidden="true">
+    <div class="battle-backdrop"></div>
+    <div class="battle-stage" id="battleStage"></div>
+  </div>
+
+  <script src="/replay/app.js"></script>
+</body>
+</html>

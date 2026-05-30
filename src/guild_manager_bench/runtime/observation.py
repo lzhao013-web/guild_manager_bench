@@ -215,6 +215,7 @@ def _upgrade_to_dict(state, upgrade) -> dict[str, Any]:
     return {
         "upgrade_id": upgrade.upgrade_id,
         "name": upgrade.name,
+        "description": upgrade.description,
         "gold_cost": upgrade.gold_cost,
         "stats": _stat_modifier_to_dict(upgrade.stat_modifier),
         "party_size_bonus": upgrade.party_size_bonus,
@@ -236,6 +237,7 @@ def _skill_to_dict(skill: Skill) -> dict[str, Any]:
         "mp_cost": skill.mp_cost,
         "priority": skill.priority,
         "once_per_battle": skill.once_per_battle,
+        "free": skill.free,
     }
 
 

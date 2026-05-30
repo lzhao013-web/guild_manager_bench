@@ -21,6 +21,7 @@ monsters:
     stat_growth:
       hp: 3
       attack: 1
+      defense: 0.4
     reward_growth:
       gold: 1
       experience: 2
@@ -48,6 +49,7 @@ monsters:
     stat_growth:
       hp: 2
       attack: 1
+      defense: 0.4
     reward_growth:
       gold: 1
       experience: 1
@@ -75,7 +77,8 @@ monsters:
     stat_growth:
       hp: 4
       attack: 1
-      defense: 1
+      defense: 0.4
+      speed: 0.15
     reward_growth:
       gold: 2
       experience: 3
@@ -103,6 +106,7 @@ monsters:
     stat_growth:
       hp: 3
       attack: 1
+      defense: 0.4
     reward_growth:
       gold: 1
       experience: 2
@@ -130,6 +134,7 @@ monsters:
     stat_growth:
       hp: 3
       attack: 1
+      defense: 0.4
     reward_growth:
       gold: 1
       experience: 2
@@ -158,6 +163,7 @@ monsters:
     stat_growth:
       hp: 2
       attack: 1
+      defense: 0.4
     reward_growth:
       gold: 1
       experience: 2
@@ -173,7 +179,7 @@ monsters:
       hp: 180
       mp: 0
       attack: 32
-      defense: 16
+      defense: 14
       speed: 8
       recovery: 0
       mp_recovery: 0
@@ -186,7 +192,7 @@ monsters:
     stat_growth:
       hp: 6
       attack: 2
-      defense: 1
+      defense: 0.55
     reward_growth:
       gold: 2
       experience: 3
@@ -215,6 +221,7 @@ monsters:
     stat_growth:
       hp: 4
       attack: 2
+      defense: 0.5
     reward_growth:
       gold: 2
       experience: 3
@@ -243,6 +250,7 @@ monsters:
     stat_growth:
       hp: 4
       attack: 2
+      defense: 0.5
     reward_growth:
       gold: 2
       experience: 3
@@ -258,7 +266,7 @@ monsters:
       hp: 160
       mp: 0
       attack: 30
-      defense: 14
+      defense: 12
       speed: 9
       recovery: 0
       mp_recovery: 0
@@ -271,7 +279,7 @@ monsters:
     stat_growth:
       hp: 5
       attack: 2
-      defense: 1
+      defense: 0.55
     reward_growth:
       gold: 2
       experience: 3
@@ -288,7 +296,7 @@ monsters:
       hp: 250
       mp: 0
       attack: 40
-      defense: 22
+      defense: 20
       speed: 8
       recovery: 0
       mp_recovery: 0
@@ -301,7 +309,7 @@ monsters:
     stat_growth:
       hp: 6
       attack: 2
-      defense: 2
+      defense: 1.0
     reward_growth:
       gold: 2
       experience: 4
@@ -330,6 +338,7 @@ monsters:
     stat_growth:
       hp: 5
       attack: 2
+      defense: 0.5
     reward_growth:
       gold: 2
       experience: 4
@@ -358,6 +367,7 @@ monsters:
     stat_growth:
       hp: 5
       attack: 2
+      defense: 0.5
     reward_growth:
       gold: 2
       experience: 4
@@ -373,7 +383,7 @@ monsters:
       hp: 280
       mp: 0
       attack: 46
-      defense: 18
+      defense: 16
       speed: 12
       recovery: 0
       mp_recovery: 0
@@ -386,7 +396,7 @@ monsters:
     stat_growth:
       hp: 7
       attack: 2
-      defense: 2
+      defense: 1.1
     reward_growth:
       gold: 3
       experience: 5

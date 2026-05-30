@@ -3,12 +3,14 @@ upgrades:
   - id: roster_expansion_1
     name: 扩编 I
     gold: 400
+    description: 解锁中级全局加成的前置科技。
     party_size_bonus: 1
 
   - id: roster_expansion_2
     name: 扩编 II
     gold: 1200
-    required:
+    description: 解锁高级全局加成的前置科技。
+    required: 
       - roster_expansion_1
     party_size_bonus: 2
 
@@ -58,6 +60,7 @@ upgrades:
     gold: 240
     required:
       - blacksmith
+      - roster_expansion_1
     stats:
       attack: 6
       defense: 4
@@ -68,6 +71,7 @@ upgrades:
     gold: 220
     required:
       - herb_garden
+      - roster_expansion_1
     stats:
       hp: 10
       mp: 6
@@ -80,6 +84,7 @@ upgrades:
     required:
       - scout_network
       - training_grounds
+      - roster_expansion_1
     stats:
       speed: 4
       attack: 4
@@ -91,6 +96,7 @@ upgrades:
     required:
       - blacksmith
       - training_grounds
+      - roster_expansion_1
     stats:
       attack: 7
       defense: 5
@@ -101,6 +107,7 @@ upgrades:
     required:
       - herb_garden
       - supply_post
+      - roster_expansion_1
     stats:
       mp: 8
       speed: 3
@@ -114,6 +121,7 @@ upgrades:
     required:
       - armory
       - tactics_academy
+      - roster_expansion_2
     stats:
       hp: 18
       attack: 7
@@ -126,6 +134,7 @@ upgrades:
     required:
       - field_hospital
       - armory
+      - roster_expansion_2
     stats:
       hp: 22
       defense: 8
@@ -138,6 +147,7 @@ upgrades:
     required:
       - reinforced_forge
       - tactics_academy
+      - roster_expansion_2
     stats:
       attack: 9
       speed: 5
@@ -149,6 +159,7 @@ upgrades:
     required:
       - meditation_hall
       - reinforced_forge
+      - roster_expansion_2
     stats:
       mp: 10
       attack: 5
@@ -160,6 +171,7 @@ upgrades:
     required:
       - veteran_command
       - paladin_order
+      - roster_expansion_2
     stats:
       attack: 10
       defense: 7

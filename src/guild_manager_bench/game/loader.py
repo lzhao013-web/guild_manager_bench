@@ -254,6 +254,7 @@ def _parse_upgrades(values: list[Any], registry: dict[str, Skill]) -> tuple[Glob
                 upgrade_id=_str(_id_field(data), f"upgrades[{index}].id"),
                 name=_str(_required(data, "name"), f"upgrades[{index}].name"),
                 gold_cost=_int(data.get("gold", data.get("gold_cost", 0)), f"upgrades[{index}].gold"),
+                description=_opt_str(data.get("description"), f"upgrades[{index}].description"),
                 stat_modifier=_parse_stat_modifier(
                     _mapping(_stat_modifier_data(data), f"upgrades[{index}].stats")
                 ),
@@ -491,13 +492,13 @@ def _parse_combat_stats(data: Mapping[str, Any]) -> CombatStats:
 
 def _parse_stat_modifier(data: Mapping[str, Any]) -> CombatStatModifier:
     return CombatStatModifier(
-        hp=_int(data.get("hp", 0), "stat_modifier.hp"),
-        mp=_int(data.get("mp", 0), "stat_modifier.mp"),
-        attack=_int(data.get("attack", 0), "stat_modifier.attack"),
-        defense=_int(data.get("defense", 0), "stat_modifier.defense"),
-        speed=_int(data.get("speed", 0), "stat_modifier.speed"),
-        recovery=_int(data.get("recovery", 0), "stat_modifier.recovery"),
-        mp_recovery=_int(data.get("mp_recovery", 0), "stat_modifier.mp_recovery"),
+        hp=_number(data.get("hp", 0), "stat_modifier.hp"),
+        mp=_number(data.get("mp", 0), "stat_modifier.mp"),
+        attack=_number(data.get("attack", 0), "stat_modifier.attack"),
+        defense=_number(data.get("defense", 0), "stat_modifier.defense"),
+        speed=_number(data.get("speed", 0), "stat_modifier.speed"),
+        recovery=_number(data.get("recovery", 0), "stat_modifier.recovery"),
+        mp_recovery=_number(data.get("mp_recovery", 0), "stat_modifier.mp_recovery"),
     )
 
 
@@ -662,6 +663,15 @@ def _int_mapping(value: Any, path: str) -> dict[str, int]:
         _str(key, f"{path}.key"): _int(item, f"{path}.{key}")
         for key, item in data.items()
     }
+
+
+def _opt_str(value: Any, path: str) -> str:
+    """可选字符串字段，允许空字符串或 None。"""
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        raise YamlLoadError(f"{path} must be a string")
+    return value
 
 
 def _str(value: Any, path: str) -> str:

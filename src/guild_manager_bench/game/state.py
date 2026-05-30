@@ -12,6 +12,24 @@ from guild_manager_bench.game.skills import Skill
 from guild_manager_bench.game.upgrades import GlobalUpgrade
 
 
+MATERIAL_NAMES: dict[str, str] = {
+    "iron_ore": "铁矿石",
+    "wood": "木材",
+    "leather": "皮革",
+    "herb": "草药",
+    "bone": "骨头",
+    "beast_hide": "兽皮",
+    "sharp_claw": "利爪",
+    "arcane_dust": "奥术之尘",
+    "spider_silk": "蛛丝",
+    "mithril_shard": "秘银碎片",
+    "dragon_scale": "龙鳞",
+    "demon_core": "恶魔核心",
+    "soul_shard": "灵魂碎片",
+    "dragon_blood": "龙血",
+}
+
+
 @dataclass(frozen=True, slots=True)
 class RewardBundle:
     """战斗胜利后获得的奖励。"""

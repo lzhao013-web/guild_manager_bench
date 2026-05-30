@@ -11,7 +11,7 @@ rules:
       per_turn: 2
     reward_growth_curve:
       base: 0.0
-      per_turn: 0.10
+      per_turn: 0.15
   recruitment:
     candidate_count: 3
     first_turn_candidate_count: 6
@@ -44,9 +44,11 @@ rules:
 starting:
   gold: 175
   materials:
-    iron_ore: 1
-    bone: 1
-    herb: 1
+    iron_ore: 2
+    bone: 2
+    herb: 2
+    beast_hide: 1
+    sharp_claw: 1
 
 experience:
   base_required_experience: 100
@@ -58,7 +60,7 @@ scoring:
   seed: 20260529
   waves: 1000
   wave_size: 6
-  difficulty_factors: [30, 32, 35, 40, 45, 50]
+  difficulty_factors: [30, 40, 50, 60, 70]
   resource_mode: full
   aggregation: best_assignment
   elite_chance: 0.15

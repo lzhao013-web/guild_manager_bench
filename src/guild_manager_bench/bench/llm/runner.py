@@ -31,6 +31,7 @@ from guild_manager_bench.bench.llm.trace import (
 from guild_manager_bench.bench.metrics import score_final_state
 from guild_manager_bench.game.loader import load_game_definition
 from guild_manager_bench.game.presets import describe_data_source, verify_data_source
+from guild_manager_bench.game.state import MATERIAL_NAMES
 
 
 @dataclass(frozen=True, slots=True)
@@ -1549,6 +1550,7 @@ def _mapping_key(value: Any) -> str:
         "speed": "速度",
         "recovery": "恢复",
         "mp_recovery": "回魔",
+        **MATERIAL_NAMES,
     }
     return labels.get(value, str(value))
 

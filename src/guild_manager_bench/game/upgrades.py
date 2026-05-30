@@ -25,6 +25,7 @@ class GlobalUpgrade:
     upgrade_id: str
     name: str
     gold_cost: int
+    description: str = ""
     stat_modifier: CombatStatModifier = field(default_factory=CombatStatModifier)
     skills: tuple[Skill, ...] = ()
     required_upgrade_ids: tuple[str, ...] = ()

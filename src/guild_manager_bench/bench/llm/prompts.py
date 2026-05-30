@@ -6,10 +6,11 @@ from guild_manager_bench.bench.llm.refs import (
     build_numeric_refs,
     display_ref,
 )
+from guild_manager_bench.game.state import MATERIAL_NAMES
 
 DEFAULT_OBJECTIVE = (
     "最大化终局 Arena 评分（0-100 分）。\n"
-    "- 评分基于队伍在 1000 波竞技场战斗中的表现，队伍越强评分越高。\n"
+    "- 评分基于队伍在游戏结束后，模拟 1000 波怪物战斗中的整体表现，队伍越强评分越高。\n"
 )
 
 
@@ -35,12 +36,14 @@ def build_turn_prompt(
             "你正在进行 Guild Manager Bench。",
             f"目标：{objective}",
             "",
-            "回合流程：准备阶段可调用查询工具读取信息，也可调用动作工具执行准备操作；回合结束通过 end_turn 提交讨伐列表。",
+            "回合流程：可调用查询工具读取信息，也可调用动作工具执行各种操作；如果你觉得本回合要做的事情都结束了，结束通过 end_turn 提交讨伐列表并结束回合。",
             "战斗提示：冒险者讨伐怪物的战斗是完全的1V1自动战斗，无法干预战斗过程，但可以通过调整冒险者的装备、技能来影响战斗结果。",
-            "技能相关：主动技能满足条件时会在角色行动时按优先级触发，但会覆盖普通攻击；被动技能会在满足条件时持续生效；技能效果可能包括伤害、治疗、状态等，具体信息请参考状态和冒险者信息中的技能描述。",
+            "战斗机制：SPD 决定出手频率，而非仅决定先后手。 例如，SPD 80 vs SPD 20 → 高SPD方每行动约4次，低SPD方才行动1次。普通攻击伤害 = max(1, ATK - DEF)"
+            "技能相关：主动技能满足条件时会在角色行动时按优先级触发，会覆盖普通攻击，带有“即时”tag的技能不会覆盖普通攻击；被动技能会在满足条件时持续生效；技能效果可能包括伤害、治疗、状态等，具体信息请参考状态和冒险者信息中的技能描述。",
             "回复机制：每回合战斗结束后全体冒险者回复HP和MP，额外回复等同于其恢复属性（recovery）值的HP，战斗中技能也可提供治疗、百分比治疗、MP恢复和持续回复状态。"
             f"HP回复 = {_turn_recovery_hp(observation)} + 最大HP×{_percent(observation['turn_recovery_rules']['hp_percent'])} + 恢复属性；"
             f"MP回复 = {_turn_recovery_mp(observation)} + 最大MP×{_percent(observation['turn_recovery_rules']['mp_percent'])} + 回魔属性。",
+            "刷新机制：回合结束后，可讨伐的怪物和可招募的冒险者都会刷新。",
             f"本回合最多允许 {max_tool_calls} 次非 end_turn 工具调用{bp_limit_text}；每一次工具调用，包括查询、战斗预览、实际操作和失败的调用均会消耗使用次数，请考虑工具调用的预算，谨慎决定和规划要使用的工具。",
             "调用工具使用的所有对象 id 都使用列表左侧的数字 id。",
             "工具会返回 OK/FAIL、budget 和结果摘要。动作工具返回变更摘要；详细信息分散在各个查询工具中。",
@@ -261,6 +264,8 @@ def _skill_text_zh(skill: Mapping[str, Any]) -> str:
         str(skill.get("name") or skill.get("skill_id") or "技能"),
         _skill_kind_text(skill.get("kind")),
     ]
+    if skill.get("free"):
+        parts.append("即时")
     mp_cost = skill.get("mp_cost")
     if isinstance(mp_cost, int | float) and mp_cost:
         parts.append(f"MP消耗 {mp_cost}")
@@ -422,7 +427,7 @@ def _stat_text(value: Any) -> str:
 def _mapping_text(value: Any) -> str:
     if not isinstance(value, Mapping) or not value:
         return "{}"
-    return "{" + ", ".join(f"{key}: {value}" for key, value in value.items()) + "}"
+    return "{" + ", ".join(f"{MATERIAL_NAMES.get(key, key)}: {value}" for key, value in value.items()) + "}"
 
 
 def _stat_modifier_text(value: Any) -> str:

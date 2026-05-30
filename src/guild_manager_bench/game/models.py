@@ -4,8 +4,17 @@ from dataclasses import dataclass
 
 
 def _require_at_least(name: str, value: int, minimum: int) -> None:
-    if not isinstance(value, int):
+    if isinstance(value, bool) or not isinstance(value, int):
         raise TypeError(f"{name} must be an int")
+    if value < minimum:
+        raise ValueError(f"{name} must be >= {minimum}")
+
+
+def _require_number_at_least(name: str, value: float, minimum: float) -> None:
+    if isinstance(value, bool):
+        raise TypeError(f"{name} must be a number, not bool")
+    if not isinstance(value, (int, float)):
+        raise TypeError(f"{name} must be a number")
     if value < minimum:
         raise ValueError(f"{name} must be >= {minimum}")
 
@@ -40,24 +49,25 @@ class CombatStatModifier:
     """战斗属性修正值。
 
     装备、升级、等级成长都可以用这个结构表示对基础属性的加成。
+    支持浮点数，最终应用到 CombatStats 时取整。
     """
 
-    hp: int = 0
-    mp: int = 0
-    attack: int = 0
-    defense: int = 0
-    speed: int = 0
-    recovery: int = 0
-    mp_recovery: int = 0
+    hp: float = 0.0
+    mp: float = 0.0
+    attack: float = 0.0
+    defense: float = 0.0
+    speed: float = 0.0
+    recovery: float = 0.0
+    mp_recovery: float = 0.0
 
     def __post_init__(self) -> None:
-        _require_at_least("hp", self.hp, 0)
-        _require_at_least("mp", self.mp, 0)
-        _require_at_least("attack", self.attack, 0)
-        _require_at_least("defense", self.defense, 0)
-        _require_at_least("speed", self.speed, 0)
-        _require_at_least("recovery", self.recovery, 0)
-        _require_at_least("mp_recovery", self.mp_recovery, 0)
+        _require_number_at_least("hp", self.hp, 0.0)
+        _require_number_at_least("mp", self.mp, 0.0)
+        _require_number_at_least("attack", self.attack, 0.0)
+        _require_number_at_least("defense", self.defense, 0.0)
+        _require_number_at_least("speed", self.speed, 0.0)
+        _require_number_at_least("recovery", self.recovery, 0.0)
+        _require_number_at_least("mp_recovery", self.mp_recovery, 0.0)
 
     def __add__(self, other: CombatStatModifier) -> CombatStatModifier:
         if not isinstance(other, CombatStatModifier):
@@ -74,23 +84,23 @@ class CombatStatModifier:
 
 
 def apply_stat_modifier(stats: CombatStats, modifier: CombatStatModifier) -> CombatStats:
-    """把属性修正应用到基础战斗属性上。"""
+    """把属性修正应用到基础战斗属性上，浮点修正取整。"""
 
     return CombatStats(
-        hp=stats.hp + modifier.hp,
-        mp=stats.mp + modifier.mp,
-        attack=stats.attack + modifier.attack,
-        defense=stats.defense + modifier.defense,
-        speed=stats.speed + modifier.speed,
-        recovery=stats.recovery + modifier.recovery,
-        mp_recovery=stats.mp_recovery + modifier.mp_recovery,
+        hp=int(stats.hp + modifier.hp),
+        mp=int(stats.mp + modifier.mp),
+        attack=int(stats.attack + modifier.attack),
+        defense=int(stats.defense + modifier.defense),
+        speed=int(stats.speed + modifier.speed),
+        recovery=int(stats.recovery + modifier.recovery),
+        mp_recovery=int(stats.mp_recovery + modifier.mp_recovery),
     )
 
 
-def scale_stat_modifier(modifier: CombatStatModifier, factor: int) -> CombatStatModifier:
-    """按整数倍率放大战斗属性修正。"""
+def scale_stat_modifier(modifier: CombatStatModifier, factor: float) -> CombatStatModifier:
+    """按倍率放大战斗属性修正，支持浮点倍率和浮点成长。"""
 
-    _require_at_least("factor", factor, 0)
+    _require_number_at_least("factor", factor, 0.0)
     return CombatStatModifier(
         hp=modifier.hp * factor,
         mp=modifier.mp * factor,
