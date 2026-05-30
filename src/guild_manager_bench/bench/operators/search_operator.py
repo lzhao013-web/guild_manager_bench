@@ -398,6 +398,10 @@ class SearchOperator:
 
         # 队伍人数奖励
         party_bonus = 10.0 * shadow.party_size
+        # 人口上限价值：按已有人均战力估算，确保无属性的扩容升级也能在 beam 中存活
+        avg_member_power = stat_power / max(shadow.party_size, 1)
+        capacity_per_slot = max(avg_member_power * 0.8, 80.0)
+        capacity_bonus = capacity_per_slot * shadow.party_size_limit
 
         # 剩余资源的轻微正价值
         resource_value = 0.1 * shadow.gold + 0.2 * shadow.experience_pool
@@ -416,4 +420,4 @@ class SearchOperator:
                 + item_stats.get("hp", 0) * 0.15
             )
 
-        return stat_power + party_bonus + healer_bonus + resource_value + item_potential
+        return stat_power + party_bonus + capacity_bonus + healer_bonus + resource_value + item_potential
