@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from threading import Lock
 from typing import Any
 from uuid import uuid4
 
@@ -33,6 +34,7 @@ class GameSession:
     state: GameState | None = None
     events: list[SessionEvent] = field(default_factory=list)
     _next_sequence: int = 1
+    _lock: Lock = field(default_factory=Lock)
 
     def __post_init__(self) -> None:
         if self.state is None:
@@ -43,50 +45,53 @@ class GameSession:
     def observation(self) -> dict[str, Any]:
         """返回当前会话的可见状态。"""
 
-        assert self.state is not None
-        data = build_observation(self.definition, self.state)
+        with self._lock:
+            assert self.state is not None
+            data = build_observation(self.definition, self.state)
         data["session_id"] = self.session_id
         return data
 
     def apply_preparation(self, action: PreparationAction) -> SessionEvent:
         """执行一个回合内操作并记录事件。"""
 
-        assert self.state is not None
-        turn = self.state.turn
-        before_observation = build_observation(self.definition, self.state)
-        self.state = apply_preparation_action(self.definition, self.state, action)
-        after_observation = build_observation(self.definition, self.state)
-        return self._append_event(
-            "preparation_applied",
-            {
-                "action": encode_preparation_action(action),
-                "summary": _preparation_summary(self.definition, before_observation, action),
-                "changes": _observation_changes(before_observation, after_observation),
-            },
-            turn=turn,
-        )
+        with self._lock:
+            assert self.state is not None
+            turn = self.state.turn
+            before_observation = build_observation(self.definition, self.state)
+            self.state = apply_preparation_action(self.definition, self.state, action)
+            after_observation = build_observation(self.definition, self.state)
+            return self._append_event(
+                "preparation_applied",
+                {
+                    "action": encode_preparation_action(action),
+                    "summary": _preparation_summary(self.definition, before_observation, action),
+                    "changes": _observation_changes(before_observation, after_observation),
+                },
+                turn=turn,
+            )
 
     def end_turn(self, action: EndTurnAction) -> tuple[TurnResult, SessionEvent]:
         """提交交战列表，结算当前回合并记录事件。"""
 
-        assert self.state is not None
-        turn = self.state.turn
-        before_observation = build_observation(self.definition, self.state)
-        result = end_turn(self.definition, self.state, action)
-        self.state = result.state
-        after_observation = build_observation(self.definition, self.state)
-        battles = [
-            _battle_to_dict(battle, before_observation, after_observation)
-            for battle in result.battles
-        ]
-        event = self._append_event(
-            "turn_ended",
-            {
-                "action": encode_end_turn_action(action),
-                "summary": _end_turn_summary(turn, battles),
-                "changes": _observation_changes(before_observation, after_observation),
-                "battles": battles,
-            },
+        with self._lock:
+            assert self.state is not None
+            turn = self.state.turn
+            before_observation = build_observation(self.definition, self.state)
+            result = end_turn(self.definition, self.state, action)
+            self.state = result.state
+            after_observation = build_observation(self.definition, self.state)
+            battles = [
+                _battle_to_dict(battle, before_observation, after_observation)
+                for battle in result.battles
+            ]
+            event = self._append_event(
+                "turn_ended",
+                {
+                    "action": encode_end_turn_action(action),
+                    "summary": _end_turn_summary(turn, battles),
+                    "changes": _observation_changes(before_observation, after_observation),
+                    "battles": battles,
+                },
             turn=turn,
         )
         return result, event
@@ -94,8 +99,9 @@ class GameSession:
     def reject_action(self, payload: dict[str, Any], error: str) -> SessionEvent:
         """记录一次被拒绝的外部动作。"""
 
-        assert self.state is not None
-        return self._append_event(
+        with self._lock:
+            assert self.state is not None
+            return self._append_event(
             "action_rejected",
             {
                 "action": dict(payload),

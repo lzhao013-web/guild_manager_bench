@@ -240,6 +240,14 @@ class ShadowState:
         if upgrade["party_size_bonus"] > 0:
             self.party_size_limit += upgrade["party_size_bonus"]
 
+        # 全局升级的属性修正应用于所有冒险者
+        upgrade_stats = upgrade.get("stats", {})
+        for adv in self.adventurers.values():
+            eff = dict(adv.get("effective_stats", adv.get("base_stats", {})))
+            for key in ("hp", "mp", "attack", "defense", "speed", "recovery"):
+                eff[key] = eff.get(key, 0) + upgrade_stats.get(key, 0)
+            adv["effective_stats"] = eff
+
     def apply_equip(
         self,
         adventurer_id: str,
@@ -286,10 +294,48 @@ class ShadowState:
         self,
         adventurer_id: str,
         amount: int,
+        obs: dict[str, Any] | None = None,
     ) -> None:
         """记录经验分配的状态变化。"""
 
         self.experience_pool -= amount
+
+        adv = self.adventurers.get(adventurer_id)
+        if adv is None:
+            return
+
+        # 计算升级
+        rules = obs.get("experience_rules", {}) if obs else {}
+        max_level = rules.get("max_level", 10)
+        base_req = rules.get("base_required_experience", 80)
+        req_growth = rules.get("required_experience_growth", 40)
+
+        old_level = adv.get("level", 1)
+        experience = adv.get("experience", 0) + amount
+        level = old_level
+
+        while level < max_level:
+            required = base_req + (level - 1) * req_growth
+            if experience < required:
+                break
+            experience -= required
+            level += 1
+
+        if level >= max_level:
+            level = max_level
+            experience = 0
+
+        adv["level"] = level
+        adv["experience"] = experience
+
+        # 应用升级带来的属性成长
+        levels_gained = level - old_level
+        if levels_gained > 0:
+            growth = adv.get("stat_growth_per_level", {})
+            eff = dict(adv.get("effective_stats", adv.get("base_stats", {})))
+            for key in ("hp", "mp", "attack", "defense", "speed", "recovery"):
+                eff[key] = eff.get(key, 0) + growth.get(key, 0) * levels_gained
+            adv["effective_stats"] = eff
 
 
 # ── 启发式工具函数 ────────────────────────────────────────

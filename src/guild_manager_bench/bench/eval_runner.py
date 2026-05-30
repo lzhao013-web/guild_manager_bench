@@ -26,6 +26,7 @@ class EvalConfig:
     seeds: tuple[int, ...] = tuple(range(50))
     max_steps: int = 1_000
     max_workers: int | None = None  # None = 自动（CPU 核数）
+    score_waves: int | None = None  # None = 使用规则默认波次
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,6 +94,7 @@ def run_single_eval(
     seed: int,
     *,
     max_steps: int = 1_000,
+    score_waves: int | None = None,
 ) -> OperatorResult:
     """运行单个种子的评估。"""
 
@@ -108,7 +110,10 @@ def run_single_eval(
     try:
         session = run_operator(seeded_definition, operator, max_steps=max_steps)
         assert session.state is not None
-        report = score_final_state(seeded_definition, session.state)
+        report = score_final_state(
+            seeded_definition, session.state,
+            waves=score_waves,
+        )
         duration = perf_counter() - started
         return OperatorResult(
             operator_name=type(operator).__name__,
@@ -132,8 +137,8 @@ def run_single_eval(
 def _run_single_eval_worker(args: tuple[Any, ...]) -> OperatorResult:
     """ProcessPoolExecutor 的工作函数。"""
 
-    factory, definition, seed, max_steps = args
-    return run_single_eval(factory, definition, seed, max_steps=max_steps)
+    factory, definition, seed, max_steps, score_waves = args
+    return run_single_eval(factory, definition, seed, max_steps=max_steps, score_waves=score_waves)
 
 
 def run_eval_suite(
@@ -163,17 +168,22 @@ def _run_operator_eval(
 ) -> list[OperatorResult]:
     """运行单个操作者的所有种子评估。"""
 
-    # 构建任务列表
-    tasks = [
-        (factory, definition, seed, config.max_steps)
-        for seed in config.seeds
-    ]
-
     if config.max_workers == 1:
         # 单进程模式（方便调试）
-        return [run_single_eval(factory, definition, seed, max_steps=config.max_steps) for seed in config.seeds]
+        return [
+            run_single_eval(
+                factory, definition, seed,
+                max_steps=config.max_steps,
+                score_waves=config.score_waves,
+            )
+            for seed in config.seeds
+        ]
 
     # 多进程模式
+    tasks = [
+        (factory, definition, seed, config.max_steps, config.score_waves)
+        for seed in config.seeds
+    ]
     started = perf_counter()
     per_seed: list[OperatorResult] = []
 

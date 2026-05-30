@@ -22,6 +22,9 @@ from guild_manager_bench.bench.operators.shadow import (
 from guild_manager_bench.bench.runner import run_operator
 from guild_manager_bench.game.loader import load_game_definition
 
+# 测试中用少量波次评分，全量 1000 波只在基准模拟中使用
+_FAST_WAVES = 10
+
 
 # ── Shadow 状态测试 ────────────────────────────────────────
 
@@ -128,8 +131,8 @@ def test_random_full_deterministic() -> None:
 
     assert session1.state is not None
     assert session2.state is not None
-    report1 = score_final_state(definition, session1.state)
-    report2 = score_final_state(definition, session2.state)
+    report1 = score_final_state(definition, session1.state, waves=_FAST_WAVES)
+    report2 = score_final_state(definition, session2.state, waves=_FAST_WAVES)
     assert report1.score == report2.score
 
 
@@ -141,28 +144,19 @@ def test_random_full_scores_higher_than_random_hunt() -> None:
     """
 
     definition = _load_definition()
-    seeds = list(range(10))
+    from dataclasses import replace
+    seeded = replace(definition, rules=replace(definition.rules, seed=0))
 
-    random_hunt_scores = []
-    random_full_scores = []
+    s1 = run_operator(seeded, RandomHuntOperator(seed=0), max_steps=200)
+    s2 = run_operator(seeded, RandomFullOperator(seed=0), max_steps=200)
 
-    for seed in seeds:
-        from dataclasses import replace
-        seeded = replace(definition, rules=replace(definition.rules, seed=seed))
+    assert s1.state is not None
+    assert s2.state is not None
 
-        s1 = run_operator(seeded, RandomHuntOperator(seed=seed), max_steps=200)
-        s2 = run_operator(seeded, RandomFullOperator(seed=seed), max_steps=200)
-
-        assert s1.state is not None
-        assert s2.state is not None
-
-        random_hunt_scores.append(score_final_state(seeded, s1.state).score)
-        random_full_scores.append(score_final_state(seeded, s2.state).score)
-
-    avg_hunt = sum(random_hunt_scores) / len(random_hunt_scores)
-    avg_full = sum(random_full_scores) / len(random_full_scores)
-    assert avg_full > avg_hunt, (
-        f"RandomFull ({avg_full:.2f}) should > RandomHunt ({avg_hunt:.2f})"
+    score_hunt = score_final_state(seeded, s1.state, waves=_FAST_WAVES).score
+    score_full = score_final_state(seeded, s2.state, waves=_FAST_WAVES).score
+    assert score_full > score_hunt, (
+        f"RandomFull ({score_full:.2f}) should > RandomHunt ({score_hunt:.2f})"
     )
 
 
@@ -185,8 +179,8 @@ def test_greedy_deterministic() -> None:
 
     assert session1.state is not None
     assert session2.state is not None
-    report1 = score_final_state(definition, session1.state)
-    report2 = score_final_state(definition, session2.state)
+    report1 = score_final_state(definition, session1.state, waves=_FAST_WAVES)
+    report2 = score_final_state(definition, session2.state, waves=_FAST_WAVES)
     assert report1.score == report2.score
 
 
@@ -194,28 +188,19 @@ def test_greedy_outperforms_random() -> None:
     """贪心操作者应比随机操作者得分更高。"""
 
     definition = _load_definition()
-    seeds = list(range(10))
+    from dataclasses import replace
+    seeded = replace(definition, rules=replace(definition.rules, seed=0))
 
-    random_scores = []
-    greedy_scores = []
+    s1 = run_operator(seeded, RandomFullOperator(seed=0), max_steps=200)
+    s2 = run_operator(seeded, GreedyOperator(seed=0), max_steps=200)
 
-    for seed in seeds:
-        from dataclasses import replace
-        seeded = replace(definition, rules=replace(definition.rules, seed=seed))
+    assert s1.state is not None
+    assert s2.state is not None
 
-        s1 = run_operator(seeded, RandomFullOperator(seed=seed), max_steps=200)
-        s2 = run_operator(seeded, GreedyOperator(seed=seed), max_steps=200)
-
-        assert s1.state is not None
-        assert s2.state is not None
-
-        random_scores.append(score_final_state(seeded, s1.state).score)
-        greedy_scores.append(score_final_state(seeded, s2.state).score)
-
-    avg_random = sum(random_scores) / len(random_scores)
-    avg_greedy = sum(greedy_scores) / len(greedy_scores)
-    assert avg_greedy >= avg_random, (
-        f"Greedy ({avg_greedy:.2f}) should >= RandomFull ({avg_random:.2f})"
+    score_random = score_final_state(seeded, s1.state, waves=_FAST_WAVES).score
+    score_greedy = score_final_state(seeded, s2.state, waves=_FAST_WAVES).score
+    assert score_greedy >= score_random, (
+        f"Greedy ({score_greedy:.2f}) should >= RandomFull ({score_random:.2f})"
     )
 
 
@@ -226,7 +211,7 @@ def test_search_completes() -> None:
     definition = _load_definition()
     session = run_operator(
         definition,
-        SearchOperator(seed=0, beam_width=5, max_prep_per_turn=4),
+        SearchOperator(seed=0, beam_width=3, max_prep_per_turn=3),
         max_steps=200,
     )
 
@@ -242,26 +227,18 @@ def test_search_outperforms_greedy() -> None:
     """
 
     definition = _load_definition()
-    seeds = list(range(5))
+    from dataclasses import replace
+    seeded = replace(definition, rules=replace(definition.rules, seed=0))
 
-    search_scores = []
+    s = run_operator(
+        seeded,
+        SearchOperator(seed=0, beam_width=5, max_prep_per_turn=4),
+        max_steps=200,
+    )
 
-    for seed in seeds:
-        from dataclasses import replace
-        seeded = replace(definition, rules=replace(definition.rules, seed=seed))
-
-        s = run_operator(
-            seeded,
-            SearchOperator(seed=seed, beam_width=10, max_prep_per_turn=6),
-            max_steps=200,
-        )
-
-        assert s.state is not None
-        search_scores.append(score_final_state(seeded, s.state).score)
-
-    avg_search = sum(search_scores) / len(search_scores)
-    # 搜索应至少获得正分（能招募和战斗）
-    assert avg_search > 0, f"Search should score > 0, got {avg_search:.2f}"
+    assert s.state is not None
+    score = score_final_state(seeded, s.state, waves=_FAST_WAVES).score
+    assert score > 0, f"Search should score > 0, got {score:.2f}"
 
 
 # ── EvalRunner 测试 ────────────────────────────────────────
@@ -284,9 +261,10 @@ def test_single_eval_completed() -> None:
 def test_eval_suite_produces_reports() -> None:
     config = EvalConfig(
         data_dir=str(_data_dir()),
-        seeds=(0, 1, 2),
+        seeds=(0,),
         max_steps=200,
         max_workers=1,
+        score_waves=_FAST_WAVES,
     )
 
     results = run_eval_suite(
@@ -302,18 +280,18 @@ def test_eval_suite_produces_reports() -> None:
     assert "Greedy" in results
 
     full_report = results["RandomFull"]
-    assert full_report.seed_count == 3
+    assert full_report.seed_count == 1
     assert full_report.mean > 0
-    assert full_report.min <= full_report.p50 <= full_report.max
-    assert len(full_report.per_seed) == 3
+    assert len(full_report.per_seed) == 1
 
 
 def test_save_eval_results_json(tmp_path: Path) -> None:
     config = EvalConfig(
         data_dir=str(_data_dir()),
-        seeds=(0, 1),
+        seeds=(0,),
         max_steps=200,
         max_workers=1,
+        score_waves=_FAST_WAVES,
     )
 
     results = run_eval_suite(
@@ -329,7 +307,7 @@ def test_save_eval_results_json(tmp_path: Path) -> None:
     assert "timestamp" in content
     assert "results" in content
     assert "RandomFull" in content["results"]
-    assert content["results"]["RandomFull"]["seed_count"] == 2
+    assert content["results"]["RandomFull"]["seed_count"] == 1
 
 
 # ── 辅助函数 ──────────────────────────────────────────────

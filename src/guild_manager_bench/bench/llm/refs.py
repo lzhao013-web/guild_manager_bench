@@ -23,6 +23,17 @@ def build_numeric_refs(observation: Mapping[str, Any]) -> RefMap:
     }
 
 
+def update_numeric_refs(refs: RefMap, observation: Mapping[str, Any]) -> None:
+    """增量更新 refs：为新增项分配新序号，保留已有项的原始序号不变。"""
+
+    _update_category(refs, "adventurer", observation, "adventurers", "adventurer_id")
+    _update_category(refs, "monster", observation, "monsters", "monster_id")
+    _update_category(refs, "recipe", observation, "crafting_recipes", "recipe_id")
+    _update_category(refs, "upgrade", observation, "global_upgrades", "upgrade_id")
+    _update_category(refs, "recruit", observation, "recruit_candidates", "candidate_id")
+    _update_category(refs, "equipment", observation, "equipment_inventory", "instance_id")
+
+
 def display_ref(
     refs: Mapping[str, Mapping[str, int]],
     category: str,
@@ -58,6 +69,16 @@ def resolve_tool_arguments(
     """Resolve LLM-facing numeric refs into canonical game ids."""
 
     refs = build_numeric_refs(observation)
+    return resolve_tool_arguments_with_refs(refs, name, arguments)
+
+
+def resolve_tool_arguments_with_refs(
+    refs: Mapping[str, Mapping[str, int]],
+    name: str,
+    arguments: Mapping[str, Any],
+) -> dict[str, Any]:
+    """使用预构建的 refs 映射解析 LLM 数字 ID 为游戏内部 ID。"""
+
     values = dict(arguments)
     if name == "craft_equipment":
         _resolve_field(values, "recipe_id", "recipe", refs)
@@ -151,3 +172,27 @@ def _numeric_value(value: Any) -> int | None:
 
 def _sequence(value: Any) -> Sequence[Any]:
     return value if isinstance(value, Sequence) and not isinstance(value, str) else ()
+
+
+def _update_category(
+    refs: RefMap,
+    category: str,
+    observation: Mapping[str, Any],
+    list_key: str,
+    id_key: str,
+) -> None:
+    """增量更新单个类别的 refs：已有项保持原序号，新增项追加新序号。"""
+
+    category_refs = refs.get(category, {})
+    existing_ids = set(category_refs.keys())
+    max_ref = max(category_refs.values()) if category_refs else 0
+
+    for item in _sequence(observation.get(list_key)):
+        if not isinstance(item, Mapping):
+            continue
+        canonical_id = item.get(id_key)
+        if isinstance(canonical_id, str) and canonical_id and canonical_id not in existing_ids:
+            max_ref += 1
+            category_refs[canonical_id] = max_ref
+
+    refs[category] = category_refs

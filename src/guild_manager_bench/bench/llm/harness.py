@@ -6,7 +6,8 @@ from typing import Any, Mapping, Sequence
 
 from guild_manager_bench.bench.llm.refs import (
     build_numeric_refs,
-    resolve_tool_arguments,
+    resolve_tool_arguments_with_refs,
+    update_numeric_refs,
 )
 from guild_manager_bench.bench.llm.tools import GuildManagerTools, ToolCallError
 
@@ -117,6 +118,10 @@ class TurnToolHarness:
         self.memo_store = memo_store or MemoStore()
         self.budget = ToolBudget(max_tool_calls=max_tool_calls)
         self.ended = False
+        # 固化本回合的数字 ID 映射，避免并行动作导致列表变化后序号偏移
+        self._turn_refs = build_numeric_refs(
+            tools.get_observation(session_id)["observation"]
+        )
         self._agent_tool_names = tuple(
             schema["name"]
             for schema in self.tool_schemas()
@@ -157,6 +162,14 @@ class TurnToolHarness:
         if name == "end_turn" and result.get("ok") is True:
             self.ended = True
 
+        # 成功后增量更新 refs（为新增的实体分配序号，已有项序号不变）
+        if result.get("ok") is True and not self.ended:
+            try:
+                observation = self.tools.get_observation(self.session_id)["observation"]
+                update_numeric_refs(self._turn_refs, observation)
+            except Exception:
+                pass
+
         return self._with_budget(result)
 
     def _arguments_with_session(
@@ -165,8 +178,7 @@ class TurnToolHarness:
         arguments: Mapping[str, Any] | None,
     ) -> dict[str, Any]:
         values = {} if arguments is None else dict(arguments)
-        observation = self.tools.get_observation(self.session_id)["observation"]
-        values = resolve_tool_arguments(observation, name, values)
+        values = resolve_tool_arguments_with_refs(self._turn_refs, name, values)
         values["session_id"] = self.session_id
         return values
 
@@ -183,11 +195,7 @@ class TurnToolHarness:
 
     def _with_budget(self, result: dict[str, Any]) -> dict[str, Any]:
         data = dict(result)
-        try:
-            observation = self.tools.get_observation(self.session_id)["observation"]
-            data["_llm_refs"] = build_numeric_refs(observation)
-        except Exception:
-            pass
+        data["_llm_refs"] = self._turn_refs
         data["tool_budget"] = self._budget_state()
         return data
 

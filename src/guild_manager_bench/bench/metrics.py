@@ -85,11 +85,17 @@ def total_effective_level(state: GameState) -> int:
     return sum(adventurer.level for adventurer in state.adventurers)
 
 
-def score_final_state(definition: GameDefinition, state: GameState) -> ScoreReport:
+def score_final_state(
+    definition: GameDefinition,
+    state: GameState,
+    *,
+    waves: int | None = None,
+) -> ScoreReport:
     """通过固定 Arena 大量模拟评估终局队伍战力。"""
 
     rules = definition.scoring
     rng = random.Random(rules.seed)
+    wave_count = waves if waves is not None else rules.waves
     adventurers = tuple(state.adventurers)
     per_adventurer_score = {item.adventurer_id: 0.0 for item in adventurers}
     per_adventurer_wins = {item.adventurer_id: 0 for item in adventurers}
@@ -101,7 +107,7 @@ def score_final_state(definition: GameDefinition, state: GameState) -> ScoreRepo
     simulated_battles = 0
     max_pairs_per_wave = min(len(adventurers), rules.wave_size)
 
-    for wave_index in range(rules.waves):
+    for wave_index in range(wave_count):
         difficulty = rules.difficulty_factors[wave_index % len(rules.difficulty_factors)]
         monsters = tuple(
             _sample_arena_monster(
@@ -131,7 +137,7 @@ def score_final_state(definition: GameDefinition, state: GameState) -> ScoreRepo
             per_adventurer_wins[adventurer.adventurer_id] += 1 if evaluation.won else 0
             per_adventurer_assignments[adventurer.adventurer_id] += 1
 
-    denominator = rules.waves * max_pairs_per_wave * 100
+    denominator = wave_count * max_pairs_per_wave * 100
     score = _round_score(100 * total_score / denominator) if denominator else 0.0
     per_adventurer = tuple(
         AdventurerScoreBreakdown(
