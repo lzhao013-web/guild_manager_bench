@@ -51,6 +51,7 @@ def build_observation(definition: GameDefinition, state: GameState) -> dict[str,
         "party_size_limit": size_limit,
         "party_size": len(state.adventurers),
         "experience_rules": _experience_rules_to_dict(definition),
+        "turn_recovery_rules": _turn_recovery_rules_to_dict(definition),
         "scoring": _scoring_rules_to_dict(definition),
         "adventurers": [
             _adventurer_to_dict(definition, state, adventurer)
@@ -270,6 +271,7 @@ def _stats_to_dict(stats: CombatStats) -> dict[str, int]:
         "defense": stats.defense,
         "speed": stats.speed,
         "recovery": stats.recovery,
+        "mp_recovery": stats.mp_recovery,
     }
 
 
@@ -281,6 +283,7 @@ def _stat_modifier_to_dict(stats: CombatStatModifier) -> dict[str, int]:
         "defense": stats.defense,
         "speed": stats.speed,
         "recovery": stats.recovery,
+        "mp_recovery": stats.mp_recovery,
     }
 
 
@@ -298,6 +301,17 @@ def _experience_rules_to_dict(definition: GameDefinition) -> dict[str, Any]:
         "required_experience_growth": rules.required_experience_growth,
         "max_level": rules.max_level,
         "stat_growth_per_level": _stat_modifier_to_dict(rules.stat_growth_per_level),
+    }
+
+
+def _turn_recovery_rules_to_dict(definition: GameDefinition) -> dict[str, Any]:
+    rules = definition.rules.turn_recovery
+    return {
+        "hp": rules.hp,
+        "mp": rules.mp,
+        "hp_percent": rules.hp_percent,
+        "mp_percent": rules.mp_percent,
+        "use_recovery_stat": rules.use_recovery_stat,
     }
 
 

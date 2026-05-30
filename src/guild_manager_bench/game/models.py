@@ -23,6 +23,7 @@ class CombatStats:
     defense: int
     speed: int
     recovery: int
+    mp_recovery: int = 0
 
     def __post_init__(self) -> None:
         _require_at_least("hp", self.hp, 1)
@@ -31,6 +32,7 @@ class CombatStats:
         _require_at_least("defense", self.defense, 0)
         _require_at_least("speed", self.speed, 0)
         _require_at_least("recovery", self.recovery, 0)
+        _require_at_least("mp_recovery", self.mp_recovery, 0)
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,6 +48,7 @@ class CombatStatModifier:
     defense: int = 0
     speed: int = 0
     recovery: int = 0
+    mp_recovery: int = 0
 
     def __post_init__(self) -> None:
         _require_at_least("hp", self.hp, 0)
@@ -54,6 +57,7 @@ class CombatStatModifier:
         _require_at_least("defense", self.defense, 0)
         _require_at_least("speed", self.speed, 0)
         _require_at_least("recovery", self.recovery, 0)
+        _require_at_least("mp_recovery", self.mp_recovery, 0)
 
     def __add__(self, other: CombatStatModifier) -> CombatStatModifier:
         if not isinstance(other, CombatStatModifier):
@@ -65,6 +69,7 @@ class CombatStatModifier:
             defense=self.defense + other.defense,
             speed=self.speed + other.speed,
             recovery=self.recovery + other.recovery,
+            mp_recovery=self.mp_recovery + other.mp_recovery,
         )
 
 
@@ -78,6 +83,7 @@ def apply_stat_modifier(stats: CombatStats, modifier: CombatStatModifier) -> Com
         defense=stats.defense + modifier.defense,
         speed=stats.speed + modifier.speed,
         recovery=stats.recovery + modifier.recovery,
+        mp_recovery=stats.mp_recovery + modifier.mp_recovery,
     )
 
 
@@ -92,6 +98,7 @@ def scale_stat_modifier(modifier: CombatStatModifier, factor: int) -> CombatStat
         defense=modifier.defense * factor,
         speed=modifier.speed * factor,
         recovery=modifier.recovery * factor,
+        mp_recovery=modifier.mp_recovery * factor,
     )
 
 
@@ -105,6 +112,7 @@ def scale_combat_stats(stats: CombatStats, multiplier: float) -> CombatStats:
         defense=max(0, int(stats.defense * multiplier)),
         speed=max(0, int(stats.speed * multiplier)),
         recovery=max(0, int(stats.recovery * multiplier)),
+        mp_recovery=max(0, int(stats.mp_recovery * multiplier)),
     )
 
 

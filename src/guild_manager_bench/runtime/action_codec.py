@@ -6,6 +6,7 @@ from typing import Any
 from guild_manager_bench.game.actions import (
     AllocateExperienceAction,
     CraftAction,
+    DismissAction,
     EndTurnAction,
     EquipAction,
     HuntAction,
@@ -35,6 +36,8 @@ def decode_preparation_action(payload: Mapping[str, Any]) -> PreparationAction:
         )
     if action_type == "recruit":
         return RecruitAction(candidate_id=_str(payload, "candidate_id"))
+    if action_type == "dismiss":
+        return DismissAction(adventurer_id=_str(payload, "adventurer_id"))
     if action_type == "equip":
         return EquipAction(
             adventurer_id=_str(payload, "adventurer_id"),
@@ -72,6 +75,8 @@ def encode_preparation_action(action: PreparationAction) -> dict[str, Any]:
         }
     if isinstance(action, RecruitAction):
         return {"type": "recruit", "candidate_id": action.candidate_id}
+    if isinstance(action, DismissAction):
+        return {"type": "dismiss", "adventurer_id": action.adventurer_id}
     if isinstance(action, EquipAction):
         return {
             "type": "equip",

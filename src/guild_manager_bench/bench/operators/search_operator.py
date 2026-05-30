@@ -367,6 +367,7 @@ class SearchOperator:
         total_speed = 0.0
         total_hp = 0.0
         total_recovery = 0.0
+        total_mp_recovery = 0.0
         healers = 0
 
         all_advs = list(shadow.adventurers.values()) if shadow.adventurers else obs.get("adventurers", [])
@@ -378,6 +379,7 @@ class SearchOperator:
             total_speed += stats.get("speed", 0)
             total_hp += stats.get("hp", 0)
             total_recovery += stats.get("recovery", 0)
+            total_mp_recovery += stats.get("mp_recovery", 0)
             for skill in adv.get("skills", []):
                 for effect in skill.get("effects", []):
                     if effect.get("type") in ("heal", "heal_percent"):
@@ -390,6 +392,7 @@ class SearchOperator:
             + total_speed * 1.8
             + total_defense * 1.5
             + total_recovery * 0.5
+            + total_mp_recovery * 0.5
             + total_hp * 0.3
         )
 

@@ -90,7 +90,6 @@ class LlmRunConfig:
     max_tool_calls_per_turn: int = 20
     max_empty_responses: int = 2
     max_end_turn_attempts: int = 3
-    max_invalid_tool_responses: int = 3
     max_model_steps_per_turn: int = 50
     archive_dir: str | Path | None = "runs/llm"
     game_seed: int | None = None
@@ -100,7 +99,6 @@ class LlmRunConfig:
         _require_non_negative("max_tool_calls_per_turn", self.max_tool_calls_per_turn)
         _require_positive("max_empty_responses", self.max_empty_responses)
         _require_positive("max_end_turn_attempts", self.max_end_turn_attempts)
-        _require_positive("max_invalid_tool_responses", self.max_invalid_tool_responses)
         _require_positive("max_model_steps_per_turn", self.max_model_steps_per_turn)
         _require_optional_int("game_seed", self.game_seed)
         _require_optional_int("scoring_seed", self.scoring_seed)
@@ -329,7 +327,6 @@ def run_llm_turn(
 
     empty_responses = 0
     failed_end_turns = 0
-    invalid_tool_responses = 0
 
     for step_index in range(1, config.max_model_steps_per_turn + 1):
         schemas = tuple(turn_harness.tool_schemas())
@@ -460,16 +457,6 @@ def run_llm_turn(
                     message=retry["content"],
                 )
                 continue
-
-            if _is_protocol_error(result):
-                invalid_tool_responses += 1
-                if invalid_tool_responses >= config.max_invalid_tool_responses:
-                    return _fail_turn(
-                        turn_trace,
-                        _protocol_failure_reason(result),
-                        event_sink,
-                        trace_update,
-                    )
 
         if turn_harness.budget.exhausted and not turn_harness.ended:
             retry = _retry_message_budget_exhausted()
@@ -1101,7 +1088,7 @@ def _append_adventurer_lines(
             f"HP {resources.get('current_hp')}/{stats.get('hp')} "
             f"MP {resources.get('current_mp')}/{stats.get('mp')} "
             f"攻击 {stats.get('attack')} 防御 {stats.get('defense')} 速度 {stats.get('speed')} "
-            f"恢复 {stats.get('recovery')} "
+            f"恢复 {stats.get('recovery')} 回魔 {stats.get('mp_recovery')} "
             f"装备 {equipment_text}"
         )
         _append_skill_lines(lines, adventurer.get("skills"), indent="  ")
@@ -1141,7 +1128,7 @@ def _append_recruit_candidate_lines(
             f"费用 {candidate.get('recruit_gold')} "
             f"HP {stats.get('hp')} MP {stats.get('mp')} "
             f"攻击 {stats.get('attack')} 防御 {stats.get('defense')} "
-            f"速度 {stats.get('speed')} 恢复 {stats.get('recovery')} "
+            f"速度 {stats.get('speed')} 恢复 {stats.get('recovery')} 回魔 {stats.get('mp_recovery')} "
             f"成长 {_stat_modifier_inline(candidate.get('stat_growth_per_level'))} "
             f"{availability}{missing_text}"
         )
@@ -1176,7 +1163,7 @@ def _append_monster_lines(
             f"{monster.get('name')} "
             f"HP {stats.get('hp')} MP {stats.get('mp')} "
             f"攻击 {stats.get('attack')} 防御 {stats.get('defense')} "
-            f"速度 {stats.get('speed')} 恢复 {stats.get('recovery')} "
+            f"速度 {stats.get('speed')} 恢复 {stats.get('recovery')} 回魔 {stats.get('mp_recovery')} "
             f"奖励 {reward_text}"
         )
         _append_skill_lines(lines, monster.get("skills"), indent="  ")
@@ -1507,7 +1494,7 @@ def _stat_modifier_inline(value: Any) -> str:
     if not isinstance(value, Mapping):
         return "无"
     parts = []
-    for key in ("hp", "mp", "attack", "defense", "speed", "recovery"):
+    for key in ("hp", "mp", "attack", "defense", "speed", "recovery", "mp_recovery"):
         amount = value.get(key, 0)
         if isinstance(amount, int | float) and amount:
             parts.append(f"{_mapping_key(key)}+{_number_inline(amount)}")
@@ -1528,6 +1515,7 @@ def _mapping_key(value: Any) -> str:
         "defense": "防御",
         "speed": "速度",
         "recovery": "恢复",
+        "mp_recovery": "回魔",
     }
     return labels.get(value, str(value))
 
@@ -1770,7 +1758,6 @@ def _config_to_dict(config: LlmRunConfig) -> dict[str, Any]:
         "max_tool_calls_per_turn": config.max_tool_calls_per_turn,
         "max_empty_responses": config.max_empty_responses,
         "max_end_turn_attempts": config.max_end_turn_attempts,
-        "max_invalid_tool_responses": config.max_invalid_tool_responses,
         "max_model_steps_per_turn": config.max_model_steps_per_turn,
         "archive_dir": None if config.archive_dir is None else str(config.archive_dir),
         "game_seed": config.game_seed,
@@ -1820,21 +1807,6 @@ def _json_safe(value: Any) -> Any:
         return json.loads(json.dumps(value, ensure_ascii=False, default=str))
     except (TypeError, ValueError):
         return deepcopy(value)
-
-
-def _is_protocol_error(result: Mapping[str, Any]) -> bool:
-    if result.get("ok") is not False:
-        return False
-    if result.get("event", {}).get("type") == "action_rejected":
-        return False
-    return True
-
-
-def _protocol_failure_reason(result: Mapping[str, Any]) -> str:
-    budget = result.get("tool_budget")
-    if isinstance(budget, Mapping) and budget.get("end_turn_required") is True:
-        return "tool_budget_exhausted_without_end_turn"
-    return "invalid_tool_call_limit"
 
 
 def _require_positive(name: str, value: int) -> None:

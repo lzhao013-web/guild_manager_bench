@@ -172,7 +172,7 @@ def test_invalid_end_turn_fails_after_attempt_limit() -> None:
     assert "duplicate adventurer hunt" in run.turns[0].tool_calls[-1].result["error"]
 
 
-def test_budget_exhaustion_without_end_turn_fails() -> None:
+def test_budget_exhaustion_without_end_turn_retries() -> None:
     agent = StaticAgent(
         LlmAgentResponse(tool_calls=(LlmToolCall("get_party", {}),))
     )
@@ -182,13 +182,13 @@ def test_budget_exhaustion_without_end_turn_fails() -> None:
         data_dir=_data_dir(),
         config=LlmRunConfig(
             max_tool_calls_per_turn=1,
-            max_invalid_tool_responses=2,
+            max_model_steps_per_turn=5,
             archive_dir=None,
         ),
     )
 
     assert run.status == "failed"
-    assert run.failure_reason == "tool_budget_exhausted_without_end_turn"
+    assert run.failure_reason == "model_step_limit"
 
 
 def test_run_llm_turn_emits_debug_events() -> None:
@@ -258,8 +258,8 @@ def test_turn_prompt_includes_compact_skill_summaries() -> None:
     prompt = build_turn_prompt(observation, max_tool_calls=3)
 
     assert "回合流程：准备阶段可调用查询工具读取信息" in prompt
-    assert "工具预算：本回合最多允许 3 次非 end_turn 工具调用" in prompt
-    assert "工具参数：所有对象 id 都使用下方列表左侧的数字 id" in prompt
+    assert "本回合最多允许 3 次非 end_turn 工具调用" in prompt
+    assert "调用工具使用的所有对象 id 都使用列表左侧的数字 id" in prompt
     assert "本回合概览：" in prompt
     assert "可制作配方" in prompt
     assert "可购买升级" in prompt
@@ -276,7 +276,6 @@ def test_turn_prompt_includes_compact_skill_summaries() -> None:
     assert "等级技能" not in prompt
     assert "壁垒集结" not in prompt
     assert "战舞者" not in prompt
-    assert "随机种子：游戏 20260524，评分 20260526" in prompt
     assert "效果 伤害倍率 1.8" not in prompt
 
 

@@ -9,6 +9,7 @@ recruitable_adventurers:
       defense: 9
       speed: 9
       recovery: 6
+      mp_recovery: 6
     stat_growth_per_level:
       hp: 18
       mp: 1
@@ -16,6 +17,7 @@ recruitable_adventurers:
       defense: 4
       speed: 1
       recovery: 2
+      mp_recovery: 2
     skills: [shield_stance]
     level_skill_unlocks:
       - level: 3
@@ -31,6 +33,7 @@ recruitable_adventurers:
       defense: 5
       speed: 14
       recovery: 4
+      mp_recovery: 4
     stat_growth_per_level:
       hp: 9
       mp: 2
@@ -38,6 +41,7 @@ recruitable_adventurers:
       defense: 1
       speed: 3
       recovery: 1
+      mp_recovery: 1
     skills: [power_strike]
     level_skill_unlocks:
       - level: 3
@@ -55,6 +59,7 @@ recruitable_adventurers:
       defense: 4
       speed: 11
       recovery: 5
+      mp_recovery: 5
     stat_growth_per_level:
       hp: 7
       mp: 5
@@ -62,6 +67,7 @@ recruitable_adventurers:
       defense: 1
       speed: 1
       recovery: 2
+      mp_recovery: 2
     skills: [emergency_heal, arcane_focus]
     level_skill_unlocks:
       - level: 3
@@ -79,6 +85,7 @@ recruitable_adventurers:
       defense: 5
       speed: 16
       recovery: 4
+      mp_recovery: 4
     stat_growth_per_level:
       hp: 10
       mp: 2
@@ -86,6 +93,7 @@ recruitable_adventurers:
       defense: 1
       speed: 3
       recovery: 1
+      mp_recovery: 1
     skills: [dancer_flurry]
     level_skill_unlocks:
       - level: 3
@@ -101,6 +109,7 @@ recruitable_adventurers:
       defense: 10
       speed: 8
       recovery: 6
+      mp_recovery: 6
     stat_growth_per_level:
       hp: 17
       mp: 1
@@ -108,6 +117,7 @@ recruitable_adventurers:
       defense: 4
       speed: 1
       recovery: 2
+      mp_recovery: 2
     skills: [guard_oath]
     level_skill_unlocks:
       - level: 3
@@ -123,6 +133,7 @@ recruitable_adventurers:
       defense: 4
       speed: 10
       recovery: 8
+      mp_recovery: 8
     stat_growth_per_level:
       hp: 9
       mp: 4
@@ -130,6 +141,7 @@ recruitable_adventurers:
       defense: 1
       speed: 1
       recovery: 3
+      mp_recovery: 3
     skills: [bitter_tonic]
     level_skill_unlocks:
       - level: 3
@@ -145,6 +157,7 @@ recruitable_adventurers:
       defense: 3
       speed: 12
       recovery: 5
+      mp_recovery: 5
     stat_growth_per_level:
       hp: 8
       mp: 5
@@ -152,6 +165,7 @@ recruitable_adventurers:
       defense: 1
       speed: 2
       recovery: 1
+      mp_recovery: 1
     skills: [venom_hex]
     level_skill_unlocks:
       - level: 3
@@ -167,6 +181,7 @@ recruitable_adventurers:
       defense: 3
       speed: 11
       recovery: 4
+      mp_recovery: 4
     stat_growth_per_level:
       hp: 8
       mp: 4
@@ -174,6 +189,7 @@ recruitable_adventurers:
       defense: 1
       speed: 1
       recovery: 1
+      mp_recovery: 1
     skills: [ember_brand]
     level_skill_unlocks:
       - level: 3

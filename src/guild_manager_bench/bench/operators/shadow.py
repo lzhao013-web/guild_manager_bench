@@ -244,7 +244,7 @@ class ShadowState:
         upgrade_stats = upgrade.get("stats", {})
         for adv in self.adventurers.values():
             eff = dict(adv.get("effective_stats", adv.get("base_stats", {})))
-            for key in ("hp", "mp", "attack", "defense", "speed", "recovery"):
+            for key in ("hp", "mp", "attack", "defense", "speed", "recovery", "mp_recovery"):
                 eff[key] = eff.get(key, 0) + upgrade_stats.get(key, 0)
             adv["effective_stats"] = eff
 
@@ -277,7 +277,7 @@ class ShadowState:
         if adv is not None:
             eff = dict(adv.get("effective_stats", adv.get("base_stats", {})))
             item_stats = item.get("stats", {})
-            for key in ("hp", "mp", "attack", "defense", "speed", "recovery"):
+            for key in ("hp", "mp", "attack", "defense", "speed", "recovery", "mp_recovery"):
                 eff[key] = eff.get(key, 0) + item_stats.get(key, 0)
             adv["effective_stats"] = eff
 
@@ -333,7 +333,7 @@ class ShadowState:
         if levels_gained > 0:
             growth = adv.get("stat_growth_per_level", {})
             eff = dict(adv.get("effective_stats", adv.get("base_stats", {})))
-            for key in ("hp", "mp", "attack", "defense", "speed", "recovery"):
+            for key in ("hp", "mp", "attack", "defense", "speed", "recovery", "mp_recovery"):
                 eff[key] = eff.get(key, 0) + growth.get(key, 0) * levels_gained
             adv["effective_stats"] = eff
 

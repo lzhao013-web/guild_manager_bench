@@ -562,12 +562,14 @@ def _effective_stats(
         "defense": 0,
         "speed": 0,
         "recovery": 0,
+        "mp_recovery": 0,
     }
     multipliers = {
         "attack": 1.0,
         "defense": 1.0,
         "speed": 1.0,
         "recovery": 1.0,
+        "mp_recovery": 1.0,
     }
 
     for skill in combatant.passive_skills:
@@ -605,6 +607,11 @@ def _effective_stats(
             combatant.stats.recovery,
             bonuses["recovery"],
             multipliers["recovery"],
+        ),
+        mp_recovery=_effective_stat_value(
+            combatant.stats.mp_recovery,
+            bonuses["mp_recovery"],
+            multipliers["mp_recovery"],
         ),
     )
 
@@ -820,4 +827,8 @@ def _apply_recovery(combatant: _RuntimeCombatant) -> None:
     combatant.resources.current_hp = min(
         combatant.stats.hp,
         combatant.resources.current_hp + combatant.stats.recovery,
+    )
+    combatant.resources.current_mp = min(
+        combatant.stats.mp,
+        combatant.resources.current_mp + combatant.stats.mp_recovery,
     )

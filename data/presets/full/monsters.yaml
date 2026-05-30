@@ -11,6 +11,7 @@ monsters:
       defense: 4
       speed: 9
       recovery: 0
+      mp_recovery: 0
     base_reward:
       gold: 20
       experience: 45
@@ -37,6 +38,7 @@ monsters:
       defense: 2
       speed: 17
       recovery: 0
+      mp_recovery: 0
     base_reward:
       gold: 14
       experience: 32
@@ -63,6 +65,7 @@ monsters:
       defense: 9
       speed: 5
       recovery: 0
+      mp_recovery: 0
     base_reward:
       gold: 34
       experience: 78
@@ -90,6 +93,7 @@ monsters:
       defense: 6
       speed: 10
       recovery: 0
+      mp_recovery: 0
     base_reward:
       gold: 28
       experience: 64
@@ -116,6 +120,7 @@ monsters:
       defense: 3
       speed: 12
       recovery: 0
+      mp_recovery: 0
     base_reward:
       gold: 26
       experience: 58
@@ -142,6 +147,7 @@ monsters:
       defense: 3
       speed: 8
       recovery: 0
+      mp_recovery: 0
     skills: [shaman_spark]
     base_reward:
       gold: 24
@@ -170,6 +176,7 @@ monsters:
       defense: 16
       speed: 8
       recovery: 0
+      mp_recovery: 0
     base_reward:
       gold: 38
       experience: 85
@@ -198,6 +205,7 @@ monsters:
       defense: 8
       speed: 13
       recovery: 0
+      mp_recovery: 0
     base_reward:
       gold: 36
       experience: 80
@@ -225,6 +233,7 @@ monsters:
       defense: 7
       speed: 16
       recovery: 0
+      mp_recovery: 0
     base_reward:
       gold: 34
       experience: 76
@@ -252,6 +261,7 @@ monsters:
       defense: 14
       speed: 9
       recovery: 0
+      mp_recovery: 0
     base_reward:
       gold: 36
       experience: 82
@@ -281,6 +291,7 @@ monsters:
       defense: 22
       speed: 8
       recovery: 0
+      mp_recovery: 0
     base_reward:
       gold: 48
       experience: 108
@@ -309,6 +320,7 @@ monsters:
       defense: 10
       speed: 20
       recovery: 0
+      mp_recovery: 0
     base_reward:
       gold: 52
       experience: 115
@@ -336,6 +348,7 @@ monsters:
       defense: 10
       speed: 14
       recovery: 0
+      mp_recovery: 0
     base_reward:
       gold: 54
       experience: 120
@@ -363,6 +376,7 @@ monsters:
       defense: 18
       speed: 12
       recovery: 0
+      mp_recovery: 0
     base_reward:
       gold: 56
       experience: 128

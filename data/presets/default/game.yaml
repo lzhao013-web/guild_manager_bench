@@ -60,6 +60,7 @@ experience:
     defense: 2
     speed: 1
     recovery: 1
+    mp_recovery: 1
 
 llm:
   expose_battle_preview: false

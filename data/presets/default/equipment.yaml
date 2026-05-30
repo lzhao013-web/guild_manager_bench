@@ -40,6 +40,7 @@ equipment:
     stats:
       speed: 4
       recovery: 2
+      mp_recovery: 2
 
   - id: focus_charm
     name: 专注护符
@@ -79,4 +80,5 @@ equipment:
       mp: 14
       attack: 5
       recovery: 3
+      mp_recovery: 3
     skills: [renewal_flow]

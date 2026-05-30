@@ -7,6 +7,7 @@ from typing import Any, Iterable, Mapping
 from guild_manager_bench.game.actions import (
     AllocateExperienceAction,
     CraftAction,
+    DismissAction,
     EndTurnAction,
     EquipAction,
     HuntAction,
@@ -181,6 +182,9 @@ def apply_preparation_action(
 
     if isinstance(action, RecruitAction):
         return _apply_recruit_action(definition, state, action)
+
+    if isinstance(action, DismissAction):
+        return _apply_dismiss_action(definition, state, action)
 
     if isinstance(action, UnequipAction):
         return _apply_unequip_action(definition, state, action)
@@ -511,6 +515,35 @@ def _apply_recruit_action(
     )
 
 
+def _apply_dismiss_action(
+    definition: GameDefinition,
+    state: GameState,
+    action: DismissAction,
+) -> GameState:
+    """解散冒险者：移出队伍，装备归还库存。"""
+
+    adventurer = _adventurer_by_id(state, action.adventurer_id)
+
+    # 收集该冒险者身上的装备，归还到库存
+    equipped_items = [
+        instance
+        for instance in state.equipment_inventory
+        if instance.equipped_by == adventurer.adventurer_id
+    ]
+    returned_inventory = list(state.equipment_inventory)
+    for instance in equipped_items:
+        idx = returned_inventory.index(instance)
+        returned_inventory[idx] = replace(instance, equipped_by=None)
+
+    return replace(
+        state,
+        adventurers=tuple(
+            a for a in state.adventurers if a.adventurer_id != adventurer.adventurer_id
+        ),
+        equipment_inventory=tuple(returned_inventory),
+    )
+
+
 def _apply_equip_action(
     definition: GameDefinition,
     state: GameState,
@@ -813,9 +846,11 @@ def _apply_turn_recovery(definition: GameDefinition, state: GameState) -> GameSt
         )
         if definition.rules.turn_recovery.use_recovery_stat:
             hp_recovery += stats.recovery
-        mp_recovery = definition.rules.turn_recovery.mp + int(
+        mp_recovery_amount = definition.rules.turn_recovery.mp + int(
             stats.mp * definition.rules.turn_recovery.mp_percent
         )
+        if definition.rules.turn_recovery.use_recovery_stat:
+            mp_recovery_amount += stats.mp_recovery
         adventurers.append(
             replace(
                 adventurer,
@@ -823,7 +858,7 @@ def _apply_turn_recovery(definition: GameDefinition, state: GameState) -> GameSt
                     current_hp=min(stats.hp, adventurer.resources.current_hp + hp_recovery),
                     current_mp=min(
                         stats.mp,
-                        adventurer.resources.current_mp + mp_recovery,
+                        adventurer.resources.current_mp + mp_recovery_amount,
                     ),
                 ),
             )

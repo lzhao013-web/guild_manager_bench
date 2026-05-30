@@ -71,6 +71,7 @@ equipment:
     slot: accessory
     stats:
       recovery: 3
+      mp_recovery: 3
       mp: 5
 
   # ===== T1 Specials =====
@@ -87,6 +88,7 @@ equipment:
     slot: accessory
     stats:
       recovery: 6
+      mp_recovery: 6
       defense: 2
       mp: 3
     skills: [healing_pulse]
@@ -229,6 +231,7 @@ equipment:
       defense: 12
       hp: 35
       recovery: 3
+      mp_recovery: 3
 
   - id: t3_heavy_armor
     name: 龙鳞甲
@@ -245,6 +248,7 @@ equipment:
       defense: 7
       hp: 20
       recovery: 2
+      mp_recovery: 2
 
   - id: t3_heavy_boots
     name: 龙鳞靴
@@ -294,6 +298,7 @@ equipment:
       attack: 6
       hp: 15
       recovery: 4
+      mp_recovery: 4
 
   # ===== T3 Specials =====
   - id: t3_dragon_greatsword
@@ -312,6 +317,7 @@ equipment:
       attack: 5
       mp: 35
       recovery: 5
+      mp_recovery: 5
     skills: [plague_touch]
     allowed_classes: [spellshot_mage, plague_mage]
 
@@ -331,5 +337,6 @@ equipment:
       defense: 20
       hp: 70
       recovery: 4
+      mp_recovery: 4
     skills: [fortify]
     allowed_classes: [foot_knight, ascetic_monk]

@@ -217,7 +217,7 @@ class TurnToolHarness:
 
 _WRITE_MEMO_SCHEMA: dict[str, Any] = {
     "name": "write_memo",
-    "description": "写入一条跨回合备忘录。备忘录仅在下回合开始时出现在提示词中，之后自动消失。",
+    "description": "写入一条跨回合备忘录，以提醒下回合该如何操作。备忘录仅在下回合开始时出现在提示词中，之后自动消失。",
     "parameters": {
         "type": "object",
         "required": ["content"],

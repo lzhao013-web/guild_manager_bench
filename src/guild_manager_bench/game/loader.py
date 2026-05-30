@@ -454,6 +454,7 @@ def _parse_combat_stats(data: Mapping[str, Any]) -> CombatStats:
         defense=_int(_required(data, "defense"), "stats.defense"),
         speed=_int(_required(data, "speed"), "stats.speed"),
         recovery=_int(data.get("recovery", 0), "stats.recovery"),
+        mp_recovery=_int(data.get("mp_recovery", 0), "stats.mp_recovery"),
     )
 
 
@@ -465,6 +466,7 @@ def _parse_stat_modifier(data: Mapping[str, Any]) -> CombatStatModifier:
         defense=_int(data.get("defense", 0), "stat_modifier.defense"),
         speed=_int(data.get("speed", 0), "stat_modifier.speed"),
         recovery=_int(data.get("recovery", 0), "stat_modifier.recovery"),
+        mp_recovery=_int(data.get("mp_recovery", 0), "stat_modifier.mp_recovery"),
     )
 
 

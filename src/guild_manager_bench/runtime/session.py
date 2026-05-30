@@ -8,6 +8,7 @@ from uuid import uuid4
 from guild_manager_bench.game.actions import (
     AllocateExperienceAction,
     CraftAction,
+    DismissAction,
     EndTurnAction,
     EquipAction,
     PreparationAction,
@@ -200,6 +201,9 @@ def _preparation_summary(
     if isinstance(action, RecruitAction):
         candidate = _recruit_candidate_by_id(observation, action.candidate_id)
         return f"招募 {candidate['name']}"
+    if isinstance(action, DismissAction):
+        adventurer = _adventurer_by_id(observation, action.adventurer_id)
+        return f"解散 {adventurer['name']}"
     if isinstance(action, EquipAction):
         adventurer = _adventurer_by_id(observation, action.adventurer_id)
         equipment = _equipment_by_instance_id(observation, action.equipment_instance_id)
@@ -307,6 +311,7 @@ def _append_adventurer_changes(
             ("defense", "防御"),
             ("speed", "速度"),
             ("recovery", "战后回血"),
+            ("mp_recovery", "战后回魔"),
         ):
             _append_value_change(
                 changes,

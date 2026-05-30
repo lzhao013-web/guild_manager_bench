@@ -7,7 +7,10 @@ from guild_manager_bench.bench.llm.refs import (
     display_ref,
 )
 
-DEFAULT_OBJECTIVE = "最大化本局最终表现：尽量赢得战斗、提升队伍、积累有价值资源。"
+DEFAULT_OBJECTIVE = (
+    "最大化终局 Arena 评分（0-100 分）。\n"
+    "- 评分基于队伍在 1000 波竞技场战斗中的表现，队伍越强评分越高。\n"
+)
 
 
 def build_turn_prompt(
@@ -26,9 +29,14 @@ def build_turn_prompt(
             f"目标：{objective}",
             "",
             "回合流程：准备阶段可调用查询工具读取信息，也可调用动作工具执行准备操作；回合结束通过 end_turn 提交讨伐列表。",
-            f"工具预算：本回合最多允许 {max_tool_calls} 次非 end_turn 工具调用；查询、动作和非法调用均计入预算。预算耗尽后只接受 end_turn。",
-            "工具参数：所有对象 id 都使用下方列表左侧的数字 id。",
-            "工具结果：返回 OK/FAIL、budget 和结果摘要。动作工具返回变更摘要，不自动附带完整状态；详细信息分散在队伍、怪物、制作、装备库存、全局升级、招募等查询工具中。",
+            "战斗提示：冒险者讨伐怪物的战斗是完全的1V1自动战斗，无法干预战斗过程，但可以通过调整冒险者的装备、技能来影响战斗结果。",
+            "技能相关：主动技能满足条件时会在角色行动时按优先级触发，但会覆盖普通攻击；被动技能会在满足条件时持续生效；技能效果可能包括伤害、治疗、状态等，具体信息请参考状态和冒险者信息中的技能描述。",
+            "回复机制：每回合战斗结束后全体冒险者回复HP和MP，额外回复等同于其恢复属性（recovery）值的HP，战斗中技能也可提供治疗、百分比治疗、MP恢复和持续回复状态。"
+            f"HP回复 = {_turn_recovery_hp(observation)} + 最大HP×{_percent(observation['turn_recovery_rules']['hp_percent'])} + 恢复属性；"
+            f"MP回复 = {_turn_recovery_mp(observation)} + 最大MP×{_percent(observation['turn_recovery_rules']['mp_percent'])} + 回魔属性。",
+            f"本回合最多允许 {max_tool_calls} 次非 end_turn 工具调用；查询、动作和失败的调用均会消耗使用次数，请谨慎决定和规划要使用的工具。",
+            "调用工具使用的所有对象 id 都使用列表左侧的数字 id。",
+            "工具会返回 OK/FAIL、budget 和结果摘要。动作工具返回变更摘要；详细信息分散在各个查询工具中。",
             "",
             _memo_summary(memo_entries),
             "",
@@ -62,7 +70,6 @@ def _state_summary(observation: Mapping[str, Any]) -> str:
         scoring = {}
     lines = [
         f"当前回合：{observation['turn']}/{observation['max_turns']}",
-        f"随机种子：游戏 {observation.get('seed')}，评分 {scoring.get('seed')}",
         f"资源：金币 {observation['gold']}，经验池 {observation['experience_pool']}，材料 {_mapping_text(observation['materials'])}",
         _turn_overview(observation),
         "冒险者：",
@@ -401,6 +408,7 @@ def _stat_text(value: Any) -> str:
         "defense": "防御",
         "speed": "速度",
         "recovery": "恢复",
+        "mp_recovery": "回魔",
     }
     return labels.get(value, str(value))
 
@@ -422,11 +430,26 @@ def _stat_modifier_text(value: Any) -> str:
         ("defense", "防御"),
         ("speed", "速度"),
         ("recovery", "恢复"),
+        ("mp_recovery", "回魔"),
     ):
         amount = value.get(key, 0)
         if isinstance(amount, int | float) and amount:
             parts.append(f"{label}+{_number(amount)}")
     return " ".join(parts) if parts else "无"
+
+
+def _turn_recovery_hp(observation: Mapping[str, Any]) -> int:
+    rules = observation.get("turn_recovery_rules", {})
+    if isinstance(rules, Mapping):
+        return int(rules.get("hp", 0))
+    return 0
+
+
+def _turn_recovery_mp(observation: Mapping[str, Any]) -> int:
+    rules = observation.get("turn_recovery_rules", {})
+    if isinstance(rules, Mapping):
+        return int(rules.get("mp", 0))
+    return 0
 
 
 def _percent(value: Any) -> str:

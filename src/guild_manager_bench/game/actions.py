@@ -49,6 +49,16 @@ class RecruitAction:
 
 
 @dataclass(frozen=True, slots=True)
+class DismissAction:
+    """解散一个冒险者，腾出队伍名额。"""
+
+    adventurer_id: str
+
+    def __post_init__(self) -> None:
+        _require_non_empty("adventurer_id", self.adventurer_id)
+
+
+@dataclass(frozen=True, slots=True)
 class EquipAction:
     """把一件装备穿戴到指定冒险者身上。"""
 
@@ -90,6 +100,7 @@ PreparationAction: TypeAlias = (
     | PurchaseUpgradeAction
     | AllocateExperienceAction
     | RecruitAction
+    | DismissAction
     | UnequipAction
     | EquipAction
 )
@@ -98,6 +109,7 @@ PREPARATION_ACTION_TYPES = (
     PurchaseUpgradeAction,
     AllocateExperienceAction,
     RecruitAction,
+    DismissAction,
     UnequipAction,
     EquipAction,
 )

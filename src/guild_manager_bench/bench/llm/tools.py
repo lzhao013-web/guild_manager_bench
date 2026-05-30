@@ -244,6 +244,21 @@ class GuildManagerTools:
             },
         )
 
+    def dismiss_adventurer(
+        self,
+        session_id: str,
+        adventurer_id: str,
+    ) -> dict[str, Any]:
+        """解散队伍中的冒险者，装备归还库存。"""
+
+        return self._submit_preparation(
+            session_id,
+            {
+                "type": "dismiss",
+                "adventurer_id": adventurer_id,
+            },
+        )
+
     def equip_item(
         self,
         session_id: str,
@@ -541,6 +556,7 @@ _BASE_HANDLER_NAMES = {
     "purchase_upgrade": "purchase_upgrade",
     "allocate_experience": "allocate_experience",
     "recruit_adventurer": "recruit_adventurer",
+    "dismiss_adventurer": "dismiss_adventurer",
     "equip_item": "equip_item",
     "unequip_item": "unequip_item",
     "end_turn": "end_turn",
@@ -698,6 +714,19 @@ _BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
             "properties": {
                 "session_id": _SESSION_ID,
                 "candidate_id": _RECRUIT_CANDIDATE_ID,
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "dismiss_adventurer",
+        "description": "解散队伍中的冒险者，腾出队伍名额；该冒险者的装备会归还到库存。",
+        "parameters": {
+            "type": "object",
+            "required": ["session_id", "adventurer_id"],
+            "properties": {
+                "session_id": _SESSION_ID,
+                "adventurer_id": _ADVENTURER_ID,
             },
             "additionalProperties": False,
         },

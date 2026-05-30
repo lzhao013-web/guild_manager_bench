@@ -8,6 +8,7 @@ monsters:
       defense: 3
       speed: 13
       recovery: 0
+      mp_recovery: 0
     stat_growth:
       hp: 10
       attack: 2
@@ -31,6 +32,7 @@ monsters:
       defense: 5
       speed: 9
       recovery: 0
+      mp_recovery: 0
     stat_growth:
       hp: 12
       attack: 2
@@ -54,6 +56,7 @@ monsters:
       defense: 9
       speed: 5
       recovery: 0
+      mp_recovery: 0
     stat_growth:
       hp: 18
       attack: 2
@@ -78,6 +81,7 @@ monsters:
       defense: 4
       speed: 10
       recovery: 3
+      mp_recovery: 3
     stat_growth:
       hp: 12
       mp: 3

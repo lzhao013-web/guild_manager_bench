@@ -170,7 +170,7 @@ class GreedyOperator:
             + stats.get("attack", 0) * 2.0
             + stats.get("defense", 0) * 1.5
             + stats.get("speed", 0) * 1.8
-            + stats.get("recovery", 0) * 0.5
+            + stats.get("recovery", 0) * 0.5 + stats.get("mp_recovery", 0) * 0.5
         )
         # 升级效果应用于全队
         party_wide = stat_sum * party_size

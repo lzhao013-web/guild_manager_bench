@@ -27,6 +27,7 @@ upgrades:
       hp: 6
       mp: 4
       recovery: 2
+      mp_recovery: 2
 
   - id: blacksmith
     name: 铁匠铺
@@ -48,6 +49,7 @@ upgrades:
     stats:
       hp: 4
       recovery: 3
+      mp_recovery: 3
       defense: 1
 
   # === Mid Game (5 upgrades, ~220-350g, require early upgrades) ===
@@ -70,6 +72,7 @@ upgrades:
       hp: 10
       mp: 6
       recovery: 4
+      mp_recovery: 4
 
   - id: tactics_academy
     name: 战术学院
@@ -102,6 +105,7 @@ upgrades:
       mp: 8
       speed: 3
       recovery: 3
+      mp_recovery: 3
 
   # === Late Game (5 upgrades, ~600-850g, require multiple mid upgrades) ===
   - id: veteran_command
@@ -126,6 +130,7 @@ upgrades:
       hp: 22
       defense: 8
       recovery: 5
+      mp_recovery: 5
 
   - id: elite_hunters
     name: 精锐猎兵团

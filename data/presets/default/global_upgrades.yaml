@@ -20,6 +20,7 @@ upgrades:
     gold: 40
     stats:
       recovery: 5
+      mp_recovery: 5
       mp: 4
 
   - id: tactical_drills
@@ -52,6 +53,7 @@ upgrades:
     stats:
       hp: 6
       recovery: 1
+      mp_recovery: 1
 
   - id: expanded_roster
     name: 扩编名册
