@@ -163,6 +163,7 @@ skills:
     priority: 165
     mp_cost: 4
     once_per_battle: true
+    free: true
     condition:
       type: self_hp_pct_lte
       value: 0.7
@@ -216,6 +217,7 @@ skills:
     priority: 175
     mp_cost: 7
     once_per_battle: true
+    free: true
     condition:
       type: self_mp_pct_gte
       value: 0.25
@@ -280,6 +282,7 @@ skills:
     priority: 170
     mp_cost: 4
     once_per_battle: true
+    free: true
     condition:
       type: self_hp_pct_lte
       value: 0.75
@@ -304,6 +307,7 @@ skills:
     priority: 175
     mp_cost: 7
     once_per_battle: true
+    free: true
     condition:
       type: self_mp_pct_gte
       value: 0.25
@@ -472,6 +476,7 @@ skills:
     kind: active
     priority: 160
     mp_cost: 6
+    free: true
     condition:
       type: self_hp_pct_lte
       value: 0.65
@@ -538,6 +543,7 @@ skills:
     kind: active
     priority: 190
     once_per_battle: true
+    free: true
     condition:
       type: action_index_lte
       value: 3
@@ -566,13 +572,11 @@ skills:
     kind: active
     priority: 170
     once_per_battle: true
+    free: true
     condition:
       type: action_index_lte
       value: 3
     effects:
-      - type: damage_bonus
-        value: 2
-        target: target
       - type: apply_status
         value: 0
         target: target
@@ -584,18 +588,18 @@ skills:
           stack_mode: add_duration
           effects:
             - type: true_damage
-              value: 5
+              value: 6
 
   - id: iron_shell
     name: 坚甲
     kind: passive
     condition:
       type: self_hp_pct_lte
-      value: 0.6
+      value: 0.65
     effects:
       - type: stat_bonus
         stat: defense
-        value: 7
+        value: 8
         target: self
 
   - id: blood_fang
@@ -608,10 +612,10 @@ skills:
       value: 0.55
     effects:
       - type: damage_multiplier
-        value: 1.4
+        value: 1.5
         target: target
       - type: heal_percent
-        value: 0.12
+        value: 0.15
         target: self
 
   - id: phantom_step
@@ -636,7 +640,7 @@ skills:
       value: 0.4
     effects:
       - type: damage_multiplier
-        value: 1.2
+        value: 1.3
         target: target
       - type: apply_status
         value: 0
@@ -650,7 +654,7 @@ skills:
           effects:
             - type: stat_multiplier
               stat: defense
-              value: 0.7
+              value: 0.65
               target: self
 
   - id: rage_charge
@@ -663,16 +667,17 @@ skills:
       value: 0.3
     effects:
       - type: damage_multiplier
-        value: 1.9
+        value: 2.0
         target: target
       - type: self_damage
-        value: 8
+        value: 10
 
   - id: regen_flesh
     name: 再生体质
     kind: active
     priority: 175
     once_per_battle: true
+    free: true
     condition:
       type: self_hp_pct_lte
       value: 0.65
@@ -688,7 +693,7 @@ skills:
           stack_mode: refresh
           effects:
             - type: heal_percent
-              value: 0.08
+              value: 0.10
               target: self
 
   - id: ambush_strike
@@ -703,3 +708,101 @@ skills:
       - type: damage_multiplier
         value: 2.2
         target: target
+
+  # --- 蛮力 (Brute) ---
+  - id: crushing_slam
+    name: 碎地重击
+    kind: active
+    priority: 165
+    once_per_battle: true
+    condition:
+      type: action_index_lte
+      value: 3
+    effects:
+      - type: damage_multiplier
+        value: 1.5
+        target: target
+      - type: apply_status
+        value: 0
+        target: target
+        status:
+          id: crushing_slow
+          name: 减速
+          duration: 2
+          polarity: negative
+          stack_mode: refresh
+          effects:
+            - type: stat_multiplier
+              stat: speed
+              value: 0.8
+              target: self
+
+  # --- 毒素 (Venom) ---
+  - id: paralytic_bite
+    name: 麻痹噬咬
+    kind: active
+    priority: 160
+    once_per_battle: true
+    condition:
+      type: action_index_lte
+      value: 4
+    effects:
+      - type: damage_bonus
+        value: 3
+        target: target
+      - type: apply_status
+        value: 0
+        target: target
+        status:
+          id: paralytic_poison
+          name: 麻痹毒
+          duration: 2
+          polarity: negative
+          stack_mode: add_duration
+          effects:
+            - type: stat_multiplier
+              stat: speed
+              value: 0.85
+              target: self
+            - type: true_damage
+              value: 3
+
+  # --- 再生 (Regen) ---
+  - id: thick_hide
+    name: 厚皮
+    kind: passive
+    condition:
+      type: always
+    effects:
+      - type: stat_bonus
+        stat: defense
+        value: 5
+        target: self
+
+  # --- 掠食 (Predator) ---
+  - id: pounce
+    name: 扑杀
+    kind: active
+    priority: 160
+    once_per_battle: true
+    condition:
+      type: target_hp_pct_lte
+      value: 0.5
+    effects:
+      - type: damage_multiplier
+        value: 1.3
+        target: target
+      - type: apply_status
+        value: 0
+        target: self
+        status:
+          id: pounce_rush
+          name: 扑杀加速
+          duration: 2
+          polarity: positive
+          stack_mode: refresh
+          effects:
+            - type: stat_bonus
+              stat: speed
+              value: 3
+              target: self

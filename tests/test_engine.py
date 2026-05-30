@@ -39,10 +39,12 @@ from guild_manager_bench.game.state import (
     LevelSkillUnlock,
     MonsterArchetype,
     MonsterSpawnRules,
+    MonsterTierConfig,
     RecruitableAdventurerTemplate,
     RecruitVariationConfig,
     RecruitmentRules,
     RewardBundle,
+    SkillTheme,
     StatSuffixMapping,
     TurnRecoveryRules,
 )
@@ -681,3 +683,90 @@ def test_zero_stat_adjustment_gives_old_price_behavior() -> None:
         # Without stat adjustment, price is just template.recruit_gold * [0.85, 1.15]
         assert candidate.recruit_gold >= int(round(template.recruit_gold * 0.85)) - 1
         assert candidate.recruit_gold <= int(round(template.recruit_gold * 1.15)) + 1
+
+
+def test_sample_bonus_skills_picks_from_same_theme() -> None:
+    """精英/头领 bonus skills 必须来自同一主题。"""
+    _dmg = (SkillEffect(effect_type="true_damage", value=1),)
+    skill_a = Skill(
+        skill_id="venom_a",
+        name="毒A",
+        kind="active",
+        condition=SkillCondition(condition_type="always"),
+        effects=_dmg,
+    )
+    skill_b = Skill(
+        skill_id="venom_b",
+        name="毒B",
+        kind="active",
+        condition=SkillCondition(condition_type="always"),
+        effects=_dmg,
+    )
+    skill_c = Skill(
+        skill_id="brute_c",
+        name="力C",
+        kind="active",
+        condition=SkillCondition(condition_type="always"),
+        effects=_dmg,
+    )
+    themes = (
+        SkillTheme(theme_id="venom", name="毒素", skills=(skill_a, skill_b)),
+        SkillTheme(theme_id="brute", name="蛮力", skills=(skill_c,)),
+    )
+    definition = _definition()
+    spawn_rules = MonsterSpawnRules(
+        count_curve=FloatCurve(base=20.0),
+        elite=MonsterTierConfig(
+            chance=1.0,
+            stat_multiplier=1.3,
+            bonus_skill_count=1,
+        ),
+        boss=MonsterTierConfig(
+            chance=1.0,
+            stat_multiplier=2.0,
+            bonus_skill_count=2,
+        ),
+        bonus_skill_themes=themes,
+    )
+    definition = replace(
+        definition,
+        rules=replace(definition.rules, monster_spawn=spawn_rules),
+    )
+
+    monsters = spawn_monsters(definition, 1)
+
+    for monster in monsters:
+        if monster.tier in ("elite", "boss"):
+            bonus_ids = {s.skill_id for s in monster.skills}
+            # All bonus skills must come from one theme
+            in_venom = bonus_ids <= {"venom_a", "venom_b"}
+            in_brute = bonus_ids <= {"brute_c"}
+            assert in_venom or in_brute, f"bonus skills {bonus_ids} not from any single theme"
+
+
+def test_sample_bonus_skills_normal_monsters_get_no_bonus() -> None:
+    skill_a = Skill(
+        skill_id="test_skill",
+        name="测试",
+        kind="active",
+        condition=SkillCondition(condition_type="always"),
+        effects=(SkillEffect(effect_type="true_damage", value=1),),
+    )
+    themes = (SkillTheme(theme_id="test", name="测试", skills=(skill_a,)),)
+    definition = _definition()
+    spawn_rules = MonsterSpawnRules(
+        count_curve=FloatCurve(base=10.0),
+        elite=MonsterTierConfig(chance=0.0, bonus_skill_count=1),
+        boss=MonsterTierConfig(chance=0.0, bonus_skill_count=2),
+        bonus_skill_themes=themes,
+    )
+    definition = replace(
+        definition,
+        rules=replace(definition.rules, monster_spawn=spawn_rules),
+    )
+
+    monsters = spawn_monsters(definition, 1)
+
+    for monster in monsters:
+        assert monster.tier == "normal"
+        assert monster.skills == ()

@@ -93,6 +93,27 @@ class FloatCurve:
 
 
 @dataclass(frozen=True, slots=True)
+class SkillTheme:
+    """怪物技能主题包，同一主题的技能共享战斗风格。"""
+
+    theme_id: str
+    name: str
+    skills: tuple[Skill, ...]
+
+    def __post_init__(self) -> None:
+        if not self.theme_id:
+            raise ValueError("theme_id must not be empty")
+        if not self.name:
+            raise ValueError("name must not be empty")
+        object.__setattr__(self, "skills", tuple(self.skills))
+        if not self.skills:
+            raise ValueError("skills must have at least one skill")
+        for skill in self.skills:
+            if not isinstance(skill, Skill):
+                raise TypeError("skills must contain Skill")
+
+
+@dataclass(frozen=True, slots=True)
 class MonsterTierConfig:
     """怪物阶级（精英/首领）生成配置。"""
 
@@ -101,7 +122,6 @@ class MonsterTierConfig:
     reward_multiplier: float = 1.0
     bonus_reward_growth: RewardBundle = field(default_factory=RewardBundle)
     name_prefix: str = ""
-    bonus_skill_pool: tuple[Skill, ...] = ()
     bonus_skill_count: int = 0
 
     def __post_init__(self) -> None:
@@ -123,10 +143,6 @@ class MonsterTierConfig:
             raise TypeError("bonus_skill_count must be an int")
         if self.bonus_skill_count < 0:
             raise ValueError("bonus_skill_count must be >= 0")
-        object.__setattr__(self, "bonus_skill_pool", tuple(self.bonus_skill_pool))
-        for skill in self.bonus_skill_pool:
-            if not isinstance(skill, Skill):
-                raise TypeError("bonus_skill_pool must contain Skill")
 
 
 @dataclass(frozen=True, slots=True)
@@ -138,6 +154,7 @@ class MonsterSpawnRules:
     reward_growth_curve: FloatCurve = field(default_factory=lambda: FloatCurve(base=0.0, per_turn=1.0))
     elite: MonsterTierConfig = field(default_factory=MonsterTierConfig)
     boss: MonsterTierConfig = field(default_factory=MonsterTierConfig)
+    bonus_skill_themes: tuple[SkillTheme, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.count_curve, FloatCurve):
@@ -150,6 +167,10 @@ class MonsterSpawnRules:
             raise TypeError("elite must be MonsterTierConfig")
         if not isinstance(self.boss, MonsterTierConfig):
             raise TypeError("boss must be MonsterTierConfig")
+        object.__setattr__(self, "bonus_skill_themes", tuple(self.bonus_skill_themes))
+        for theme in self.bonus_skill_themes:
+            if not isinstance(theme, SkillTheme):
+                raise TypeError("bonus_skill_themes must contain SkillTheme")
 
 
 @dataclass(frozen=True, slots=True)
@@ -473,10 +494,17 @@ class LlmToolRules:
     """LLM tool-use exposure switches for a data preset."""
 
     expose_battle_preview: bool = False
+    max_battle_preview_per_turn: int = 3
 
     def __post_init__(self) -> None:
         if not isinstance(self.expose_battle_preview, bool):
             raise TypeError("expose_battle_preview must be a bool")
+        if (
+            not isinstance(self.max_battle_preview_per_turn, int)
+            or isinstance(self.max_battle_preview_per_turn, bool)
+            or self.max_battle_preview_per_turn < 0
+        ):
+            raise ValueError("max_battle_preview_per_turn must be >= 0")
 
 
 @dataclass(frozen=True, slots=True)
@@ -490,6 +518,10 @@ class ScoringRules:
     difficulty_factors: tuple[int, ...] = (8, 10, 12, 14)
     resource_mode: str = "full"
     aggregation: str = "best_assignment"
+    elite_chance: float = 0.0
+    elite_stat_multiplier: float = 1.0
+    boss_chance: float = 0.0
+    boss_stat_multiplier: float = 1.0
 
     def __post_init__(self) -> None:
         if self.mode != "endgame_arena":
@@ -507,6 +539,18 @@ class ScoringRules:
             raise ValueError("scoring.resource_mode must be full or current")
         if self.aggregation != "best_assignment":
             raise ValueError("scoring.aggregation must be best_assignment")
+        for name in ("elite_chance", "boss_chance"):
+            val = getattr(self, name)
+            if not isinstance(val, (int, float)):
+                raise TypeError(f"scoring.{name} must be a number")
+            if not (0.0 <= val <= 1.0):
+                raise ValueError(f"scoring.{name} must be between 0.0 and 1.0")
+        for name in ("elite_stat_multiplier", "boss_stat_multiplier"):
+            val = getattr(self, name)
+            if not isinstance(val, (int, float)):
+                raise TypeError(f"scoring.{name} must be a number")
+            if val < 1.0:
+                raise ValueError(f"scoring.{name} must be >= 1.0")
 
 
 @dataclass(frozen=True, slots=True)

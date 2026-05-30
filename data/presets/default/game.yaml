@@ -73,3 +73,7 @@ scoring:
   difficulty_factors: [8, 10, 12, 14]
   resource_mode: full
   aggregation: best_assignment
+  elite_chance: 0.15
+  elite_stat_multiplier: 1.5
+  boss_chance: 0.05
+  boss_stat_multiplier: 2.5

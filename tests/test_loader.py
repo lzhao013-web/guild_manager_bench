@@ -255,6 +255,78 @@ def test_list_data_presets_returns_complete_presets_only() -> None:
     assert [preset.name for preset in presets] == ["good"]
 
 
+def test_load_game_definition_parses_bonus_skill_themes() -> None:
+    with _data_dir("skill_themes") as data_dir:
+        _write_game_yaml_files(data_dir)
+        (data_dir / "skills.yaml").write_text(
+            dedent(
+                """
+                skills:
+                  - id: venom_spit
+                    name: 剧毒喷吐
+                    kind: active
+                    condition:
+                      type: always
+                    effects:
+                      - type: true_damage
+                        value: 3
+                  - id: iron_shell
+                    name: 坚甲
+                    kind: passive
+                    condition:
+                      type: always
+                    effects:
+                      - type: stat_bonus
+                        stat: defense
+                        value: 5
+                        target: self
+                  - id: blood_fang
+                    name: 嗜血
+                    kind: active
+                    condition:
+                      type: always
+                    effects:
+                      - type: damage_multiplier
+                        value: 1.5
+                """
+            ),
+            encoding="utf-8",
+        )
+        (data_dir / "monster_tiers.yaml").write_text(
+            dedent(
+                """
+                bonus_skill_themes:
+                  - id: venom
+                    name: 毒素
+                    skills: [venom_spit, iron_shell]
+                  - id: predator
+                    name: 掠食
+                    skills: [blood_fang]
+                tiers:
+                  elite:
+                    chance: 0.2
+                    stat_multiplier: 1.3
+                    bonus_skill_count: 1
+                  boss:
+                    chance: 0.1
+                    stat_multiplier: 2.0
+                    bonus_skill_count: 2
+                """
+            ),
+            encoding="utf-8",
+        )
+
+        definition = load_game_definition(data_dir)
+
+    themes = definition.rules.monster_spawn.bonus_skill_themes
+    assert len(themes) == 2
+    assert themes[0].theme_id == "venom"
+    assert themes[0].name == "毒素"
+    assert [s.skill_id for s in themes[0].skills] == ["venom_spit", "iron_shell"]
+    assert themes[1].theme_id == "predator"
+    assert [s.skill_id for s in themes[1].skills] == ["blood_fang"]
+
+
 @contextmanager
 def _data_dir(name: str):
     root = Path(__file__).parent / "_tmp_loader" / name

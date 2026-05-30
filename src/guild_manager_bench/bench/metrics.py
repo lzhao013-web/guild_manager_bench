@@ -7,8 +7,8 @@ from typing import Any
 
 from guild_manager_bench.game.combat import Combatant, run_auto_battle
 from guild_manager_bench.game.engine import effective_adventurer_skills, effective_adventurer_stats
-from guild_manager_bench.game.models import CombatResources, CombatStats, apply_stat_modifier, scale_stat_modifier
-from guild_manager_bench.game.state import AdventurerState, GameDefinition, GameState, MonsterArchetype
+from guild_manager_bench.game.models import CombatResources, CombatStats, apply_stat_modifier, scale_combat_stats, scale_stat_modifier
+from guild_manager_bench.game.state import AdventurerState, GameDefinition, GameState, MonsterArchetype, ScoringRules
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,7 +105,6 @@ def score_final_state(
     chosen_wins = 0
     chosen_battles = 0
     simulated_battles = 0
-    max_pairs_per_wave = min(len(adventurers), rules.wave_size)
 
     for wave_index in range(wave_count):
         difficulty = rules.difficulty_factors[wave_index % len(rules.difficulty_factors)]
@@ -137,7 +136,7 @@ def score_final_state(
             per_adventurer_wins[adventurer.adventurer_id] += 1 if evaluation.won else 0
             per_adventurer_assignments[adventurer.adventurer_id] += 1
 
-    denominator = wave_count * max_pairs_per_wave * 100
+    denominator = wave_count * rules.wave_size * 100
     score = _round_score(100 * total_score / denominator) if denominator else 0.0
     per_adventurer = tuple(
         AdventurerScoreBreakdown(
@@ -179,8 +178,36 @@ def _sample_arena_monster(
     index: int,
     difficulty: int,
 ) -> _ArenaMonster:
-    archetype = rng.choice(definition.content.monster_archetypes)
-    return _arena_monster(archetype, wave_index=wave_index, index=index, difficulty=difficulty)
+    eligible = [
+        a for a in definition.content.monster_archetypes
+        if a.min_turn <= wave_index and a.spawn_weight > 0
+    ]
+    if not eligible:
+        eligible = list(definition.content.monster_archetypes)
+
+    weights = [a.spawn_weight for a in eligible]
+    archetype = rng.choices(eligible, weights=weights, k=1)[0]
+
+    tier, tier_stat_multiplier = _roll_arena_tier(rng, definition.scoring)
+    return _arena_monster(
+        archetype,
+        wave_index=wave_index,
+        index=index,
+        difficulty=difficulty,
+        tier=tier,
+        tier_stat_multiplier=tier_stat_multiplier,
+    )
+
+
+def _roll_arena_tier(
+    rng: random.Random,
+    rules: "ScoringRules",
+) -> tuple[str, float]:
+    if rules.boss_chance > 0 and rng.random() < rules.boss_chance:
+        return ("boss", rules.boss_stat_multiplier)
+    if rules.elite_chance > 0 and rng.random() < rules.elite_chance:
+        return ("elite", rules.elite_stat_multiplier)
+    return ("normal", 1.0)
 
 
 def _arena_monster(
@@ -189,11 +216,15 @@ def _arena_monster(
     wave_index: int,
     index: int,
     difficulty: int,
+    tier: str = "normal",
+    tier_stat_multiplier: float = 1.0,
 ) -> _ArenaMonster:
     stats = apply_stat_modifier(
         archetype.base_stats,
         scale_stat_modifier(archetype.stat_growth, difficulty),
     )
+    if tier != "normal":
+        stats = scale_combat_stats(stats, tier_stat_multiplier)
     return _ArenaMonster(
         monster_id=f"arena_{wave_index}_monster_{index}",
         archetype_id=archetype.archetype_id,

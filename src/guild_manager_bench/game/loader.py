@@ -32,6 +32,7 @@ from guild_manager_bench.game.state import (
     RecruitmentRules,
     RewardBundle,
     ScoringRules,
+    SkillTheme,
     StatSuffixMapping,
     TurnRecoveryRules,
 )
@@ -86,10 +87,10 @@ def load_game_definition(data_dir: str | Path) -> GameDefinition:
     tier_data = _load_yaml(data_path / "monster_tiers.yaml")
 
     skill_registry = _build_skill_registry(skill_data)
-    tier_configs = _parse_tier_configs(tier_data, skill_registry)
+    tier_configs_data = _parse_tier_configs(tier_data, skill_registry)
     rules = _parse_game_rules(
         _mapping(_required(game_data, "rules"), "rules"),
-        tier_configs=tier_configs,
+        tier_configs=tier_configs_data,
     )
     experience_rules = _parse_experience_rules(_mapping(game_data.get("experience", {}), "experience"))
     content = GameContent(
@@ -270,7 +271,11 @@ def _parse_upgrades(values: list[Any], registry: dict[str, Skill]) -> tuple[Glob
     return tuple(upgrades)
 
 
-def _parse_game_rules(data: Mapping[str, Any], tier_configs: Mapping[str, MonsterTierConfig]) -> GameRules:
+def _parse_game_rules(
+    data: Mapping[str, Any],
+    tier_configs: tuple[tuple[SkillTheme, ...], dict[str, MonsterTierConfig]],
+) -> GameRules:
+    themes, tier_dict = tier_configs
     spawn = _mapping(_required(data, "monster_spawn"), "rules.monster_spawn")
     return GameRules(
         max_turns=_int(_required(data, "max_turns"), "rules.max_turns"),
@@ -283,8 +288,9 @@ def _parse_game_rules(data: Mapping[str, Any], tier_configs: Mapping[str, Monste
             reward_growth_curve=_parse_float_curve(
                 _mapping(spawn.get("reward_growth_curve", {}), "rules.monster_spawn.reward_growth_curve")
             ),
-            elite=tier_configs.get("elite", MonsterTierConfig()),
-            boss=tier_configs.get("boss", MonsterTierConfig()),
+            elite=tier_dict.get("elite", MonsterTierConfig()),
+            boss=tier_dict.get("boss", MonsterTierConfig()),
+            bonus_skill_themes=themes,
         ),
         turn_recovery=_parse_turn_recovery(
             _mapping(data.get("turn_recovery", {}), "rules.turn_recovery")
@@ -364,6 +370,10 @@ def _parse_llm_tool_rules(data: Mapping[str, Any]) -> LlmToolRules:
             data.get("expose_battle_preview", False),
             "llm.expose_battle_preview",
         ),
+        max_battle_preview_per_turn=_int(
+            data.get("max_battle_preview_per_turn", 3),
+            "llm.max_battle_preview_per_turn",
+        ),
     )
 
 
@@ -380,6 +390,10 @@ def _parse_scoring_rules(data: Mapping[str, Any]) -> ScoringRules:
         ),
         resource_mode=_str(data.get("resource_mode", "full"), "scoring.resource_mode"),
         aggregation=_str(data.get("aggregation", "best_assignment"), "scoring.aggregation"),
+        elite_chance=float(data.get("elite_chance", 0.0)),
+        elite_stat_multiplier=float(data.get("elite_stat_multiplier", 1.0)),
+        boss_chance=float(data.get("boss_chance", 0.0)),
+        boss_stat_multiplier=float(data.get("boss_stat_multiplier", 1.0)),
     )
 
 
@@ -412,11 +426,13 @@ def _parse_float_curve(data: Mapping[str, Any]) -> FloatCurve:
     )
 
 
-def _parse_tier_configs(data: Any, registry: dict[str, Skill]) -> dict[str, MonsterTierConfig]:
+def _parse_tier_configs(
+    data: Any, registry: dict[str, Skill]
+) -> tuple[tuple[SkillTheme, ...], dict[str, MonsterTierConfig]]:
     if not data:
-        return {}
+        return (), {}
     mapping = _mapping(data, "monster_tiers")
-    shared_pool = _resolve_skills(mapping.get("bonus_skill_pool", ()), registry, "monster_tiers.bonus_skill_pool")
+    themes = _parse_skill_themes(mapping.get("bonus_skill_themes", ()), registry, "monster_tiers.bonus_skill_themes")
     tiers_data = _mapping(mapping.get("tiers", {}), "monster_tiers.tiers")
     result: dict[str, MonsterTierConfig] = {}
     for tier_name in ("elite", "boss"):
@@ -424,11 +440,27 @@ def _parse_tier_configs(data: Any, registry: dict[str, Skill]) -> dict[str, Mons
         if tier_data is None:
             continue
         td = _mapping(tier_data, f"monster_tiers.tiers.{tier_name}")
-        result[tier_name] = _parse_tier_config(td, f"monster_tiers.tiers.{tier_name}", shared_pool)
-    return result
+        result[tier_name] = _parse_tier_config(td, f"monster_tiers.tiers.{tier_name}")
+    return themes, result
 
 
-def _parse_tier_config(data: Mapping[str, Any], path: str, shared_pool: tuple[Skill, ...] = ()) -> MonsterTierConfig:
+def _parse_skill_themes(
+    value: Any, registry: dict[str, Skill], path: str
+) -> tuple[SkillTheme, ...]:
+    themes: list[SkillTheme] = []
+    for index, item in enumerate(_list(value, path)):
+        data = _mapping(item, f"{path}[{index}]")
+        themes.append(
+            SkillTheme(
+                theme_id=_str(_id_field(data), f"{path}[{index}].id"),
+                name=_str(_required(data, "name"), f"{path}[{index}].name"),
+                skills=_resolve_skills(data.get("skills", ()), registry, f"{path}[{index}].skills"),
+            )
+        )
+    return tuple(themes)
+
+
+def _parse_tier_config(data: Mapping[str, Any], path: str) -> MonsterTierConfig:
     bonus_growth_data = data.get("bonus_reward_growth")
     bonus_reward_growth = (
         _parse_reward(_mapping(bonus_growth_data, f"{path}.bonus_reward_growth"))
@@ -441,7 +473,6 @@ def _parse_tier_config(data: Mapping[str, Any], path: str, shared_pool: tuple[Sk
         reward_multiplier=float(data.get("reward_multiplier", 1.0)),
         bonus_reward_growth=bonus_reward_growth,
         name_prefix=str(data.get("name_prefix", "")),
-        bonus_skill_pool=shared_pool,
         bonus_skill_count=_int(data.get("bonus_skill_count", 0), f"{path}.bonus_skill_count"),
     )
 
@@ -498,6 +529,7 @@ def _parse_skills(value: Any, path: str) -> tuple[Skill, ...]:
                 mp_cost=_int(data.get("mp_cost", 0), f"{path}[{index}].mp_cost"),
                 priority=_int(data.get("priority", 0), f"{path}[{index}].priority"),
                 once_per_battle=_bool(data.get("once_per_battle", False), f"{path}[{index}].once_per_battle"),
+                free=_bool(data.get("free", False), f"{path}[{index}].free"),
             )
         )
     return tuple(skills)

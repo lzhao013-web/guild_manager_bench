@@ -61,6 +61,10 @@ scoring:
   difficulty_factors: [30, 32, 35, 40, 45, 50]
   resource_mode: full
   aggregation: best_assignment
+  elite_chance: 0.15
+  elite_stat_multiplier: 1.3
+  boss_chance: 0.05
+  boss_stat_multiplier: 1.5
 
 llm:
   expose_battle_preview: true

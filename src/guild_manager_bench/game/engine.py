@@ -47,6 +47,7 @@ from guild_manager_bench.game.state import (
     RecruitableAdventurerTemplate,
     RecruitVariationConfig,
     RewardBundle,
+    SkillTheme,
     SpawnedMonster,
 )
 from guild_manager_bench.game.skills import Skill
@@ -289,7 +290,7 @@ def spawn_monsters(definition: GameDefinition, turn: int) -> tuple[SpawnedMonste
         archetype = _select_monster_archetype(rng, eligible_archetypes)
         tier = _roll_tier(rng, spawn_rules)
         tc = _tier_config(spawn_rules, tier)
-        bonus_skills = _sample_bonus_skills(rng, tc)
+        bonus_skills = _sample_bonus_skills(rng, spawn_rules.bonus_skill_themes, tc.bonus_skill_count if tc else 0)
         monsters.append(_spawn_monster(archetype, turn, index + 1, stat_factor, reward_factor, tier, tc, bonus_skills))
     return tuple(monsters)
 
@@ -554,8 +555,8 @@ def _apply_equip_action(
     adventurer = _adventurer_by_id(state, equip_action.adventurer_id)
     if template.allowed_classes and adventurer.template_id not in template.allowed_classes:
         raise GameError(
-            f"adventurer class '{adventurer.template_id}' cannot equip "
-            f"'{template.equipment_id}' (requires: {template.allowed_classes})"
+            f"冒险者职业 '{adventurer.template_id}' 无法装备 "
+            f"'{template.name}'（需要职业: {', '.join(template.allowed_classes)}）"
         )
     old_stats = _effective_stats_by_adventurer_id(definition, state)
 
@@ -577,7 +578,7 @@ def _apply_unequip_action(
 ) -> GameState:
     adventurer = _adventurer_by_id(state, unequip_action.adventurer_id)
     if not any(item.slot == unequip_action.slot for item in adventurer.equipment.items):
-        raise GameError(f"equipment slot is empty: {unequip_action.slot}")
+        raise GameError(f"装备槽位为空: {unequip_action.slot}")
 
     old_stats = _effective_stats_by_adventurer_id(definition, state)
     updated = replace(
@@ -649,11 +650,14 @@ def _tier_config(spawn_rules: MonsterSpawnRules, tier: str) -> MonsterTierConfig
     return None
 
 
-def _sample_bonus_skills(rng: random.Random, tc: MonsterTierConfig | None) -> tuple[Skill, ...]:
-    if tc is None or tc.bonus_skill_count <= 0 or not tc.bonus_skill_pool:
+def _sample_bonus_skills(
+    rng: random.Random, themes: tuple[SkillTheme, ...], count: int
+) -> tuple[Skill, ...]:
+    if not themes or count <= 0:
         return ()
-    count = min(tc.bonus_skill_count, len(tc.bonus_skill_pool))
-    return tuple(rng.sample(list(tc.bonus_skill_pool), count))
+    theme = rng.choice(themes)
+    available = list(theme.skills)
+    return tuple(rng.sample(available, min(count, len(available))))
 
 
 def _scale_reward_bundle(reward: RewardBundle, multiplier: float) -> RewardBundle:

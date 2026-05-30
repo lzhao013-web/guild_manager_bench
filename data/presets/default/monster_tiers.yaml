@@ -1,4 +1,16 @@
-bonus_skill_pool: [venom_spit, iron_shell, blood_fang, phantom_step, shattering_claw, rage_charge, regen_flesh, ambush_strike]
+bonus_skill_themes:
+  - id: brute
+    name: 蛮力
+    skills: [ambush_strike, rage_charge, crushing_slam]
+  - id: venom
+    name: 毒素
+    skills: [venom_spit, shattering_claw, paralytic_bite]
+  - id: regen
+    name: 再生
+    skills: [iron_shell, regen_flesh, thick_hide]
+  - id: predator
+    name: 掠食
+    skills: [blood_fang, phantom_step, pounce]
 
 tiers:
   elite:

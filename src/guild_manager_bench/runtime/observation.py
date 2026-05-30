@@ -38,6 +38,10 @@ def build_observation(definition: GameDefinition, state: GameState) -> dict[str,
         item.equipment_id: item
         for item in definition.content.equipment_templates
     }
+    class_names = {
+        t.template_id: t.name
+        for t in definition.content.recruitable_adventurers
+    }
     equipped_by = _equipped_by_adventurer_id(state)
     size_limit = party_size_limit(definition, state)
     return {
@@ -62,11 +66,11 @@ def build_observation(definition: GameDefinition, state: GameState) -> dict[str,
             for monster in state.current_monsters
         ],
         "equipment_inventory": [
-            _equipment_instance_to_dict(item, equipment_templates, equipped_by.get(item.instance_id))
+            _equipment_instance_to_dict(item, equipment_templates, equipped_by.get(item.instance_id), class_names)
             for item in state.equipment_inventory
         ],
         "crafting_recipes": [
-            _recipe_to_dict(definition, state, recipe)
+            _recipe_to_dict(definition, state, recipe, class_names)
             for recipe in definition.content.crafting_recipes
         ],
         "global_upgrades": [
@@ -153,8 +157,11 @@ def _recruit_candidate_to_dict(
     }
 
 
-def _equipment_instance_to_dict(item, equipment_templates, equipped_by: str | None) -> dict[str, Any]:
+def _equipment_instance_to_dict(item, equipment_templates, equipped_by: str | None, class_names: dict[str, str] | None = None) -> dict[str, Any]:
     template = equipment_templates[item.template_id]
+    allowed_classes = list(template.allowed_classes)
+    if class_names is None:
+        class_names = {}
     return {
         "instance_id": item.instance_id,
         "template_id": item.template_id,
@@ -162,12 +169,13 @@ def _equipment_instance_to_dict(item, equipment_templates, equipped_by: str | No
         "slot": template.slot,
         "stats": _stat_modifier_to_dict(template.stat_modifier),
         "skills": [_skill_to_dict(skill) for skill in template.skills],
-        "allowed_classes": list(template.allowed_classes),
+        "allowed_classes": allowed_classes,
+        "allowed_class_names": [class_names.get(cid, cid) for cid in allowed_classes],
         "equipped_by": equipped_by,
     }
 
 
-def _recipe_to_dict(definition, state, recipe) -> dict[str, Any]:
+def _recipe_to_dict(definition, state, recipe, class_names: dict[str, str] | None = None) -> dict[str, Any]:
     inventory = CraftingInventory(
         gold=state.gold,
         materials=state.materials,
@@ -175,6 +183,9 @@ def _recipe_to_dict(definition, state, recipe) -> dict[str, Any]:
     )
     missing = missing_requirements(recipe, inventory)
     template = _equipment_template_by_id(definition, recipe.output_template_id)
+    allowed_classes = list(template.allowed_classes)
+    if class_names is None:
+        class_names = {}
     return {
         "recipe_id": recipe.recipe_id,
         "name": recipe.name,
@@ -183,7 +194,8 @@ def _recipe_to_dict(definition, state, recipe) -> dict[str, Any]:
         "output_slot": template.slot,
         "output_stats": _stat_modifier_to_dict(template.stat_modifier),
         "output_skills": [_skill_to_dict(skill) for skill in template.skills],
-        "output_allowed_classes": list(template.allowed_classes),
+        "output_allowed_classes": allowed_classes,
+        "output_allowed_class_names": [class_names.get(cid, cid) for cid in allowed_classes],
         "gold_cost": recipe.gold_cost,
         "material_costs": {
             cost.material_id: cost.quantity
