@@ -111,12 +111,15 @@ class TurnToolHarness:
         session_id: str,
         *,
         max_tool_calls: int,
+        max_battle_preview_per_turn: int = 3,
         memo_store: MemoStore | None = None,
     ) -> None:
         self.tools = tools
         self.session_id = session_id
         self.memo_store = memo_store or MemoStore()
         self.budget = ToolBudget(max_tool_calls=max_tool_calls)
+        self.max_battle_preview_per_turn = max_battle_preview_per_turn
+        self._battle_preview_count = 0
         self.ended = False
         # 固化本回合的数字 ID 映射，避免并行动作导致列表变化后序号偏移
         self._turn_refs = build_numeric_refs(
@@ -145,6 +148,12 @@ class TurnToolHarness:
         if name != "end_turn" and self.budget.exhausted:
             return self._error("tool call budget exhausted; only end_turn is allowed")
 
+        if name == "preview_battle" and self._battle_preview_count >= self.max_battle_preview_per_turn:
+            return self._error(
+                f"preview_battle limit exceeded ({self.max_battle_preview_per_turn} per turn); "
+                "only use preview_battle for critical matchups"
+            )
+
         if name != "end_turn":
             self.budget.consume()
 
@@ -158,6 +167,9 @@ class TurnToolHarness:
                 )
             except (ToolCallError, ValueError) as exc:
                 result = {"ok": False, "error": str(exc)}
+
+        if name == "preview_battle":
+            self._battle_preview_count += 1
 
         if name == "end_turn" and result.get("ok") is True:
             self.ended = True
@@ -212,6 +224,8 @@ class TurnToolHarness:
             "remaining": self.budget.remaining,
             "end_turn_required": self.budget.exhausted and not self.ended,
             "allowed_tools": allowed_tools,
+            "battle_preview_used": self._battle_preview_count,
+            "battle_preview_limit": self.max_battle_preview_per_turn,
         }
 
 

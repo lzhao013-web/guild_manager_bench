@@ -81,6 +81,7 @@ class TurnTrace:
     tool_calls: list[ToolCallRecord] = field(default_factory=list)
     status: TurnStatus | None = None
     failure_reason: str | None = None
+    observation_before: dict[str, Any] | None = None
 
     def complete(self) -> None:
         self.status = "completed"
@@ -104,6 +105,11 @@ class TurnTrace:
             ],
             "status": self.status,
             "failure_reason": self.failure_reason,
+            "observation_before": (
+                dict(self.observation_before)
+                if self.observation_before is not None
+                else None
+            ),
         }
 
 

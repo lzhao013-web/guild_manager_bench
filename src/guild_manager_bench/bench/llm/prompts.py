@@ -18,6 +18,7 @@ def build_turn_prompt(
     *,
     objective: str = DEFAULT_OBJECTIVE,
     max_tool_calls: int,
+    max_battle_preview_per_turn: int = 3,
     previous_turn_event: Mapping[str, Any] | None = None,
     memo_entries: Sequence[str] = (),
 ) -> str:
@@ -34,7 +35,7 @@ def build_turn_prompt(
             "回复机制：每回合战斗结束后全体冒险者回复HP和MP，额外回复等同于其恢复属性（recovery）值的HP，战斗中技能也可提供治疗、百分比治疗、MP恢复和持续回复状态。"
             f"HP回复 = {_turn_recovery_hp(observation)} + 最大HP×{_percent(observation['turn_recovery_rules']['hp_percent'])} + 恢复属性；"
             f"MP回复 = {_turn_recovery_mp(observation)} + 最大MP×{_percent(observation['turn_recovery_rules']['mp_percent'])} + 回魔属性。",
-            f"本回合最多允许 {max_tool_calls} 次非 end_turn 工具调用；查询、动作和失败的调用均会消耗使用次数，请谨慎决定和规划要使用的工具。",
+            f"本回合最多允许 {max_tool_calls} 次非 end_turn 工具调用{bp_limit_text}；每一次工具调用，包括查询、战斗预览、实际操作和失败的调用均会消耗使用次数，请考虑工具调用的预算，谨慎决定和规划要使用的工具。",
             "调用工具使用的所有对象 id 都使用列表左侧的数字 id。",
             "工具会返回 OK/FAIL、budget 和结果摘要。动作工具返回变更摘要；详细信息分散在各个查询工具中。",
             "",
@@ -42,7 +43,6 @@ def build_turn_prompt(
             "",
             _state_summary(observation),
             "",
-            _previous_turn_summary(previous_turn_event),
         ]
     ).strip()
 

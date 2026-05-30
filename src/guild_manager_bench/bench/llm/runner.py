@@ -302,6 +302,7 @@ def run_llm_turn(
         observation,
         objective=config.objective,
         max_tool_calls=config.max_tool_calls_per_turn,
+        max_battle_preview_per_turn=tools.definition.llm_tools.max_battle_preview_per_turn,
         previous_turn_event=previous_turn_event,
         memo_entries=memo_store.consume(),
     )
@@ -309,6 +310,7 @@ def run_llm_turn(
         turn=observation["turn"],
         prompt=prompt,
         messages=[{"role": "user", "content": prompt}],
+        observation_before=observation,
     )
     _emit(
         event_sink,
@@ -322,6 +324,7 @@ def run_llm_turn(
         tools,
         session_id,
         max_tool_calls=config.max_tool_calls_per_turn,
+        max_battle_preview_per_turn=tools.definition.llm_tools.max_battle_preview_per_turn,
         memo_store=memo_store,
     )
 
@@ -410,6 +413,11 @@ def run_llm_turn(
                 call_id=call.call_id,
             )
             result = turn_harness.call_tool(call.name, call.arguments)
+            # Capture observation snapshot after successful write operations
+            if call.name in _STATE_MUTATING_TOOL_NAMES and result.get("ok") is True:
+                obs_snapshot = tools.get_observation(session_id)["observation"]
+                result = dict(result)
+                result["_observation_after"] = obs_snapshot
             turn_trace.tool_calls.append(
                 ToolCallRecord(
                     name=call.name,
@@ -602,6 +610,11 @@ def _trace_from_replay_turn(turn: Mapping[str, Any]) -> TurnTrace:
         turn=turn_number if isinstance(turn_number, int) else 0,
         prompt=prompt,
         messages=[],
+        observation_before=(
+            dict(turn.get("observation_before"))
+            if isinstance(turn.get("observation_before"), Mapping)
+            else None
+        ),
     )
     calls_by_id: dict[str, dict[str, Any]] = {}
     for step in _sequence(turn.get("steps")):
@@ -926,10 +939,14 @@ def _append_observation_lines(lines: list[str], observation: Mapping[str, Any]) 
                 "- "
                 f"{display_ref(refs, 'recipe', recipe.get('recipe_id'))} "
                 f"{recipe.get('name')} -> {recipe.get('output_name')} "
+                f"槽位 {recipe.get('output_slot')} "
                 f"属性 {_mapping_inline(recipe.get('output_stats'))} "
                 f"成本 金币 {recipe.get('gold_cost')} 材料 {_mapping_inline(recipe.get('material_costs'))} "
                 f"{availability}{missing_text}"
             )
+            allowed_class_names = recipe.get("output_allowed_class_names")
+            if allowed_class_names:
+                lines.append(f"  职业限制 {', '.join(allowed_class_names)}")
             _append_skill_lines(lines, recipe.get("output_skills"), label="产物技能", indent="  ")
 
     inventory = [
@@ -945,12 +962,15 @@ def _append_observation_lines(lines: list[str], observation: Mapping[str, Any]) 
                 if item.get("equipped_by")
                 else "空闲"
             )
+            allowed_names = item.get("allowed_class_names")
+            class_text = f" 职业限制 {', '.join(allowed_names)}" if allowed_names else ""
             lines.append(
                 "- "
                 f"{display_ref(refs, 'equipment', item.get('instance_id'))} "
                 f"{item.get('name')} 槽位 {item.get('slot')} "
                 f"属性 {_mapping_inline(item.get('stats'))} "
                 f"装备者 {equipped}"
+                f"{class_text}"
             )
             _append_skill_lines(lines, item.get("skills"), indent="  ")
 
@@ -1200,6 +1220,9 @@ def _append_recipe_lines(
             f"成本 金币 {recipe.get('gold_cost')} 材料 {_mapping_inline(recipe.get('material_costs'))} "
             f"{availability}{missing_text}"
         )
+        allowed_class_names = recipe.get("output_allowed_class_names")
+        if allowed_class_names:
+            lines.append(f"  职业限制 {', '.join(allowed_class_names)}")
         _append_skill_lines(lines, recipe.get("output_skills"), label="产物技能", indent="  ")
 
 
@@ -1230,6 +1253,9 @@ def _append_inventory_lines(
             f"属性 {_mapping_inline(item.get('stats'))} "
             f"装备者 {equipped}"
         )
+        allowed_names = item.get("allowed_class_names")
+        if allowed_names:
+            lines.append(f"  职业限制 {', '.join(allowed_names)}")
         _append_skill_lines(lines, item.get("skills"), indent="  ")
 
 
@@ -1417,10 +1443,17 @@ def _append_budget_lines(lines: list[str], result: Mapping[str, Any]) -> list[st
     budget = result.get("tool_budget")
     if isinstance(budget, Mapping):
         suffix = "；仅允许 end_turn" if budget.get("end_turn_required") else ""
+        bp_used = budget.get("battle_preview_used")
+        bp_limit = budget.get("battle_preview_limit")
+        bp_text = (
+            f"；preview_battle {bp_used}/{bp_limit}"
+            if isinstance(bp_used, int) and isinstance(bp_limit, int)
+            else ""
+        )
         lines.append(
             "预算: "
             f"已用 {budget.get('used')}/{budget.get('max_tool_calls')}，"
-            f"剩余 {budget.get('remaining')}{suffix}"
+            f"剩余 {budget.get('remaining')}{bp_text}{suffix}"
         )
     return lines
 
@@ -1833,3 +1866,68 @@ _STATE_MUTATING_TOOL_NAMES = {
     "unequip_item",
     "end_turn",
 }
+
+
+def rebuild_replay_observations(
+    replay: dict[str, Any],
+    *,
+    data_dir: str | Path = "data/presets/default",
+) -> dict[str, Any]:
+    """为没有 observation_before 的旧 replay 重建回合状态快照。
+
+    通过在全新 GameSession 上重放所有变更工具调用来重建每个回合开始时的游戏状态。
+    读操作不改变状态因此跳过，只重放写操作和 end_turn。
+    """
+
+    turns = _sequence(replay.get("turns"))
+    has_observations = any(
+        isinstance(t, Mapping) and t.get("observation_before") is not None
+        for t in turns
+    )
+    if has_observations or not turns:
+        return dict(replay)
+
+    tools = GuildManagerTools(load_game_definition(data_dir))
+    session = tools.start_session()
+    session_id = session["session_id"]
+
+    rebuilt_turns: list[dict[str, Any]] = []
+    for turn_data in turns:
+        if not isinstance(turn_data, Mapping):
+            continue
+
+        observation_before = tools.get_observation(session_id)["observation"]
+        rebuilt_steps: list[dict[str, Any]] = []
+
+        for step in _sequence(turn_data.get("steps")):
+            step_copy = dict(step) if isinstance(step, Mapping) else {}
+            rebuilt_steps.append(step_copy)
+            if not isinstance(step, Mapping):
+                continue
+            if step.get("type") != "tool_result":
+                continue
+            name = step.get("name")
+            if name not in _STATE_MUTATING_TOOL_NAMES:
+                continue
+            if not _replay_tool_step_succeeded(step):
+                continue
+            arguments = _replay_tool_arguments(step)
+            harness = TurnToolHarness(tools, session_id, max_tool_calls=1_000_000)
+            result = harness.call_tool(str(name), arguments)
+            if result.get("ok") is not True:
+                raise ValueError(
+                    f"重建失败: {name} 参数 {arguments}: {result.get('error')}"
+                )
+            # Capture observation after this mutation
+            obs_after = tools.get_observation(session_id)["observation"]
+            step_copy["observation_after"] = dict(obs_after)
+
+        turn_copy = dict(turn_data)
+        turn_copy["observation_before"] = dict(observation_before)
+        turn_copy["steps"] = rebuilt_steps
+        rebuilt_turns.append(turn_copy)
+
+    result = dict(replay)
+    result["turns"] = rebuilt_turns
+    result["_observations_rebuilt"] = True
+    return result

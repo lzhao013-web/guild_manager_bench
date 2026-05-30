@@ -20,6 +20,7 @@ from guild_manager_bench.bench.llm.runner import (
     LlmRunConfig,
     LlmToolCall,
     LlmTurnAgent,
+    rebuild_replay_observations,
     run_llm_game,
     run_llm_turn,
 )
@@ -55,4 +56,5 @@ __all__ = [
     "start_llm_run_archive",
     "tool_schemas",
     "write_llm_run_archive",
+    "rebuild_replay_observations",
 ]

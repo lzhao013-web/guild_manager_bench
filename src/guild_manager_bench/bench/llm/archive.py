@@ -237,7 +237,7 @@ def build_llm_run_replay(
 
 
 def _turn_replay(turn: TurnTrace) -> dict[str, Any]:
-    return {
+    data: dict[str, Any] = {
         "turn": turn.turn,
         "status": turn.status,
         "failure_reason": turn.failure_reason,
@@ -248,6 +248,9 @@ def _turn_replay(turn: TurnTrace) -> dict[str, Any]:
             turn.model_responses,
         ),
     }
+    if turn.observation_before is not None:
+        data["observation_before"] = turn.observation_before
+    return data
 
 
 def _message_steps(
@@ -348,6 +351,12 @@ def _message_steps(
                 "arguments": dict(arguments) if isinstance(arguments, Mapping) else {},
                 "content": content,
             }
+            # Attach intermediate observation snapshot from write tool results
+            result_data = record.get("result")
+            if isinstance(result_data, Mapping):
+                obs_after = result_data.get("_observation_after")
+                if isinstance(obs_after, Mapping):
+                    step["observation_after"] = dict(obs_after)
             legacy_result = record.get("result")
             if isinstance(legacy_result, Mapping) and not isinstance(content, str):
                 step["result"] = dict(legacy_result)
