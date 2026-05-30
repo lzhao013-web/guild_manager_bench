@@ -24,6 +24,12 @@ def build_turn_prompt(
 ) -> str:
     """构造单个游戏回合开始时给 LLM 的提示词。"""
 
+    bp_limit_text = (
+        f"；preview_battle 最多 {max_battle_preview_per_turn} 次/回合"
+        if max_battle_preview_per_turn
+        else ""
+    )
+
     return "\n".join(
         [
             "你正在进行 Guild Manager Bench。",
