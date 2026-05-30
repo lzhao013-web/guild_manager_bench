@@ -234,18 +234,18 @@ recruitable_adventurers:
     name: 瘟疫法师
     recruit_gold: 50
     stats:
-      hp: 82
+      hp: 90
       mp: 30
-      attack: 11
+      attack: 13
       defense: 4
-      speed: 9
+      speed: 10
       recovery: 4
     stat_growth_per_level:
       hp: 8
       mp: 5
-      attack: 2
+      attack: 3
       defense: 1
-      speed: 1
+      speed: 2
       recovery: 1
     skills: [plague_curse]
     level_skill_unlocks:

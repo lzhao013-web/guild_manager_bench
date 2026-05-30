@@ -164,10 +164,10 @@ monsters:
     spawn_weight: 15
     min_turn: 8
     base_stats:
-      hp: 130
+      hp: 180
       mp: 0
-      attack: 24
-      defense: 12
+      attack: 32
+      defense: 16
       speed: 8
       recovery: 0
     base_reward:
@@ -177,8 +177,8 @@ monsters:
         mithril_shard: 1
         sharp_claw: 1
     stat_growth:
-      hp: 4
-      attack: 1
+      hp: 6
+      attack: 2
       defense: 1
     reward_growth:
       gold: 2
@@ -192,11 +192,11 @@ monsters:
     spawn_weight: 15
     min_turn: 8
     base_stats:
-      hp: 90
-      mp: 24
-      attack: 18
-      defense: 6
-      speed: 11
+      hp: 120
+      mp: 30
+      attack: 26
+      defense: 8
+      speed: 13
       recovery: 0
     base_reward:
       gold: 36
@@ -205,8 +205,8 @@ monsters:
         arcane_dust: 1
         herb: 1
     stat_growth:
-      hp: 3
-      attack: 1
+      hp: 4
+      attack: 2
     reward_growth:
       gold: 2
       experience: 3
@@ -219,11 +219,11 @@ monsters:
     spawn_weight: 15
     min_turn: 8
     base_stats:
-      hp: 95
+      hp: 130
       mp: 0
-      attack: 20
-      defense: 5
-      speed: 14
+      attack: 28
+      defense: 7
+      speed: 16
       recovery: 0
     base_reward:
       gold: 34
@@ -232,8 +232,8 @@ monsters:
         spider_silk: 1
         beast_hide: 1
     stat_growth:
-      hp: 3
-      attack: 1
+      hp: 4
+      attack: 2
     reward_growth:
       gold: 2
       experience: 3
@@ -246,10 +246,10 @@ monsters:
     spawn_weight: 15
     min_turn: 8
     base_stats:
-      hp: 110
+      hp: 160
       mp: 0
-      attack: 22
-      defense: 10
+      attack: 30
+      defense: 14
       speed: 9
       recovery: 0
     base_reward:
@@ -259,8 +259,8 @@ monsters:
         mithril_shard: 1
         bone: 1
     stat_growth:
-      hp: 3
-      attack: 1
+      hp: 5
+      attack: 2
       defense: 1
     reward_growth:
       gold: 2
@@ -275,11 +275,11 @@ monsters:
     spawn_weight: 20
     min_turn: 18
     base_stats:
-      hp: 150
+      hp: 250
       mp: 0
-      attack: 26
-      defense: 14
-      speed: 6
+      attack: 40
+      defense: 22
+      speed: 8
       recovery: 0
     base_reward:
       gold: 48
@@ -288,9 +288,9 @@ monsters:
         dragon_scale: 1
         mithril_shard: 1
     stat_growth:
-      hp: 3
-      attack: 1
-      defense: 1
+      hp: 6
+      attack: 2
+      defense: 2
     reward_growth:
       gold: 2
       experience: 4
@@ -303,11 +303,11 @@ monsters:
     spawn_weight: 20
     min_turn: 18
     base_stats:
-      hp: 130
+      hp: 210
       mp: 0
-      attack: 28
-      defense: 6
-      speed: 16
+      attack: 44
+      defense: 10
+      speed: 20
       recovery: 0
     base_reward:
       gold: 52
@@ -316,8 +316,8 @@ monsters:
         dragon_scale: 1
         dragon_blood: 1
     stat_growth:
-      hp: 3
-      attack: 1
+      hp: 5
+      attack: 2
     reward_growth:
       gold: 2
       experience: 4
@@ -330,11 +330,11 @@ monsters:
     spawn_weight: 20
     min_turn: 18
     base_stats:
-      hp: 110
-      mp: 30
-      attack: 20
-      defense: 6
-      speed: 12
+      hp: 180
+      mp: 40
+      attack: 34
+      defense: 10
+      speed: 14
       recovery: 0
     base_reward:
       gold: 54
@@ -343,8 +343,8 @@ monsters:
         soul_shard: 1
         arcane_dust: 1
     stat_growth:
-      hp: 3
-      attack: 1
+      hp: 5
+      attack: 2
     reward_growth:
       gold: 2
       experience: 4
@@ -357,11 +357,11 @@ monsters:
     spawn_weight: 20
     min_turn: 18
     base_stats:
-      hp: 160
+      hp: 280
       mp: 0
-      attack: 30
-      defense: 12
-      speed: 10
+      attack: 46
+      defense: 18
+      speed: 12
       recovery: 0
     base_reward:
       gold: 56
@@ -370,9 +370,9 @@ monsters:
         demon_core: 1
         dragon_scale: 1
     stat_growth:
-      hp: 4
-      attack: 1
-      defense: 1
+      hp: 7
+      attack: 2
+      defense: 2
     reward_growth:
       gold: 3
       experience: 5

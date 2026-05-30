@@ -306,9 +306,9 @@ class ShadowState:
 
         # 计算升级
         rules = obs.get("experience_rules", {}) if obs else {}
-        max_level = rules.get("max_level", 10)
-        base_req = rules.get("base_required_experience", 80)
-        req_growth = rules.get("required_experience_growth", 40)
+        max_level = rules.get("max_level", 12)
+        base_req = rules.get("base_required_experience", 100)
+        req_growth = rules.get("required_experience_growth", 35)
 
         old_level = adv.get("level", 1)
         experience = adv.get("experience", 0) + amount

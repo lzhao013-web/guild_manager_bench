@@ -125,13 +125,7 @@ recipes:
   - id: recipe_t2_heavy_armor
     name: 锁子甲配方
     output: t2_heavy_armor
-    gold: 58
-    materials:
-      mithril_shard: 2
-      iron_ore: 1
-      beast_hide: 2
-
-  - id: recipe_t2_heavy_helmet
+    gold: 72
     name: 战盔配方
     output: t2_heavy_helmet
     gold: 42
@@ -151,7 +145,7 @@ recipes:
   - id: recipe_t2_light_bow
     name: 复合弓配方
     output: t2_light_bow
-    gold: 58
+    gold: 70
     materials:
       spider_silk: 1
       beast_hide: 2
@@ -192,7 +186,7 @@ recipes:
   - id: recipe_t2_warhammer
     name: 破甲战锤配方
     output: t2_warhammer
-    gold: 62
+    gold: 80
     materials:
       mithril_shard: 3
       sharp_claw: 2
@@ -238,11 +232,12 @@ recipes:
     materials:
       dragon_scale: 2
       demon_core: 1
+      mithril_shard: 1
 
   - id: recipe_t3_heavy_armor
     name: 龙鳞甲配方
     output: t3_heavy_armor
-    gold: 115
+    gold: 150
     materials:
       dragon_scale: 3
       mithril_shard: 2
@@ -254,6 +249,7 @@ recipes:
     materials:
       dragon_scale: 2
       bone: 2
+      mithril_shard: 1
 
   - id: recipe_t3_heavy_boots
     name: 龙鳞靴配方
@@ -262,6 +258,7 @@ recipes:
     materials:
       dragon_scale: 1
       soul_shard: 1
+      mithril_shard: 1
 
   # T3 Light Set
   - id: recipe_t3_light_bow
@@ -287,6 +284,7 @@ recipes:
     materials:
       soul_shard: 1
       arcane_dust: 2
+      spider_silk: 1
 
   - id: recipe_t3_light_boots
     name: 暗影靴配方
@@ -295,6 +293,7 @@ recipes:
     materials:
       soul_shard: 2
       arcane_dust: 1
+      spider_silk: 1
 
   - id: recipe_t3_light_charm
     name: 龙心坠饰配方
@@ -303,29 +302,32 @@ recipes:
     materials:
       dragon_blood: 1
       soul_shard: 1
+      spider_silk: 1
 
   # T3 Specials
   - id: recipe_t3_dragon_greatsword
     name: 龙牙巨剑配方
     output: t3_dragon_greatsword
-    gold: 140
+    gold: 180
     materials:
       dragon_scale: 3
       dragon_blood: 1
       sharp_claw: 2
+      mithril_shard: 2
 
   - id: recipe_t3_wisdom_crown
     name: 智慧之冠配方
     output: t3_wisdom_crown
-    gold: 100
+    gold: 130
     materials:
       soul_shard: 2
       arcane_dust: 2
+      spider_silk: 1
 
   - id: recipe_t3_siege_cannon
     name: 传奇火炮配方
     output: t3_siege_cannon
-    gold: 124
+    gold: 155
     materials:
       dragon_scale: 2
       demon_core: 1
@@ -334,8 +336,9 @@ recipes:
   - id: recipe_t3_dragon_resolve
     name: 龙魂战铠配方
     output: t3_dragon_resolve
-    gold: 132
+    gold: 170
     materials:
       dragon_scale: 3
       demon_core: 1
       soul_shard: 1
+      mithril_shard: 2

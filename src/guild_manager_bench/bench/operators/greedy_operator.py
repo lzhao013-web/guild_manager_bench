@@ -356,7 +356,7 @@ class GreedyOperator:
             if amount <= 0:
                 break
             actual = min(amount, shadow.experience_pool)
-            shadow.apply_xp_allocation(adventurer_id, actual)
+            shadow.apply_xp_allocation(adventurer_id, actual, obs)
             actions.append({
                 "type": "allocate_experience",
                 "adventurer_id": adventurer_id,

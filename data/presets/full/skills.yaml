@@ -124,7 +124,7 @@ skills:
               target: self
       - type: atk_ratio_damage
         value: 0.3
-    mp_cost: 8
+    mp_cost: 7
     priority: 10
 
   # ===== Adventurer Level Unlock Skills =====
@@ -563,7 +563,7 @@ skills:
               stat: defense
               value: 0.8
               target: self
-    mp_cost: 6
+    mp_cost: 5
     priority: 12
 
   - id: epidemic

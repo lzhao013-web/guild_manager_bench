@@ -8,10 +8,10 @@ rules:
       maximum: 10.0
     stat_growth_curve:
       base: 0
-      per_turn: 1
+      per_turn: 2
     reward_growth_curve:
       base: 0.0
-      per_turn: 0.15
+      per_turn: 0.10
   recruitment:
     candidate_count: 3
     first_turn_candidate_count: 6
@@ -51,7 +51,7 @@ starting:
 experience:
   base_required_experience: 100
   required_experience_growth: 35
-  max_level: 10
+  max_level: 12
 
 scoring:
   mode: endgame_arena

@@ -263,9 +263,9 @@ class SearchOperator:
 
         actions: list[dict[str, Any]] = []
         rules = obs.get("experience_rules", {})
-        max_level = rules.get("max_level", 10)
-        base_req = rules.get("base_required_experience", 80)
-        req_growth = rules.get("required_experience_growth", 40)
+        max_level = rules.get("max_level", 12)
+        base_req = rules.get("base_required_experience", 100)
+        req_growth = rules.get("required_experience_growth", 35)
 
         while shadow.experience_pool > 0:
             best_score = -1.0
