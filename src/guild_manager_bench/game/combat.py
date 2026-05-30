@@ -235,6 +235,12 @@ def _perform_action(
         target,
         action_index=action_index,
     )
+
+    # free 技能在效果结算后额外执行一次普通攻击。
+    if active_skill.free:
+        bonus_damage = _apply_basic_attack(actor, target, action_index=action_index)
+        damage += bonus_damage
+
     return CombatEvent(
         action_index=action_index,
         time_elapsed=time_elapsed,

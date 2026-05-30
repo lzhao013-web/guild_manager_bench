@@ -165,3 +165,71 @@ def test_status_rejects_nested_status_effect() -> None:
             duration=1,
             effects=(SkillEffect(effect_type="apply_status", status=nested),),
         )
+
+
+def test_free_skill_accepts_non_damage_effects() -> None:
+    skill = Skill(
+        skill_id="rally",
+        name="鼓舞",
+        kind="active",
+        condition=SkillCondition(condition_type="action_index_lte", value=1),
+        effects=(
+            SkillEffect(
+                effect_type="apply_status",
+                target="self",
+                status=StatusDefinition(
+                    status_id="buff",
+                    name="增益",
+                    duration=2,
+                    polarity="positive",
+                    effects=(
+                        SkillEffect(effect_type="stat_bonus", stat="attack", value=3, target="self"),
+                    ),
+                ),
+            ),
+        ),
+        priority=100,
+        once_per_battle=True,
+        free=True,
+    )
+
+    assert skill.free is True
+
+
+def test_free_skill_rejects_damage_effects() -> None:
+    with pytest.raises(ValueError, match="free skill must not have damage_multiplier or damage_bonus"):
+        Skill(
+            skill_id="bad",
+            name="错误",
+            kind="active",
+            condition=SkillCondition(condition_type="always"),
+            effects=(SkillEffect(effect_type="damage_multiplier", value=1.5),),
+            free=True,
+        )
+
+
+def test_free_skill_accepts_independent_damage_effects() -> None:
+    skill = Skill(
+        skill_id="poison_dart",
+        name="毒镖",
+        kind="active",
+        condition=SkillCondition(condition_type="always"),
+        effects=(
+            SkillEffect(effect_type="true_damage", value=5),
+            SkillEffect(effect_type="atk_ratio_damage", value=0.5),
+        ),
+        free=True,
+    )
+    assert skill.free is True
+
+
+def test_passive_skill_rejects_free() -> None:
+    with pytest.raises(ValueError, match="passive skill must not be free"):
+        Skill(
+            skill_id="bad",
+            name="错误",
+            kind="passive",
+            condition=SkillCondition(condition_type="always"),
+            effects=(SkillEffect(effect_type="stat_bonus", stat="attack", value=3, target="self"),),
+            free=True,
+        )

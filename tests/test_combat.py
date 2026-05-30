@@ -479,3 +479,69 @@ def test_positive_status_can_heal_and_buff_holder() -> None:
     assert [event.healing for event in status_events] == [2, 2]
     assert [event.damage for event in action_events] == [0, 7, 7]
     assert result.left_resources.current_hp == 14
+
+
+def test_free_skill_applies_effects_and_basic_attack() -> None:
+    """free 技能触发效果后还会执行普通攻击，不浪费回合。"""
+    left = Combatant(
+        combatant_id="left",
+        stats=CombatStats(hp=30, mp=0, attack=5, defense=0, speed=10, recovery=0),
+        resources=CombatResources(current_hp=12, current_mp=0),
+        skills=(
+            Skill(
+                skill_id="rally",
+                name="鼓舞",
+                kind="active",
+                condition=SkillCondition(condition_type="action_index_lte", value=1),
+                effects=(
+                    SkillEffect(
+                        effect_type="apply_status",
+                        target="self",
+                        status=StatusDefinition(
+                            status_id="inspired",
+                            name="鼓舞",
+                            duration=2,
+                            polarity="positive",
+                            effects=(
+                                SkillEffect(
+                                    effect_type="stat_bonus",
+                                    stat="attack",
+                                    value=3,
+                                    target="self",
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+                priority=100,
+                once_per_battle=True,
+                free=True,
+            ),
+        ),
+    )
+    right = Combatant(
+        combatant_id="right",
+        stats=CombatStats(hp=30, mp=0, attack=0, defense=0, speed=0, recovery=0),
+    )
+
+    result = run_auto_battle(left, right, max_actions=4)
+
+    action_events = [event for event in result.events if event.action_type != "status"]
+
+    # Action 1: free skill fires, applies buff, then bonus basic attack.
+    # Buff is already active when basic attack resolves → attack=5+3=8.
+    assert action_events[0].action_type == "skill"
+    assert action_events[0].skill_id == "rally"
+    assert action_events[0].damage == 8
+
+    # Action 2: buff active (tick+decrement from snapshot=empty, stays remaining=2).
+    assert action_events[1].action_type == "basic_attack"
+    assert action_events[1].damage == 8
+
+    # Action 3: buff still active (decrement to remaining=1 on action 2's snapshot).
+    assert action_events[2].action_type == "basic_attack"
+    assert action_events[2].damage == 8
+
+    # Action 4: buff expired (decrement to remaining=0 on action 3's snapshot).
+    assert action_events[3].action_type == "basic_attack"
+    assert action_events[3].damage == 5

@@ -52,6 +52,19 @@ SkillConditionType = Literal[
     "any",
 ]
 
+_DAMAGE_EFFECT_TYPES: frozenset[str] = frozenset({
+    "damage_multiplier",
+    "damage_bonus",
+    "true_damage",
+    "atk_ratio_damage",
+})
+
+# free 技能禁止这些效果类型：它们基于 base_damage 计算，与免费普攻叠加会过强。
+_BLOCKED_FREE_EFFECT_TYPES: frozenset[str] = frozenset({
+    "damage_multiplier",
+    "damage_bonus",
+})
+
 
 @dataclass(frozen=True, slots=True)
 class StatusDefinition:
@@ -312,6 +325,7 @@ class Skill:
     mp_cost: int = 0
     priority: int = 0
     once_per_battle: bool = False
+    free: bool = False
 
     def __post_init__(self) -> None:
         if not self.skill_id:
@@ -339,12 +353,20 @@ class Skill:
                 raise ValueError("passive skill must not have priority")
             if self.once_per_battle:
                 raise ValueError("passive skill must not be once_per_battle")
+            if self.free:
+                raise ValueError("passive skill must not be free")
             return
 
         if self.kind == "active":
             for effect in self.effects:
                 if effect.effect_type in {"stat_bonus", "stat_multiplier"}:
                     raise ValueError("active skill does not support stat effects")
+            if self.free:
+                for effect in self.effects:
+                    if effect.effect_type in _BLOCKED_FREE_EFFECT_TYPES:
+                        raise ValueError(
+                            "free skill must not have damage_multiplier or damage_bonus effects"
+                        )
             return
 
         raise ValueError(f"unknown skill kind: {self.kind}")
