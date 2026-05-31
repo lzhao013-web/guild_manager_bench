@@ -34,6 +34,10 @@ results/
 Thumbs.db
 .DS_Store
 
+# Leaderboard data (users drop replay.json here)
+web/leaderboard/data/
+web/leaderboard/leaderboard_data.json
+
 # Simulation scripts
 sim_*.py
 

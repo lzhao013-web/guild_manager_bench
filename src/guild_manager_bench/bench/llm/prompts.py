@@ -145,7 +145,7 @@ def _state_summary(observation: Mapping[str, Any]) -> str:
             f"{monster['name']} "
             f"HP {stats['hp']} MP {stats.get('mp', 0)} "
             f"攻击 {stats['attack']} 防御 {stats['defense']} 速度 {stats['speed']} "
-            f"奖励 金币={reward['gold']} 经验={reward['experience']} 材料={_mapping_text(reward['materials'])}"
+            f"奖励 金币={reward['gold']} 经验={reward['experience']} 掉落材料={_mapping_text(reward['materials'])}"
         )
         _append_skill_lines_zh(lines, monster.get("skills"))
 
@@ -199,7 +199,7 @@ def _turn_overview(observation: Mapping[str, Any]) -> str:
         f"可购买升级 {len(purchasable)} 个，"
         f"空闲装备 {len(free_equipment)} 件，"
         f"招募候选 {len(recruit_candidates)} 个，"
-        f"队伍 {observation.get('party_size')}/{observation.get('party_size_limit')}，"
+        f"当前队伍人数/队伍人数上限 {observation.get('party_size')}/{observation.get('party_size_limit')}，"
         f"当前怪物 {len(monsters)} 个。"
     )
 
@@ -216,7 +216,7 @@ def _previous_turn_summary(previous_turn_event: Mapping[str, Any] | None) -> str
         lines.append(
             "- "
             f"{_battle_participant_name(battle, 'adventurer')} vs {_battle_participant_name(battle, 'monster')}：{result}，"
-            f"奖励 金币={reward['gold']} 经验={reward['experience']} 材料={_mapping_text(reward['materials'])}"
+            f"奖励 金币={reward['gold']} 经验={reward['experience']} 掉落材料={_mapping_text(reward['materials'])}"
         )
     return "\n".join(lines)
 

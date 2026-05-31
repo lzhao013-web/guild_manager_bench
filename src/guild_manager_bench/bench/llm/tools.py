@@ -79,17 +79,17 @@ class GuildManagerTools:
         if arguments is None:
             arguments = {}
         if not isinstance(arguments, Mapping):
-            raise ToolCallError("tool arguments must be an object")
+            raise ToolCallError("工具参数必须是 JSON 对象")
         try:
             return handler(**dict(arguments))
         except TypeError as exc:
-            raise ToolCallError(f"invalid arguments for tool {name}: {exc}") from exc
+            raise ToolCallError(f"工具 {name} 的参数不合法: {exc}") from exc
 
     def start_session(self, session_id: str | None = None) -> dict[str, Any]:
         """创建新会话。"""
 
         if session_id is not None and not _non_empty_string(session_id):
-            raise ToolCallError("session_id must be a non-empty string")
+            raise ToolCallError("session_id 必须是非空字符串")
 
         with self._lock:
             session = GameSession(
@@ -97,7 +97,7 @@ class GuildManagerTools:
                 session_id=session_id or uuid4().hex,
             )
             if session.session_id in self._sessions:
-                raise ToolCallError(f"duplicate session id: {session.session_id}")
+                raise ToolCallError(f"会话 id 已存在: {session.session_id}")
             self._sessions[session.session_id] = session
             return _session_snapshot(session)
 
@@ -336,7 +336,7 @@ class GuildManagerTools:
         if since_sequence is not None and (
             not isinstance(since_sequence, int) or isinstance(since_sequence, bool)
         ):
-            raise ToolCallError("since_sequence must be an integer")
+            raise ToolCallError("since_sequence 必须是整数")
         with self._lock:
             session = self._get_session(session_id)
             events = session.events
@@ -398,18 +398,18 @@ class GuildManagerTools:
 
     def _get_session(self, session_id: str) -> GameSession:
         if not _non_empty_string(session_id):
-            raise ToolCallError("session_id must be a non-empty string")
+            raise ToolCallError("session_id 必须是非空字符串")
         session = self._sessions.get(session_id)
         if session is None:
-            raise ToolCallError(f"session not found: {session_id}")
+            raise ToolCallError(f"会话不存在: {session_id}")
         return session
 
     def _handler(self, name: str) -> Callable[..., dict[str, Any]]:
         if not _non_empty_string(name):
-            raise ToolCallError("tool name must be a non-empty string")
+            raise ToolCallError("工具名称必须是非空字符串")
         handler_names = self._handler_names()
         if name not in handler_names:
-            raise ToolCallError(f"unknown tool: {name}")
+            raise ToolCallError(f"未知工具: {name}")
         return getattr(self, handler_names[name])
 
     def _handler_names(self) -> dict[str, str]:
@@ -519,14 +519,14 @@ def _adventurer_by_id(state, adventurer_id: str):
     for adventurer in state.adventurers:
         if adventurer.adventurer_id == adventurer_id:
             return adventurer
-    raise ToolCallError(f"unknown adventurer: {adventurer_id}")
+    raise ToolCallError(f"未找到冒险者: {adventurer_id}")
 
 
 def _monster_by_id(state, monster_id: str):
     for monster in state.current_monsters:
         if monster.monster_id == monster_id:
             return monster
-    raise ToolCallError(f"unknown monster: {monster_id}")
+    raise ToolCallError(f"未找到怪物: {monster_id}")
 
 
 def _error_response(

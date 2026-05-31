@@ -519,9 +519,11 @@ def _restore_from_replay_archive(
     for turn in _sequence(replay.get("turns")):
         if not isinstance(turn, Mapping):
             continue
+        # 每个 turn 复用同一个 harness，使增量 refs 更新在同一回合内累积
+        harness = TurnToolHarness(tools, session_id, max_tool_calls=1_000_000)
         for step in _sequence(turn.get("steps")):
             if isinstance(step, Mapping):
-                _replay_confirmed_tool_result(tools, session_id, step)
+                _replay_confirmed_tool_result(harness, step)
 
     return {
         "session_id": session_id,
@@ -541,8 +543,7 @@ def _read_replay(path: Path) -> dict[str, Any]:
 
 
 def _replay_confirmed_tool_result(
-    tools: GuildManagerTools,
-    session_id: str,
+    harness: TurnToolHarness,
     step: Mapping[str, Any],
 ) -> None:
     if step.get("type") != "tool_result":
@@ -554,8 +555,7 @@ def _replay_confirmed_tool_result(
         return
 
     arguments = _replay_tool_arguments(step)
-    replay_harness = TurnToolHarness(tools, session_id, max_tool_calls=1_000_000)
-    replayed = replay_harness.call_tool(str(name), arguments)
+    replayed = harness.call_tool(str(name), arguments)
     if replayed.get("ok") is not True:
         raise ValueError(
             f"failed to replay confirmed tool result {name}: {replayed.get('error')}"
@@ -1879,6 +1879,173 @@ def _agent_metadata(agent: LlmTurnAgent) -> dict[str, Any]:
     return metadata
 
 
+def _compute_run_stats(run: LlmGameRun) -> dict[str, Any]:
+    """从 LlmGameRun 轨迹中聚合全面的运行统计数据。"""
+
+    # Timing accumulators
+    total_duration_ms: float = 0.0
+
+    # Token accumulators
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_read_input_tokens: int = 0
+    cache_creation_input_tokens: int = 0
+
+    # Tool call accumulators
+    total_tool_calls: int = 0
+    successful_tool_calls: int = 0
+    failed_tool_calls: int = 0
+    calls_by_name: dict[str, int] = {}
+
+    # Game action accumulators
+    battles_total: int = 0
+    battles_won: int = 0
+    battles_lost: int = 0
+    total_gold_earned: int = 0
+    total_experience_earned: int = 0
+    total_equipment_crafted: int = 0
+    total_upgrades_purchased: int = 0
+    total_recruits: int = 0
+    total_dismissals: int = 0
+    total_experience_allocated: int = 0
+    total_equips: int = 0
+    total_unequips: int = 0
+
+    # Model interaction accumulators
+    total_model_steps: int = 0
+    total_turns_completed: int = 0
+    total_turns_failed: int = 0
+
+    for turn in run.turns:
+        # Model interaction
+        total_model_steps += len(turn.model_responses)
+        if turn.status == "completed":
+            total_turns_completed += 1
+        elif turn.status == "failed":
+            total_turns_failed += 1
+
+        # Timing and token usage from model responses
+        for record in turn.model_responses:
+            timing = record.timing
+            if isinstance(timing, dict):
+                ms = timing.get("duration_ms")
+                if isinstance(ms, (int, float)):
+                    total_duration_ms += float(ms)
+
+            usage = record.usage
+            if isinstance(usage, dict):
+                inp = usage.get("input_tokens")
+                if not isinstance(inp, (int, float)):
+                    inp = usage.get("prompt_tokens")
+                if isinstance(inp, (int, float)):
+                    input_tokens += int(inp)
+
+                out = usage.get("output_tokens")
+                if not isinstance(out, (int, float)):
+                    out = usage.get("completion_tokens")
+                if isinstance(out, (int, float)):
+                    output_tokens += int(out)
+
+                cr = usage.get("cache_read_input_tokens")
+                if isinstance(cr, (int, float)):
+                    cache_read_input_tokens += int(cr)
+
+                cc = usage.get("cache_creation_input_tokens")
+                if isinstance(cc, (int, float)):
+                    cache_creation_input_tokens += int(cc)
+
+        # Tool call stats and game actions
+        for call in turn.tool_calls:
+            total_tool_calls += 1
+            calls_by_name[call.name] = calls_by_name.get(call.name, 0) + 1
+
+            if call.ok is True:
+                successful_tool_calls += 1
+
+                # Game action counts by tool name
+                if call.name == "craft_equipment":
+                    total_equipment_crafted += 1
+                elif call.name == "purchase_upgrade":
+                    total_upgrades_purchased += 1
+                elif call.name == "allocate_experience":
+                    total_experience_allocated += 1
+                elif call.name == "recruit_adventurer":
+                    total_recruits += 1
+                elif call.name == "dismiss_adventurer":
+                    total_dismissals += 1
+                elif call.name == "equip_item":
+                    total_equips += 1
+                elif call.name == "unequip_item":
+                    total_unequips += 1
+                elif call.name == "end_turn":
+                    # Extract battle results
+                    turn_result = call.result.get("turn_result")
+                    if isinstance(turn_result, dict):
+                        battles = turn_result.get("battles")
+                        if isinstance(battles, list):
+                            for battle in battles:
+                                if not isinstance(battle, dict):
+                                    continue
+                                battles_total += 1
+                                if battle.get("won") is True:
+                                    battles_won += 1
+                                else:
+                                    battles_lost += 1
+                                reward = battle.get("reward")
+                                if isinstance(reward, dict):
+                                    gold = reward.get("gold")
+                                    if isinstance(gold, (int, float)):
+                                        total_gold_earned += int(gold)
+                                    exp = reward.get("experience")
+                                    if isinstance(exp, (int, float)):
+                                        total_experience_earned += int(exp)
+            else:
+                failed_tool_calls += 1
+
+    # Build result
+    token_usage: dict[str, int] = {
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+    }
+    if cache_read_input_tokens > 0:
+        token_usage["cache_read_input_tokens"] = cache_read_input_tokens
+    if cache_creation_input_tokens > 0:
+        token_usage["cache_creation_input_tokens"] = cache_creation_input_tokens
+
+    return {
+        "timing": {
+            "total_duration_ms": round(total_duration_ms),
+            "total_duration_seconds": round(total_duration_ms / 1000, 3),
+        },
+        "tool_calls": {
+            "total": total_tool_calls,
+            "successful": successful_tool_calls,
+            "failed": failed_tool_calls,
+            "by_name": calls_by_name,
+        },
+        "token_usage": token_usage,
+        "game_actions": {
+            "battles_total": battles_total,
+            "battles_won": battles_won,
+            "battles_lost": battles_lost,
+            "total_gold_earned": total_gold_earned,
+            "total_experience_earned": total_experience_earned,
+            "total_equipment_crafted": total_equipment_crafted,
+            "total_upgrades_purchased": total_upgrades_purchased,
+            "total_recruits": total_recruits,
+            "total_dismissals": total_dismissals,
+            "total_experience_allocated": total_experience_allocated,
+            "total_equips": total_equips,
+            "total_unequips": total_unequips,
+        },
+        "model_interaction": {
+            "total_model_steps": total_model_steps,
+            "total_turns_completed": total_turns_completed,
+            "total_turns_failed": total_turns_failed,
+        },
+    }
+
+
 def _run_summary(run: LlmGameRun) -> dict[str, Any]:
     return {
         "status": run.status,
@@ -1888,6 +2055,7 @@ def _run_summary(run: LlmGameRun) -> dict[str, Any]:
         "final_observation": dict(run.final_observation),
         "archive_dir": run.archive_dir,
         "score": None if run.score is None else dict(run.score),
+        "stats": _compute_run_stats(run),
     }
 
 

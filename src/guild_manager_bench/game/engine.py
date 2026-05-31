@@ -167,7 +167,7 @@ def apply_preparation_action(
     _validate_definition(definition)
     _validate_state(state)
     if is_finished(state):
-        raise GameError("game is already finished")
+        raise GameError("游戏已结束")
 
     if isinstance(action, CraftAction):
         state, _ = _apply_craft_action(definition, state, action.recipe_id)
@@ -208,7 +208,7 @@ def end_turn(
     if not isinstance(action, EndTurnAction):
         raise TypeError("action must be EndTurnAction")
     if is_finished(state):
-        raise GameError("game is already finished")
+        raise GameError("游戏已结束")
 
     battles: list[BattleSettlement] = []
 
@@ -258,7 +258,7 @@ def preview_battle(
     _validate_definition(definition)
     _validate_state(state)
     if is_finished(state):
-        raise GameError("game is already finished")
+        raise GameError("游戏已结束")
     _, battle = _apply_hunt_action(
         definition,
         state,
@@ -335,10 +335,10 @@ def _eligible_monster_archetypes(
 ) -> tuple[MonsterArchetype, ...]:
     unlocked = tuple(archetype for archetype in archetypes if archetype.min_turn <= turn)
     if not unlocked:
-        raise ValueError(f"no monster archetypes unlocked on turn {turn}")
+        raise ValueError(f"第 {turn} 回合没有已解锁的怪物原型")
     eligible = tuple(archetype for archetype in unlocked if archetype.spawn_weight > 0)
     if not eligible:
-        raise ValueError(f"no monster archetypes with positive spawn weight on turn {turn}")
+        raise ValueError(f"第 {turn} 回合没有可生成的怪物原型（生成权重均 ≤ 0）")
     return eligible
 
 
@@ -453,7 +453,7 @@ def _apply_experience_allocation(
     allocation: AllocateExperienceAction,
 ) -> GameState:
     if allocation.amount > state.experience_pool:
-        raise GameError("not enough experience in pool")
+        raise GameError("经验池中的经验不足")
     adventurer = _adventurer_by_id(state, allocation.adventurer_id)
     old_stats = effective_adventurer_stats(definition, state, adventurer)
     level, experience = add_experience(
@@ -483,9 +483,9 @@ def _apply_recruit_action(
     candidate = _recruit_candidate_by_id(state, action.candidate_id)
     limit = party_size_limit(definition, state)
     if len(state.adventurers) >= limit:
-        raise GameError(f"party size limit reached: {len(state.adventurers)}/{limit}")
+        raise GameError(f"队伍人数已达上限: {len(state.adventurers)}/{limit}")
     if state.gold < candidate.recruit_gold:
-        raise GameError("not enough gold")
+        raise GameError("金币不足")
 
     adventurer_id, next_number = _next_recruited_adventurer_id(state)
     adventurer = AdventurerState(
@@ -596,7 +596,7 @@ def _apply_hunt_action(
 ) -> tuple[GameState, BattleSettlement]:
     adventurer = _adventurer_by_id(state, hunt_action.adventurer_id)
     if not adventurer.resources.is_alive:
-        raise GameError(f"adventurer is not alive: {adventurer.adventurer_id}")
+        raise GameError(f"冒险者已阵亡: {adventurer.adventurer_id}")
     monster = _monster_by_id(state, hunt_action.monster_id)
 
     combat_result = run_auto_battle(
@@ -960,7 +960,7 @@ def _equipped_templates(
     for equipped in adventurer.equipment.items:
         instance = instances.get(equipped.instance_id)
         if instance is None:
-            raise GameError(f"missing equipment instance: {equipped.instance_id}")
+            raise GameError(f"装备实例缺失: {equipped.instance_id}")
         templates.append(_equipment_template_by_id(definition, instance.template_id))
     return tuple(templates)
 
@@ -976,7 +976,7 @@ def _unlocked_upgrades(
     upgrades = []
     for upgrade_id in state.unlocked_upgrade_ids:
         if upgrade_id not in upgrades_by_id:
-            raise GameError(f"unknown unlocked upgrade: {upgrade_id}")
+            raise GameError(f"未知的已解锁升级: {upgrade_id}")
         upgrades.append(upgrades_by_id[upgrade_id])
     return tuple(upgrades)
 
@@ -986,9 +986,9 @@ def _validate_hunt_actions(hunts: Iterable[HuntAction]) -> None:
     monster_ids: set[str] = set()
     for hunt in hunts:
         if hunt.adventurer_id in adventurer_ids:
-            raise GameError(f"duplicate adventurer hunt: {hunt.adventurer_id}")
+            raise GameError(f"重复派遣同一冒险者: {hunt.adventurer_id}")
         if hunt.monster_id in monster_ids:
-            raise GameError(f"duplicate monster hunt: {hunt.monster_id}")
+            raise GameError(f"重复讨伐同一怪物: {hunt.monster_id}")
         adventurer_ids.add(hunt.adventurer_id)
         monster_ids.add(hunt.monster_id)
 
@@ -1007,21 +1007,21 @@ def _adventurer_by_id(state: GameState, adventurer_id: str) -> AdventurerState:
     for adventurer in state.adventurers:
         if adventurer.adventurer_id == adventurer_id:
             return adventurer
-    raise GameError(f"unknown adventurer: {adventurer_id}")
+    raise GameError(f"未找到冒险者: {adventurer_id}")
 
 
 def _monster_by_id(state: GameState, monster_id: str) -> SpawnedMonster:
     for monster in state.current_monsters:
         if monster.monster_id == monster_id:
             return monster
-    raise GameError(f"unknown monster: {monster_id}")
+    raise GameError(f"未找到怪物: {monster_id}")
 
 
 def _equipment_instance_by_id(state: GameState, instance_id: str) -> EquipmentInstance:
     for equipment in state.equipment_inventory:
         if equipment.instance_id == instance_id:
             return equipment
-    raise GameError(f"unknown equipment instance: {instance_id}")
+    raise GameError(f"未找到装备实例: {instance_id}")
 
 
 def _equipment_template_by_id(
@@ -1031,28 +1031,28 @@ def _equipment_template_by_id(
     for template in definition.content.equipment_templates:
         if template.equipment_id == template_id:
             return template
-    raise GameError(f"unknown equipment template: {template_id}")
+    raise GameError(f"未找到装备模板: {template_id}")
 
 
 def _recipe_by_id(definition: GameDefinition, recipe_id: str) -> CraftingRecipe:
     for recipe in definition.content.crafting_recipes:
         if recipe.recipe_id == recipe_id:
             return recipe
-    raise GameError(f"unknown recipe: {recipe_id}")
+    raise GameError(f"未找到制作配方: {recipe_id}")
 
 
 def _upgrade_by_id(definition: GameDefinition, upgrade_id: str) -> GlobalUpgrade:
     for upgrade in definition.content.global_upgrades:
         if upgrade.upgrade_id == upgrade_id:
             return upgrade
-    raise GameError(f"unknown upgrade: {upgrade_id}")
+    raise GameError(f"未找到全局升级: {upgrade_id}")
 
 
 def _recruit_candidate_by_id(state: GameState, candidate_id: str) -> RecruitCandidate:
     for candidate in state.recruit_candidates:
         if candidate.candidate_id == candidate_id:
             return candidate
-    raise GameError(f"unknown recruit candidate: {candidate_id}")
+    raise GameError(f"未找到招募候选: {candidate_id}")
 
 
 def _next_recruited_adventurer_id(state: GameState) -> tuple[str, int]:

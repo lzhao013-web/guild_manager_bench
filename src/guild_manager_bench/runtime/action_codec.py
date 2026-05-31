@@ -48,7 +48,7 @@ def decode_preparation_action(payload: Mapping[str, Any]) -> PreparationAction:
             adventurer_id=_str(payload, "adventurer_id"),
             slot=_str(payload, "slot"),
         )
-    raise ActionCodecError(f"unknown preparation action type: {action_type}")
+    raise ActionCodecError(f"未知的准备动作类型: {action_type}")
 
 
 def decode_end_turn_action(payload: Mapping[str, Any]) -> EndTurnAction:
@@ -56,7 +56,7 @@ def decode_end_turn_action(payload: Mapping[str, Any]) -> EndTurnAction:
 
     action_type = _action_type(payload)
     if action_type != "end_turn":
-        raise ActionCodecError(f"expected end_turn action, got: {action_type}")
+        raise ActionCodecError(f"期望 end_turn 动作，实际收到: {action_type}")
     return EndTurnAction(hunts=_decode_hunts(payload.get("hunts", ())))
 
 
@@ -109,11 +109,11 @@ def encode_end_turn_action(action: EndTurnAction) -> dict[str, Any]:
 
 def _decode_hunts(value: Any) -> tuple[HuntAction, ...]:
     if not isinstance(value, Sequence) or isinstance(value, str | bytes):
-        raise ActionCodecError("hunts must be a list")
+        raise ActionCodecError("hunts 必须是列表")
     hunts = []
     for index, item in enumerate(value):
         if not isinstance(item, Mapping):
-            raise ActionCodecError(f"hunts[{index}] must be an object")
+            raise ActionCodecError(f"hunts[{index}] 必须是对象")
         hunts.append(
             HuntAction(
                 adventurer_id=_str(item, "adventurer_id"),
@@ -125,19 +125,19 @@ def _decode_hunts(value: Any) -> tuple[HuntAction, ...]:
 
 def _action_type(payload: Mapping[str, Any]) -> str:
     if not isinstance(payload, Mapping):
-        raise ActionCodecError("action payload must be an object")
+        raise ActionCodecError("动作数据必须是对象")
     return _str(payload, "type")
 
 
 def _str(payload: Mapping[str, Any], key: str) -> str:
     value = payload.get(key)
     if not isinstance(value, str) or not value:
-        raise ActionCodecError(f"{key} must be a non-empty string")
+        raise ActionCodecError(f"{key} 必须是非空字符串")
     return value
 
 
 def _int(payload: Mapping[str, Any], key: str) -> int:
     value = payload.get(key)
     if not isinstance(value, int) or isinstance(value, bool):
-        raise ActionCodecError(f"{key} must be an integer")
+        raise ActionCodecError(f"{key} 必须是整数")
     return value

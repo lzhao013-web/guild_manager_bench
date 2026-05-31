@@ -61,6 +61,7 @@ const DOM = {
   stepBarFill: $('#stepBarFill'),
   ovTurn: $('#ovTurn'), ovMaxTurn: $('#ovMaxTurn'), ovGold: $('#ovGold'), ovExp: $('#ovExp'),
   ovMaterials: $('#ovMaterials'), ovParty: $('#ovParty'), ovScore: $('#ovScore'), ovRank: $('#ovRank'),
+  ovStats: $('#ovStats'),
   actionToast: $('#actionToast'), battleOverlay: $('#battleOverlay'), battleStage: $('#battleStage'),
 };
 
@@ -688,7 +689,7 @@ function renderTimeline() {
 // ============================================================================
 function renderOverview() {
   const obs = getEffectiveObservation();
-  if (!obs) { DOM.ovTurn.textContent='—';DOM.ovMaxTurn.textContent='—';DOM.ovGold.textContent='—';DOM.ovExp.textContent='—';DOM.ovMaterials.textContent='—';DOM.ovParty.textContent='—';DOM.ovScore.textContent='—'; return; }
+  if (!obs) { DOM.ovTurn.textContent='—';DOM.ovMaxTurn.textContent='—';DOM.ovGold.textContent='—';DOM.ovExp.textContent='—';DOM.ovMaterials.textContent='—';DOM.ovParty.textContent='—';DOM.ovScore.textContent='—';DOM.ovStats.textContent='—'; return; }
   DOM.ovTurn.textContent = obs.turn||(S.currentTurnIdx+1);
   DOM.ovMaxTurn.textContent = obs.max_turns||'—';
   DOM.ovGold.textContent = fmt(obs.gold);
@@ -696,6 +697,23 @@ function renderOverview() {
   const mats = obs.materials||{}; DOM.ovMaterials.textContent = Object.entries(mats).map(([k,v])=>`${matLabel(k)}:${fmt(v)}`).join(' ')||'无材料';
   const advs = obs.adventurers||[]; DOM.ovParty.textContent = `${advs.length}/${obs.party_size_limit||'?'}`;
   if (S.replay&&S.replay.score) { DOM.ovScore.textContent = S.replay.score.total_score||S.replay.score.score||'—'; DOM.ovRank.textContent = S.replay.score.rank_score!=null ? Math.round(S.replay.score.rank_score) : '—'; } else { DOM.ovScore.textContent='—'; DOM.ovRank.textContent='—'; }
+  // Run stats
+  const stats = computeReplayStats(S.replay);
+  if (stats) {
+    const parts = [];
+    if (stats.timing && stats.timing.total_duration_ms > 0) parts.push(`⏱ ${formatReplayDuration(stats.timing.total_duration_ms)}`);
+    if (stats.token_usage) {
+      const tp = [];
+      if (stats.token_usage.input_tokens) tp.push(`in ${stats.token_usage.input_tokens.toLocaleString()}`);
+      if (stats.token_usage.output_tokens) tp.push(`out ${stats.token_usage.output_tokens.toLocaleString()}`);
+      if (tp.length) parts.push(`🔤 ${tp.join('·')}`);
+    }
+    if (stats.tool_calls && stats.tool_calls.total > 0) parts.push(`🔧 ${stats.tool_calls.total} (✓${stats.tool_calls.successful} ✗${stats.tool_calls.failed})`);
+    if (stats.game_actions && stats.game_actions.battles_total > 0) parts.push(`⚔ ${stats.game_actions.battles_won}/${stats.game_actions.battles_total}胜`);
+    DOM.ovStats.textContent = parts.length ? parts.join(' · ') : '—';
+  } else {
+    DOM.ovStats.textContent = '—';
+  }
 }
 
 // ============================================================================
@@ -878,6 +896,93 @@ function skillTip(s) { const p=[]; if(s.kind)p.push(`类型:${s.kind}`); if(s.mp
 function refId(refs,c,id) { return (refs&&refs[c]&&id)?(refs[c][id]??null):null; }
 function setStatus(m,e) { DOM.statusText.textContent=m; DOM.statusText.style.color=e?'var(--danger)':'var(--muted)'; }
 function keyById(arr,key) { const m={}; for(const it of arr){if(it&&it[key])m[it[key]]=it;} return m; }
+
+// ============================================================================
+// Replay Stats (client-side computation from turns/steps)
+// ============================================================================
+function formatReplayDuration(ms) {
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  return `${(ms / 1000).toFixed(2)} s`;
+}
+
+function computeReplayStats(replay) {
+  if (!replay || !Array.isArray(replay.turns)) return null;
+  let totalMs = 0, inputTokens = 0, outputTokens = 0, cacheRead = 0, cacheWrite = 0;
+  let totalCalls = 0, successfulCalls = 0, failedCalls = 0;
+  let battlesTotal = 0, battlesWon = 0, battlesLost = 0;
+  let crafted = 0, upgrades = 0, allocated = 0, recruited = 0, dismissed = 0, equipped = 0, unequipped = 0;
+  let modelSteps = 0, turnsCompleted = 0, turnsFailed = 0;
+
+  for (const turn of replay.turns) {
+    if (!turn || typeof turn !== "object") continue;
+    if (turn.status === "completed") turnsCompleted++;
+    else if (turn.status === "failed") turnsFailed++;
+
+    if (turn.timing_usage) {
+      const tu = turn.timing_usage;
+      if (typeof tu.duration_ms === "number") totalMs += tu.duration_ms;
+      if (typeof tu.input_tokens === "number") inputTokens += tu.input_tokens;
+      if (typeof tu.output_tokens === "number") outputTokens += tu.output_tokens;
+    }
+    const steps = Array.isArray(turn.steps) ? turn.steps : [];
+    for (const step of steps) {
+      if (!step || typeof step !== "object") continue;
+      if (step.type === "assistant") {
+        modelSteps++;
+        if (!turn.timing_usage) {
+          if (step.timing?.duration_ms != null) totalMs += Number(step.timing.duration_ms);
+          const u = step.usage || {};
+          const inp = u.input_tokens ?? u.prompt_tokens;
+          const out = u.output_tokens ?? u.completion_tokens;
+          if (typeof inp === "number") inputTokens += inp;
+          if (typeof out === "number") outputTokens += out;
+          if (typeof u.cache_read_input_tokens === "number") cacheRead += u.cache_read_input_tokens;
+          if (typeof u.cache_creation_input_tokens === "number") cacheWrite += u.cache_creation_input_tokens;
+        }
+      }
+      if (step.type === "tool_result") {
+        totalCalls++;
+        const name = step.name || "";
+        const content = typeof step.content === "string" ? step.content : "";
+        const ok = content.startsWith("OK");
+        if (ok) {
+          successfulCalls++;
+          if (name === "craft_equipment") crafted++;
+          else if (name === "purchase_upgrade") upgrades++;
+          else if (name === "allocate_experience") allocated++;
+          else if (name === "recruit_adventurer") recruited++;
+          else if (name === "dismiss_adventurer") dismissed++;
+          else if (name === "equip_item") equipped++;
+          else if (name === "unequip_item") unequipped++;
+          else if (name === "end_turn") {
+            const bm = content.match(/(\d+)\s*场战斗[,，]\s*(\d+)\s*胜\s*(\d+)\s*负/);
+            if (bm) { battlesTotal += parseInt(bm[1], 10); battlesWon += parseInt(bm[2], 10); battlesLost += parseInt(bm[3], 10); }
+          }
+        } else {
+          failedCalls++;
+        }
+      }
+    }
+  }
+
+  const tokenUsage = { input_tokens: inputTokens, output_tokens: outputTokens };
+  if (cacheRead > 0) tokenUsage.cache_read_input_tokens = cacheRead;
+  if (cacheWrite > 0) tokenUsage.cache_creation_input_tokens = cacheWrite;
+
+  return {
+    timing: { total_duration_ms: Math.round(totalMs), total_duration_seconds: Math.round(totalMs) / 1000 },
+    tool_calls: { total: totalCalls, successful: successfulCalls, failed: failedCalls },
+    token_usage: tokenUsage,
+    game_actions: {
+      battles_total: battlesTotal, battles_won: battlesWon, battles_lost: battlesLost,
+      total_gold_earned: 0, total_experience_earned: 0,
+      total_equipment_crafted: crafted, total_upgrades_purchased: upgrades,
+      total_recruits: recruited, total_dismissals: dismissed,
+      total_experience_allocated: allocated, total_equips: equipped, total_unequips: unequipped,
+    },
+    model_interaction: { total_model_steps: modelSteps, total_turns_completed: turnsCompleted, total_turns_failed: turnsFailed },
+  };
+}
 
 // ============================================================================
 // Boot

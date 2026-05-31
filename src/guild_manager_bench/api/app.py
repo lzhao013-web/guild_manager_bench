@@ -34,6 +34,10 @@ def create_app(data_dir: str | Path = "data", *, preset: str | None = None) -> F
     if replay_dir.exists():
         app.mount("/replay", StaticFiles(directory=replay_dir, html=True), name="replay")
 
+    leaderboard_dir = _leaderboard_dir()
+    if leaderboard_dir.exists():
+        app.mount("/leaderboard", StaticFiles(directory=leaderboard_dir, html=True), name="leaderboard")
+
     static_dir = _static_dir()
     if static_dir.exists():
         app.mount("/", StaticFiles(directory=static_dir, html=True), name="web")
@@ -47,6 +51,10 @@ def _static_dir() -> Path:
 
 def _replay_dir() -> Path:
     return Path(__file__).resolve().parents[3] / "web" / "replay"
+
+
+def _leaderboard_dir() -> Path:
+    return Path(__file__).resolve().parents[3] / "web" / "leaderboard"
 
 
 app = create_app()

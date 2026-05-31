@@ -61,7 +61,7 @@ window.addEventListener("load", () => {
 
 function initModes() {
   const params = new URLSearchParams(window.location.search);
-  const initialMode = params.get("mode") === "llm" ? "llm" : "manual";
+  const initialMode = params.get("mode") === "manual" ? "manual" : "llm";
   document.querySelectorAll(".mode-button").forEach((button) => {
     button.addEventListener("click", () => setMode(button.dataset.mode || "manual"));
   });
@@ -80,8 +80,8 @@ function setMode(mode, updateUrl = true) {
     return;
   }
   const url = new URL(window.location.href);
-  if (selectedMode === "llm") {
-    url.searchParams.set("mode", "llm");
+  if (selectedMode === "manual") {
+    url.searchParams.set("mode", "manual");
   } else {
     url.searchParams.delete("mode");
   }
@@ -1223,9 +1223,11 @@ function handleLlmEvent(event) {
     state.llm.running = false;
     const score = formatScore(event.run?.score);
     state.llm.status = `完成 · ${event.run?.turns || 0} 回合 · ${score ? `${score} · ` : ""}已留档`;
+    state.llm.transcript.push({ kind: "summary", stats: event.run?.stats, score: event.run?.score, turns: event.run?.turns });
   } else if (event.type === "run_failed") {
     state.llm.running = false;
     state.llm.status = `失败：${event.run?.failure_reason || "unknown"} · 已留档`;
+    state.llm.transcript.push({ kind: "summary", stats: event.run?.stats, turns: event.run?.turns, failureReason: event.run?.failure_reason });
   } else if (event.type === "debug_error") {
     state.llm.running = false;
     state.llm.status = `错误：${event.error}`;
@@ -1359,6 +1361,9 @@ function renderLlmTranscript() {
     if (entry.kind === "turn") {
       const meta = renderTurnTimingUsage(entry.timingUsage);
       return `<div class="llm-turn-marker">${escapeHtml(entry.title)}${meta}</div>`;
+    }
+    if (entry.kind === "summary") {
+      return renderRunSummary(entry);
     }
     if (entry.kind === "retry") {
       return `<div class="llm-retry">重试提示：${escapeHtml(entry.text)}</div>`;
@@ -1819,6 +1824,8 @@ function renderLlmReplay() {
   }
   const gameSeed = replay.final_observation?.seed;
   const scoringSeed = replay.score?.seed ?? replay.final_observation?.scoring?.seed;
+  const stats = computeReplayStats(replay);
+  const statsBadges = stats ? renderReplayStatsBadges(stats) : "";
   const summary = `
     <div class="llm-replay-summary">
       <span>来源：${escapeHtml(state.llm.replay.source || "replay.json")}</span>
@@ -1830,6 +1837,7 @@ function renderLlmReplay() {
       <span>Data hash：${escapeHtml(shortHash(replay.data?.data_hash))}</span>
       <span>回合：${escapeHtml(String(replay.turns?.length || 0))}</span>
       ${replay.score ? `<span>得分：${escapeHtml(formatScore(replay.score))}</span>` : ""}
+      ${statsBadges}
     </div>
   `;
   const turns = (replay.turns || []).map((turn) => renderReplayTurn(turn)).join("");
@@ -1963,6 +1971,190 @@ function formatScore(score) {
     text += ` · 段位 ${Math.round(score.rank_score)}`;
   }
   return text;
+}
+
+function renderRunSummary(entry) {
+  const stats = entry.stats;
+  if (!stats) return "";
+  const isFailed = !!entry.failureReason;
+  const titleParts = [];
+  if (isFailed) {
+    titleParts.push(`运行失败：${escapeHtml(entry.failureReason || "unknown")}`);
+  } else {
+    titleParts.push("运行总结");
+    const scoreText = formatScore(entry.score);
+    if (scoreText) titleParts.push(escapeHtml(scoreText));
+  }
+  if (entry.turns) titleParts.push(`${entry.turns} 回合`);
+
+  const badges = [];
+  // Timing
+  const timing = stats.timing;
+  if (timing && (timing.total_duration_ms > 0 || timing.total_duration_seconds > 0)) {
+    badges.push(`⏱ 耗时 ${formatDurationMs(timing.total_duration_ms || 0)}`);
+  }
+  // Tokens
+  const tokens = stats.token_usage;
+  if (tokens) {
+    const tokenParts = [];
+    if (tokens.input_tokens) tokenParts.push(`in ${tokens.input_tokens.toLocaleString()}`);
+    if (tokens.output_tokens) tokenParts.push(`out ${tokens.output_tokens.toLocaleString()}`);
+    if (tokenParts.length) badges.push(`🔤 tokens ${tokenParts.join(" · ")}`);
+    if (tokens.cache_read_input_tokens) badges.push(`📦 缓存命中 ${tokens.cache_read_input_tokens.toLocaleString()}`);
+  }
+  // Tool calls
+  const tc = stats.tool_calls;
+  if (tc && tc.total > 0) {
+    badges.push(`🔧 工具调用 ${tc.total} 次 (✓ ${tc.successful} · ✗ ${tc.failed})`);
+  }
+  // Game actions
+  const ga = stats.game_actions;
+  if (ga) {
+    if (ga.battles_total > 0) badges.push(`⚔ 战斗 ${ga.battles_won}/${ga.battles_total} 胜`);
+    if (ga.total_gold_earned > 0) badges.push(`💰 金币收入 ${ga.total_gold_earned.toLocaleString()}`);
+    if (ga.total_experience_earned > 0) badges.push(`⭐ 经验收入 ${ga.total_experience_earned.toLocaleString()}`);
+    if (ga.total_equipment_crafted > 0) badges.push(`⚒ 合成 ${ga.total_equipment_crafted} 件`);
+    if (ga.total_upgrades_purchased > 0) badges.push(`📈 升级 ${ga.total_upgrades_purchased} 个`);
+    if (ga.total_recruits > 0) badges.push(`👥 招募 ${ga.total_recruits} 人`);
+    if (ga.total_experience_allocated > 0) badges.push(`💫 分配经验 ${ga.total_experience_allocated} 次`);
+    if (ga.total_equips > 0) badges.push(`🗡 装备 ${ga.total_equips} 次`);
+  }
+  // Model interaction
+  const mi = stats.model_interaction;
+  if (mi && mi.total_model_steps > 0) {
+    badges.push(`🧠 模型步数 ${mi.total_model_steps}`);
+  }
+
+  return `
+    <div class="llm-run-summary${isFailed ? " failed" : ""}">
+      <div class="llm-run-summary-title">${titleParts.join(" · ")}</div>
+      <div class="llm-replay-summary">
+        ${badges.map((b) => `<span>${escapeHtml(b)}</span>`).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function computeReplayStats(replay) {
+  if (!replay || !Array.isArray(replay.turns)) return null;
+  let totalMs = 0, inputTokens = 0, outputTokens = 0, cacheRead = 0, cacheWrite = 0;
+  let totalCalls = 0, successfulCalls = 0, failedCalls = 0;
+  const callsByName = {};
+  let battlesTotal = 0, battlesWon = 0, battlesLost = 0;
+  let goldEarned = 0, expEarned = 0;
+  let crafted = 0, upgrades = 0, allocated = 0, recruited = 0, dismissed = 0, equipped = 0, unequipped = 0;
+  let modelSteps = 0, turnsCompleted = 0, turnsFailed = 0;
+
+  for (const turn of replay.turns) {
+    if (!turn || typeof turn !== "object") continue;
+    // Turn status
+    if (turn.status === "completed") turnsCompleted++;
+    else if (turn.status === "failed") turnsFailed++;
+
+    // Timing/usage from turn-level aggregate or step-level
+    if (turn.timing_usage) {
+      const tu = turn.timing_usage;
+      if (typeof tu.duration_ms === "number") totalMs += tu.duration_ms;
+      if (typeof tu.input_tokens === "number") inputTokens += tu.input_tokens;
+      if (typeof tu.output_tokens === "number") outputTokens += tu.output_tokens;
+    }
+    const steps = Array.isArray(turn.steps) ? turn.steps : [];
+    for (const step of steps) {
+      if (!step || typeof step !== "object") continue;
+      // Assistant steps: timing + usage + count model steps
+      if (step.type === "assistant") {
+        modelSteps++;
+        if (!turn.timing_usage) {
+          if (step.timing?.duration_ms != null) totalMs += Number(step.timing.duration_ms);
+          const u = step.usage || {};
+          const inp = u.input_tokens ?? u.prompt_tokens;
+          const out = u.output_tokens ?? u.completion_tokens;
+          if (typeof inp === "number") inputTokens += inp;
+          if (typeof out === "number") outputTokens += out;
+          if (typeof u.cache_read_input_tokens === "number") cacheRead += u.cache_read_input_tokens;
+          if (typeof u.cache_creation_input_tokens === "number") cacheWrite += u.cache_creation_input_tokens;
+        }
+      }
+      // Tool results: count calls + game actions
+      if (step.type === "tool_result") {
+        totalCalls++;
+        const name = step.name || "";
+        callsByName[name] = (callsByName[name] || 0) + 1;
+        const content = typeof step.content === "string" ? step.content : "";
+        const ok = content.startsWith("OK");
+        if (ok) {
+          successfulCalls++;
+          if (name === "craft_equipment") crafted++;
+          else if (name === "purchase_upgrade") upgrades++;
+          else if (name === "allocate_experience") allocated++;
+          else if (name === "recruit_adventurer") recruited++;
+          else if (name === "dismiss_adventurer") dismissed++;
+          else if (name === "equip_item") equipped++;
+          else if (name === "unequip_item") unequipped++;
+          else if (name === "end_turn") {
+            // Parse battle summary from content like "OK end_turn: 结束第 X 回合：Y 场战斗，W 胜 L 负"
+            const battleMatch = content.match(/(\d+)\s*场战斗[,，]\s*(\d+)\s*胜\s*(\d+)\s*负/);
+            if (battleMatch) {
+              const total = parseInt(battleMatch[1], 10);
+              const won = parseInt(battleMatch[2], 10);
+              const lost = parseInt(battleMatch[3], 10);
+              battlesTotal += total;
+              battlesWon += won;
+              battlesLost += lost;
+            }
+          }
+        } else {
+          failedCalls++;
+        }
+      }
+    }
+  }
+
+  const tokenUsage = { input_tokens: inputTokens, output_tokens: outputTokens };
+  if (cacheRead > 0) tokenUsage.cache_read_input_tokens = cacheRead;
+  if (cacheWrite > 0) tokenUsage.cache_creation_input_tokens = cacheWrite;
+
+  return {
+    timing: { total_duration_ms: Math.round(totalMs), total_duration_seconds: Math.round(totalMs) / 1000 },
+    tool_calls: { total: totalCalls, successful: successfulCalls, failed: failedCalls, by_name: callsByName },
+    token_usage: tokenUsage,
+    game_actions: {
+      battles_total: battlesTotal, battles_won: battlesWon, battles_lost: battlesLost,
+      total_gold_earned: goldEarned, total_experience_earned: expEarned,
+      total_equipment_crafted: crafted, total_upgrades_purchased: upgrades,
+      total_recruits: recruited, total_dismissals: dismissed,
+      total_experience_allocated: allocated, total_equips: equipped, total_unequips: unequipped,
+    },
+    model_interaction: { total_model_steps: modelSteps, total_turns_completed: turnsCompleted, total_turns_failed: turnsFailed },
+  };
+}
+
+function renderReplayStatsBadges(stats) {
+  const badges = [];
+  const timing = stats.timing;
+  if (timing && timing.total_duration_ms > 0) {
+    badges.push(`⏱ 耗时 ${formatDurationMs(timing.total_duration_ms)}`);
+  }
+  const tokens = stats.token_usage;
+  if (tokens) {
+    const tp = [];
+    if (tokens.input_tokens) tp.push(`in ${tokens.input_tokens.toLocaleString()}`);
+    if (tokens.output_tokens) tp.push(`out ${tokens.output_tokens.toLocaleString()}`);
+    if (tp.length) badges.push(`🔤 tokens ${tp.join(" · ")}`);
+    if (tokens.cache_read_input_tokens) badges.push(`📦 缓存命中 ${tokens.cache_read_input_tokens.toLocaleString()}`);
+  }
+  const tc = stats.tool_calls;
+  if (tc && tc.total > 0) {
+    badges.push(`🔧 工具调用 ${tc.total} (✓ ${tc.successful} · ✗ ${tc.failed})`);
+  }
+  const ga = stats.game_actions;
+  if (ga) {
+    if (ga.battles_total > 0) badges.push(`⚔ 战斗 ${ga.battles_won}/${ga.battles_total} 胜`);
+    if (ga.total_equipment_crafted > 0) badges.push(`⚒ 合成 ${ga.total_equipment_crafted} 件`);
+    if (ga.total_upgrades_purchased > 0) badges.push(`📈 升级 ${ga.total_upgrades_purchased} 个`);
+    if (ga.total_recruits > 0) badges.push(`👥 招募 ${ga.total_recruits} 人`);
+  }
+  return badges.map((b) => `<span>${escapeHtml(b)}</span>`).join("");
 }
 
 function readOptionalValue(id) {

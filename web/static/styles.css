@@ -1101,6 +1101,28 @@ textarea {
   font-size: 12px;
 }
 
+.llm-run-summary {
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.llm-run-summary.failed {
+  border-color: rgba(251, 191, 36, 0.35);
+  background: var(--warning-dim);
+}
+
+.llm-run-summary-title {
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.llm-run-summary .llm-replay-summary {
+  margin-top: 0;
+}
+
 .llm-model-meta span {
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
