@@ -338,7 +338,7 @@ function renderRecruitment(obs) {
       </div>
       <div class="small muted">费用 ${candidate.recruit_gold} 金币 · ${escapeHtml(candidate.template_id)}</div>
       ${candidateStats(candidate.base_stats)}
-      <div class="small">成长：${statModifierText(candidate.stat_growth_per_level)}</div>
+      <div class="small">每级属性成长：${statModifierText(candidate.stat_growth_per_level)}</div>
       ${skillList(candidate.skills)}
       ${candidateLevelUnlocks(candidate)}
       ${candidate.can_recruit ? "" : `<div class="small danger">缺少：${missingText(candidate.missing)}</div>`}
@@ -360,7 +360,7 @@ function candidateLevelUnlocks(candidate) {
   if (!unlocks.length) {
     return "";
   }
-  return `<div class="small muted">等级技能：${unlocks.map((unlock) => levelPreviewUnlockText(unlock)).join(" · ")}</div>`;
+  return `<div class="small muted">升级可学会技能：${unlocks.map((unlock) => levelPreviewUnlockText(unlock)).join(" · ")}</div>`;
 }
 
 /* ========== Crafting ========== */
@@ -807,7 +807,7 @@ function experienceBlock(obs, adventurer) {
         <span class="muted">经验池 ${obs.experience_pool}</span>
       </div>
       <div class="progress"><span style="width: ${percent}%"></span></div>
-      <div class="small muted">下级成长：${statModifierText(obs.experience_rules.stat_growth_per_level)}</div>
+      <div class="small muted">下级属性成长：${statModifierText(obs.experience_rules.stat_growth_per_level)}</div>
       ${next.preview_level !== adventurer.level ? `<div class="small ok">投入全部经验池可到 Lv.${next.preview_level}</div>` : ""}
       ${previewUnlocks.length ? `<div class="small ok">可解锁：${previewUnlocks.map((item) => levelPreviewUnlockText(item)).join(" · ")}</div>` : ""}
     </div>
@@ -825,7 +825,7 @@ function levelSkillUnlocksBlock(adventurer) {
     return "";
   }
   return `
-    <div class="small muted">等级技能：
+    <div class="small muted">升级可学会技能：
       ${unlocks.map((unlock) => `<span class="skill-unlock ${unlock.unlocked ? "ok" : "muted"}">${levelUnlockText(unlock)}</span>`).join(" ")}
     </div>
   `;
@@ -1574,8 +1574,10 @@ function renderLlmToolTrace() {
   }
   return state.llm.toolTrace.slice(-120).reverse().map((item) => {
     const ok = item.ok;
-    const cls = ok === false ? "danger" : ok === true ? "ok" : "muted";
-    const label = ok === false ? "失败" : ok === true ? "成功" : "等待结果";
+    const contentOk = typeof item.content === "string" && item.content.startsWith("OK");
+    const isSuccess = ok === true || (ok === null && contentOk);
+    const cls = ok === false ? "danger" : isSuccess ? "ok" : "muted";
+    const label = ok === false ? "失败" : isSuccess ? "成功" : "等待结果";
     const toolId = toolTraceId(item);
     const open = state.llm.openToolTrace.has(toolId) ? "open" : "";
     const received = item.content || "";
@@ -1739,15 +1741,69 @@ async function loadSelectedLlmReplay() {
   state.llm.replay.status = "正在加载 replay";
   renderLlmDebug();
   try {
-    const response = await fetch(`/api/llm/runs/${encodeURIComponent(runId)}/replay`);
-    const replay = await response.json();
+    let response = await fetch(`/api/llm/runs/${encodeURIComponent(runId)}/replay`);
+    let replay = await response.json();
     if (!response.ok) {
       throw new Error(replay.detail || "加载 replay 失败");
     }
+    if (!hasReplayObservations(replay)) {
+      state.llm.replay.status = "缺少回合快照，正在重建";
+      renderLlmDebug();
+      replay = await postLlmReplayMaintenance(runId, "rebuild", "重建 replay 失败");
+    } else if (needsReplayRankScores(replay)) {
+      state.llm.replay.status = "缺少段位分，正在补全";
+      renderLlmDebug();
+      replay = await postLlmReplayMaintenance(runId, "rescore", "补全段位分失败");
+    }
+    updateLoadedRunMetadata(runId, replay);
     setLlmReplay(replay, runId);
   } catch (error) {
     state.llm.replay.status = error.message || "加载 replay 失败";
     renderLlmDebug();
+  }
+}
+
+async function postLlmReplayMaintenance(runId, action, fallbackMessage) {
+  const response = await fetch(`/api/llm/runs/${encodeURIComponent(runId)}/${action}`, {
+    method: "POST",
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.detail || fallbackMessage);
+  }
+  return data;
+}
+
+function hasReplayObservations(replay) {
+  const turns = replay?.turns;
+  return Array.isArray(turns) && turns.length > 0 && turns[0]?.observation_before != null;
+}
+
+function needsReplayRankScores(replay) {
+  if (!replay || typeof replay !== "object") return false;
+  const turns = Array.isArray(replay.turns) ? replay.turns : [];
+  const hasFinalObservation = replay.final_observation && typeof replay.final_observation === "object";
+  const score = replay.score && typeof replay.score === "object" ? replay.score : null;
+  if (hasFinalObservation && (!score || score.rank_score == null)) return true;
+  return turns.some((turn, index) => {
+    if (!turn || typeof turn !== "object" || turn.status !== "completed" || turn.rank_score != null) {
+      return false;
+    }
+    const nextTurn = turns[index + 1];
+    return Boolean(
+      (nextTurn && nextTurn.observation_before) ||
+      (index === turns.length - 1 && hasFinalObservation)
+    );
+  });
+}
+
+function updateLoadedRunMetadata(runId, replay) {
+  const run = state.llm.replay.runs.find((item) => item.run_id === runId);
+  if (!run || !replay || typeof replay !== "object") return;
+  run.has_observations = hasReplayObservations(replay);
+  if (replay.score && typeof replay.score === "object") {
+    run.score = replay.score.score;
+    run.rank_score = replay.score.rank_score;
   }
 }
 
@@ -1807,7 +1863,10 @@ function renderLlmReplayControls() {
   select.innerHTML = state.llm.replay.runs.length
     ? state.llm.replay.runs.map((run) => {
       const preset = run.preset ? ` · ${run.preset}` : "";
-      const label = `${run.created_at || run.run_id} · ${run.status || "unknown"}${preset} · ${run.turns || 0} 回合`;
+      const rank = run.rank_score !== undefined && run.rank_score !== null
+        ? ` · 段位 ${Math.round(run.rank_score)}`
+        : "";
+      const label = `${run.created_at || run.run_id} · ${run.status || "unknown"}${preset} · ${run.turns || 0} 回合${rank}`;
       return `<option value="${escapeHtml(run.run_id)}">${escapeHtml(label)}</option>`;
     }).join("")
     : '<option value="">无归档</option>';
@@ -1824,6 +1883,7 @@ function renderLlmReplay() {
   }
   const gameSeed = replay.final_observation?.seed;
   const scoringSeed = replay.score?.seed ?? replay.final_observation?.scoring?.seed;
+  const scoreText = formatScore(replay.score);
   const stats = computeReplayStats(replay);
   const statsBadges = stats ? renderReplayStatsBadges(stats) : "";
   const summary = `
@@ -1836,7 +1896,7 @@ function renderLlmReplay() {
       <span>Preset：${escapeHtml(replay.data?.preset || "custom")}</span>
       <span>Data hash：${escapeHtml(shortHash(replay.data?.data_hash))}</span>
       <span>回合：${escapeHtml(String(replay.turns?.length || 0))}</span>
-      ${replay.score ? `<span>得分：${escapeHtml(formatScore(replay.score))}</span>` : ""}
+      ${scoreText ? `<span>${escapeHtml(scoreText)}</span>` : ""}
       ${statsBadges}
     </div>
   `;
@@ -1963,12 +2023,17 @@ function renderTurnTimingUsage(tu) {
 }
 
 function formatScore(score) {
-  if (!score || typeof score !== "object" || score.score === undefined || score.score === null) {
+  if (!score || typeof score !== "object") {
     return "";
   }
-  let text = `得分 ${score.score}`;
+  const hasScore = score.score !== undefined && score.score !== null;
+  const hasRank = score.rank_score !== undefined && score.rank_score !== null;
+  if (!hasScore && !hasRank) {
+    return "";
+  }
+  let text = hasScore ? `得分 ${score.score}` : "";
   if (score.rank_score !== undefined && score.rank_score !== null) {
-    text += ` · 段位 ${Math.round(score.rank_score)}`;
+    text += `${text ? " · " : ""}段位 ${Math.round(score.rank_score)}`;
   }
   return text;
 }

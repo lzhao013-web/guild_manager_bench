@@ -540,10 +540,10 @@ class ScoringRules:
     elite_stat_multiplier: float = 1.0
     boss_chance: float = 0.0
     boss_stat_multiplier: float = 1.0
-    rank_min_diff: int = 10
+    rank_min_diff: int = 1
     rank_max_diff: int = 300
-    rank_step: int = 10
-    rank_waves: int = 200
+    rank_step: int = 5
+    rank_waves: int = 50
 
     def __post_init__(self) -> None:
         if self.mode != "endgame_arena":

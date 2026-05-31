@@ -833,6 +833,26 @@ button:disabled { cursor: not-allowed; opacity: 0.4; }
   border-color: var(--accent-hover);
 }
 
+.replay-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-decoration: none;
+  transition: background 0.12s, border-color 0.12s;
+}
+.replay-link:hover {
+  background: var(--surface-hover);
+  border-color: var(--accent);
+}
+
 /* ========== Inputs ========== */
 input,
 select,

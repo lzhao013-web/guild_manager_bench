@@ -43,6 +43,7 @@ const S = {
   playSpeed: 1,
   playTimer: null,
   battleVisible: false,
+  rankChartInstance: null,
 };
 
 // ============================================================================
@@ -63,6 +64,7 @@ const DOM = {
   ovMaterials: $('#ovMaterials'), ovParty: $('#ovParty'), ovScore: $('#ovScore'), ovRank: $('#ovRank'),
   ovStats: $('#ovStats'),
   actionToast: $('#actionToast'), battleOverlay: $('#battleOverlay'), battleStage: $('#battleStage'),
+  chartOverlay: $('#chartOverlay'), rankChartCanvas: $('#rankChart'), btnRankChart: $('#btnRankChart'), chartClose: $('#chartClose'),
 };
 
 // ============================================================================
@@ -84,6 +86,9 @@ function bindEvents() {
   DOM.btnLast.addEventListener('click', () => { if (S.replay) goToTurn(S.replay.turns.length - 1); });
   DOM.speedSelect.addEventListener('change', () => { S.playSpeed = parseFloat(DOM.speedSelect.value); });
   DOM.battleOverlay.addEventListener('click', hideBattleOverlay);
+  DOM.btnRankChart.addEventListener('click', showRankChart);
+  DOM.chartClose.addEventListener('click', hideRankChart);
+  DOM.chartOverlay.addEventListener('click', e => { if (e.target === DOM.chartOverlay || e.target.classList.contains('chart-backdrop')) hideRankChart(); });
   $$('#stateTabs .tab').forEach(t => t.addEventListener('click', () => switchTab(t.dataset.tab)));
   document.addEventListener('keydown', e => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
@@ -95,7 +100,7 @@ function bindEvents() {
       case 'ArrowDown': e.preventDefault(); nextStep(); break;
       case 'Home': e.preventDefault(); goToTurn(0); break;
       case 'End': e.preventDefault(); if (S.replay) goToTurn(S.replay.turns.length - 1); break;
-      case 'Escape': hideBattleOverlay(); break;
+      case 'Escape': hideBattleOverlay(); hideRankChart(); break;
     }
   });
 }
@@ -109,7 +114,8 @@ async function loadRunList() {
     DOM.runSelector.innerHTML = '<option value="">— 选择 LLM 跑局 —</option>';
     (d.runs||[]).forEach(run => {
       const o = document.createElement('option'); o.value = run.run_id;
-      o.textContent = `${(run.created_at||'').slice(0,15)} · ${run.preset||'?'} · T${run.turns} · ${run.status}${run.has_observations?' 📷':''}`;
+      const rank = run.rank_score != null ? ` · R${Math.round(run.rank_score)}` : '';
+      o.textContent = `${(run.created_at||'').slice(0,15)} · ${run.preset||'?'} · T${run.turns} · ${run.status}${rank}${run.has_observations?' 📷':''}`;
       DOM.runSelector.appendChild(o);
     });
   } catch(e) { console.error(e); }
@@ -118,17 +124,25 @@ async function loadRunList() {
 async function loadReplay(runId) {
   setStatus('加载中...');
   try {
-    let resp = await fetch(`/api/llm/runs/${runId}/replay`);
+    let resp = await fetch(`/api/llm/runs/${encodeURIComponent(runId)}/replay`);
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     let replay = await resp.json();
     if (!hasObservations(replay)) {
       setStatus('缺少回合快照，正在重建...');
-      resp = await fetch(`/api/llm/runs/${runId}/rebuild`, { method: 'POST' });
+      resp = await fetch(`/api/llm/runs/${encodeURIComponent(runId)}/rebuild`, { method: 'POST' });
       if (!resp.ok) { const err = await resp.json(); throw new Error(err.detail||'重建失败'); }
+      replay = await resp.json();
+    } else if (needsRankScores(replay)) {
+      setStatus('缺少段位分，正在补全...');
+      resp = await fetch(`/api/llm/runs/${encodeURIComponent(runId)}/rescore`, { method: 'POST' });
+      if (!resp.ok) { const err = await resp.json(); throw new Error(err.detail||'补分失败'); }
       replay = await resp.json();
     }
     S.replay = replay; S.currentTurnIdx = 0; S.currentStepIdx = -1;
     stopPlayback(); hideBattleOverlay();
+    // Enable rank chart button if any turn has rank_score
+    const hasRankData = (replay.turns||[]).some(t => t.rank_score != null);
+    DOM.btnRankChart.disabled = !hasRankData;
     window.location.hash = `#run=${runId}`;
     updateAll(); setStatus(`已加载: ${runId}`);
     DOM.runMeta.innerHTML = `<span>${replay.session_id||runId}</span>`;
@@ -137,6 +151,22 @@ async function loadReplay(runId) {
 
 function hasObservations(replay) {
   const t = replay.turns; return Array.isArray(t) && t.length && t[0].observation_before != null;
+}
+
+function needsRankScores(replay) {
+  if (!replay || typeof replay !== 'object') return false;
+  const turns = Array.isArray(replay.turns) ? replay.turns : [];
+  const hasFinalObservation = replay.final_observation && typeof replay.final_observation === 'object';
+  const score = replay.score && typeof replay.score === 'object' ? replay.score : null;
+  if (hasFinalObservation && (!score || score.rank_score == null)) return true;
+  return turns.some((turn, index) => {
+    if (!turn || typeof turn !== 'object' || turn.status !== 'completed' || turn.rank_score != null) return false;
+    const nextTurn = turns[index + 1];
+    return Boolean(
+      (nextTurn && nextTurn.observation_before) ||
+      (index === turns.length - 1 && hasFinalObservation)
+    );
+  });
 }
 
 // ============================================================================
@@ -607,6 +637,91 @@ function hideBattleOverlay() {
   DOM.battleOverlay.setAttribute('aria-hidden','true');
 }
 
+// ============================================================================
+// Rank Chart
+// ============================================================================
+function showRankChart() {
+  if (!S.replay || !S.replay.turns) return;
+  const turns = S.replay.turns;
+  const labels = [];
+  const data = [];
+  const pointBgColors = [];
+
+  turns.forEach((t, i) => {
+    labels.push(t.turn != null ? t.turn : i + 1);
+    data.push(t.rank_score != null ? Math.round(t.rank_score) : null);
+    pointBgColors.push(i === S.currentTurnIdx ? '#f59e0b' : '#6366f1');
+  });
+
+  // Destroy previous instance
+  if (S.rankChartInstance) { S.rankChartInstance.destroy(); S.rankChartInstance = null; }
+
+  const ctx = DOM.rankChartCanvas.getContext('2d');
+  S.rankChartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Rank Score',
+        data,
+        borderColor: '#6366f1',
+        backgroundColor: 'rgba(99, 102, 241, 0.10)',
+        pointBackgroundColor: pointBgColors,
+        pointBorderColor: pointBgColors,
+        pointRadius: data.length > 50 ? 2 : 4,
+        pointHoverRadius: 6,
+        borderWidth: 2,
+        fill: true,
+        tension: 0.3,
+        spanGaps: true,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#161c2e',
+          borderColor: '#1d2440',
+          borderWidth: 1,
+          titleColor: '#e4e9f2',
+          bodyColor: '#a8b2cc',
+          padding: 10,
+          cornerRadius: 6,
+          callbacks: {
+            title: items => `回合 ${items[0].label}`,
+            label: item => item.raw != null ? `Rank: ${item.raw}` : '无数据',
+          },
+        },
+      },
+      scales: {
+        x: {
+          title: { display: true, text: '回合', color: '#636d8c', font: { size: 12 } },
+          grid: { color: 'rgba(29, 36, 64, 0.6)' },
+          ticks: { color: '#636d8c', maxTicksLimit: 20 },
+        },
+        y: {
+          title: { display: true, text: 'Rank Score', color: '#636d8c', font: { size: 12 } },
+          grid: { color: 'rgba(29, 36, 64, 0.6)' },
+          ticks: { color: '#636d8c' },
+          beginAtZero: false,
+        },
+      },
+      animation: { duration: 400, easing: 'easeOutCubic' },
+    },
+  });
+
+  DOM.chartOverlay.classList.add('active');
+  DOM.chartOverlay.setAttribute('aria-hidden', 'false');
+}
+
+function hideRankChart() {
+  DOM.chartOverlay.classList.remove('active');
+  DOM.chartOverlay.setAttribute('aria-hidden', 'true');
+  if (S.rankChartInstance) { S.rankChartInstance.destroy(); S.rankChartInstance = null; }
+}
+
 function parseBattles(content) {
   const battles = [];
   const lines = content.split('\n');
@@ -678,7 +793,8 @@ function renderTimeline() {
     let summary = '';
     if (endS) { const bm = (endS.content||'').match(/(\d+)\s*场战斗[,，]\s*(\d+)\s*胜/); summary = bm?`⚔ ${bm[2]}/${bm[1]} 胜`:'✓ end_turn'; }
     if (turn.status==='failed') summary = summary||turn.failure_reason||'失败';
-    html += `<div class="${cls}" data-turn="${idx}" onclick="goToTurn(${idx})"><div class="turn-dot ${dotCls}"></div><div class="turn-info"><div class="turn-label">回合 ${turn.turn}</div><div class="turn-summary">${summary||writeSteps.length+' 操作'}</div>${formatTurnMeta(turn.timing_usage)}</div></div>`;
+    const rankHtml = turn.rank_score != null ? `<div class="turn-rank">🏅 R${Math.round(turn.rank_score)}</div>` : '';
+    html += `<div class="${cls}" data-turn="${idx}" onclick="goToTurn(${idx})"><div class="turn-dot ${dotCls}"></div><div class="turn-info"><div class="turn-label">回合 ${turn.turn}</div><div class="turn-summary">${summary||writeSteps.length+' 操作'}</div>${rankHtml}${formatTurnMeta(turn.timing_usage)}</div></div>`;
   });
   DOM.timelineScroll.innerHTML = html;
   const a = DOM.timelineScroll.querySelector('.timeline-turn.active'); if (a) a.scrollIntoView({block:'nearest',behavior:'smooth'});
@@ -696,7 +812,11 @@ function renderOverview() {
   DOM.ovExp.textContent = fmt(obs.experience_pool);
   const mats = obs.materials||{}; DOM.ovMaterials.textContent = Object.entries(mats).map(([k,v])=>`${matLabel(k)}:${fmt(v)}`).join(' ')||'无材料';
   const advs = obs.adventurers||[]; DOM.ovParty.textContent = `${advs.length}/${obs.party_size_limit||'?'}`;
-  if (S.replay&&S.replay.score) { DOM.ovScore.textContent = S.replay.score.total_score||S.replay.score.score||'—'; DOM.ovRank.textContent = S.replay.score.rank_score!=null ? Math.round(S.replay.score.rank_score) : '—'; } else { DOM.ovScore.textContent='—'; DOM.ovRank.textContent='—'; }
+  if (S.replay&&S.replay.score) { DOM.ovScore.textContent = S.replay.score.total_score||S.replay.score.score||'—'; } else { DOM.ovScore.textContent='—'; }
+  // Per-turn rank score with fallback to overall
+  const curTurn = currentTurn();
+  const turnRank = curTurn && curTurn.rank_score != null ? Math.round(curTurn.rank_score) : (S.replay&&S.replay.score&&S.replay.score.rank_score!=null ? Math.round(S.replay.score.rank_score) : null);
+  DOM.ovRank.textContent = turnRank != null ? turnRank : '—';
   // Run stats
   const stats = computeReplayStats(S.replay);
   if (stats) {

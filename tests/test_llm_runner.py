@@ -257,7 +257,7 @@ def test_recruitment_tool_returns_compact_model_visible_text() -> None:
     assert "招募候选:" in tool_message["content"]
     assert tool_message["content"].count("\n- ") == 6
     assert "费用" in tool_message["content"]
-    assert "成长" in tool_message["content"]
+    assert "每级属性成长" in tool_message["content"]
     assert "预算: 已用 1/" in tool_message["content"]
 
 
@@ -274,15 +274,15 @@ def test_turn_prompt_includes_compact_skill_summaries() -> None:
     assert "可购买升级" in prompt
     assert "空闲装备" in prompt
     assert "招募候选 6 个" in prompt
-    assert "队伍 0/3" in prompt
+    assert "当前队伍人数/队伍人数上限 0/3" in prompt
     assert "当前怪物" in prompt
     assert "总潜在奖励" not in prompt
     assert "怪物最高攻击" not in prompt
     assert "- 1 先锋" not in prompt
     assert "EXP 0/" not in prompt
-    assert "成长 HP+18 MP+1 攻击+2 防御+4 速度+1 恢复+2" not in prompt
+    assert "每级属性成长 HP+18 MP+1 攻击+2 防御+4 速度+1 恢复+2" not in prompt
     assert "  技能:\n    - 强力打击 主动" not in prompt
-    assert "等级技能" not in prompt
+    assert "升级可学会技能" not in prompt
     assert "壁垒集结" not in prompt
     assert "战舞者" not in prompt
     assert "效果 伤害倍率 1.8" not in prompt
@@ -539,6 +539,7 @@ def test_run_llm_game_archives_trace_and_replay(tmp_path) -> None:
     assert replay["status"] == "completed"
     assert replay["score"]["score"] == run.score["score"]
     assert replay["score"]["mode"] == "endgame_arena"
+    assert replay["data"]["preset"] == "default"
     assert replay["data"]["data_hash"]
     assert replay["data"]["game_seed"] == 20260524
     assert replay["data"]["scoring_seed"] == 20260526

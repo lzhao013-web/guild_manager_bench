@@ -23,6 +23,8 @@ from datetime import datetime
 from pathlib import Path
 from statistics import mean, median
 
+from guild_manager_bench.bench.replay_scoring import with_rank_score_from_final_observation
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def _extract_run_info(replay: dict) -> dict | None:
@@ -123,6 +125,7 @@ def build_leaderboard(data_dir: Path, output: Path) -> None:
             skipped += 1
             continue
 
+        data = with_rank_score_from_final_observation(data)
         info = _extract_run_info(data)
         if info is None:
             skipped += 1

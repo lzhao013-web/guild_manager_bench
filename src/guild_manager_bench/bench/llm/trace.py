@@ -82,6 +82,7 @@ class TurnTrace:
     status: TurnStatus | None = None
     failure_reason: str | None = None
     observation_before: dict[str, Any] | None = None
+    rank_score: float | None = None
 
     def complete(self) -> None:
         self.status = "completed"
@@ -91,7 +92,7 @@ class TurnTrace:
         self.failure_reason = reason
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        data: dict[str, Any] = {
             "turn": self.turn,
             "prompt": self.prompt,
             "messages": [dict(message) for message in self.messages],
@@ -111,6 +112,9 @@ class TurnTrace:
                 else None
             ),
         }
+        if self.rank_score is not None:
+            data["rank_score"] = self.rank_score
+        return data
 
 
 @dataclass(slots=True)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from concurrent.futures import ProcessPoolExecutor
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from datetime import datetime
@@ -28,7 +29,7 @@ from guild_manager_bench.bench.llm.trace import (
     ToolCallRecord,
     TurnTrace,
 )
-from guild_manager_bench.bench.metrics import score_final_state
+from guild_manager_bench.bench.metrics import compute_rank_score, score_final_state
 from guild_manager_bench.game.loader import load_game_definition
 from guild_manager_bench.game.presets import describe_data_source, verify_data_source
 from guild_manager_bench.game.state import MATERIAL_NAMES
@@ -206,68 +207,75 @@ def run_llm_game(
     )
 
     try:
-        while True:
-            observation = tools.get_observation(session_id)["observation"]
-            if observation["finished"]:
-                score = _score_final_state(tools, session_id)
-                run = LlmGameRun(
-                    status="completed",
-                    session_id=session_id,
-                    final_observation=observation,
-                    turns=traces,
-                    score=score,
-                )
-                run.archive_dir = (
-                    None
-                    if archive_writer is None
-                    else str(archive_writer.archive.directory)
-                )
-                _write_replay(
-                    archive_writer,
-                    status="completed",
-                    traces=traces,
-                    final_observation=observation,
-                    score=score,
-                )
-                _emit(emit, "run_completed", run=_run_summary(run))
-                return run
+        with ProcessPoolExecutor() as rank_executor:
+            while True:
+                observation = tools.get_observation(session_id)["observation"]
+                if observation["finished"]:
+                    score = _score_final_state(tools, session_id)
+                    run = LlmGameRun(
+                        status="completed",
+                        session_id=session_id,
+                        final_observation=observation,
+                        turns=traces,
+                        score=score,
+                    )
+                    run.archive_dir = (
+                        None
+                        if archive_writer is None
+                        else str(archive_writer.archive.directory)
+                    )
+                    _write_replay(
+                        archive_writer,
+                        status="completed",
+                        traces=traces,
+                        final_observation=observation,
+                        score=score,
+                    )
+                    _emit(emit, "run_completed", run=_run_summary(run))
+                    return run
 
-            turn_trace = run_llm_turn(
-                agent,
-                tools,
-                session_id,
-                config=config,
-                memo_store=memo_store,
-                event_sink=emit,
-                trace_update=update_replay,
-                system_prompt=system_prompt,
-            )
-            traces.append(turn_trace)
-            active_turn_trace = None
-            update_replay()
-            if turn_trace.status == "failed":
-                final_observation = tools.get_observation(session_id)["observation"]
-                run = LlmGameRun(
-                    status="failed",
-                    session_id=session_id,
-                    final_observation=final_observation,
-                    turns=traces,
-                    failure_reason=turn_trace.failure_reason,
+                turn_trace = run_llm_turn(
+                    agent,
+                    tools,
+                    session_id,
+                    config=config,
+                    memo_store=memo_store,
+                    event_sink=emit,
+                    trace_update=update_replay,
+                    system_prompt=system_prompt,
                 )
-                run.archive_dir = (
-                    None
-                    if archive_writer is None
-                    else str(archive_writer.archive.directory)
-                )
-                _write_replay(
-                    archive_writer,
-                    status="failed",
-                    traces=traces,
-                    final_observation=final_observation,
-                    failure_reason=turn_trace.failure_reason,
-                )
-                _emit(emit, "run_failed", run=_run_summary(run))
-                return run
+                traces.append(turn_trace)
+                if turn_trace.status == "completed":
+                    turn_trace.rank_score = compute_rank_score(
+                        tools.definition,
+                        tools.get_state(session_id),
+                        executor=rank_executor,
+                    )
+                active_turn_trace = None
+                update_replay()
+                if turn_trace.status == "failed":
+                    final_observation = tools.get_observation(session_id)["observation"]
+                    run = LlmGameRun(
+                        status="failed",
+                        session_id=session_id,
+                        final_observation=final_observation,
+                        turns=traces,
+                        failure_reason=turn_trace.failure_reason,
+                    )
+                    run.archive_dir = (
+                        None
+                        if archive_writer is None
+                        else str(archive_writer.archive.directory)
+                    )
+                    _write_replay(
+                        archive_writer,
+                        status="failed",
+                        traces=traces,
+                        final_observation=final_observation,
+                        failure_reason=turn_trace.failure_reason,
+                    )
+                    _emit(emit, "run_failed", run=_run_summary(run))
+                    return run
     except Exception as exc:
         if archive_writer is not None:
             try:
@@ -519,6 +527,8 @@ def _restore_from_replay_archive(
     for turn in _sequence(replay.get("turns")):
         if not isinstance(turn, Mapping):
             continue
+        if turn.get("status") != "completed":
+            continue
         # 每个 turn 复用同一个 harness，使增量 refs 更新在同一回合内累积
         harness = TurnToolHarness(tools, session_id, max_tool_calls=1_000_000)
         for step in _sequence(turn.get("steps")):
@@ -719,6 +729,9 @@ def _trace_from_replay_turn(turn: Mapping[str, Any]) -> TurnTrace:
         trace.complete()
     elif status == "failed":
         trace.fail(str(turn.get("failure_reason") or "unknown"))
+    rank_score = turn.get("rank_score")
+    if isinstance(rank_score, (int, float)):
+        trace.rank_score = float(rank_score)
     return trace
 
 
@@ -797,6 +810,10 @@ def _format_tool_result_for_model(name: str, result: Mapping[str, Any]) -> str:
             )
         else:
             has_event_battles = False
+        recruited = result.get("recruited_adventurer")
+        if isinstance(recruited, Mapping):
+            lines.append("新冒险者详情:")
+            _append_adventurer_lines(lines, [recruited], _result_refs(result))
         turn_result = result.get("turn_result")
         if isinstance(turn_result, Mapping):
             if not has_event_battles:
@@ -905,14 +922,14 @@ def _append_observation_lines(lines: list[str], observation: Mapping[str, Any]) 
                 f"{adventurer.get('name')} "
                 f"Lv{adventurer.get('level')} "
                 f"EXP {exp_text} "
-                f"成长 {growth_text} "
+                f"每级属性成长 {growth_text} "
                 f"HP {resources.get('current_hp')}/{stats.get('hp')} "
                 f"MP {resources.get('current_mp')}/{stats.get('mp')} "
                 f"攻击 {stats.get('attack')} 防御 {stats.get('defense')} 速度 {stats.get('speed')} "
                 f"装备 {equipment_text}"
             )
             _append_skill_lines(lines, adventurer.get("skills"), indent="  ")
-            lines.append(f"  等级技能 {_level_skill_unlocks_inline(adventurer.get('level_skill_unlocks'))}")
+            lines.append(f"  升级可学会技能 {_level_skill_unlocks_inline(adventurer.get('level_skill_unlocks'))}")
 
     monsters = [
         monster
@@ -1120,7 +1137,7 @@ def _append_adventurer_lines(
             f"{adventurer.get('name')} "
             f"Lv{adventurer.get('level')} "
             f"EXP {exp_text} "
-            f"成长 {growth_text} "
+            f"每级属性成长 {growth_text} "
             f"HP {resources.get('current_hp')}/{stats.get('hp')} "
             f"MP {resources.get('current_mp')}/{stats.get('mp')} "
             f"攻击 {stats.get('attack')} 防御 {stats.get('defense')} 速度 {stats.get('speed')} "
@@ -1128,7 +1145,7 @@ def _append_adventurer_lines(
             f"装备 {equipment_text}"
         )
         _append_skill_lines(lines, adventurer.get("skills"), indent="  ")
-        lines.append(f"  等级技能 {_level_skill_unlocks_inline(adventurer.get('level_skill_unlocks'))}")
+        lines.append(f"  升级可学会技能 {_level_skill_unlocks_inline(adventurer.get('level_skill_unlocks'))}")
 
 
 def _append_recruit_candidate_lines(
@@ -1165,12 +1182,12 @@ def _append_recruit_candidate_lines(
             f"HP {stats.get('hp')} MP {stats.get('mp')} "
             f"攻击 {stats.get('attack')} 防御 {stats.get('defense')} "
             f"速度 {stats.get('speed')} 恢复 {stats.get('recovery')} 回魔 {stats.get('mp_recovery')} "
-            f"成长 {_stat_modifier_inline(candidate.get('stat_growth_per_level'))} "
+            f"每级属性成长 {_stat_modifier_inline(candidate.get('stat_growth_per_level'))} "
             f"{availability}{missing_text}"
         )
         _append_skill_lines(lines, candidate.get("skills"), indent="  ")
         lines.append(
-            f"  等级技能 {_level_skill_unlocks_inline(candidate.get('level_skill_unlocks'))}"
+            f"  升级可学会技能 {_level_skill_unlocks_inline(candidate.get('level_skill_unlocks'))}"
         )
 
 
@@ -2086,6 +2103,7 @@ _STATE_MUTATING_TOOL_NAMES = {
     "purchase_upgrade",
     "allocate_experience",
     "recruit_adventurer",
+    "dismiss_adventurer",
     "equip_item",
     "unequip_item",
     "end_turn",
@@ -2118,6 +2136,8 @@ def rebuild_replay_observations(
     rebuilt_turns: list[dict[str, Any]] = []
     for turn_data in turns:
         if not isinstance(turn_data, Mapping):
+            continue
+        if turn_data.get("status") != "completed":
             continue
 
         observation_before = tools.get_observation(session_id)["observation"]

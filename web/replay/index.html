@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Guild Manager Bench · Replay</title>
   <link rel="stylesheet" href="/replay/styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 </head>
 <body>
   <!-- ===== Top Bar ===== -->
@@ -71,6 +72,7 @@
         <div class="stat-chip">👥 <strong id="ovParty">—</strong></div>
         <div class="stat-chip">⚔️ <strong id="ovScore">—</strong> 分</div>
         <div class="stat-chip">🏅 <strong id="ovRank">—</strong> 段位</div>
+        <button class="stat-chip chart-btn" id="btnRankChart" title="Rank 曲线" disabled>📈</button>
         <div class="stat-chip" id="ovStats">—</div>
       </div>
 
@@ -125,6 +127,20 @@
 
   <!-- ===== Action Toast ===== -->
   <div class="action-toast" id="actionToast" aria-hidden="true"></div>
+
+  <!-- ===== Rank Chart Overlay ===== -->
+  <div class="chart-overlay" id="chartOverlay" aria-hidden="true">
+    <div class="chart-backdrop"></div>
+    <div class="chart-panel">
+      <div class="chart-header">
+        <h2>Rank 曲线</h2>
+        <button class="chart-close" id="chartClose">&times;</button>
+      </div>
+      <div class="chart-body">
+        <canvas id="rankChart"></canvas>
+      </div>
+    </div>
+  </div>
 
   <!-- ===== Battle Overlay ===== -->
   <div class="battle-overlay" id="battleOverlay" aria-hidden="true">

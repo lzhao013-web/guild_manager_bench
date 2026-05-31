@@ -253,6 +253,8 @@ def _turn_replay(turn: TurnTrace) -> dict[str, Any]:
         data["timing_usage"] = timing_usage
     if turn.observation_before is not None:
         data["observation_before"] = turn.observation_before
+    if turn.rank_score is not None:
+        data["rank_score"] = turn.rank_score
     return data
 
 

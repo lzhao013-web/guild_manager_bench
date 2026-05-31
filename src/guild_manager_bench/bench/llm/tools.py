@@ -234,15 +234,23 @@ class GuildManagerTools:
         session_id: str,
         candidate_id: str,
     ) -> dict[str, Any]:
-        """招募一个候选冒险者。"""
+        """招募一个候选冒险者，成功后返回新冒险者的详细信息。"""
 
-        return self._submit_preparation(
+        result = self._submit_preparation(
             session_id,
             {
                 "type": "recruit",
                 "candidate_id": candidate_id,
             },
         )
+        if result.get("ok"):
+            with self._lock:
+                session = self._get_session(session_id)
+                observation = session.observation()
+                adventurers = observation.get("adventurers", [])
+                if adventurers:
+                    result["recruited_adventurer"] = adventurers[-1]
+        return result
 
     def dismiss_adventurer(
         self,
@@ -700,7 +708,7 @@ _BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
     },
     {
         "name": "dismiss_adventurer",
-        "description": "解散队伍中的冒险者，腾出队伍名额；该冒险者的装备会归还到库存。",
+        "description": "解散队伍中的冒险者，腾出队伍名额；该冒险者的装备会归还到库存，已分配的经验会返还到经验池，招募费用不会返还。",
         "parameters": {
             "type": "object",
             "required": ["session_id", "adventurer_id"],

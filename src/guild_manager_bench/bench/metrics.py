@@ -1,14 +1,26 @@
 from __future__ import annotations
 
+import copyreg
 import random
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, replace
 from functools import lru_cache
-from typing import Any
+from types import MappingProxyType
+from typing import Any, Mapping
 
 from guild_manager_bench.game.combat import Combatant, run_auto_battle
 from guild_manager_bench.game.engine import effective_adventurer_skills, effective_adventurer_stats
 from guild_manager_bench.game.models import CombatResources, CombatStats, apply_stat_modifier, scale_combat_stats, scale_stat_modifier
+from guild_manager_bench.game.skills import Skill, SkillCondition, SkillEffect, StatusDefinition
 from guild_manager_bench.game.state import AdventurerState, GameDefinition, GameState, MonsterArchetype, ScoringRules
+
+
+# MappingProxyType 不可 pickle，ProcessPoolExecutor 需要序列化参数。
+def _pickle_mappingproxy(mp: MappingProxyType) -> tuple[type[dict], tuple[dict[str, Any], ...]]:  # pyright: ignore[reportUnusedParameter]
+    return dict, (dict(mp),)
+
+
+copyreg.pickle(MappingProxyType, _pickle_mappingproxy)
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,6 +93,14 @@ class _BattleEvaluation:
     won: bool
 
 
+@dataclass(frozen=True, slots=True)
+class _ObservationAdventurer:
+    adventurer_id: str
+    stats: CombatStats
+    resources: CombatResources
+    skills: tuple[Skill, ...]
+
+
 def total_effective_level(state: GameState) -> int:
     """返回队伍等级总和，作为临时运行统计。"""
 
@@ -118,7 +138,7 @@ def score_final_state(
     )
     return ScoreReport(
         score=arena_result.score,
-        rank_score=_compute_rank_score(definition, state),
+        rank_score=compute_rank_score(definition, state),
         mode=rules.mode,
         seed=rules.seed,
         waves=rules.waves,
@@ -131,6 +151,85 @@ def score_final_state(
         chosen_win_rate=arena_result.chosen_win_rate,
         per_adventurer=per_adventurer,
     )
+
+
+def _compute_difficulty_tier(
+    args: tuple[int, GameDefinition, tuple[_ObservationAdventurer, ...], int],
+) -> tuple[int, float]:
+    """Compute arena score for a single difficulty level.
+
+    Top-level function so it can be pickled by ProcessPoolExecutor.
+    """
+    difficulty, definition, adventurers, rank_waves = args
+    tier_scoring = ScoringRules(
+        mode="endgame_arena",
+        seed=definition.scoring.seed,
+        waves=rank_waves,
+        wave_size=definition.scoring.wave_size,
+        difficulty_factors=(difficulty,),
+        resource_mode=definition.scoring.resource_mode,
+        aggregation="best_assignment",
+        elite_chance=definition.scoring.elite_chance,
+        elite_stat_multiplier=definition.scoring.elite_stat_multiplier,
+        boss_chance=definition.scoring.boss_chance,
+        boss_stat_multiplier=definition.scoring.boss_stat_multiplier,
+    )
+    tier_definition = replace(definition, scoring=tier_scoring)
+    tier_result = _run_observation_arena(tier_definition, adventurers, waves=rank_waves)
+    return difficulty, tier_result.score
+
+
+def _compute_difficulty_tier_state(
+    args: tuple[int, GameDefinition, GameState, int],
+) -> tuple[int, float]:
+    """Compute arena score for a single difficulty level (live state version).
+
+    Top-level function so it can be pickled by ProcessPoolExecutor.
+    """
+    difficulty, definition, state, rank_waves = args
+    tier_scoring = ScoringRules(
+        mode="endgame_arena",
+        seed=definition.scoring.seed,
+        waves=rank_waves,
+        wave_size=definition.scoring.wave_size,
+        difficulty_factors=(difficulty,),
+        resource_mode=definition.scoring.resource_mode,
+        aggregation="best_assignment",
+        elite_chance=definition.scoring.elite_chance,
+        elite_stat_multiplier=definition.scoring.elite_stat_multiplier,
+        boss_chance=definition.scoring.boss_chance,
+        boss_stat_multiplier=definition.scoring.boss_stat_multiplier,
+    )
+    tier_definition = replace(definition, scoring=tier_scoring)
+    tier_result = _run_arena(tier_definition, state, waves=rank_waves)
+    return difficulty, tier_result.score
+
+
+def rank_score_from_final_observation(
+    definition: GameDefinition,
+    observation: Mapping[str, Any],
+) -> float:
+    """从 replay 的终局 observation 估算段位积分。"""
+
+    adventurers = _observation_adventurers(observation)
+    if not adventurers:
+        return 0.0
+
+    rules = definition.scoring
+    difficulties = list(range(rules.rank_min_diff, rules.rank_max_diff + 1, rules.rank_step))
+    if not difficulties:
+        return 0.0
+
+    args_iter = (
+        (d, definition, adventurers, rules.rank_waves) for d in difficulties
+    )
+    rank_score = 0.0
+    with ProcessPoolExecutor() as executor:
+        for difficulty, score in executor.map(_compute_difficulty_tier, args_iter):
+            performance = score / 100.0
+            rank_score += performance * difficulty
+
+    return _round_score(rank_score)
 
 
 @dataclass(frozen=True, slots=True)
@@ -209,46 +308,103 @@ def _run_arena(
     )
 
 
-def _compute_rank_score(
+def _run_observation_arena(
+    definition: GameDefinition,
+    adventurers: tuple[_ObservationAdventurer, ...],
+    *,
+    waves: int,
+) -> _ArenaResult:
+    """用 observation 中的最终阵容快照运行 Arena 模拟。"""
+
+    rules = definition.scoring
+    rng = random.Random(rules.seed)
+    per_adventurer_score = {item.adventurer_id: 0.0 for item in adventurers}
+    per_adventurer_wins = {item.adventurer_id: 0 for item in adventurers}
+    per_adventurer_assignments = {item.adventurer_id: 0 for item in adventurers}
+
+    total_score = 0.0
+    chosen_wins = 0
+    chosen_battles = 0
+    simulated_battles = 0
+
+    for wave_index in range(waves):
+        difficulty = rules.difficulty_factors[wave_index % len(rules.difficulty_factors)]
+        monsters = tuple(
+            _sample_arena_monster(
+                definition,
+                rng,
+                wave_index=wave_index + 1,
+                index=index + 1,
+                difficulty=difficulty,
+            )
+            for index in range(rules.wave_size)
+        )
+        matrix = [
+            [
+                _evaluate_observation_battle(definition, adventurer, monster)
+                for monster in monsters
+            ]
+            for adventurer in adventurers
+        ]
+        simulated_battles += len(adventurers) * len(monsters)
+        for adventurer_index, monster_index in _best_assignment(matrix):
+            evaluation = matrix[adventurer_index][monster_index]
+            adventurer = adventurers[adventurer_index]
+            total_score += evaluation.score
+            chosen_wins += 1 if evaluation.won else 0
+            chosen_battles += 1
+            per_adventurer_score[adventurer.adventurer_id] += evaluation.score
+            per_adventurer_wins[adventurer.adventurer_id] += 1 if evaluation.won else 0
+            per_adventurer_assignments[adventurer.adventurer_id] += 1
+
+    denominator = waves * rules.wave_size * 100
+    score = _round_score(100 * total_score / denominator) if denominator else 0.0
+    return _ArenaResult(
+        score=score,
+        simulated_battles=simulated_battles,
+        chosen_battles=chosen_battles,
+        chosen_win_rate=_average(chosen_wins, chosen_battles),
+        per_adventurer_score=per_adventurer_score,
+        per_adventurer_wins=per_adventurer_wins,
+        per_adventurer_assignments=per_adventurer_assignments,
+    )
+
+
+def compute_rank_score(
     definition: GameDefinition,
     state: GameState,
+    *,
+    executor: ProcessPoolExecutor | None = None,
 ) -> float:
-    """通过线性难度扫描计算段位积分。
+    """通过线性难度扫描计算段位积分（并行版）。
 
     在每个难度等级上运行 Arena 模拟，计算 performance × difficulty 的加权和。
     rank = Σ performance(d) × d  for d in [rank_min_diff .. rank_max_diff, step=rank_step]
+
+    如果传入 *executor*，则复用该进程池，避免反复创建/销毁的开销。
     """
     rules = definition.scoring
     adventurers = tuple(state.adventurers)
     if not adventurers:
         return 0.0
 
+    difficulties = list(range(rules.rank_min_diff, rules.rank_max_diff + 1, rules.rank_step))
+    if not difficulties:
+        return 0.0
+
+    args_iter = (
+        (d, definition, state, rules.rank_waves) for d in difficulties
+    )
     rank_score = 0.0
-    early_exit_threshold = 0.001
-
-    for d in range(rules.rank_min_diff, rules.rank_max_diff + 1, rules.rank_step):
-        tier_scoring = ScoringRules(
-            mode="endgame_arena",
-            seed=rules.seed,
-            waves=rules.rank_waves,
-            wave_size=rules.wave_size,
-            difficulty_factors=(d,),
-            resource_mode=rules.resource_mode,
-            aggregation="best_assignment",
-            elite_chance=rules.elite_chance,
-            elite_stat_multiplier=rules.elite_stat_multiplier,
-            boss_chance=rules.boss_chance,
-            boss_stat_multiplier=rules.boss_stat_multiplier,
-        )
-        tier_definition = replace(definition, scoring=tier_scoring)
-        tier_result = _run_arena(tier_definition, state, waves=rules.rank_waves)
-
-        performance = tier_result.score / 100.0
-        rank_score += performance * d
-
-        # Early exit: once performance is negligible, higher difficulties won't help
-        if performance < early_exit_threshold and d > rules.rank_min_diff + rules.rank_step * 5:
-            break
+    if executor is not None:
+        for difficulty, score in executor.map(_compute_difficulty_tier_state, args_iter):
+            performance = score / 100.0
+            rank_score += performance * difficulty
+    else:
+        with ProcessPoolExecutor() as pool:
+            for difficulty, score in pool.map(_compute_difficulty_tier_state, args_iter):
+                performance = score / 100.0
+                rank_score += performance * difficulty
 
     return _round_score(rank_score)
 
@@ -316,6 +472,40 @@ def _arena_monster(
     )
 
 
+def _evaluate_observation_battle(
+    definition: GameDefinition,
+    adventurer: _ObservationAdventurer,
+    monster: _ArenaMonster,
+) -> _BattleEvaluation:
+    stats = adventurer.stats
+    result = run_auto_battle(
+        Combatant(
+            combatant_id=adventurer.adventurer_id,
+            stats=stats,
+            resources=_observation_scoring_resources(definition, adventurer),
+            skills=adventurer.skills,
+        ),
+        Combatant(
+            combatant_id=monster.monster_id,
+            stats=monster.stats,
+            resources=CombatResources.full(monster.stats),
+            skills=monster.skills,
+        ),
+    )
+    enemy_progress = 1 - result.right_resources.current_hp / monster.stats.hp
+    survival_margin = result.left_resources.current_hp / stats.hp
+    outcome_score = {
+        "left_win": 1.0,
+        "draw": 0.4,
+        "right_win": 0.0,
+    }[result.outcome]
+    score = 70 * outcome_score + 20 * enemy_progress + 10 * survival_margin
+    return _BattleEvaluation(
+        score=_round_score(max(0.0, min(100.0, score))),
+        won=result.outcome == "left_win",
+    )
+
+
 def _evaluate_battle(
     definition: GameDefinition,
     state: GameState,
@@ -362,6 +552,144 @@ def _scoring_resources(
             current_mp=min(adventurer.resources.current_mp, stats.mp),
         )
     return CombatResources.full(stats)
+
+
+def _observation_scoring_resources(
+    definition: GameDefinition,
+    adventurer: _ObservationAdventurer,
+) -> CombatResources:
+    stats = adventurer.stats
+    if definition.scoring.resource_mode == "current":
+        return CombatResources(
+            current_hp=min(adventurer.resources.current_hp, stats.hp),
+            current_mp=min(adventurer.resources.current_mp, stats.mp),
+        )
+    return CombatResources.full(stats)
+
+
+def _observation_adventurers(
+    observation: Mapping[str, Any],
+) -> tuple[_ObservationAdventurer, ...]:
+    values = observation.get("adventurers")
+    if not isinstance(values, list):
+        raise ValueError("final_observation.adventurers must be a list")
+
+    adventurers: list[_ObservationAdventurer] = []
+    for index, data in enumerate(values, start=1):
+        if not isinstance(data, Mapping):
+            raise ValueError(f"final_observation.adventurers[{index}] must be an object")
+        stats_data = data.get("effective_stats") or data.get("base_stats")
+        if not isinstance(stats_data, Mapping):
+            raise ValueError(f"final_observation.adventurers[{index}] missing effective_stats")
+        stats = _combat_stats_from_mapping(stats_data)
+        resources_data = data.get("resources")
+        resources = (
+            _combat_resources_from_mapping(resources_data)
+            if isinstance(resources_data, Mapping)
+            else CombatResources.full(stats)
+        )
+        skills_data = data.get("skills", [])
+        if not isinstance(skills_data, list):
+            raise ValueError(f"final_observation.adventurers[{index}].skills must be a list")
+        adventurers.append(
+            _ObservationAdventurer(
+                adventurer_id=str(data.get("adventurer_id") or f"adventurer_{index}"),
+                stats=stats,
+                resources=resources,
+                skills=tuple(
+                    _skill_from_mapping(item)
+                    for item in skills_data
+                    if isinstance(item, Mapping)
+                ),
+            )
+        )
+    return tuple(adventurers)
+
+
+def _combat_stats_from_mapping(data: Mapping[str, Any]) -> CombatStats:
+    return CombatStats(
+        hp=_int_field(data, "hp"),
+        mp=_int_field(data, "mp"),
+        attack=_int_field(data, "attack"),
+        defense=_int_field(data, "defense"),
+        speed=_int_field(data, "speed"),
+        recovery=_int_field(data, "recovery"),
+        mp_recovery=_int_field(data, "mp_recovery", default=0),
+    )
+
+
+def _combat_resources_from_mapping(data: Mapping[str, Any]) -> CombatResources:
+    return CombatResources(
+        current_hp=_int_field(data, "current_hp"),
+        current_mp=_int_field(data, "current_mp"),
+    )
+
+
+def _skill_from_mapping(data: Mapping[str, Any]) -> Skill:
+    effects = data.get("effects", [])
+    if not isinstance(effects, list):
+        raise ValueError("skill.effects must be a list")
+    return Skill(
+        skill_id=str(data.get("skill_id") or data.get("name") or "skill"),
+        name=str(data.get("name") or data.get("skill_id") or "skill"),
+        kind=data.get("kind", "active"),
+        condition=_skill_condition_from_mapping(data.get("condition")),
+        effects=tuple(
+            _skill_effect_from_mapping(item)
+            for item in effects
+            if isinstance(item, Mapping)
+        ),
+        mp_cost=_int_field(data, "mp_cost", default=0),
+        priority=_int_field(data, "priority", default=0),
+        once_per_battle=bool(data.get("once_per_battle", False)),
+        free=bool(data.get("free", False)),
+    )
+
+
+def _skill_condition_from_mapping(data: Any) -> SkillCondition:
+    if not isinstance(data, Mapping):
+        return SkillCondition(condition_type="always")
+    children = data.get("conditions", [])
+    if not isinstance(children, list):
+        children = []
+    return SkillCondition(
+        condition_type=data.get("type", "always"),
+        value=data.get("value"),
+        conditions=tuple(_skill_condition_from_mapping(item) for item in children),
+    )
+
+
+def _skill_effect_from_mapping(data: Mapping[str, Any]) -> SkillEffect:
+    status_data = data.get("status")
+    return SkillEffect(
+        effect_type=data.get("type"),
+        value=data.get("value", 0),
+        stat=data.get("stat"),
+        target=data.get("target") or "target",
+        status=(
+            _status_from_mapping(status_data)
+            if isinstance(status_data, Mapping)
+            else None
+        ),
+    )
+
+
+def _status_from_mapping(data: Mapping[str, Any]) -> StatusDefinition:
+    effects = data.get("effects", [])
+    if not isinstance(effects, list):
+        raise ValueError("status.effects must be a list")
+    return StatusDefinition(
+        status_id=str(data.get("status_id") or data.get("name") or "status"),
+        name=str(data.get("name") or data.get("status_id") or "status"),
+        duration=_int_field(data, "duration"),
+        effects=tuple(
+            _skill_effect_from_mapping(item)
+            for item in effects
+            if isinstance(item, Mapping)
+        ),
+        polarity=data.get("polarity", "neutral"),
+        stack_mode=data.get("stack_mode", "refresh"),
+    )
 
 
 def _best_assignment(matrix: list[list[_BattleEvaluation]]) -> tuple[tuple[int, int], ...]:
@@ -416,3 +744,10 @@ def _average(total: float, count: int) -> float:
 
 def _round_score(value: float) -> float:
     return round(value, 4)
+
+
+def _int_field(data: Mapping[str, Any], key: str, *, default: int | None = None) -> int:
+    value = data.get(key, default)
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{key} must be an int")
+    return value

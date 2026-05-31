@@ -395,10 +395,10 @@ def _parse_scoring_rules(data: Mapping[str, Any]) -> ScoringRules:
         elite_stat_multiplier=float(data.get("elite_stat_multiplier", 1.0)),
         boss_chance=float(data.get("boss_chance", 0.0)),
         boss_stat_multiplier=float(data.get("boss_stat_multiplier", 1.0)),
-        rank_min_diff=_int(data.get("rank_min_diff", 10), "scoring.rank_min_diff"),
+        rank_min_diff=_int(data.get("rank_min_diff", 1), "scoring.rank_min_diff"),
         rank_max_diff=_int(data.get("rank_max_diff", 300), "scoring.rank_max_diff"),
-        rank_step=_int(data.get("rank_step", 10), "scoring.rank_step"),
-        rank_waves=_int(data.get("rank_waves", 200), "scoring.rank_waves"),
+        rank_step=_int(data.get("rank_step", 5), "scoring.rank_step"),
+        rank_waves=_int(data.get("rank_waves", 50), "scoring.rank_waves"),
     )
 
 
