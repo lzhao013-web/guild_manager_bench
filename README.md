@@ -80,6 +80,7 @@ data/presets/<preset_name>/
 
 ```powershell
 uv run guild-manager serve --preset default --host 127.0.0.1 --port 8000
+uv run guild-manager run --preset default
 ```
 
 不传 `--preset` 时默认读取 `data/presets/default/`。LLM 留档会在 `replay.json` 顶层记录 `data.preset`、`data.data_dir` 和 `data.data_hash`；续跑时如果旧 replay 记录了 hash 且当前数据不一致，会拒绝恢复，避免用不同规则继续同一局。

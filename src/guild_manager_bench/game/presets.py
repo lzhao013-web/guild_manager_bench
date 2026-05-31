@@ -50,6 +50,25 @@ def resolve_data_preset(
     raise ValueError(f"unknown data preset: {preset_name}")
 
 
+def resolve_data_source(
+    data_dir: str | Path = "data",
+    preset: str | None = None,
+) -> DataPreset:
+    """Resolve either a data root + preset or a direct game data directory."""
+
+    path = Path(data_dir)
+    if preset is not None:
+        return resolve_data_preset(path, preset)
+    if _looks_like_data_dir(path):
+        inferred_preset = _infer_preset_name(path)
+        return _preset(
+            inferred_preset,
+            path,
+            "preset" if inferred_preset is not None else "data_dir",
+        )
+    return resolve_data_preset(path)
+
+
 def list_data_presets(data_dir: str | Path = "data") -> list[DataPreset]:
     """List complete presets under data/presets."""
 
@@ -72,8 +91,9 @@ def describe_data_source(
     """Return replay-safe metadata for a resolved game data directory."""
 
     path = Path(data_dir)
-    name = _preset_name(preset) if preset is not None else None
-    return _preset(name, path, source).to_dict()
+    name = _preset_name(preset) if preset is not None else _infer_preset_name(path)
+    resolved_source = "preset" if source == "data_dir" and name is not None else source
+    return _preset(name, path, resolved_source).to_dict()
 
 
 def verify_data_source(
@@ -135,6 +155,15 @@ def hash_data_dir(data_dir: str | Path) -> str:
 
 def _looks_like_data_dir(path: Path) -> bool:
     return all((path / filename).is_file() for filename in REQUIRED_DATA_FILES)
+
+
+def _infer_preset_name(path: Path) -> str | None:
+    if path.parent.name != PRESETS_DIR:
+        return None
+    try:
+        return _preset_name(path.name)
+    except ValueError:
+        return None
 
 
 def _preset_name(value: str) -> str:

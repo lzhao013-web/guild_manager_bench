@@ -14,7 +14,12 @@ from guild_manager_bench.game.actions import (
 )
 from guild_manager_bench.game.engine import apply_turn, new_game
 from guild_manager_bench.game.loader import YamlLoadError, load_game_definition
-from guild_manager_bench.game.presets import list_data_presets, resolve_data_preset
+from guild_manager_bench.game.presets import (
+    describe_data_source,
+    list_data_presets,
+    resolve_data_preset,
+    resolve_data_source,
+)
 
 
 def test_load_game_definition_from_yaml_directory() -> None:
@@ -239,6 +244,28 @@ def test_resolve_data_preset_defaults_to_default_preset() -> None:
     assert preset.name == "default"
     assert preset.source == "preset"
     assert preset.data_dir.name == "default"
+
+
+def test_resolve_data_source_accepts_root_or_direct_preset_path() -> None:
+    with _data_dir("data_source_preset") as data_dir:
+        default_dir = data_dir / "presets" / "default"
+        full_dir = data_dir / "presets" / "full"
+        default_dir.mkdir(parents=True)
+        full_dir.mkdir(parents=True)
+        _write_game_yaml_files(default_dir)
+        _write_game_yaml_files(full_dir)
+
+        implicit = resolve_data_source(data_dir)
+        explicit = resolve_data_source(data_dir, "full")
+        direct = resolve_data_source(full_dir)
+        described = describe_data_source(full_dir)
+
+    assert implicit.name == "default"
+    assert explicit.name == "full"
+    assert direct.name == "full"
+    assert direct.source == "preset"
+    assert described["preset"] == "full"
+    assert described["source"] == "preset"
 
 
 def test_list_data_presets_returns_complete_presets_only() -> None:

@@ -12,13 +12,13 @@ from guild_manager_bench.api.routes_sessions import sessions_router
 from guild_manager_bench.api.store import SessionStore
 from guild_manager_bench.api.websocket import SessionHub, websocket_router
 from guild_manager_bench.game.loader import load_game_definition
-from guild_manager_bench.game.presets import resolve_data_preset
+from guild_manager_bench.game.presets import resolve_data_source
 
 
 def create_app(data_dir: str | Path = "data", *, preset: str | None = None) -> FastAPI:
     """创建可视化和操作服务。"""
 
-    data_preset = resolve_data_preset(data_dir, preset)
+    data_preset = resolve_data_source(data_dir, preset)
     definition = load_game_definition(data_preset.data_dir)
     store = SessionStore(definition)
     hub = SessionHub()
