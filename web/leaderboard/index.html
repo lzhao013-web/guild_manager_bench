@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Guild Manager Bench · Leaderboard</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- ===== Top Bar ===== -->
+  <header class="topbar">
+    <div class="topbar-brand">
+      <h1>Guild Manager Bench</h1>
+      <span class="brand-badge">Leaderboard</span>
+    </div>
+    <div class="topbar-meta" id="topMeta">
+      <span class="muted">加载数据中…</span>
+    </div>
+  </header>
+
+  <!-- ===== Leaderboard Content ===== -->
+  <main class="leaderboard-main" id="leaderboardMain">
+    <div class="loading-state" id="loadingState">
+      <div class="spinner"></div>
+      <p>正在加载排行榜数据…</p>
+    </div>
+  </main>
+
+  <!-- ===== Footer ===== -->
+  <footer class="footer">
+    <span>将 <code>replay.json</code> 放入 <code>data/</code> 目录 · 运行 <code>python scripts/build_leaderboard.py</code> 生成数据</span>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
