@@ -11,6 +11,7 @@ from guild_manager_bench.bench.llm import (
     LlmRunConfig,
     LlmToolCall,
     TurnToolHarness,
+    build_system_prompt,
     build_turn_prompt,
     run_llm_game,
     run_llm_turn,
@@ -61,8 +62,10 @@ class RecordingSequenceAgent(SequenceAgent):
         messages: Sequence[Mapping[str, Any]],
         tools: Sequence[Mapping[str, Any]],
     ) -> LlmAgentResponse:
-        if messages:
-            self.prompts.append(str(messages[0].get("content", "")))
+        for message in messages:
+            if message.get("role") == "user":
+                self.prompts.append(str(message.get("content", "")))
+                break
         return super().respond(messages=messages, tools=tools)
 
 
@@ -255,11 +258,10 @@ def test_turn_prompt_includes_compact_skill_summaries() -> None:
     tools = GuildManagerTools.from_data_dir(_data_dir())
     observation = tools.start_session("skill-prompt")["observation"]
 
-    prompt = build_turn_prompt(observation, max_tool_calls=3)
+    prompt = build_turn_prompt(observation)
 
-    assert "回合流程：准备阶段可调用查询工具读取信息" in prompt
-    assert "本回合最多允许 3 次非 end_turn 工具调用" in prompt
-    assert "调用工具使用的所有对象 id 都使用列表左侧的数字 id" in prompt
+    assert "上一回合：无，这是本局第一个回合。" in prompt
+    assert "备忘录：无。" in prompt
     assert "本回合概览：" in prompt
     assert "可制作配方" in prompt
     assert "可购买升级" in prompt
@@ -277,6 +279,46 @@ def test_turn_prompt_includes_compact_skill_summaries() -> None:
     assert "壁垒集结" not in prompt
     assert "战舞者" not in prompt
     assert "效果 伤害倍率 1.8" not in prompt
+
+    # Static rules should NOT be in turn prompt anymore
+    assert "回合流程：" not in prompt
+    assert "战斗机制：" not in prompt
+    assert "回复机制：" not in prompt
+
+
+def test_system_prompt_includes_static_rules() -> None:
+    tools = GuildManagerTools.from_data_dir(_data_dir())
+    observation = tools.start_session("system-prompt")["observation"]
+    recovery = observation.get("turn_recovery_rules", {})
+
+    prompt = build_system_prompt(
+        objective="测试目标。",
+        max_tool_calls=7,
+        max_battle_preview_per_turn=5,
+        turn_recovery_rules=recovery,
+    )
+
+    assert "你正在进行 Guild Manager Bench。" in prompt
+    assert "目标：测试目标。" in prompt
+    assert "回合流程：" in prompt
+    assert "战斗提示：" in prompt
+    assert "战斗机制：SPD 决定出手频率" in prompt
+    assert "普通攻击伤害 = max(1, ATK - DEF)" in prompt
+    assert "技能相关：" in prompt
+    assert "回复机制：" in prompt
+    assert "HP回复 = " in prompt
+    assert "MP回复 = " in prompt
+    assert "刷新机制：" in prompt
+    assert "每回合最多允许 7 次非 end_turn 工具调用" in prompt
+    assert "preview_battle 最多 5 次/回合" in prompt
+    assert "调用工具使用的所有对象 id 都使用列表左侧的数字 id" in prompt
+    assert "工具会返回 OK/FAIL、budget 和结果摘要" in prompt
+
+    # Dynamic content should NOT be in system prompt
+    assert "当前回合" not in prompt
+    assert "本回合概览" not in prompt
+    assert "备忘录" not in prompt
+    assert "上一回合" not in prompt
 
 
 def test_turn_prompt_shows_equipped_numeric_refs() -> None:
@@ -299,11 +341,11 @@ def test_turn_prompt_shows_equipped_numeric_refs() -> None:
     )
 
     observation = tools.get_observation(session_id)["observation"]
-    prompt = build_turn_prompt(observation, max_tool_calls=3)
+    prompt = build_turn_prompt(observation)
     adventurer_name = observation["adventurers"][0]["name"]
 
     assert f"1 {adventurer_name}" in prompt
-    assert "装备 铁剑(id=1)" in prompt
+    assert "装备 铁剑(id=1, main_hand)" in prompt
     assert "装备 无" not in prompt.split(f"1 {adventurer_name}", 1)[1].splitlines()[0]
 
 
@@ -383,7 +425,7 @@ def test_memo_tool_content_appears_in_next_turn_prompt() -> None:
         if "当前回合：1/" in prompt
     )
     assert run.turns[0].tool_calls[0].name == "write_memo"
-    assert run.turns[0].messages[2]["content"].startswith("OK write_memo")
+    assert run.turns[0].messages[3]["content"].startswith("OK write_memo")
 
 
 def test_preview_battle_tool_returns_compact_model_visible_text() -> None:
@@ -479,7 +521,8 @@ def test_run_llm_game_archives_trace_and_replay(tmp_path) -> None:
         for record in trace_lines
         if record.get("event", {}).get("type") == "model_response"
     )
-    assert request_event["request"]["messages"][0]["role"] == "user"
+    assert request_event["request"]["messages"][0]["role"] == "system"
+    assert request_event["request"]["messages"][1]["role"] == "user"
     assert request_event["request"]["tools"]
     assert response_event["raw"] == {"id": "response_1"}
     assert response_event["usage"]["total_tokens"] == 17
@@ -492,15 +535,16 @@ def test_run_llm_game_archives_trace_and_replay(tmp_path) -> None:
     assert replay["data"]["data_hash"]
     assert replay["data"]["game_seed"] == 20260524
     assert replay["data"]["scoring_seed"] == 20260526
-    assert replay["turns"][0]["steps"][0]["type"] == "turn_prompt"
-    assert replay["turns"][0]["steps"][1]["type"] == "assistant"
-    assert replay["turns"][0]["steps"][1]["usage"]["total_tokens"] == 17
-    assert replay["turns"][0]["steps"][1]["timing"]["duration_ms"] >= 0
-    assert replay["turns"][0]["steps"][2]["type"] == "tool_result"
-    assert replay["turns"][0]["steps"][2]["name"] == "end_turn"
-    assert replay["turns"][0]["steps"][2]["content"].startswith("OK end_turn")
-    assert "result" not in replay["turns"][0]["steps"][2]
-    assert run.turns[0].messages[-1]["content"] == replay["turns"][0]["steps"][2]["content"]
+    assert replay["turns"][0]["steps"][0]["type"] == "system_prompt"
+    assert replay["turns"][0]["steps"][1]["type"] == "turn_prompt"
+    assert replay["turns"][0]["steps"][2]["type"] == "assistant"
+    assert replay["turns"][0]["steps"][2]["usage"]["total_tokens"] == 17
+    assert replay["turns"][0]["steps"][2]["timing"]["duration_ms"] >= 0
+    assert replay["turns"][0]["steps"][3]["type"] == "tool_result"
+    assert replay["turns"][0]["steps"][3]["name"] == "end_turn"
+    assert replay["turns"][0]["steps"][3]["content"].startswith("OK end_turn")
+    assert "result" not in replay["turns"][0]["steps"][3]
+    assert run.turns[0].messages[-1]["content"] == replay["turns"][0]["steps"][3]["content"]
 
 
 def test_run_llm_game_can_override_seeds_and_archives_effective_values(tmp_path) -> None:
@@ -606,7 +650,7 @@ def test_run_llm_game_archives_stream_final_without_delta_chunks(tmp_path) -> No
     assert "tool_call_delta" not in event_types
     assert "model_stream_completed" in event_types
     replay = _read_json(archive_dir / "replay.json")
-    assert replay["turns"][0]["steps"][1]["usage"]["total_tokens"] == 10
+    assert replay["turns"][0]["steps"][2]["usage"]["total_tokens"] == 10
 
 
 def test_run_llm_game_archives_interrupted_run_incrementally(tmp_path) -> None:
@@ -632,7 +676,8 @@ def test_run_llm_game_archives_interrupted_run_incrementally(tmp_path) -> None:
 
     assert replay["status"] == "interrupted"
     assert replay["failure_reason"] == "model unavailable"
-    assert replay["turns"][0]["steps"][0]["type"] == "turn_prompt"
+    assert replay["turns"][0]["steps"][0]["type"] == "system_prompt"
+    assert replay["turns"][0]["steps"][1]["type"] == "turn_prompt"
     assert any(
         record.get("event", {}).get("type") == "model_request"
         for record in trace_lines

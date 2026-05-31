@@ -540,6 +540,10 @@ class ScoringRules:
     elite_stat_multiplier: float = 1.0
     boss_chance: float = 0.0
     boss_stat_multiplier: float = 1.0
+    rank_min_diff: int = 10
+    rank_max_diff: int = 300
+    rank_step: int = 10
+    rank_waves: int = 200
 
     def __post_init__(self) -> None:
         if self.mode != "endgame_arena":
@@ -569,6 +573,14 @@ class ScoringRules:
                 raise TypeError(f"scoring.{name} must be a number")
             if val < 1.0:
                 raise ValueError(f"scoring.{name} must be >= 1.0")
+        if self.rank_step < 1:
+            raise ValueError("scoring.rank_step must be >= 1")
+        if self.rank_min_diff < 0:
+            raise ValueError("scoring.rank_min_diff must be >= 0")
+        if self.rank_max_diff < self.rank_min_diff:
+            raise ValueError("scoring.rank_max_diff must be >= rank_min_diff")
+        if self.rank_waves < 1:
+            raise ValueError("scoring.rank_waves must be >= 1")
 
 
 @dataclass(frozen=True, slots=True)

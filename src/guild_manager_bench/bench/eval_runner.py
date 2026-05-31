@@ -36,6 +36,7 @@ class OperatorResult:
     operator_name: str
     seed: int
     score: float
+    rank_score: float
     duration_seconds: float
     status: str  # "completed" | "failed"
     error: str | None = None
@@ -48,14 +49,20 @@ class EvalReport:
     operator_name: str
     seed_count: int
     scores: tuple[float, ...]
+    rank_scores: tuple[float, ...]
     mean: float
     std: float
+    rank_mean: float
+    rank_std: float
     min: float
     max: float
+    rank_min: float
+    rank_max: float
     p25: float
     p50: float
     p75: float
     p95: float
+    rank_p50: float
     duration_seconds: float
     per_seed: tuple[OperatorResult, ...]
 
@@ -64,14 +71,20 @@ class EvalReport:
             "operator_name": self.operator_name,
             "seed_count": self.seed_count,
             "scores": list(self.scores),
+            "rank_scores": list(self.rank_scores),
             "mean": round(self.mean, 4),
             "std": round(self.std, 4),
+            "rank_mean": round(self.rank_mean, 4),
+            "rank_std": round(self.rank_std, 4),
             "min": round(self.min, 4),
             "max": round(self.max, 4),
+            "rank_min": round(self.rank_min, 4),
+            "rank_max": round(self.rank_max, 4),
             "p25": round(self.p25, 4),
             "p50": round(self.p50, 4),
             "p75": round(self.p75, 4),
             "p95": round(self.p95, 4),
+            "rank_p50": round(self.rank_p50, 4),
             "duration_seconds": round(self.duration_seconds, 4),
             "per_seed": [_result_to_dict(r) for r in self.per_seed],
         }
@@ -82,6 +95,7 @@ def _result_to_dict(result: OperatorResult) -> dict[str, Any]:
         "operator_name": result.operator_name,
         "seed": result.seed,
         "score": round(result.score, 4),
+        "rank_score": round(result.rank_score, 4),
         "duration_seconds": round(result.duration_seconds, 4),
         "status": result.status,
         "error": result.error,
@@ -119,6 +133,7 @@ def run_single_eval(
             operator_name=type(operator).__name__,
             seed=seed,
             score=report.score,
+            rank_score=report.rank_score,
             duration_seconds=round(duration, 4),
             status="completed",
         )
@@ -128,6 +143,7 @@ def run_single_eval(
             operator_name=type(operator).__name__,
             seed=seed,
             score=0.0,
+            rank_score=0.0,
             duration_seconds=round(duration, 4),
             status="failed",
             error=str(exc),
@@ -200,6 +216,7 @@ def _build_report(name: str, per_seed: list[OperatorResult]) -> EvalReport:
 
     completed = [r for r in per_seed if r.status == "completed"]
     scores = tuple(r.score for r in completed)
+    rank_scores = tuple(r.rank_score for r in completed)
 
     if len(scores) >= 2:
         q = quantiles(scores, n=20)
@@ -215,20 +232,36 @@ def _build_report(name: str, per_seed: list[OperatorResult]) -> EvalReport:
         p25 = p50 = p75 = p95 = 0.0
         std_val = 0.0
 
+    if len(rank_scores) >= 2:
+        rank_p50 = quantiles(rank_scores, n=4)[1]
+        rank_std_val = stdev(rank_scores)
+    elif len(rank_scores) == 1:
+        rank_p50 = rank_scores[0]
+        rank_std_val = 0.0
+    else:
+        rank_p50 = 0.0
+        rank_std_val = 0.0
+
     total_duration = sum(r.duration_seconds for r in per_seed)
 
     return EvalReport(
         operator_name=name,
         seed_count=len(per_seed),
         scores=scores,
+        rank_scores=rank_scores,
         mean=mean(scores) if scores else 0.0,
         std=std_val,
+        rank_mean=mean(rank_scores) if rank_scores else 0.0,
+        rank_std=rank_std_val,
         min=min(scores) if scores else 0.0,
         max=max(scores) if scores else 0.0,
+        rank_min=min(rank_scores) if rank_scores else 0.0,
+        rank_max=max(rank_scores) if rank_scores else 0.0,
         p25=p25,
         p50=p50,
         p75=p75,
         p95=p95,
+        rank_p50=rank_p50,
         duration_seconds=total_duration,
         per_seed=tuple(per_seed),
     )
@@ -264,8 +297,8 @@ def save_eval_results(
 def print_eval_summary(results: dict[str, EvalReport]) -> None:
     """打印评估结果的摘要表格。"""
 
-    print(f"\n{'操作者':<25} {'种子数':>6} {'均值':>8} {'标准差':>8} {'最小':>8} {'中位':>8} {'最大':>8} {'P95':>8}")
-    print("-" * 90)
+    print(f"\n{'操作者':<25} {'种子数':>6} {'均值':>8} {'标准差':>8} {'最小':>8} {'中位':>8} {'最大':>8} {'P95':>8} {'段位中位':>10}")
+    print("-" * 100)
     for name, report in results.items():
         print(
             f"{report.operator_name:<25} "
@@ -275,5 +308,6 @@ def print_eval_summary(results: dict[str, EvalReport]) -> None:
             f"{report.min:>8.2f} "
             f"{report.p50:>8.2f} "
             f"{report.max:>8.2f} "
-            f"{report.p95:>8.2f}"
+            f"{report.p95:>8.2f} "
+            f"{report.rank_p50:>10.2f}"
         )

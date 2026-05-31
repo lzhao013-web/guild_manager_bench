@@ -248,9 +248,50 @@ def _turn_replay(turn: TurnTrace) -> dict[str, Any]:
             turn.model_responses,
         ),
     }
+    timing_usage = _aggregate_timing_usage(turn.model_responses)
+    if timing_usage:
+        data["timing_usage"] = timing_usage
     if turn.observation_before is not None:
         data["observation_before"] = turn.observation_before
     return data
+
+
+def _aggregate_timing_usage(
+    model_responses: Sequence[Any],
+) -> dict[str, Any] | None:
+    """从 model_responses 聚合回合级 timing 和 usage 汇总。"""
+    total_ms: float = 0.0
+    total_input: int = 0
+    total_output: int = 0
+    has_data = False
+    for record in model_responses:
+        to_dict = getattr(record, "to_dict", None)
+        data = to_dict() if callable(to_dict) else record
+        if not isinstance(data, Mapping):
+            continue
+        timing = data.get("timing")
+        if isinstance(timing, Mapping):
+            ms = timing.get("duration_ms")
+            if isinstance(ms, (int, float)):
+                total_ms += ms
+                has_data = True
+        usage = data.get("usage")
+        if isinstance(usage, Mapping):
+            inp = usage.get("input_tokens", usage.get("prompt_tokens"))
+            out = usage.get("output_tokens", usage.get("completion_tokens"))
+            if isinstance(inp, (int, float)):
+                total_input += int(inp)
+                has_data = True
+            if isinstance(out, (int, float)):
+                total_output += int(out)
+                has_data = True
+    if not has_data:
+        return None
+    return {
+        "duration_ms": round(total_ms),
+        "input_tokens": total_input,
+        "output_tokens": total_output,
+    }
 
 
 def _message_steps(
@@ -275,9 +316,19 @@ def _message_steps(
         call_id = item.get("call_id")
         if isinstance(call_id, str):
             tool_results_by_id[call_id] = item
-    for index, message in enumerate(messages):
+    seen_turn_prompt = False
+    for message in messages:
         role = message.get("role")
-        if role == "user" and index == 0:
+        if role == "system":
+            steps.append(
+                {
+                    "type": "system_prompt",
+                    "content": message.get("content", ""),
+                }
+            )
+            continue
+        if role == "user" and not seen_turn_prompt:
+            seen_turn_prompt = True
             steps.append(
                 {
                     "type": "turn_prompt",

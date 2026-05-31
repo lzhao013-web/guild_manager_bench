@@ -336,8 +336,8 @@ monsters:
         dragon_scale: 1
         dragon_blood: 1
     stat_growth:
-      hp: 5
-      attack: 2
+      hp: 4
+      attack: 1.5
       defense: 0.5
     reward_growth:
       gold: 2
@@ -365,8 +365,8 @@ monsters:
         soul_shard: 1
         arcane_dust: 1
     stat_growth:
-      hp: 5
-      attack: 2
+      hp: 3.5
+      attack: 1.5
       defense: 0.5
     reward_growth:
       gold: 2
@@ -395,8 +395,8 @@ monsters:
         dragon_scale: 1
     stat_growth:
       hp: 7
-      attack: 2
-      defense: 1.1
+      attack: 1.8
+      defense: 1.0
     reward_growth:
       gold: 3
       experience: 5

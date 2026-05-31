@@ -60,7 +60,7 @@ const DOM = {
   btnNextTurn: $('#btnNextTurn'), btnLast: $('#btnLast'), speedSelect: $('#speedSelect'),
   stepBarFill: $('#stepBarFill'),
   ovTurn: $('#ovTurn'), ovMaxTurn: $('#ovMaxTurn'), ovGold: $('#ovGold'), ovExp: $('#ovExp'),
-  ovMaterials: $('#ovMaterials'), ovParty: $('#ovParty'), ovScore: $('#ovScore'),
+  ovMaterials: $('#ovMaterials'), ovParty: $('#ovParty'), ovScore: $('#ovScore'), ovRank: $('#ovRank'),
   actionToast: $('#actionToast'), battleOverlay: $('#battleOverlay'), battleStage: $('#battleStage'),
 };
 
@@ -677,7 +677,7 @@ function renderTimeline() {
     let summary = '';
     if (endS) { const bm = (endS.content||'').match(/(\d+)\s*场战斗[,，]\s*(\d+)\s*胜/); summary = bm?`⚔ ${bm[2]}/${bm[1]} 胜`:'✓ end_turn'; }
     if (turn.status==='failed') summary = summary||turn.failure_reason||'失败';
-    html += `<div class="${cls}" data-turn="${idx}" onclick="goToTurn(${idx})"><div class="turn-dot ${dotCls}"></div><div class="turn-info"><div class="turn-label">回合 ${turn.turn}</div><div class="turn-summary">${summary||writeSteps.length+' 操作'}</div></div></div>`;
+    html += `<div class="${cls}" data-turn="${idx}" onclick="goToTurn(${idx})"><div class="turn-dot ${dotCls}"></div><div class="turn-info"><div class="turn-label">回合 ${turn.turn}</div><div class="turn-summary">${summary||writeSteps.length+' 操作'}</div>${formatTurnMeta(turn.timing_usage)}</div></div>`;
   });
   DOM.timelineScroll.innerHTML = html;
   const a = DOM.timelineScroll.querySelector('.timeline-turn.active'); if (a) a.scrollIntoView({block:'nearest',behavior:'smooth'});
@@ -695,7 +695,7 @@ function renderOverview() {
   DOM.ovExp.textContent = fmt(obs.experience_pool);
   const mats = obs.materials||{}; DOM.ovMaterials.textContent = Object.entries(mats).map(([k,v])=>`${matLabel(k)}:${fmt(v)}`).join(' ')||'无材料';
   const advs = obs.adventurers||[]; DOM.ovParty.textContent = `${advs.length}/${obs.party_size_limit||'?'}`;
-  if (S.replay&&S.replay.score) DOM.ovScore.textContent = S.replay.score.total_score||S.replay.score.score||'—'; else DOM.ovScore.textContent='—';
+  if (S.replay&&S.replay.score) { DOM.ovScore.textContent = S.replay.score.total_score||S.replay.score.score||'—'; DOM.ovRank.textContent = S.replay.score.rank_score!=null ? Math.round(S.replay.score.rank_score) : '—'; } else { DOM.ovScore.textContent='—'; DOM.ovRank.textContent='—'; }
 }
 
 // ============================================================================
@@ -836,6 +836,16 @@ function renderLLMStep(step, idx, active, isRead, isWrite) {
   } else return '';
 
   return `<div class="${cls}" data-step="${idx}"><div class="llm-step-header">${icon}<span class="llm-step-title">${title}</span>${step.timing?`<span style="font-size:10px;color:var(--muted);margin-left:auto">${step.timing.duration_ms||0}ms</span>`:''}</div>${body}</div>`;
+}
+
+function formatTurnMeta(tu) {
+  if (!tu) return '';
+  const parts = [];
+  const ms = Number(tu.duration_ms);
+  if (Number.isFinite(ms) && ms > 0) parts.push(ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`);
+  if (tu.input_tokens) parts.push(`in ${tu.input_tokens}`);
+  if (tu.output_tokens) parts.push(`out ${tu.output_tokens}`);
+  return parts.length ? `<div class="turn-meta">${parts.join(' · ')}</div>` : '';
 }
 
 // ============================================================================

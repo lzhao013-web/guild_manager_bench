@@ -1207,8 +1207,9 @@ function handleLlmEvent(event) {
   } else if (event.type === "retry") {
     state.llm.transcript.push({ kind: "retry", reason: event.reason, text: event.message });
   } else if (event.type === "turn_completed") {
+    const timingUsage = aggregateTranscriptTiming();
     state.llm.status = `第 ${event.trace?.turn || ""} 回合完成`;
-    state.llm.transcript.push({ kind: "turn", title: `第 ${event.trace?.turn || ""} 回合完成` });
+    state.llm.transcript.push({ kind: "turn", title: `第 ${event.trace?.turn || ""} 回合完成`, timingUsage });
   } else if (event.type === "turn_failed") {
     state.llm.running = false;
     state.llm.status = `回合失败：${event.trace?.failure_reason || "unknown"}`;
@@ -1257,6 +1258,24 @@ function createModelEntry(turn, step) {
     usage: null,
     request: null,
   };
+}
+
+function aggregateTranscriptTiming() {
+  let totalMs = 0, totalIn = 0, totalOut = 0, hasData = false;
+  const tr = state.llm.transcript;
+  for (let i = tr.length - 1; i >= 0; i--) {
+    const e = tr[i];
+    if (e.kind === "turn") break;
+    if (e.kind !== "model") continue;
+    if (e.timing?.duration_ms != null) { totalMs += Number(e.timing.duration_ms); hasData = true; }
+    if (e.usage) {
+      const inp = e.usage.input_tokens ?? e.usage.prompt_tokens;
+      const out = e.usage.output_tokens ?? e.usage.completion_tokens;
+      if (inp != null) { totalIn += Number(inp); hasData = true; }
+      if (out != null) { totalOut += Number(out); hasData = true; }
+    }
+  }
+  return hasData ? { duration_ms: Math.round(totalMs), input_tokens: totalIn, output_tokens: totalOut } : null;
 }
 
 function createToolTraceItem(event) {
@@ -1338,7 +1357,8 @@ function renderLlmTranscript() {
   }
   return state.llm.transcript.slice(-80).map((entry) => {
     if (entry.kind === "turn") {
-      return `<div class="llm-turn-marker">${escapeHtml(entry.title)}</div>`;
+      const meta = renderTurnTimingUsage(entry.timingUsage);
+      return `<div class="llm-turn-marker">${escapeHtml(entry.title)}${meta}</div>`;
     }
     if (entry.kind === "retry") {
       return `<div class="llm-retry">重试提示：${escapeHtml(entry.text)}</div>`;
@@ -1819,11 +1839,13 @@ function renderLlmReplay() {
 function renderReplayTurn(turn) {
   const steps = (turn.steps || []).map((step, index) => renderReplayStep(step, index + 1)).join("");
   const open = turn.status === "failed" ? "open" : "";
+  const timingHtml = renderTurnTimingUsage(turn.timing_usage);
   return `
     <details class="llm-replay-turn" ${open}>
       <summary>
         <span>第 ${escapeHtml(turn.turn)} 回合</span>
         <strong>${escapeHtml(turn.status || "unknown")}</strong>
+        ${timingHtml}
       </summary>
       ${turn.failure_reason ? `<div class="llm-retry">失败原因：${escapeHtml(turn.failure_reason)}</div>` : ""}
       <div class="llm-replay-steps">${steps}</div>
@@ -1922,11 +1944,25 @@ function formatUsage(usage) {
   return parts.length ? `tokens ${parts.join(" · ")}` : "";
 }
 
+function renderTurnTimingUsage(tu) {
+  if (!tu) return "";
+  const parts = [];
+  const ms = Number(tu.duration_ms);
+  if (Number.isFinite(ms) && ms > 0) parts.push(formatDurationMs(ms));
+  if (tu.input_tokens) parts.push(`in ${tu.input_tokens}`);
+  if (tu.output_tokens) parts.push(`out ${tu.output_tokens}`);
+  return parts.length ? `<span class="llm-turn-meta">${escapeHtml(parts.join(" · "))}</span>` : "";
+}
+
 function formatScore(score) {
   if (!score || typeof score !== "object" || score.score === undefined || score.score === null) {
     return "";
   }
-  return `得分 ${score.score}`;
+  let text = `得分 ${score.score}`;
+  if (score.rank_score !== undefined && score.rank_score !== null) {
+    text += ` · 段位 ${Math.round(score.rank_score)}`;
+  }
+  return text;
 }
 
 function readOptionalValue(id) {

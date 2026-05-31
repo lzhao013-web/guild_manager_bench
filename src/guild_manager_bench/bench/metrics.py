@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import lru_cache
 from typing import Any
 
@@ -36,6 +36,7 @@ class ScoreReport:
     """终局 Arena 评分结果。"""
 
     score: float
+    rank_score: float
     mode: str
     seed: int
     waves: int
@@ -51,6 +52,7 @@ class ScoreReport:
     def to_dict(self) -> dict[str, Any]:
         return {
             "score": self.score,
+            "rank_score": self.rank_score,
             "mode": self.mode,
             "seed": self.seed,
             "waves": self.waves,
@@ -94,8 +96,66 @@ def score_final_state(
     """通过固定 Arena 大量模拟评估终局队伍战力。"""
 
     rules = definition.scoring
-    rng = random.Random(rules.seed)
     wave_count = waves if waves is not None else rules.waves
+    arena_result = _run_arena(definition, state, waves=wave_count)
+    adventurers = tuple(state.adventurers)
+
+    per_adventurer = tuple(
+        AdventurerScoreBreakdown(
+            adventurer_id=adventurer.adventurer_id,
+            name=adventurer.name,
+            assignments=arena_result.per_adventurer_assignments[adventurer.adventurer_id],
+            average_score=_average(
+                arena_result.per_adventurer_score[adventurer.adventurer_id],
+                arena_result.per_adventurer_assignments[adventurer.adventurer_id],
+            ),
+            win_rate=_average(
+                arena_result.per_adventurer_wins[adventurer.adventurer_id],
+                arena_result.per_adventurer_assignments[adventurer.adventurer_id],
+            ),
+        )
+        for adventurer in adventurers
+    )
+    return ScoreReport(
+        score=arena_result.score,
+        rank_score=_compute_rank_score(definition, state),
+        mode=rules.mode,
+        seed=rules.seed,
+        waves=rules.waves,
+        wave_size=rules.wave_size,
+        difficulty_factors=rules.difficulty_factors,
+        resource_mode=rules.resource_mode,
+        aggregation=rules.aggregation,
+        simulated_battles=arena_result.simulated_battles,
+        chosen_battles=arena_result.chosen_battles,
+        chosen_win_rate=arena_result.chosen_win_rate,
+        per_adventurer=per_adventurer,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class _ArenaResult:
+    """Arena 模拟的原始结果（不含 rank_score）。"""
+
+    score: float
+    simulated_battles: int
+    chosen_battles: int
+    chosen_win_rate: float
+    per_adventurer_score: dict[str, float]
+    per_adventurer_wins: dict[str, int]
+    per_adventurer_assignments: dict[str, int]
+
+
+def _run_arena(
+    definition: GameDefinition,
+    state: GameState,
+    *,
+    waves: int,
+) -> _ArenaResult:
+    """运行 Arena 模拟并返回原始评分数据。"""
+
+    rules = definition.scoring
+    rng = random.Random(rules.seed)
     adventurers = tuple(state.adventurers)
     per_adventurer_score = {item.adventurer_id: 0.0 for item in adventurers}
     per_adventurer_wins = {item.adventurer_id: 0 for item in adventurers}
@@ -106,7 +166,7 @@ def score_final_state(
     chosen_battles = 0
     simulated_battles = 0
 
-    for wave_index in range(wave_count):
+    for wave_index in range(waves):
         difficulty = rules.difficulty_factors[wave_index % len(rules.difficulty_factors)]
         monsters = tuple(
             _sample_arena_monster(
@@ -136,38 +196,61 @@ def score_final_state(
             per_adventurer_wins[adventurer.adventurer_id] += 1 if evaluation.won else 0
             per_adventurer_assignments[adventurer.adventurer_id] += 1
 
-    denominator = wave_count * rules.wave_size * 100
+    denominator = waves * rules.wave_size * 100
     score = _round_score(100 * total_score / denominator) if denominator else 0.0
-    per_adventurer = tuple(
-        AdventurerScoreBreakdown(
-            adventurer_id=adventurer.adventurer_id,
-            name=adventurer.name,
-            assignments=per_adventurer_assignments[adventurer.adventurer_id],
-            average_score=_average(
-                per_adventurer_score[adventurer.adventurer_id],
-                per_adventurer_assignments[adventurer.adventurer_id],
-            ),
-            win_rate=_average(
-                per_adventurer_wins[adventurer.adventurer_id],
-                per_adventurer_assignments[adventurer.adventurer_id],
-            ),
-        )
-        for adventurer in adventurers
-    )
-    return ScoreReport(
+    return _ArenaResult(
         score=score,
-        mode=rules.mode,
-        seed=rules.seed,
-        waves=rules.waves,
-        wave_size=rules.wave_size,
-        difficulty_factors=rules.difficulty_factors,
-        resource_mode=rules.resource_mode,
-        aggregation=rules.aggregation,
         simulated_battles=simulated_battles,
         chosen_battles=chosen_battles,
         chosen_win_rate=_average(chosen_wins, chosen_battles),
-        per_adventurer=per_adventurer,
+        per_adventurer_score=per_adventurer_score,
+        per_adventurer_wins=per_adventurer_wins,
+        per_adventurer_assignments=per_adventurer_assignments,
     )
+
+
+def _compute_rank_score(
+    definition: GameDefinition,
+    state: GameState,
+) -> float:
+    """通过线性难度扫描计算段位积分。
+
+    在每个难度等级上运行 Arena 模拟，计算 performance × difficulty 的加权和。
+    rank = Σ performance(d) × d  for d in [rank_min_diff .. rank_max_diff, step=rank_step]
+    """
+    rules = definition.scoring
+    adventurers = tuple(state.adventurers)
+    if not adventurers:
+        return 0.0
+
+    rank_score = 0.0
+    early_exit_threshold = 0.001
+
+    for d in range(rules.rank_min_diff, rules.rank_max_diff + 1, rules.rank_step):
+        tier_scoring = ScoringRules(
+            mode="endgame_arena",
+            seed=rules.seed,
+            waves=rules.rank_waves,
+            wave_size=rules.wave_size,
+            difficulty_factors=(d,),
+            resource_mode=rules.resource_mode,
+            aggregation="best_assignment",
+            elite_chance=rules.elite_chance,
+            elite_stat_multiplier=rules.elite_stat_multiplier,
+            boss_chance=rules.boss_chance,
+            boss_stat_multiplier=rules.boss_stat_multiplier,
+        )
+        tier_definition = replace(definition, scoring=tier_scoring)
+        tier_result = _run_arena(tier_definition, state, waves=rules.rank_waves)
+
+        performance = tier_result.score / 100.0
+        rank_score += performance * d
+
+        # Early exit: once performance is negligible, higher difficulties won't help
+        if performance < early_exit_threshold and d > rules.rank_min_diff + rules.rank_step * 5:
+            break
+
+    return _round_score(rank_score)
 
 
 def _sample_arena_monster(

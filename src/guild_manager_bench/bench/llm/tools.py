@@ -602,28 +602,8 @@ _EQUIPMENT_INSTANCE_ID = {
 
 _BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
     {
-        "name": "get_party",
-        "description": "读取冒险者、经验池、升级成长和装备槽位等队伍详细信息。",
-        "parameters": {
-            "type": "object",
-            "required": ["session_id"],
-            "properties": {"session_id": _SESSION_ID},
-            "additionalProperties": False,
-        },
-    },
-    {
-        "name": "get_monsters",
-        "description": "读取当前回合怪物的属性、技能和奖励详细信息。",
-        "parameters": {
-            "type": "object",
-            "required": ["session_id"],
-            "properties": {"session_id": _SESSION_ID},
-            "additionalProperties": False,
-        },
-    },
-    {
         "name": "get_crafting",
-        "description": "读取当前金币、材料和制作配方详细信息。",
+        "description": "读取装备制作配方的详细信息。",
         "parameters": {
             "type": "object",
             "required": ["session_id"],
@@ -643,7 +623,7 @@ _BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
     },
     {
         "name": "get_upgrades",
-        "description": "读取当前金币和全局升级详细信息。",
+        "description": "读取全局升级的详细信息。",
         "parameters": {
             "type": "object",
             "required": ["session_id"],
@@ -653,7 +633,7 @@ _BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
     },
     {
         "name": "get_recruitment",
-        "description": "读取当前金币、队伍人数上限和可招募候选详细信息。",
+        "description": "读取可招募的候选冒险者的详细信息。只有在确定要招募新的冒险者时才应调用此工具查看详情；如果只是想了解队伍人数上限，请查看回合概览。",
         "parameters": {
             "type": "object",
             "required": ["session_id"],
@@ -663,7 +643,7 @@ _BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
     },
     {
         "name": "craft_equipment",
-        "description": "消耗金币和材料，按配方合成装备实例。",
+        "description": "消耗金币和材料，按配方合成装备。",
         "parameters": {
             "type": "object",
             "required": ["session_id", "recipe_id"],
@@ -733,7 +713,7 @@ _BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
     },
     {
         "name": "equip_item",
-        "description": "把装备实例穿戴到冒险者身上；槽位由装备模板决定。",
+        "description": "把装备穿戴到冒险者身上；会自动替换同槽位已经装备的装备。",
         "parameters": {
             "type": "object",
             "required": ["session_id", "adventurer_id", "equipment_instance_id"],
@@ -772,7 +752,7 @@ _BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
     },
     {
         "name": "end_turn",
-        "description": "提交本回合讨伐列表并进入下一回合；hunts 可为空。",
+        "description": "结束当前回合：提交本回合讨伐列表并进入下一回合；hunts 可为空。",
         "parameters": {
             "type": "object",
             "required": ["session_id"],
@@ -820,7 +800,7 @@ _BATTLE_PREVIEW_SCHEMA: dict[str, Any] = {
     "description": (
         "预览一场单独的 1v1 战斗，不改变状态；每次只能传入一个冒险者和一个怪物。"
         "只能传入已经招募成功的冒险者，传入招募候选中的冒险者会失败。"
-        "注意：每回合最多只能调用 3 次此工具，请仅在关键战斗中使用，不要滥用。"
+        "注意：每回合最多只能调用 3 次此工具，请仅在你认为存在悬念的关键战斗中使用，不要滥用。"
     ),
     "parameters": {
         "type": "object",

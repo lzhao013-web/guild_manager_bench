@@ -19,7 +19,7 @@ from guild_manager_bench.bench.llm.harness import (
     TurnToolHarness,
     memo_entries_from_tool_steps,
 )
-from guild_manager_bench.bench.llm.prompts import DEFAULT_OBJECTIVE, build_turn_prompt
+from guild_manager_bench.bench.llm.prompts import DEFAULT_OBJECTIVE, build_system_prompt, build_turn_prompt
 from guild_manager_bench.bench.llm.refs import build_numeric_refs, display_ref
 from guild_manager_bench.bench.llm.tools import GuildManagerTools
 from guild_manager_bench.bench.llm.trace import (
@@ -198,6 +198,13 @@ def run_llm_game(
         config=_config_to_dict(config),
     )
 
+    system_prompt = build_system_prompt(
+        objective=config.objective,
+        max_tool_calls=config.max_tool_calls_per_turn,
+        max_battle_preview_per_turn=tools.definition.llm_tools.max_battle_preview_per_turn,
+        turn_recovery_rules=initial_observation.get("turn_recovery_rules"),
+    )
+
     try:
         while True:
             observation = tools.get_observation(session_id)["observation"]
@@ -233,6 +240,7 @@ def run_llm_game(
                 memo_store=memo_store,
                 event_sink=emit,
                 trace_update=update_replay,
+                system_prompt=system_prompt,
             )
             traces.append(turn_trace)
             active_turn_trace = None
@@ -292,6 +300,7 @@ def run_llm_turn(
     memo_store: MemoStore | None = None,
     event_sink: EventSink | None = None,
     trace_update: Callable[[TurnTrace], None] | None = None,
+    system_prompt: str | None = None,
 ) -> TurnTrace:
     """运行单个游戏回合，直到 end_turn 成功或判定失败。"""
 
@@ -301,16 +310,17 @@ def run_llm_turn(
     previous_turn_event = _previous_turn_event(tools, session_id)
     prompt = build_turn_prompt(
         observation,
-        objective=config.objective,
-        max_tool_calls=config.max_tool_calls_per_turn,
-        max_battle_preview_per_turn=tools.definition.llm_tools.max_battle_preview_per_turn,
         previous_turn_event=previous_turn_event,
         memo_entries=memo_store.consume(),
     )
+    messages: list[dict[str, Any]] = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": prompt})
     turn_trace = TurnTrace(
         turn=observation["turn"],
         prompt=prompt,
-        messages=[{"role": "user", "content": prompt}],
+        messages=messages,
         observation_before=observation,
     )
     _emit(
@@ -622,6 +632,11 @@ def _trace_from_replay_turn(turn: Mapping[str, Any]) -> TurnTrace:
         if not isinstance(step, Mapping):
             continue
         step_type = step.get("type")
+        if step_type == "system_prompt":
+            trace.messages.append(
+                {"role": "system", "content": str(step.get("content") or "")}
+            )
+            continue
         if step_type == "turn_prompt":
             content = str(step.get("content") or prompt)
             trace.messages.append({"role": "user", "content": content})
@@ -1240,24 +1255,59 @@ def _append_inventory_lines(
     if not values:
         lines.append("装备库存: 无")
         return
+    free_items = [item for item in values if not item.get("equipped_by")]
+    equipped_items = [item for item in values if item.get("equipped_by")]
     lines.append("装备库存:")
-    for item in values:
-        equipped = (
-            display_ref(refs, "adventurer", item.get("equipped_by"))
-            if item.get("equipped_by")
-            else "空闲"
-        )
+    for item in free_items:
         lines.append(
             "- "
             f"{display_ref(refs, 'equipment', item.get('instance_id'))} "
             f"{item.get('name')} 槽位 {item.get('slot')} "
             f"属性 {_mapping_inline(item.get('stats'))} "
-            f"装备者 {equipped}"
+            f"空闲"
         )
         allowed_names = item.get("allowed_class_names")
         if allowed_names:
             lines.append(f"  职业限制 {', '.join(allowed_names)}")
         _append_skill_lines(lines, item.get("skills"), indent="  ")
+    for item in equipped_items:
+        equipped = display_ref(refs, "adventurer", item.get("equipped_by"))
+        lines.append(
+            f"- {item.get('name')}({display_ref(refs, 'equipment', item.get('instance_id'))}, {item.get('slot')}) [装备者 {equipped}]"
+        )
+
+
+def _format_missing_zh(
+    missing: Mapping[str, Any],
+    refs: Mapping[str, Mapping[str, int]],
+) -> str:
+    parts = []
+    for key, value in missing.items():
+        if key == "gold":
+            if isinstance(value, (int, float)) and value:
+                parts.append(f"金币 {value}")
+        elif key == "already_unlocked":
+            parts.append("已解锁")
+        elif key == "required_upgrade_ids":
+            upgrade_refs = refs.get("upgrade", {})
+            names = []
+            for uid in _sequence(value):
+                ref = upgrade_refs.get(str(uid))
+                if ref is not None:
+                    names.append(str(ref))
+                else:
+                    names.append(str(uid))
+            parts.append(f"前置升级 {', '.join(names)}")
+        elif key == "party_size_limit":
+            if isinstance(value, Mapping):
+                current = value.get("current", "?")
+                limit = value.get("limit", "?")
+                parts.append(f"队伍已满 {current}/{limit}")
+            else:
+                parts.append(f"队伍已满 {value}")
+        else:
+            parts.append(f"{key} {value}")
+    return "；".join(parts)
 
 
 def _append_upgrade_lines(
@@ -1275,19 +1325,24 @@ def _append_upgrade_lines(
         return
     lines.append("全局升级:")
     for upgrade in values:
+        if upgrade.get("unlocked"):
+            lines.append(
+                "- "
+                f"{display_ref(refs, 'upgrade', upgrade.get('upgrade_id'))} "
+                f"{upgrade.get('name')} 已完成"
+            )
+            continue
         state = (
-            "已解锁"
-            if upgrade.get("unlocked")
-            else "可购买"
+            "可购买"
             if upgrade.get("can_purchase")
             else "不可购买"
         )
         missing = upgrade.get("missing")
-        missing_text = (
-            f"; 缺少 {_mapping_inline(missing)}"
-            if isinstance(missing, Mapping) and missing
-            else ""
-        )
+        missing_text = ""
+        if isinstance(missing, Mapping) and missing:
+            missing_str = _format_missing_zh(missing, refs)
+            if missing_str:
+                missing_text = f"；缺少 {missing_str}"
         lines.append(
             "- "
             f"{display_ref(refs, 'upgrade', upgrade.get('upgrade_id'))} "
@@ -1344,16 +1399,15 @@ def _level_skill_unlocks_inline(unlocks: Any) -> str:
     values = [
         unlock
         for unlock in _sequence(unlocks)
-        if isinstance(unlock, Mapping)
+        if isinstance(unlock, Mapping) and not unlock.get("unlocked")
     ]
     if not values:
         return "无"
     parts = []
     for unlock in values:
-        state = "已解锁" if unlock.get("unlocked") else "未解锁"
         skills = " / ".join(skill_summary_lines(unlock.get("skills"))) or "无"
         parts.append(
-            f"Lv{unlock.get('level')} {state} {skills}"
+            f"Lv{unlock.get('level')} {skills}"
         )
     return "; ".join(parts)
 

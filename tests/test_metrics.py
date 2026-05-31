@@ -18,12 +18,24 @@ def test_score_final_state_is_deterministic_and_bounded() -> None:
 
     assert first.to_dict() == second.to_dict()
     assert 0 <= first.score <= 100
+    assert first.rank_score >= 0
     assert first.simulated_battles == len(state.adventurers) * definition.scoring.wave_size * definition.scoring.waves
     assert first.chosen_battles == len(state.adventurers) * definition.scoring.waves
     assert len(first.per_adventurer) == len(state.adventurers)
+    assert "rank_score" in first.to_dict()
 
 
-def test_score_final_state_rewards_stronger_final_team() -> None:
+def test_rank_score_is_deterministic() -> None:
+    definition = _small_scoring_definition()
+    state = new_game(definition)
+
+    first = score_final_state(definition, state)
+    second = score_final_state(definition, state)
+
+    assert first.rank_score == second.rank_score
+
+
+def test_rank_score_rewards_stronger_team() -> None:
     definition = _small_scoring_definition()
     state = new_game(definition)
     state = apply_preparation_action(
@@ -49,7 +61,11 @@ def test_score_final_state_rewards_stronger_final_team() -> None:
         adventurers=(stronger_adventurer,) + state.adventurers[1:],
     )
 
-    assert score_final_state(definition, stronger_state).score > score_final_state(definition, state).score
+    normal = score_final_state(definition, state)
+    stronger = score_final_state(definition, stronger_state)
+
+    assert stronger.score > normal.score
+    assert stronger.rank_score > normal.rank_score
 
 
 def _small_scoring_definition():
@@ -63,5 +79,9 @@ def _small_scoring_definition():
             waves=8,
             wave_size=3,
             difficulty_factors=(0, 2),
+            rank_min_diff=5,
+            rank_max_diff=30,
+            rank_step=5,
+            rank_waves=4,
         ),
     )

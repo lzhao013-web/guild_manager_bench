@@ -14,16 +14,13 @@ DEFAULT_OBJECTIVE = (
 )
 
 
-def build_turn_prompt(
-    observation: Mapping[str, Any],
-    *,
+def build_system_prompt(
     objective: str = DEFAULT_OBJECTIVE,
-    max_tool_calls: int,
+    max_tool_calls: int = 20,
     max_battle_preview_per_turn: int = 3,
-    previous_turn_event: Mapping[str, Any] | None = None,
-    memo_entries: Sequence[str] = (),
+    turn_recovery_rules: Mapping[str, Any] | None = None,
 ) -> str:
-    """构造单个游戏回合开始时给 LLM 的提示词。"""
+    """构建系统提示词（静态游戏规则，跨回合不变，适合 LLM prompt caching）。"""
 
     bp_limit_text = (
         f"；preview_battle 最多 {max_battle_preview_per_turn} 次/回合"
@@ -31,22 +28,43 @@ def build_turn_prompt(
         else ""
     )
 
+    rules = turn_recovery_rules if isinstance(turn_recovery_rules, Mapping) else {}
+    hp_recovery = int(rules.get("hp", 0))
+    mp_recovery = int(rules.get("mp", 0))
+    hp_percent = _percent(rules.get("hp_percent"))
+    mp_percent = _percent(rules.get("mp_percent"))
+
     return "\n".join(
         [
             "你正在进行 Guild Manager Bench。",
             f"目标：{objective}",
             "",
-            "回合流程：可调用查询工具读取信息，也可调用动作工具执行各种操作；如果你觉得本回合要做的事情都结束了，结束通过 end_turn 提交讨伐列表并结束回合。",
+            "回合流程：可调用查询工具读取信息，也可调用动作工具执行各种操作；保证只有当你觉得本回合要做的事情都做完了，才通过 end_turn 提交讨伐列表并结束回合。",
             "战斗提示：冒险者讨伐怪物的战斗是完全的1V1自动战斗，无法干预战斗过程，但可以通过调整冒险者的装备、技能来影响战斗结果。",
-            "战斗机制：SPD 决定出手频率，而非仅决定先后手。 例如，SPD 80 vs SPD 20 → 高SPD方每行动约4次，低SPD方才行动1次。普通攻击伤害 = max(1, ATK - DEF)"
-            "技能相关：主动技能满足条件时会在角色行动时按优先级触发，会覆盖普通攻击，带有“即时”tag的技能不会覆盖普通攻击；被动技能会在满足条件时持续生效；技能效果可能包括伤害、治疗、状态等，具体信息请参考状态和冒险者信息中的技能描述。",
+            "战斗机制：SPD 决定出手频率，而非仅决定先后手。 例如，SPD 80 vs SPD 20 → 高SPD方每行动约4次，低SPD方才行动1次。普通攻击伤害 = max(1, ATK - DEF)",
+            "技能相关：主动技能满足条件时会在角色行动时按优先级触发，会覆盖普通攻击，带有”即时”tag的技能不会覆盖普通攻击；被动技能会在满足条件时持续生效；技能效果可能包括伤害、治疗、状态等，具体信息请参考状态和冒险者信息中的技能描述。",
             "回复机制：每回合战斗结束后全体冒险者回复HP和MP，额外回复等同于其恢复属性（recovery）值的HP，战斗中技能也可提供治疗、百分比治疗、MP恢复和持续回复状态。"
-            f"HP回复 = {_turn_recovery_hp(observation)} + 最大HP×{_percent(observation['turn_recovery_rules']['hp_percent'])} + 恢复属性；"
-            f"MP回复 = {_turn_recovery_mp(observation)} + 最大MP×{_percent(observation['turn_recovery_rules']['mp_percent'])} + 回魔属性。",
-            "刷新机制：回合结束后，可讨伐的怪物和可招募的冒险者都会刷新。",
-            f"本回合最多允许 {max_tool_calls} 次非 end_turn 工具调用{bp_limit_text}；每一次工具调用，包括查询、战斗预览、实际操作和失败的调用均会消耗使用次数，请考虑工具调用的预算，谨慎决定和规划要使用的工具。",
+            f"HP回复 = {hp_recovery} + 最大HP×{hp_percent} + 恢复属性；"
+            f"MP回复 = {mp_recovery} + 最大MP×{mp_percent} + 回魔属性。",
+            "刷新机制：回合结束后，当前的可讨伐的怪物和可招募的冒险者都会刷新成其他的。",
+            f"每回合最多允许 {max_tool_calls} 次非 end_turn 工具调用{bp_limit_text}；每一次工具调用，包括查询、战斗预览、实际操作和失败的调用均会消耗使用次数，请考虑工具调用的预算，谨慎决定和规划要使用的工具。",
             "调用工具使用的所有对象 id 都使用列表左侧的数字 id。",
             "工具会返回 OK/FAIL、budget 和结果摘要。动作工具返回变更摘要；详细信息分散在各个查询工具中。",
+        ]
+    )
+
+
+def build_turn_prompt(
+    observation: Mapping[str, Any],
+    *,
+    previous_turn_event: Mapping[str, Any] | None = None,
+    memo_entries: Sequence[str] = (),
+) -> str:
+    """构造单个游戏回合开始时给 LLM 的用户提示词（动态信息）。"""
+
+    return "\n".join(
+        [
+            _previous_turn_summary(previous_turn_event),
             "",
             _memo_summary(memo_entries),
             "",
@@ -63,7 +81,7 @@ def _memo_summary(memo_entries: Sequence[str]) -> str:
         if isinstance(entry, str) and entry.strip()
     ]
     if not values:
-        return "备忘录：无。"
+        return "备忘录：无。（提示：本回合的思考不会带到下回合，如有跨回合计划请用 write_memo 记录。）"
     lines = ["备忘录："]
     lines.extend(f"- {entry}" for entry in values)
     return "\n".join(lines)
@@ -73,33 +91,49 @@ def _state_summary(observation: Mapping[str, Any]) -> str:
     adventurers = observation.get("adventurers", ())
     monsters = observation.get("monsters", ())
     refs = build_numeric_refs(observation)
-    equipment_names = _equipment_name_index(observation)
-    scoring = observation.get("scoring", {})
-    if not isinstance(scoring, Mapping):
-        scoring = {}
     lines = [
         f"当前回合：{observation['turn']}/{observation['max_turns']}",
         f"资源：金币 {observation['gold']}，经验池 {observation['experience_pool']}，材料 {_mapping_text(observation['materials'])}",
-        _turn_overview(observation),
-        "冒险者：",
     ]
+    # Experience rules if available
+    exp_rules = observation.get("experience_rules")
+    if isinstance(exp_rules, Mapping):
+        base = exp_rules.get("base_required_experience")
+        growth_per = exp_rules.get("required_experience_growth")
+        max_level = exp_rules.get("max_level")
+        if base is not None and growth_per is not None:
+            lines.append(f"升级需求：{base}+{growth_per}/级；最高等级 {max_level}")
+    lines.append(_turn_overview(observation))
+    lines.append("冒险者：")
     for adventurer in adventurers:
         resources = adventurer["resources"]
         stats = adventurer["effective_stats"]
-        equipment = adventurer.get("equipment") or ()
         exp_text = _experience_text(adventurer)
+        growth_text = _stat_modifier_text(adventurer.get("stat_growth_per_level"))
+        # Use equipment_slots for slot names if available
+        equip_slots = adventurer.get("equipment_slots")
+        if equip_slots:
+            equip_text = _equipment_slots_text(refs, equip_slots)
+        else:
+            equipment = adventurer.get("equipment") or ()
+            equip_text = _equipment_refs_text(refs, equipment)
         lines.append(
             "- "
             f"{display_ref(refs, 'adventurer', adventurer['adventurer_id'])} "
             f"{adventurer['name']} "
             f"Lv{adventurer['level']} "
             f"EXP {exp_text} "
+            f"成长 {growth_text} "
             f"HP {resources['current_hp']}/{stats['hp']} "
             f"MP {resources['current_mp']}/{stats['mp']} "
             f"攻击 {stats['attack']} 防御 {stats['defense']} 速度 {stats['speed']} "
-            f"装备 {_equipment_refs_text(refs, equipment, equipment_names)}"
+            f"恢复 {stats.get('recovery', 0)} 回魔 {stats.get('mp_recovery', 0)} "
+            f"装备 {equip_text}"
         )
         _append_skill_lines_zh(lines, adventurer.get("skills"))
+        level_unlocks = adventurer.get("level_skill_unlocks")
+        if level_unlocks:
+            lines.append(f"  等级技能 {_level_skill_unlocks_text(level_unlocks)}")
 
     lines.append("当前怪物：")
     for monster in monsters:
@@ -109,7 +143,8 @@ def _state_summary(observation: Mapping[str, Any]) -> str:
             "- "
             f"{display_ref(refs, 'monster', monster['monster_id'])} "
             f"{monster['name']} "
-            f"HP {stats['hp']} 攻击 {stats['attack']} 防御 {stats['defense']} 速度 {stats['speed']} "
+            f"HP {stats['hp']} MP {stats.get('mp', 0)} "
+            f"攻击 {stats['attack']} 防御 {stats['defense']} 速度 {stats['speed']} "
             f"奖励 金币={reward['gold']} 经验={reward['experience']} 材料={_mapping_text(reward['materials'])}"
         )
         _append_skill_lines_zh(lines, monster.get("skills"))
@@ -186,44 +221,58 @@ def _previous_turn_summary(previous_turn_event: Mapping[str, Any] | None) -> str
     return "\n".join(lines)
 
 
-def _equipment_refs_text(
+def _equipment_slots_text(
     refs: Mapping[str, Mapping[str, int]],
-    equipment: Sequence[Mapping[str, Any]],
-    names: Mapping[str, str],
+    slots: Any,
 ) -> str:
-    values = [
-        _equipment_display_text(refs, item, names)
-        for item in equipment
-        if isinstance(item, Mapping)
-    ]
+    values = []
+    for slot_data in _sequence(slots):
+        if not isinstance(slot_data, Mapping):
+            continue
+        item = slot_data.get("item")
+        if not isinstance(item, Mapping):
+            continue
+        name = item.get("name")
+        ref = display_ref(refs, "equipment", item.get("instance_id"))
+        slot_name = item.get("slot") or slot_data.get("slot")
+        if isinstance(name, str) and name:
+            values.append(f"{name}(id={ref}, {slot_name})")
+        elif ref:
+            values.append(f"id={ref}({slot_name})")
     return ", ".join(values) if values else "无"
 
 
-def _equipment_name_index(observation: Mapping[str, Any]) -> dict[str, str]:
-    names: dict[str, str] = {}
-    for item in _sequence(observation.get("equipment_inventory")):
+def _equipment_refs_text(
+    refs: Mapping[str, Mapping[str, int]],
+    equipment: Sequence[Mapping[str, Any]],
+) -> str:
+    values = []
+    for item in equipment:
         if not isinstance(item, Mapping):
             continue
         instance_id = item.get("instance_id")
+        ref = display_ref(refs, "equipment", instance_id)
         name = item.get("name")
-        if isinstance(instance_id, str) and isinstance(name, str) and name:
-            names[instance_id] = name
-    return names
+        if isinstance(name, str) and name:
+            values.append(f"{name}(id={ref})")
+        elif ref:
+            values.append(f"id={ref}")
+    return ", ".join(values) if values else "无"
 
 
-def _equipment_display_text(
-    refs: Mapping[str, Mapping[str, int]],
-    item: Mapping[str, Any],
-    names: Mapping[str, str],
-) -> str:
-    instance_id = item.get("instance_id")
-    ref = display_ref(refs, "equipment", instance_id)
-    name = item.get("name")
-    if not isinstance(name, str) or not name:
-        name = names.get(str(instance_id))
-    if isinstance(name, str) and name:
-        return f"{name}(id={ref})"
-    return f"id={ref}" if ref else "未知装备"
+def _level_skill_unlocks_text(unlocks: Any) -> str:
+    values = [
+        unlock
+        for unlock in _sequence(unlocks)
+        if isinstance(unlock, Mapping) and not unlock.get("unlocked")
+    ]
+    if not values:
+        return "无"
+    parts = []
+    for unlock in values:
+        skills = _skill_summary_zh(unlock.get("skills"))
+        parts.append(f"Lv{unlock.get('level')} {skills}")
+    return "; ".join(parts)
 
 
 def _battle_participant_name(battle: Mapping[str, Any], role: str) -> str:

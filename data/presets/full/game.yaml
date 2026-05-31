@@ -14,7 +14,7 @@ rules:
       per_turn: 0.15
   recruitment:
     candidate_count: 3
-    first_turn_candidate_count: 6
+    first_turn_candidate_count: 10
     initial_party_size_limit: 3
     maximum_party_size_limit: 6
     variation:
