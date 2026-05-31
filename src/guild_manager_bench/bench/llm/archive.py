@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -414,8 +415,13 @@ def _message_steps(
                 obs_after = result_data.get("_observation_after")
                 if isinstance(obs_after, Mapping):
                     step["observation_after"] = dict(obs_after)
+                # Preserve structured result for reliable stat reconstruction
+                # after resume.  Only keep essential fields to avoid bloat.
+                compact = _compact_tool_result(result_data)
+                if compact:
+                    step["result"] = compact
             legacy_result = record.get("result")
-            if isinstance(legacy_result, Mapping) and not isinstance(content, str):
+            if isinstance(legacy_result, Mapping) and not isinstance(content, str) and "result" not in step:
                 step["result"] = dict(legacy_result)
             steps.append(step)
     return steps
@@ -429,6 +435,26 @@ def _record_dicts(records: Sequence[Any]) -> list[dict[str, Any]]:
         if isinstance(data, Mapping):
             values.append(dict(data))
     return values
+
+
+def _compact_tool_result(result: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Extract essential fields from a tool result for replay persistence.
+
+    Preserves ``ok`` status and ``turn_result`` (for ``end_turn`` calls) so
+    that ``_compute_run_stats`` can reconstruct accurate stats after a resume.
+    Returns ``None`` if nothing worth preserving is found.
+    """
+    compact: dict[str, Any] = {}
+    ok = result.get("ok")
+    if isinstance(ok, bool):
+        compact["ok"] = ok
+    error = result.get("error")
+    if isinstance(error, str) and error:
+        compact["error"] = error
+    turn_result = result.get("turn_result")
+    if isinstance(turn_result, Mapping):
+        compact["turn_result"] = dict(turn_result)
+    return compact if compact else None
 
 
 def _json_content(value: Any) -> Any:
@@ -446,7 +472,20 @@ def _write_json_atomic(path: Path, data: Mapping[str, Any]) -> None:
         json.dumps(_json_safe(data), ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
-    temp_path.replace(path)
+    _replace_file(temp_path, path)
+
+
+def _replace_file(src: Path, dst: Path, retries: int = 3, delay: float = 0.1) -> None:
+    """替换文件，在 Windows 上自动重试以应对文件被短暂占用的情况。"""
+    for attempt in range(retries):
+        try:
+            src.replace(dst)
+            return
+        except PermissionError:
+            if attempt < retries - 1:
+                time.sleep(delay)
+            else:
+                raise
 
 
 def _json_safe(value: Any) -> Any:
