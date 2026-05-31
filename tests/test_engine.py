@@ -409,7 +409,7 @@ def test_recruit_action_rejects_full_party_until_party_size_upgrade() -> None:
     state = new_game(definition)
     assert party_size_limit(definition, state) == 1
 
-    with pytest.raises(GameError, match="party size limit"):
+    with pytest.raises(GameError, match="队伍人数已达上限"):
         apply_preparation_action(
             definition,
             state,

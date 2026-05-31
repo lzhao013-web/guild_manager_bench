@@ -402,35 +402,35 @@ def _adventurer_by_id(observation: dict[str, Any], adventurer_id: str) -> dict[s
     for adventurer in observation["adventurers"]:
         if adventurer["adventurer_id"] == adventurer_id:
             return adventurer
-    raise ValueError(f"unknown adventurer: {adventurer_id}")
+    raise ValueError(f"未找到冒险者: {adventurer_id}")
 
 
 def _monster_by_id(observation: dict[str, Any], monster_id: str) -> dict[str, Any]:
     for monster in observation["monsters"]:
         if monster["monster_id"] == monster_id:
             return monster
-    raise ValueError(f"unknown monster: {monster_id}")
+    raise ValueError(f"未找到怪物: {monster_id}")
 
 
 def _recipe_by_id(observation: dict[str, Any], recipe_id: str) -> dict[str, Any]:
     for recipe in observation["crafting_recipes"]:
         if recipe["recipe_id"] == recipe_id:
             return recipe
-    raise ValueError(f"unknown recipe: {recipe_id}")
+    raise ValueError(f"未找到制作配方: {recipe_id}")
 
 
 def _upgrade_by_id(observation: dict[str, Any], upgrade_id: str) -> dict[str, Any]:
     for upgrade in observation["global_upgrades"]:
         if upgrade["upgrade_id"] == upgrade_id:
             return upgrade
-    raise ValueError(f"unknown upgrade: {upgrade_id}")
+    raise ValueError(f"未找到全局升级: {upgrade_id}")
 
 
 def _recruit_candidate_by_id(observation: dict[str, Any], candidate_id: str) -> dict[str, Any]:
     for candidate in observation["recruit_candidates"]:
         if candidate["candidate_id"] == candidate_id:
             return candidate
-    raise ValueError(f"unknown recruit candidate: {candidate_id}")
+    raise ValueError(f"未找到招募候选: {candidate_id}")
 
 
 def _equipment_by_instance_id(
@@ -440,7 +440,7 @@ def _equipment_by_instance_id(
     for equipment in observation["equipment_inventory"]:
         if equipment["instance_id"] == instance_id:
             return equipment
-    raise ValueError(f"unknown equipment instance: {instance_id}")
+    raise ValueError(f"未找到装备实例: {instance_id}")
 
 
 def _slot_name(slot: str) -> str:

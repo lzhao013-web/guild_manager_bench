@@ -93,6 +93,8 @@ def resolve_tool_arguments_with_refs(
         _resolve_field(values, "equipment_instance_id", "equipment", refs)
     elif name == "unequip_item":
         _resolve_field(values, "adventurer_id", "adventurer", refs)
+    elif name == "dismiss_adventurer":
+        _resolve_field(values, "adventurer_id", "adventurer", refs)
     elif name == "end_turn":
         hunts = values.get("hunts")
         if isinstance(hunts, Sequence) and not isinstance(hunts, str):

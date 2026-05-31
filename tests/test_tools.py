@@ -119,7 +119,7 @@ def test_invalid_action_returns_rejection_event_without_raising() -> None:
 
     assert result["ok"] is False
     assert result["event"]["type"] == "action_rejected"
-    assert "unknown recipe" in result["error"]
+    assert "未找到制作配方" in result["error"]
     assert "observation" not in result
 
 
@@ -240,7 +240,7 @@ def test_battle_preview_tool_is_controlled_by_definition_switch() -> None:
         },
     )
     assert disabled["ok"] is False
-    assert "unknown tool" in disabled["error"]
+    assert "未知工具" in disabled["error"]
     assert disabled["tool_budget"]["used"] == 1
 
     enabled_tools = GuildManagerTools(

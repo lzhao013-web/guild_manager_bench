@@ -17,6 +17,13 @@ from guild_manager_bench.bench.llm import (
     run_llm_turn,
 )
 from guild_manager_bench.bench.llm.formatting import skill_summary
+from guild_manager_bench.bench.llm.runner import _compute_run_stats
+from guild_manager_bench.bench.llm.trace import (
+    LlmGameRun,
+    ModelResponseRecord,
+    ToolCallRecord,
+    TurnTrace,
+)
 from guild_manager_bench.game.state import LlmToolRules
 
 
@@ -102,8 +109,8 @@ def test_illegal_action_error_is_returned_to_model_before_recovery() -> None:
 
     assert trace.status == "completed"
     assert trace.tool_calls[0].result["ok"] is False
-    assert "unknown recipe" in trace.tool_calls[0].result["error"]
-    assert "unknown recipe" in trace.messages[2]["content"]
+    assert "未找到制作配方" in trace.tool_calls[0].result["error"]
+    assert "未找到制作配方" in trace.messages[2]["content"]
 
 
 def test_empty_responses_fail_after_retry_limit() -> None:
@@ -172,7 +179,7 @@ def test_invalid_end_turn_fails_after_attempt_limit() -> None:
 
     assert run.status == "failed"
     assert run.failure_reason == "end_turn_attempt_limit"
-    assert "duplicate adventurer hunt" in run.turns[0].tool_calls[-1].result["error"]
+    assert "重复派遣同一冒险者" in run.turns[0].tool_calls[-1].result["error"]
 
 
 def test_budget_exhaustion_without_end_turn_retries() -> None:
@@ -766,6 +773,294 @@ def test_run_llm_game_refuses_resume_when_data_hash_changed(tmp_path) -> None:
             config=LlmRunConfig(archive_dir=tmp_path),
             resume_archive_dir=archive_dir,
         )
+
+
+def test_run_summary_includes_comprehensive_stats_in_event() -> None:
+    agent = StaticAgent(
+        LlmAgentResponse(tool_calls=(LlmToolCall("end_turn", {"hunts": []}),))
+    )
+    events: list[dict[str, Any]] = []
+
+    run = run_llm_game(
+        agent,
+        data_dir=_data_dir(),
+        config=LlmRunConfig(max_tool_calls_per_turn=2, archive_dir=None),
+        event_sink=events.append,
+    )
+
+    assert run.status == "completed"
+    completed_event = next(e for e in events if e["type"] == "run_completed")
+    stats = completed_event["run"]["stats"]
+
+    assert "timing" in stats
+    assert "total_duration_ms" in stats["timing"]
+    assert "total_duration_seconds" in stats["timing"]
+
+    assert "tool_calls" in stats
+    assert stats["tool_calls"]["total"] > 0
+    assert stats["tool_calls"]["successful"] > 0
+    assert stats["tool_calls"]["failed"] == 0
+    assert "by_name" in stats["tool_calls"]
+
+    assert "token_usage" in stats
+    assert "input_tokens" in stats["token_usage"]
+    assert "output_tokens" in stats["token_usage"]
+
+    assert "game_actions" in stats
+    assert stats["game_actions"]["battles_total"] == 0  # no hunts submitted
+
+    assert "model_interaction" in stats
+    assert stats["model_interaction"]["total_model_steps"] > 0
+    assert stats["model_interaction"]["total_turns_completed"] == run.final_observation["max_turns"]
+    assert stats["model_interaction"]["total_turns_failed"] == 0
+
+
+def test_compute_run_stats_empty_run() -> None:
+    run = LlmGameRun(
+        status="completed",
+        session_id="test-empty",
+        final_observation={"finished": True},
+        turns=[],
+    )
+
+    stats = _compute_run_stats(run)
+
+    assert stats["timing"]["total_duration_ms"] == 0
+    assert stats["timing"]["total_duration_seconds"] == 0.0
+    assert stats["tool_calls"]["total"] == 0
+    assert stats["tool_calls"]["successful"] == 0
+    assert stats["tool_calls"]["failed"] == 0
+    assert stats["tool_calls"]["by_name"] == {}
+    assert stats["token_usage"]["input_tokens"] == 0
+    assert stats["token_usage"]["output_tokens"] == 0
+    assert "cache_read_input_tokens" not in stats["token_usage"]
+    assert "cache_creation_input_tokens" not in stats["token_usage"]
+    assert stats["game_actions"]["battles_total"] == 0
+    assert stats["model_interaction"]["total_model_steps"] == 0
+    assert stats["model_interaction"]["total_turns_completed"] == 0
+    assert stats["model_interaction"]["total_turns_failed"] == 0
+
+
+def test_compute_run_stats_timing_and_token_aggregation() -> None:
+    turn = TurnTrace(turn=1, prompt="test")
+    turn.model_responses.append(
+        ModelResponseRecord(
+            text="",
+            timing={"duration_ms": 500.5},
+            usage={"input_tokens": 100, "output_tokens": 50},
+        )
+    )
+    turn.model_responses.append(
+        ModelResponseRecord(
+            text="",
+            timing={"duration_ms": 300.0},
+            usage={
+                "prompt_tokens": 80,
+                "completion_tokens": 40,
+                "cache_read_input_tokens": 60,
+                "cache_creation_input_tokens": 20,
+            },
+        )
+    )
+    turn.complete()
+
+    run = LlmGameRun(
+        status="completed",
+        session_id="test-timing",
+        final_observation={"finished": True},
+        turns=[turn],
+    )
+
+    stats = _compute_run_stats(run)
+
+    assert stats["timing"]["total_duration_ms"] == round(500.5 + 300.0)
+    assert stats["timing"]["total_duration_seconds"] == round(800.5 / 1000, 3)
+    # input_tokens from first (100) + prompt_tokens from second (80) = 180
+    assert stats["token_usage"]["input_tokens"] == 180
+    # output_tokens from first (50) + completion_tokens from second (40) = 90
+    assert stats["token_usage"]["output_tokens"] == 90
+    assert stats["token_usage"]["cache_read_input_tokens"] == 60
+    assert stats["token_usage"]["cache_creation_input_tokens"] == 20
+
+
+def test_compute_run_stats_tool_call_success_and_failure() -> None:
+    turn = TurnTrace(turn=1, prompt="test")
+    turn.tool_calls.append(
+        ToolCallRecord(
+            name="craft_equipment",
+            arguments={"recipe_id": 1},
+            result={"ok": True, "event": {}},
+        )
+    )
+    turn.tool_calls.append(
+        ToolCallRecord(
+            name="craft_equipment",
+            arguments={"recipe_id": 999},
+            result={"ok": False, "error": "not found"},
+        )
+    )
+    turn.tool_calls.append(
+        ToolCallRecord(
+            name="end_turn",
+            arguments={"hunts": []},
+            result={"ok": True, "turn_result": {"battles": []}},
+        )
+    )
+    turn.complete()
+
+    run = LlmGameRun(
+        status="completed",
+        session_id="test-tools",
+        final_observation={"finished": True},
+        turns=[turn],
+    )
+
+    stats = _compute_run_stats(run)
+
+    assert stats["tool_calls"]["total"] == 3
+    assert stats["tool_calls"]["successful"] == 2
+    assert stats["tool_calls"]["failed"] == 1
+    assert stats["tool_calls"]["by_name"]["craft_equipment"] == 2
+    assert stats["tool_calls"]["by_name"]["end_turn"] == 1
+    # Game actions: only successful craft_equipment counted
+    assert stats["game_actions"]["total_equipment_crafted"] == 1
+
+
+def test_compute_run_stats_battle_results() -> None:
+    turn = TurnTrace(turn=1, prompt="test")
+    turn.tool_calls.append(
+        ToolCallRecord(
+            name="end_turn",
+            arguments={"hunts": []},
+            result={
+                "ok": True,
+                "turn_result": {
+                    "battles": [
+                        {
+                            "won": True,
+                            "reward": {"gold": 50, "experience": 30, "materials": {}},
+                        },
+                        {
+                            "won": False,
+                            "reward": {"gold": 0, "experience": 0, "materials": {}},
+                        },
+                        {
+                            "won": True,
+                            "reward": {"gold": 25, "experience": 15, "materials": {}},
+                        },
+                    ],
+                },
+            },
+        )
+    )
+    turn.complete()
+
+    run = LlmGameRun(
+        status="completed",
+        session_id="test-battles",
+        final_observation={"finished": True},
+        turns=[turn],
+    )
+
+    stats = _compute_run_stats(run)
+
+    ga = stats["game_actions"]
+    assert ga["battles_total"] == 3
+    assert ga["battles_won"] == 2
+    assert ga["battles_lost"] == 1
+    assert ga["total_gold_earned"] == 75
+    assert ga["total_experience_earned"] == 45
+
+
+def test_compute_run_stats_mixed_game_actions() -> None:
+    turn = TurnTrace(turn=1, prompt="test")
+    for name, ok in [
+        ("craft_equipment", True),
+        ("craft_equipment", True),
+        ("purchase_upgrade", True),
+        ("allocate_experience", True),
+        ("allocate_experience", True),
+        ("allocate_experience", True),
+        ("recruit_adventurer", True),
+        ("dismiss_adventurer", True),
+        ("equip_item", True),
+        ("equip_item", True),
+        ("unequip_item", True),
+        ("get_party", True),  # read-only, not a game action
+        ("end_turn", True),
+    ]:
+        result: dict[str, Any] = {"ok": ok}
+        if name == "end_turn":
+            result["turn_result"] = {"battles": []}
+        turn.tool_calls.append(
+            ToolCallRecord(name=name, arguments={}, result=result)
+        )
+    turn.complete()
+
+    run = LlmGameRun(
+        status="completed",
+        session_id="test-actions",
+        final_observation={"finished": True},
+        turns=[turn],
+    )
+
+    stats = _compute_run_stats(run)
+
+    ga = stats["game_actions"]
+    assert ga["total_equipment_crafted"] == 2
+    assert ga["total_upgrades_purchased"] == 1
+    assert ga["total_experience_allocated"] == 3
+    assert ga["total_recruits"] == 1
+    assert ga["total_dismissals"] == 1
+    assert ga["total_equips"] == 2
+    assert ga["total_unequips"] == 1
+    assert stats["tool_calls"]["total"] == 13
+    assert stats["tool_calls"]["successful"] == 13
+    assert stats["tool_calls"]["by_name"]["get_party"] == 1
+
+
+def test_compute_run_stats_turn_status_tracking() -> None:
+    completed_turn = TurnTrace(turn=1, prompt="test")
+    completed_turn.complete()
+
+    failed_turn = TurnTrace(turn=2, prompt="test")
+    failed_turn.fail("empty_response_limit")
+
+    run = LlmGameRun(
+        status="failed",
+        session_id="test-status",
+        final_observation={"finished": False},
+        turns=[completed_turn, failed_turn],
+        failure_reason="empty_response_limit",
+    )
+
+    stats = _compute_run_stats(run)
+
+    assert stats["model_interaction"]["total_turns_completed"] == 1
+    assert stats["model_interaction"]["total_turns_failed"] == 1
+
+
+def test_compute_run_stats_cache_tokens_absent_when_zero() -> None:
+    turn = TurnTrace(turn=1, prompt="test")
+    turn.model_responses.append(
+        ModelResponseRecord(
+            text="",
+            usage={"input_tokens": 100, "output_tokens": 50},
+        )
+    )
+    turn.complete()
+
+    run = LlmGameRun(
+        status="completed",
+        session_id="test-cache",
+        final_observation={"finished": True},
+        turns=[turn],
+    )
+
+    stats = _compute_run_stats(run)
+
+    assert "cache_read_input_tokens" not in stats["token_usage"]
+    assert "cache_creation_input_tokens" not in stats["token_usage"]
 
 
 def _data_dir() -> Path:

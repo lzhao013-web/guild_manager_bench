@@ -14,15 +14,15 @@
       </div>
       <div class="topbar-actions">
         <div class="mode-switch" aria-label="界面模式">
-          <button class="mode-button active" type="button" data-mode="manual">人工操作</button>
-          <button class="mode-button" type="button" data-mode="llm">LLM 调试</button>
+          <button class="mode-button" type="button" data-mode="manual">人工操作</button>
+          <button class="mode-button active" type="button" data-mode="llm">LLM 调试</button>
         </div>
         <button id="newSessionButton" type="button">新会话</button>
       </div>
     </header>
 
     <main class="layout">
-      <section class="mode-panel active" data-mode-panel="manual">
+      <section class="mode-panel" data-mode-panel="manual">
         <section class="band" id="overview"></section>
 
         <nav class="tabs" id="tabBar">
@@ -82,7 +82,7 @@
         </div>
       </section>
 
-      <section class="mode-panel" data-mode-panel="llm">
+      <section class="mode-panel active" data-mode-panel="llm">
         <div class="llm-page">
         <div class="llm-grid">
           <div class="panel llm-config">

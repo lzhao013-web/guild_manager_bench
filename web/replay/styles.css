@@ -367,6 +367,11 @@ h3 { font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bot
   font-weight: 700;
 }
 
+.stat-chip#ovStats {
+  white-space: normal;
+  max-width: 420px;
+}
+
 /* Tabs */
 .tabs {
   display: flex;
