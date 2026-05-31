@@ -50,7 +50,7 @@ class RecruitAction:
 
 @dataclass(frozen=True, slots=True)
 class DismissAction:
-    """解散一个冒险者，腾出队伍名额。"""
+    """解散一个冒险者，腾出队伍名额；装备归还库存，经验返还经验池。"""
 
     adventurer_id: str
 

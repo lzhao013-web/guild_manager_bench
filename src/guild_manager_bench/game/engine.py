@@ -35,7 +35,7 @@ from guild_manager_bench.game.models import (
     scale_combat_stats,
     scale_stat_modifier,
 )
-from guild_manager_bench.game.progression import add_experience, level_stat_modifier
+from guild_manager_bench.game.progression import add_experience, level_stat_modifier, total_invested_experience
 from guild_manager_bench.game.state import (
     AdventurerState,
     GameDefinition,
@@ -521,27 +521,23 @@ def _apply_dismiss_action(
     state: GameState,
     action: DismissAction,
 ) -> GameState:
-    """解散冒险者：移出队伍，装备归还库存。"""
+    """解散冒险者：移出队伍，装备归还库存，经验返还经验池。"""
 
     adventurer = _adventurer_by_id(state, action.adventurer_id)
 
-    # 收集该冒险者身上的装备，归还到库存
-    equipped_items = [
-        instance
-        for instance in state.equipment_inventory
-        if instance.equipped_by == adventurer.adventurer_id
-    ]
-    returned_inventory = list(state.equipment_inventory)
-    for instance in equipped_items:
-        idx = returned_inventory.index(instance)
-        returned_inventory[idx] = replace(instance, equipped_by=None)
+    # 计算该冒险者身上已投入的总经验，返还到经验池
+    refunded_xp = total_invested_experience(
+        level=adventurer.level,
+        experience=adventurer.experience,
+        rules=definition.content.experience_rules,
+    )
 
     return replace(
         state,
         adventurers=tuple(
             a for a in state.adventurers if a.adventurer_id != adventurer.adventurer_id
         ),
-        equipment_inventory=tuple(returned_inventory),
+        experience_pool=state.experience_pool + refunded_xp,
     )
 
 

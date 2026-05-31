@@ -75,6 +75,22 @@ def level_stat_modifier(
     return scale_stat_modifier(growth, level - 1)
 
 
+def total_invested_experience(level: int, experience: int, rules: ExperienceRules) -> int:
+    """计算冒险者身上已投入的总经验（含升级消耗 + 当前进度经验）。"""
+
+    _require_at_least("level", level, 1)
+    _require_at_least("experience", experience, 0)
+    _validate_rules(rules)
+
+    # 当前等级内的进度经验
+    total = experience
+    # 1 → 2, 2 → 3, …, (level-1) → level 的升级消耗之和
+    n = level - 1
+    total += n * rules.base_required_experience
+    total += rules.required_experience_growth * (n - 1) * n // 2
+    return total
+
+
 def _validate_rules(rules: ExperienceRules) -> None:
     if not isinstance(rules, ExperienceRules):
         raise TypeError("rules must be ExperienceRules")
