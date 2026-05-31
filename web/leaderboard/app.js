@@ -3,6 +3,7 @@
  *
  * Standalone static leaderboard that reads leaderboard_data.json
  * and renders model ranking cards sorted by rank_score.
+ * Includes rank_score curve comparison using Chart.js.
  */
 
 // ============================================================================
@@ -71,7 +72,241 @@ function fmtTokens(n) {
 const MEDALS = ['🥇', '🥈', '🥉'];
 
 // ============================================================================
-// Rendering
+// Global State
+// ============================================================================
+let _leaderboardData = null;
+let _curveChart = null;
+let _curveRunSelection = {}; // key: "model::run_id" -> boolean
+
+// Palette for curve lines — distinct colors readable on dark background
+const CURVE_COLORS = [
+  '#f59e0b', // amber (accent)
+  '#22d3ee', // cyan
+  '#a78bfa', // purple
+  '#22c55e', // green
+  '#f87171', // red
+  '#60a5fa', // blue
+  '#fb923c', // orange
+  '#e879f9', // fuchsia
+  '#34d399', // emerald
+  '#fbbf24', // yellow
+];
+
+function curveColor(index) {
+  return CURVE_COLORS[index % CURVE_COLORS.length];
+}
+
+// ============================================================================
+// Tab Navigation
+// ============================================================================
+function initTabs() {
+  const tabs = $$('.tab-btn');
+  tabs.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      tabs.forEach((t) => t.classList.remove('active'));
+      btn.classList.add('active');
+      const tab = btn.dataset.tab;
+      $('#leaderboardMain').style.display = tab === 'leaderboard' ? '' : 'none';
+      $('#curvesMain').style.display = tab === 'curves' ? '' : 'none';
+      if (tab === 'curves' && _leaderboardData) {
+        renderCurvePanel();
+      }
+    });
+  });
+}
+
+// ============================================================================
+// Curve Comparison
+// ============================================================================
+
+/**
+ * Collect all runs across all models that have a rank_score_curve.
+ * Returns [{model, run, key, colorIndex}]
+ */
+function allCurveRuns(data) {
+  const runs = [];
+  let idx = 0;
+  for (const m of data.models) {
+    for (const run of (m.run_details || [])) {
+      const curve = run.rank_score_curve;
+      if (Array.isArray(curve) && curve.length > 0) {
+        runs.push({
+          model: m.model,
+          run,
+          key: `${m.model}::${run.run_id || run.session_id}`,
+          colorIndex: idx++,
+        });
+      }
+    }
+  }
+  return runs;
+}
+
+function renderCurvePanel() {
+  const data = _leaderboardData;
+  if (!data) return;
+
+  const runs = allCurveRuns(data);
+  const legend = $('#curveLegend');
+
+  if (!runs.length) {
+    legend.innerHTML = '<div class="curve-legend-placeholder">没有可用的 rank_score 曲线数据</div>';
+    if (_curveChart) { _curveChart.destroy(); _curveChart = null; }
+    return;
+  }
+
+  // Default: select all runs on first render
+  if (Object.keys(_curveRunSelection).length === 0) {
+    runs.forEach((r) => { _curveRunSelection[r.key] = true; });
+  }
+
+  // Build legend items
+  const items = runs.map((r) => {
+    const checked = _curveRunSelection[r.key] ? 'checked' : '';
+    const color = curveColor(r.colorIndex);
+    const rs = r.run.rank_score;
+    const rsLabel = rs != null ? fmtRankScore(rs) : '—';
+    const timeLabel = fmtTimestamp(r.run.created_at);
+    return `
+      <label class="curve-legend-item">
+        <input type="checkbox" data-curve-key="${esc(r.key)}" ${checked} />
+        <span class="curve-color-dot" style="background:${color}"></span>
+        <span class="curve-legend-model">${esc(r.model)}</span>
+        <span class="curve-legend-meta">${esc(timeLabel)} · ${esc(rsLabel)}</span>
+      </label>`;
+  }).join('');
+
+  legend.innerHTML = items;
+
+  // Bind checkbox events
+  legend.querySelectorAll('input[type=checkbox]').forEach((cb) => {
+    cb.addEventListener('change', () => {
+      _curveRunSelection[cb.dataset.curveKey] = cb.checked;
+      updateCurveChart(data);
+    });
+  });
+
+  // Bind select all / deselect all
+  $('#curveSelectAll').onclick = () => {
+    runs.forEach((r) => { _curveRunSelection[r.key] = true; });
+    legend.querySelectorAll('input[type=checkbox]').forEach((cb) => { cb.checked = true; });
+    updateCurveChart(data);
+  };
+  $('#curveDeselectAll').onclick = () => {
+    runs.forEach((r) => { _curveRunSelection[r.key] = false; });
+    legend.querySelectorAll('input[type=checkbox]').forEach((cb) => { cb.checked = false; });
+    updateCurveChart(data);
+  };
+
+  updateCurveChart(data);
+}
+
+function updateCurveChart(data) {
+  const runs = allCurveRuns(data);
+  const selected = runs.filter((r) => _curveRunSelection[r.key]);
+
+  if (!selected.length) {
+    if (_curveChart) {
+      _curveChart.data.labels = [];
+      _curveChart.data.datasets = [];
+      _curveChart.update();
+    }
+    return;
+  }
+
+  // Build datasets — curve is already filtered to {turn, rank_score} objects
+  const datasets = selected.map((r) => {
+    const color = curveColor(r.colorIndex);
+    const curve = r.run.rank_score_curve || [];
+    const points = curve.map((pt) => ({ x: pt.turn, y: pt.rank_score }));
+    return {
+      label: r.model,
+      data: points,
+      borderColor: color,
+      backgroundColor: color + '18',
+      pointBackgroundColor: color,
+      pointRadius: 3,
+      pointHoverRadius: 5,
+      borderWidth: 2,
+      tension: 0.15,
+      fill: false,
+    };
+  });
+
+  if (_curveChart) {
+    _curveChart.data.datasets = datasets;
+    _curveChart.update();
+  } else {
+    const ctx = document.getElementById('curveChart');
+    if (!ctx) return;
+    _curveChart = new Chart(ctx, {
+      type: 'scatter',
+      data: { datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        showLine: true,
+        interaction: {
+          mode: 'nearest',
+          intersect: false,
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: 'rgba(13, 17, 32, 0.95)',
+            titleColor: '#e8ecf4',
+            bodyColor: '#9aa3be',
+            borderColor: 'rgba(255,255,255,0.1)',
+            borderWidth: 1,
+            padding: 12,
+            cornerRadius: 8,
+            titleFont: { family: 'Inter', weight: '600' },
+            bodyFont: { family: 'JetBrains Mono', size: 12 },
+            callbacks: {
+              title: (items) => {
+                const pt = items[0]?.parsed;
+                return pt ? `回合 ${pt.x}` : '';
+              },
+              label: (item) => ` ${item.dataset.label}: ${item.parsed.y.toLocaleString('en-US', { maximumFractionDigits: 1 })}`,
+            },
+          },
+        },
+        scales: {
+          x: {
+            type: 'linear',
+            min: 1,
+            title: {
+              display: true,
+              text: '回合',
+              color: '#5c6585',
+              font: { family: 'Inter', size: 12 },
+            },
+            ticks: { color: '#5c6585', font: { family: 'JetBrains Mono', size: 11 }, stepSize: 5 },
+            grid: { color: 'rgba(255,255,255,0.04)' },
+          },
+          y: {
+            title: {
+              display: true,
+              text: 'Rank Score',
+              color: '#5c6585',
+              font: { family: 'Inter', size: 12 },
+            },
+            ticks: {
+              color: '#5c6585',
+              font: { family: 'JetBrains Mono', size: 11 },
+              callback: (val) => val.toLocaleString('en-US', { maximumFractionDigits: 0 }),
+            },
+            grid: { color: 'rgba(255,255,255,0.04)' },
+            beginAtZero: true,
+          },
+        },
+      },
+    });
+  }
+}
+
+// ============================================================================
+// Rendering — Leaderboard Cards
 // ============================================================================
 function renderLeaderboard(data) {
   const main = $('#leaderboardMain');
@@ -353,8 +588,10 @@ async function init() {
     const res = await fetch('leaderboard_data.json');
     if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     const data = await res.json();
+    _leaderboardData = data;
     $('#loadingState')?.remove();
     renderLeaderboard(data);
+    initTabs();
   } catch (e) {
     showError(`无法加载 leaderboard_data.json: ${e.message}`);
   }

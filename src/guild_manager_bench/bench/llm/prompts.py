@@ -9,7 +9,7 @@ from guild_manager_bench.bench.llm.refs import (
 from guild_manager_bench.game.state import MATERIAL_NAMES
 
 DEFAULT_OBJECTIVE = (
-    "最大程度地获取资源、加强冒险者，以使你的队伍的每个队员在回合限制达到上限时，获得最高的终局战力。每个队员的终局战力评分之和，就是你的最终得分。。"
+    "最大程度地获取资源、加强冒险者，以使你的队伍的每个队员在回合限制达到上限时，获得最高的终局战力。每个队员的终局战力评分之和，就是你的最终得分。"
 )
 
 

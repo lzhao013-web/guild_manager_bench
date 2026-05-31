@@ -3,6 +3,9 @@
 Aggregates LLM replay files by model and produces a leaderboard JSON
 consumed by the static leaderboard frontend.
 
+Supports incremental builds: processed run info is cached so unchanged
+replay files are skipped on subsequent builds.
+
 Usage via CLI::
 
     uv run guild-manager build-leaderboard
@@ -17,6 +20,7 @@ Usage programmatically::
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 from datetime import datetime
@@ -24,7 +28,13 @@ from pathlib import Path
 from statistics import mean, median
 from typing import Any
 
-from guild_manager_bench.bench.replay_scoring import with_rank_score_from_final_observation
+from guild_manager_bench.bench.replay_scoring import (
+    with_rank_score_curve,
+    with_rank_score_from_final_observation,
+)
+
+# Incremental build cache version — bump when _extract_run_info schema changes.
+_CACHE_VERSION = 3
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -56,12 +66,32 @@ def _extract_run_info(replay: dict, *, source_path: Path | None = None) -> dict 
     turns_list = turns if isinstance(turns, list) else []
 
     # Per-turn rank score curve (if available)
-    rank_score_curve: list[float | None] = []
+    # 1. Collect rank_score from completed turns only (skip retries & incomplete)
+    # 2. Remove null entries
+    # 3. Truncate to max_turns effective points
+    max_turns = (
+        (final_observation.get("max_turns") if isinstance(final_observation, dict) else None)
+        or 0
+    )
+
+    completed_scores: list[float] = []
     for t in turns_list:
-        if isinstance(t, dict):
-            rank_score_curve.append(t.get("rank_score"))
-        else:
-            rank_score_curve.append(None)
+        if not isinstance(t, dict):
+            continue
+        if t.get("status") != "completed":
+            continue
+        v = t.get("rank_score")
+        if v is not None:
+            completed_scores.append(v)
+
+    # Truncate to max_turns
+    if max_turns > 0:
+        completed_scores = completed_scores[:max_turns]
+
+    rank_score_curve: list[dict[str, int | float]] = [
+        {"turn": i + 1, "rank_score": v}
+        for i, v in enumerate(completed_scores)
+    ]
 
     # Aggregate timing/token from per-turn timing_usage if stats not available
     fallback_timing = _aggregate_turn_timing(turns_list) if not stats.get("timing") else None
@@ -542,21 +572,116 @@ def _sort_key(entry: dict) -> float:
     return -1.0
 
 
+# ── Incremental Build Cache ───────────────────────────────────────────────────
+
+def _file_fingerprint(path: Path) -> str:
+    """Fast fingerprint using mtime + size (avoids reading full content)."""
+    st = path.stat()
+    return f"{st.st_mtime_ns}:{st.st_size}"
+
+
+def _load_cache(cache_path: Path) -> dict[str, dict]:
+    """Load the incremental build cache. Returns {filename: {fingerprint, info}}."""
+    if not cache_path.exists():
+        return {}
+    try:
+        data = json.loads(cache_path.read_text(encoding="utf-8"))
+        if data.get("version") != _CACHE_VERSION:
+            return {}  # schema changed — discard stale cache
+        return data.get("entries", {})
+    except (json.JSONDecodeError, UnicodeDecodeError, KeyError):
+        return {}
+
+
+def _save_cache(cache_path: Path, entries: dict[str, dict]) -> None:
+    """Persist the incremental build cache."""
+    cache_path.write_text(
+        json.dumps({"version": _CACHE_VERSION, "entries": entries}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+
 # ── Public API ────────────────────────────────────────────────────────────────
-def build_leaderboard(data_dir: Path, output: Path) -> None:
-    """Scan *data_dir* for replay JSON files and write aggregated leaderboard to *output*."""
+
+def _load_previous_output(output: Path) -> dict[str, dict] | None:
+    """Load the previous leaderboard output. Returns {model_name: model_data} or None."""
+    if not output.exists():
+        return None
+    try:
+        data = json.loads(output.read_text(encoding="utf-8"))
+        if data.get("schema_version") != 2:
+            return None
+        return {m["model"]: m for m in data.get("models", []) if isinstance(m, dict)}
+    except (json.JSONDecodeError, UnicodeDecodeError, KeyError):
+        return None
+
+
+def build_leaderboard(data_dir: Path, output: Path, *, incremental: bool = True) -> None:
+    """Scan *data_dir* for replay JSON files and write aggregated leaderboard to *output*.
+
+    When *incrementual* is True (default):
+
+    * A ``.build_cache.json`` file is maintained next to *output* so that
+      unchanged replay files are skipped on subsequent runs.
+    * The previous ``leaderboard_data.json`` is read; only models whose replays
+      have changed (added / modified / deleted) are re-aggregated.  Models with
+      no changes are carried forward verbatim.
+    """
     json_files = sorted(data_dir.glob("*.json"))
     if not json_files:
         print(f"No JSON files found in {data_dir}")
         sys.exit(1)
 
-    print(f"Scanning {len(json_files)} file(s) in {data_dir} ...")
+    cache_path = output.parent / ".build_cache.json"
+    prev_models = _load_previous_output(output) if incremental else None
+    cache: dict[str, dict] = _load_cache(cache_path) if incremental else {}
+    new_cache: dict[str, dict] = {}
 
-    # Parse and group by model
-    model_runs: dict[str, list[dict]] = {}
-    skipped = 0
+    # Determine which files changed vs. cache
+    current_names = {p.name for p in json_files}
+    cached_names = set(cache.keys())
+
+    new_or_changed = set()
+    deleted = cached_names - current_names
 
     for path in json_files:
+        fp = _file_fingerprint(path)
+        cached = cache.get(path.name)
+        if not (cached and cached.get("fingerprint") == fp):
+            new_or_changed.add(path.name)
+
+    # Collect affected models from new/changed files
+    affected_models: set[str] = set()
+    for fname in new_or_changed:
+        # Model name will be resolved during parsing below
+        pass
+
+    # Build per-model run lists:
+    #   - For affected models: re-aggregate from scratch (all runs)
+    #   - For unaffected models: carry from previous output
+    model_runs: dict[str, list[dict]] = {}
+    skipped = 0
+    reused = 0
+    parsed = 0
+
+    for path in json_files:
+        fp = _file_fingerprint(path)
+        cached = cache.get(path.name)
+        is_hit = incremental and cached and cached.get("fingerprint") == fp
+
+        if is_hit:
+            info = cached.get("info")
+            if info is not None:
+                model_runs.setdefault(info["model"], []).append(info)
+                new_cache[path.name] = cached
+                reused += 1
+                # If this model is already affected, we'll re-aggregate anyway
+                if info["model"] in affected_models:
+                    continue
+                # Otherwise this model is clean — no need to re-aggregate
+                continue
+
+        # Parse the file (cache miss or non-incremental)
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, UnicodeDecodeError) as e:
@@ -565,23 +690,48 @@ def build_leaderboard(data_dir: Path, output: Path) -> None:
             continue
 
         data = with_rank_score_from_final_observation(data)
+        data = with_rank_score_curve(data)
         info = _extract_run_info(data, source_path=path)
         if info is None:
             skipped += 1
             continue
 
+        affected_models.add(info["model"])
         model_runs.setdefault(info["model"], []).append(info)
+        new_cache[path.name] = {"fingerprint": fp, "info": info}
+        parsed += 1
 
-    if not model_runs:
+    if not model_runs and not prev_models:
         print("No valid completed replays found.")
         sys.exit(1)
 
-    # Aggregate
+    # Aggregate: re-aggregate affected models, carry unaffected from prev
     models: list[dict] = []
+    unaffected_count = 0
+
     for model_name, runs in model_runs.items():
-        agg = _aggregate_model(runs)
-        agg["model"] = model_name
-        models.append(agg)
+        if model_name in affected_models:
+            agg = _aggregate_model(runs)
+            agg["model"] = model_name
+            models.append(agg)
+        elif prev_models and model_name in prev_models:
+            models.append(prev_models[model_name])
+            unaffected_count += 1
+        else:
+            # New model — aggregate fresh
+            agg = _aggregate_model(runs)
+            agg["model"] = model_name
+            models.append(agg)
+
+    # Carry over models from prev that have no replays in data_dir.
+    # These models keep their historical data (replays may have been moved
+    # out of data_dir but their aggregated stats should persist).
+    if prev_models:
+        current_model_names = {m["model"] for m in models}
+        for name, prev in prev_models.items():
+            if name not in current_model_names:
+                models.append(prev)
+                unaffected_count += 1
 
     # Sort and assign ranks
     models.sort(key=_sort_key, reverse=True)
@@ -596,12 +746,30 @@ def build_leaderboard(data_dir: Path, output: Path) -> None:
         "models": models,
     }
 
-    # Write
+    # Write output and cache
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
 
+    if incremental:
+        _save_cache(cache_path, new_cache)
+
+    changed_count = len(affected_models)
+    inc_info = ""
+    if incremental:
+        parts = []
+        if parsed:
+            parts.append(f"{parsed} parsed")
+        if reused:
+            parts.append(f"{reused} cached")
+        if unaffected_count:
+            parts.append(f"{unaffected_count} models unchanged")
+        if deleted:
+            parts.append(f"{len(deleted)} deleted")
+        if parts:
+            inc_info = f" ({', '.join(parts)})"
     print(f"✓ {len(models)} model(s), {result['total_runs']} run(s)"
-          + (f", {skipped} skipped" if skipped else ""))
+          + (f", {skipped} skipped" if skipped else "")
+          + inc_info)
     print(f"  → {output}")
     for m in models:
         rs = m.get("rank_score")

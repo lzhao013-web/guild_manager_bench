@@ -21,6 +21,10 @@
           <p class="header-subtitle">模型排行榜</p>
         </div>
       </div>
+      <div class="header-actions">
+        <button class="tab-btn active" data-tab="leaderboard" id="tabLeaderboard">排行榜</button>
+        <button class="tab-btn" data-tab="curves" id="tabCurves">曲线对比</button>
+      </div>
       <div class="header-meta" id="topMeta">
         <div class="spinner-wrap">
           <div class="spinner"></div>
@@ -38,6 +42,27 @@
     </div>
   </main>
 
+  <!-- ===== Curve Comparison ===== -->
+  <main class="main" id="curvesMain" style="display:none">
+    <div class="curve-panel">
+      <div class="curve-toolbar">
+        <div class="curve-toolbar-left">
+          <span class="curve-toolbar-label">选择运行：</span>
+          <button class="curve-btn" id="curveSelectAll">全选</button>
+          <button class="curve-btn" id="curveDeselectAll">清除</button>
+        </div>
+      </div>
+      <div class="curve-body">
+        <div class="curve-chart-wrap">
+          <canvas id="curveChart"></canvas>
+        </div>
+        <div class="curve-legend" id="curveLegend">
+          <div class="curve-legend-placeholder">加载数据后可在此选择运行的曲线</div>
+        </div>
+      </div>
+    </div>
+  </main>
+
   <!-- ===== Footer ===== -->
   <footer class="footer">
     <div class="footer-inner">
@@ -47,6 +72,7 @@
     </div>
   </footer>
 
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
