@@ -121,7 +121,7 @@ class OpenAIChatCompletionsConfig:
     model: str
     api_key: str | None = None
     base_url: str = "https://api.openai.com/v1"
-    timeout: float = 60.0
+    timeout: float = 180.0
     temperature: float | None = None
     top_p: float | None = None
     max_tokens: int | None = None
@@ -136,7 +136,7 @@ class OpenAIChatCompletionsConfig:
         api_key: str | None = None,
         base_url: str | None = None,
         env_file: EnvFile | None = ".env",
-        timeout: float = 60.0,
+        timeout: float = 180.0,
         temperature: float | None = None,
         top_p: float | None = None,
         max_tokens: int | None = None,
@@ -202,7 +202,7 @@ class OpenAIChatCompletionsAgent:
         api_key: str | None = None,
         base_url: str | None = None,
         env_file: EnvFile | None = ".env",
-        timeout: float = 60.0,
+        timeout: float = 180.0,
         temperature: float | None = None,
         top_p: float | None = None,
         max_tokens: int | None = None,

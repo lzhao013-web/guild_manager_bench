@@ -40,7 +40,7 @@ def build_system_prompt(
             f"目标：{objective}",
             "",
             "回合流程：可调用查询工具读取信息，也可调用动作工具执行各种操作；保证只有当你觉得本回合要做的事情都做完了，才通过 end_turn 提交讨伐列表并结束回合。",
-            "战斗提示：冒险者讨伐怪物的战斗是完全的1V1自动战斗，无法干预战斗过程，但可以通过调整冒险者的装备、技能来影响战斗结果。",
+            "战斗提示：冒险者讨伐怪物的战斗是完全的1V1自动战斗，无法干预战斗过程，也没有团队协作，但可以通过调整冒险者的装备、技能来影响战斗结果。每位冒险者当回合只能讨伐一个怪物，请谨慎选择。",
             "战斗机制：SPD 决定出手频率，而非仅决定先后手。 例如，SPD 80 vs SPD 20 → 高SPD方每行动约4次，低SPD方才行动1次。普通攻击伤害 = max(1, ATK - DEF)",
             "技能相关：主动技能满足条件时会在角色行动时按优先级触发，会覆盖普通攻击，带有”即时”tag的技能不会覆盖普通攻击；被动技能会在满足条件时持续生效；技能效果可能包括伤害、治疗、状态等，具体信息请参考状态和冒险者信息中的技能描述。",
             "回复机制：每回合战斗结束后全体冒险者回复HP和MP，额外回复等同于其恢复属性（recovery）值的HP，战斗中技能也可提供治疗、百分比治疗、MP恢复和持续回复状态。"
@@ -81,7 +81,7 @@ def _memo_summary(memo_entries: Sequence[str]) -> str:
         if isinstance(entry, str) and entry.strip()
     ]
     if not values:
-        return "备忘录：无。（提示：本回合的思考不会带到下回合，如有跨回合计划请用 write_memo 记录。）"
+        return "备忘录：无。（提示：本回合的思考不会带到下回合，如有跨回合计划请用 write_memo 记录。备忘录只持续1回合。）"
     lines = ["备忘录："]
     lines.extend(f"- {entry}" for entry in values)
     return "\n".join(lines)
@@ -123,7 +123,7 @@ def _state_summary(observation: Mapping[str, Any]) -> str:
             f"{adventurer['name']} "
             f"Lv{adventurer['level']} "
             f"EXP {exp_text} "
-            f"成长 {growth_text} "
+            f"每级属性成长 {growth_text} "
             f"HP {resources['current_hp']}/{stats['hp']} "
             f"MP {resources['current_mp']}/{stats['mp']} "
             f"攻击 {stats['attack']} 防御 {stats['defense']} 速度 {stats['speed']} "
@@ -133,7 +133,7 @@ def _state_summary(observation: Mapping[str, Any]) -> str:
         _append_skill_lines_zh(lines, adventurer.get("skills"))
         level_unlocks = adventurer.get("level_skill_unlocks")
         if level_unlocks:
-            lines.append(f"  等级技能 {_level_skill_unlocks_text(level_unlocks)}")
+            lines.append(f"  升级可学会技能 {_level_skill_unlocks_text(level_unlocks)}")
 
     lines.append("当前怪物：")
     for monster in monsters:
