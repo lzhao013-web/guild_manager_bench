@@ -238,7 +238,7 @@ function renderOverview(obs) {
   $("overview").innerHTML = `
     <div class="overview">
       ${metric("回合", `${obs.turn}/${obs.max_turns}`, "turn")}
-      ${metric("Seed", seedText(obs), "seed")}
+      ${metric("种子", seedText(obs), "seed")}
       ${metric("金币", obs.gold, "gold")}
       ${metric("经验池", obs.experience_pool, "exp")}
       ${metric("队伍", `${obs.party_size ?? obs.adventurers.length}/${obs.party_size_limit ?? obs.adventurers.length}`, "party")}
@@ -261,9 +261,9 @@ function metric(label, value, type) {
 function seedText(obs) {
   const scoringSeed = obs.scoring?.seed;
   if (scoringSeed === undefined || scoringSeed === null) {
-    return obs.seed ?? "n/a";
+    return obs.seed ?? "无";
   }
-  return `${obs.seed ?? "n/a"} / ${scoringSeed}`;
+  return `${obs.seed ?? "无"} / ${scoringSeed}`;
 }
 
 function updateLlmSeedPlaceholders(obs) {
@@ -350,7 +350,7 @@ function renderRecruitment(obs) {
 function candidateStats(stats) {
   return `
     <div class="stat-inline">
-      HP ${stats.hp} · MP ${stats.mp} · 攻击 ${stats.attack} · 防御 ${stats.defense} · 速度 ${stats.speed} · 恢复 ${stats.recovery}
+      HP ${stats.hp} · MP ${stats.mp} · 攻击 ${stats.attack} · 防御 ${stats.defense} · 速度 ${stats.speed} · 回血 ${stats.recovery} · 回魔 ${stats.mp_recovery ?? 0}
     </div>
   `;
 }
@@ -772,7 +772,8 @@ function statGrid(baseStats, effectiveStats) {
       ${statRow("攻击", baseStats.attack, effectiveStats.attack, "atk")}
       ${statRow("防御", baseStats.defense, effectiveStats.defense, "def")}
       ${statRow("速度", baseStats.speed, effectiveStats.speed, "spd")}
-      ${statRow("回复", baseStats.recovery, effectiveStats.recovery, "rec")}
+      ${statRow("回血", baseStats.recovery, effectiveStats.recovery, "rec")}
+      ${statRow("回魔", baseStats.mp_recovery, effectiveStats.mp_recovery, "mrec")}
     </div>
   `;
 }
@@ -886,7 +887,22 @@ function missingText(missing) {
 }
 
 function materialName(key) {
-  return { iron_ore: "铁矿", wood: "木材", leather: "皮革", herb: "草药" }[key] || key;
+  return {
+    iron_ore: "铁矿石",
+    wood: "木材",
+    leather: "皮革",
+    herb: "草药",
+    bone: "骨头",
+    beast_hide: "兽皮",
+    sharp_claw: "利爪",
+    arcane_dust: "奥术之尘",
+    spider_silk: "蛛丝",
+    mithril_shard: "秘银碎片",
+    dragon_scale: "龙鳞",
+    demon_core: "恶魔核心",
+    soul_shard: "灵魂碎片",
+    dragon_blood: "龙血",
+  }[key] || key;
 }
 
 function names(items) {
@@ -1036,6 +1052,7 @@ function statName(key) {
     defense: "防御",
     speed: "速度",
     recovery: "回血",
+    mp_recovery: "回魔",
   }[key] || key;
 }
 

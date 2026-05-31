@@ -47,23 +47,25 @@ function fmtTimestamp(ts) {
   return `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}:${m[6]}`;
 }
 
-function shortHash(hash) {
-  return hash ? String(hash).slice(0, 10) : null;
-}
-
 function shortRunId(value) {
   if (!value) return '';
   const text = String(value);
-  if (text.length <= 28) return text;
-  return `${text.slice(0, 15)}…${text.slice(-10)}`;
+  if (text.length <= 24) return text;
+  return `${text.slice(0, 12)}…${text.slice(-8)}`;
 }
 
-/** Return CSS class for win-rate bar color */
-function winrateClass(rate) {
-  if (rate == null) return '';
-  if (rate >= 0.7) return 'high';
-  if (rate >= 0.4) return 'mid';
-  return 'low';
+function fmtDuration(seconds) {
+  if (seconds == null) return null;
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  const m = Math.floor(seconds / 60);
+  const s = Math.round(seconds % 60);
+  return `${m}m${s}s`;
+}
+
+function fmtTokens(n) {
+  if (n == null) return null;
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
+  return String(n);
 }
 
 const MEDALS = ['🥇', '🥈', '🥉'];
@@ -91,7 +93,6 @@ function renderLeaderboard(data) {
   // Build cards with staggered animation delay
   const cards = data.models.map((m, i) => {
     const html = renderCard(m);
-    // Wrap to inject animation delay
     return html.replace(
       'class="model-card',
       `style="animation-delay:${i * 80}ms" class="model-card`
@@ -102,7 +103,9 @@ function renderLeaderboard(data) {
 
   // Bind expand toggle
   $$('.model-card').forEach((card) => {
-    card.addEventListener('click', () => {
+    card.addEventListener('click', (e) => {
+      // Don't toggle if clicking on a link or button inside
+      if (e.target.closest('a, button')) return;
       card.classList.toggle('expanded');
     });
   });
@@ -117,20 +120,15 @@ function renderCard(m) {
 
   // Primary stat: rank_score
   const rs = m.rank_score;
-  const rankScoreHtml = rs
-    ? `<span class="stat-value rank-val">${esc(fmtRankScore(rs.best))}</span>`
-    : `<span class="stat-value empty-val">—</span>`;
+  const rankScoreVal = rs ? esc(fmtRankScore(rs.best)) : '—';
 
-  // Secondary stat: score
-  const sc = m.score;
-  const scoreHtml = sc
-    ? `<span class="stat-value score-val">${esc(fmtScore(sc.best))}</span>`
-    : `<span class="stat-value empty-val">—</span>`;
+  // Efficiency stats
+  const eff = m.efficiency || {};
+  const hasEff = eff && (eff.input_tokens || eff.output_tokens || eff.duration_seconds || eff.tool_calls);
 
-  // Win rate
-  const wr = m.win_rate;
-  const wrBest = wr ? fmtPct(wr.best) : null;
-  const wrBestPct = wr && wr.best != null ? (wr.best * 100).toFixed(1) : 0;
+  // Game quality stats
+  const gq = m.game_quality || {};
+  const hasGq = gq && (gq.gold_earned || gq.exp_earned || gq.battle_win_rate != null);
 
   // Detail rows
   const details = [];
@@ -139,23 +137,11 @@ function renderCard(m) {
     details.push(detailRow('Rank Score · 均值', fmtRankScore(rs.mean)));
     details.push(detailRow('Rank Score · 中位', fmtRankScore(rs.median)));
   }
-  if (sc) {
-    details.push(detailRow('Arena Score · 最佳', fmtScore(sc.best)));
-    details.push(detailRow('Arena Score · 均值', fmtScore(sc.mean)));
-    details.push(detailRow('Arena Score · 中位', fmtScore(sc.median)));
-  }
-  if (wr) {
-    details.push(detailRow('胜率 · 最佳', fmtPct(wr.best)));
-    details.push(detailRow('胜率 · 均值', fmtPct(wr.mean)));
-  }
   if (m.last_run) {
     details.push(detailRow('最近运行', fmtTimestamp(m.last_run)));
   }
   if (latestRun.preset) {
     details.push(detailRow('Preset', latestRun.preset));
-  }
-  if (latestRun.data_hash) {
-    details.push(detailRow('Data Hash', latestRun.data_hash, { wide: true }));
   }
   if (latestRun.game_seed != null) {
     details.push(detailRow('Game Seed', fmtInt(latestRun.game_seed)));
@@ -163,8 +149,8 @@ function renderCard(m) {
   if (latestRun.scoring_seed != null) {
     details.push(detailRow('Scoring Seed', fmtInt(latestRun.scoring_seed)));
   }
-  if (latestRun.score_waves != null || latestRun.score_wave_size != null) {
-    details.push(detailRow('Arena', `${fmtInt(latestRun.score_waves) || '—'} waves · size ${fmtInt(latestRun.score_wave_size) || '—'}`));
+  if (latestRun.data_hash) {
+    details.push(detailRow('Data Hash', latestRun.data_hash, { wide: true }));
   }
 
   return `
@@ -175,19 +161,14 @@ function renderCard(m) {
           <div class="model-name" title="${esc(m.model)}">${esc(m.model)}</div>
           <div class="model-meta">
             <span>${m.runs} 次运行</span>
-            ${wrBest ? `<span>胜率 ${esc(wrBest)}</span>` : ''}
             ${latestRun.preset ? `<span>${esc(latestRun.preset)}</span>` : ''}
             ${m.last_run ? `<span>${esc(fmtTimestamp(m.last_run))}</span>` : ''}
           </div>
         </div>
         <div class="card-stats">
-          <div class="stat-block">
+          <div class="stat-block primary-stat">
             <div class="stat-label">Rank Score</div>
-            ${rankScoreHtml}
-          </div>
-          <div class="stat-block">
-            <div class="stat-label">Score</div>
-            ${scoreHtml}
+            <div class="stat-value rank-val">${rankScoreVal}</div>
           </div>
         </div>
         <div class="expand-chevron" aria-label="展开详情">
@@ -196,7 +177,13 @@ function renderCard(m) {
           </svg>
         </div>
       </div>
-      ${renderCompactRunSummary(latestRun, wrBest, wrBestPct)}
+
+      ${(hasEff || hasGq) ? `
+      <div class="metrics-row">
+        ${hasEff ? renderEfficiencySection(eff) : ''}
+        ${hasGq ? renderGameQualitySection(gq) : ''}
+      </div>` : ''}
+
       <div class="card-detail">
         <div class="detail-section">
           <div class="detail-title">聚合指标</div>
@@ -207,41 +194,61 @@ function renderCard(m) {
     </div>`;
 }
 
-function renderCompactRunSummary(run, wrBest, wrBestPct) {
-  if (!run || !Object.keys(run).length) return '';
-  const best = run.best_adventurer || {};
-  const bestText = best.name
-    ? `${best.name} · ${fmtScore(best.average_score) || '—'} · ${fmtPct(best.win_rate) || '—'}`
-    : '—';
-  const runId = run.run_id || run.session_id || '';
+function renderEfficiencySection(eff) {
+  const items = [];
 
-  // Build win-rate bar HTML if data available
-  let winrateBarHtml = '';
-  if (wrBest) {
-    const cls = winrateClass(run.win_rate);
-    winrateBarHtml = `<div class="winrate-bar-wrap"><div class="winrate-bar ${cls}" style="width:${wrBestPct}%"></div></div>`;
+  if (eff.input_tokens) {
+    const inTok = eff.input_tokens;
+    items.push(metricChip('📥 Input', fmtTokens(inTok.mean), inTok.total !== inTok.mean ? `总计 ${fmtInt(inTok.total)}` : null));
+  }
+  if (eff.output_tokens) {
+    const outTok = eff.output_tokens;
+    items.push(metricChip('📤 Output', fmtTokens(outTok.mean), outTok.total !== outTok.mean ? `总计 ${fmtInt(outTok.total)}` : null));
+  }
+  if (eff.duration_seconds) {
+    const dur = eff.duration_seconds;
+    items.push(metricChip('⏱ 耗时', fmtDuration(dur.mean), dur.total !== dur.mean ? `总计 ${fmtDuration(dur.total)}` : null));
+  }
+  if (eff.tool_calls) {
+    const tc = eff.tool_calls;
+    items.push(metricChip('🔧 操作', fmtInt(tc.mean), tc.total !== tc.mean ? `总计 ${fmtInt(tc.total)}` : null));
   }
 
+  if (!items.length) return '';
   return `
-    <div class="compact-run">
-      ${compactMetric('Run', shortRunId(runId), { title: runId, wide: true })}
-      ${compactMetric('Preset', run.preset || '—')}
-      ${compactMetric('Party', run.party_size != null || run.party_size_limit != null ? `${run.party_size ?? '—'}/${run.party_size_limit ?? '—'}` : '—')}
-      ${compactMetric('Gold / EXP', `${fmtInt(run.final_gold) || '—'} / ${fmtInt(run.final_experience_pool) || '—'}`)}
-      ${compactMetric('Best', bestText)}
-      ${compactMetric('Seeds', `${run.game_seed ?? '—'} / ${run.scoring_seed ?? '—'}`)}
-      ${winrateBarHtml}
+    <div class="metrics-group">
+      <div class="metrics-group-title">效率</div>
+      <div class="metrics-chips">${items.join('')}</div>
     </div>`;
 }
 
-function compactMetric(label, value, options = {}) {
-  const display = value == null || value === '' ? '—' : String(value);
-  const title = options.title == null ? display : String(options.title);
-  const cls = options.wide ? 'compact-metric wide' : 'compact-metric';
+function renderGameQualitySection(gq) {
+  const items = [];
+
+  if (gq.battle_win_rate != null) {
+    const pct = (gq.battle_win_rate * 100).toFixed(1);
+    items.push(metricChip('⚔ 战斗胜率', `${pct}%`, gq.battles_won != null ? `${fmtInt(gq.battles_won)} / ${fmtInt(gq.battles_total)}` : null));
+  }
+  if (gq.gold_earned) {
+    items.push(metricChip('💰 金币', fmtInt(gq.gold_earned.mean), gq.gold_earned.best !== gq.gold_earned.mean ? `最佳 ${fmtInt(gq.gold_earned.best)}` : null));
+  }
+  if (gq.exp_earned) {
+    items.push(metricChip('✨ 经验', fmtInt(gq.exp_earned.mean), gq.exp_earned.best !== gq.exp_earned.mean ? `最佳 ${fmtInt(gq.exp_earned.best)}` : null));
+  }
+
+  if (!items.length) return '';
   return `
-    <div class="${cls}">
-      <span>${esc(label)}</span>
-      <strong title="${esc(title)}">${esc(display)}</strong>
+    <div class="metrics-group">
+      <div class="metrics-group-title">游戏</div>
+      <div class="metrics-chips">${items.join('')}</div>
+    </div>`;
+}
+
+function metricChip(label, value, subtitle) {
+  return `
+    <div class="metric-chip"${subtitle ? ` title="${esc(subtitle)}"` : ''}>
+      <div class="metric-chip-label">${esc(label)}</div>
+      <div class="metric-chip-value">${esc(value)}</div>
     </div>`;
 }
 
@@ -260,14 +267,19 @@ function renderRunDetails(runs) {
   const items = runs.map((run) => {
     const best = run.best_adventurer || {};
     const bestText = best.name
-      ? `${best.name} · ${fmtScore(best.average_score) || '—'} · ${fmtPct(best.win_rate) || '—'}`
+      ? `${best.name} (${fmtScore(best.average_score) || '—'})`
       : '—';
-    const partyText = run.party_size != null || run.party_size_limit != null
-      ? `${run.party_size ?? '—'}/${run.party_size_limit ?? '—'}`
+
+    // Efficiency
+    const tu = run.token_usage || {};
+    const timing = run.timing || {};
+    const tc = run.tool_calls || {};
+    const ga = run.game_actions || {};
+
+    const partyText = run.party_size != null
+      ? `${run.party_size}/${run.party_size_limit ?? '—'}`
       : '—';
-    const finalTurn = run.final_turn != null || run.max_turns != null
-      ? `${run.final_turn ?? '—'}/${run.max_turns ?? '—'}`
-      : '—';
+
     const seeds = [
       run.game_seed != null ? `game ${fmtInt(run.game_seed)}` : null,
       run.scoring_seed != null ? `score ${fmtInt(run.scoring_seed)}` : null,
@@ -277,21 +289,28 @@ function renderRunDetails(runs) {
       <div class="run-item">
         <div class="run-head">
           <span class="run-time">${esc(fmtTimestamp(run.created_at))}</span>
-          <span class="run-id">${esc(run.run_id || run.session_id || '')}</span>
+          <span class="run-id">${esc(shortRunId(run.run_id || run.session_id || ''))}</span>
         </div>
         <div class="run-metrics">
-          ${runMetric('Rank', fmtRankScore(run.rank_score))}
-          ${runMetric('Score', fmtScore(run.score))}
-          ${runMetric('Win', fmtPct(run.win_rate))}
-          ${runMetric('Turns', `${run.turns ?? '—'} trace · ${finalTurn} obs`)}
-          ${runMetric('Party', partyText)}
-          ${runMetric('Gold', fmtInt(run.final_gold))}
-          ${runMetric('EXP', fmtInt(run.final_experience_pool))}
-          ${runMetric('Best Adventurer', bestText)}
+          ${runMetric('Rank Score', fmtRankScore(run.rank_score))}
+          ${runMetric('Arena Score', fmtScore(run.score))}
+          ${runMetric('Arena 胜率', fmtPct(run.win_rate))}
+          ${runMetric('队伍', partyText)}
+          ${runMetric('回合', `${run.turns ?? '—'}/${run.max_turns ?? '—'}`)}
+          ${runMetric('最强', bestText)}
         </div>
+        ${(tu.input_tokens || timing.total_seconds || tc.total) ? `
+        <div class="run-metrics" style="margin-top:6px">
+          ${tu.input_tokens ? runMetric('Input Tokens', fmtInt(tu.input_tokens)) : ''}
+          ${tu.output_tokens ? runMetric('Output Tokens', fmtInt(tu.output_tokens)) : ''}
+          ${timing.total_seconds ? runMetric('耗时', fmtDuration(timing.total_seconds)) : ''}
+          ${tc.total ? runMetric('操作数', fmtInt(tc.total)) : ''}
+          ${ga.battles_won != null && ga.battles_total ? runMetric('战斗胜率', `${ga.battles_won}/${ga.battles_total}`) : ''}
+          ${ga.total_gold_earned != null ? runMetric('金币', fmtInt(ga.total_gold_earned)) : ''}
+          ${ga.total_experience_earned != null ? runMetric('经验', fmtInt(ga.total_experience_earned)) : ''}
+        </div>` : ''}
         <div class="run-submeta">
           ${run.preset ? `<span>${esc(run.preset)}</span>` : ''}
-          ${run.data_hash ? `<span class="hash-line">${esc(run.data_hash)}</span>` : ''}
           ${seeds ? `<span>${esc(seeds)}</span>` : ''}
           ${run.score_mode ? `<span>${esc(run.score_mode)}</span>` : ''}
           ${run.rank_score_source ? `<span>rank ${esc(run.rank_score_source)}</span>` : ''}

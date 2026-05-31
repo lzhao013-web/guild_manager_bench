@@ -22,14 +22,14 @@ const WRITE_TOOLS = new Set([
 ]);
 
 const TOOL_FOCUS = {
-  recruit_adventurer:    { tab: 'adventurers', entityType: 'adventurer', idArg: 'candidate_id' },
-  dismiss_adventurer:    { tab: 'adventurers', entityType: 'adventurer', idArg: 'adventurer_id' },
+  recruit_adventurer:    { tab: 'adventurers', entityType: null,           idArg: null },          // special: find new adventurer from obs diff
+  dismiss_adventurer:    { tab: 'adventurers', entityType: null,           idArg: null },          // card removed; flash remaining party
   allocate_experience:   { tab: 'adventurers', entityType: 'adventurer', idArg: 'adventurer_id' },
   equip_item:            { tab: 'adventurers', entityType: 'adventurer', idArg: 'adventurer_id' },
   unequip_item:          { tab: 'adventurers', entityType: 'adventurer', idArg: 'adventurer_id' },
-  craft_equipment:       { tab: 'inventory',   entityType: 'equipment',  idArg: 'recipe_id' },
-  purchase_upgrade:      { tab: 'crafting',     entityType: 'upgrade',    idArg: 'upgrade_id' },
-  end_turn:              { tab: 'monsters',     entityType: null,         idArg: null },
+  craft_equipment:       { tab: 'inventory',   entityType: null,           idArg: null },          // special: find new equipment from obs diff
+  purchase_upgrade:      { tab: 'crafting',    entityType: 'upgrade',     idArg: 'upgrade_id' },
+  end_turn:              { tab: 'monsters',    entityType: null,           idArg: null },
 };
 
 // ============================================================================
@@ -344,6 +344,23 @@ function focusOnCurrentStep() {
       const newAdvs = (obs.adventurers||[]).filter(a => !prevIds.has(a.adventurer_id));
       setTimeout(() => newAdvs.forEach(a => flashEntity('adventurer', a.adventurer_id, step)), 300);
     }
+  }
+
+  // For craft, find the newly created equipment from observation_after
+  if (step.name === 'craft_equipment' && step.observation_after) {
+    const obs = step.observation_after;
+    const prevObs = currentTurn().observation_before;
+    if (prevObs) {
+      const prevIds = new Set((prevObs.equipment_inventory||[]).map(e=>e.instance_id));
+      const newItems = (obs.equipment_inventory||[]).filter(e => !prevIds.has(e.instance_id));
+      setTimeout(() => newItems.forEach(e => flashEntity('equipment', e.instance_id, step)), 300);
+    }
+  }
+
+  // For dismiss, flash remaining adventurers to highlight party change
+  if (step.name === 'dismiss_adventurer' && step.observation_after) {
+    const remaining = step.observation_after.adventurers || [];
+    setTimeout(() => remaining.forEach(a => flashEntity('adventurer', a.adventurer_id, step)), 200);
   }
 }
 

@@ -229,7 +229,6 @@ body::before {
     background var(--transition),
     box-shadow var(--transition),
     transform var(--transition);
-  /* entrance animation */
   opacity: 0;
   transform: translateY(12px);
   animation: card-enter 0.45s ease forwards;
@@ -246,9 +245,7 @@ body::before {
   transform: translateY(-1px);
 }
 
-.model-card:active {
-  transform: translateY(0);
-}
+.model-card:active { transform: translateY(0); }
 
 /* Rank accent stripe */
 .model-card::before {
@@ -268,35 +265,23 @@ body::before {
   background: linear-gradient(180deg, var(--gold), #f59e0b);
   opacity: 1;
 }
-
-.model-card.rank-1 {
-  border-color: rgba(251, 191, 36, 0.15);
-}
-
+.model-card.rank-1 { border-color: rgba(251, 191, 36, 0.15); }
 .model-card.rank-1:hover {
   border-color: rgba(251, 191, 36, 0.30);
-  box-shadow:
-    var(--shadow-card-hover),
-    0 0 40px rgba(251, 191, 36, 0.06);
+  box-shadow: var(--shadow-card-hover), 0 0 40px rgba(251, 191, 36, 0.06);
 }
 
 .model-card.rank-2::before {
   background: linear-gradient(180deg, var(--silver), #64748b);
   opacity: 0.8;
 }
-
-.model-card.rank-2:hover {
-  border-color: rgba(148, 163, 184, 0.20);
-}
+.model-card.rank-2:hover { border-color: rgba(148, 163, 184, 0.20); }
 
 .model-card.rank-3::before {
   background: linear-gradient(180deg, var(--bronze), #a0612a);
   opacity: 0.8;
 }
-
-.model-card.rank-3:hover {
-  border-color: rgba(205, 127, 50, 0.20);
-}
+.model-card.rank-3:hover { border-color: rgba(205, 127, 50, 0.20); }
 
 /* ── Card Header ── */
 .card-header {
@@ -377,16 +362,22 @@ body::before {
 .card-stats {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 12px;
   flex-shrink: 0;
 }
 
 .stat-block {
   text-align: right;
-  padding: 6px 14px;
+  padding: 6px 12px;
   background: var(--surface-raised);
   border-radius: var(--radius-sm);
   border: 1px solid var(--line);
+}
+
+.stat-block.primary-stat {
+  padding: 8px 14px;
+  border-color: rgba(245, 158, 11, 0.15);
+  background: linear-gradient(135deg, var(--surface-raised), rgba(245, 158, 11, 0.04));
 }
 
 .stat-label {
@@ -400,7 +391,7 @@ body::before {
 
 .stat-value {
   font-family: "JetBrains Mono", "SF Mono", "Cascadia Code", ui-monospace, monospace;
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 700;
   color: var(--text);
   letter-spacing: -0.03em;
@@ -408,17 +399,7 @@ body::before {
 
 .stat-value.rank-val {
   color: var(--accent);
-}
-
-.stat-value.score-val {
-  font-size: 16px;
-  color: var(--text-secondary);
-}
-
-.stat-value.empty-val {
-  color: var(--muted);
-  font-weight: 400;
-  font-size: 15px;
+  font-size: 20px;
 }
 
 /* ── Expand Chevron ── */
@@ -433,7 +414,6 @@ body::before {
   background: var(--surface-raised);
   border: 1px solid var(--line);
   color: var(--muted);
-  font-size: 14px;
   transition: transform var(--transition-slow), color var(--transition), background var(--transition);
 }
 
@@ -447,71 +427,65 @@ body::before {
   color: var(--accent);
 }
 
-/* ── Compact run summary ── */
-.compact-run {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 8px;
+/* ── Metrics Row (efficiency + game quality) ── */
+.metrics-row {
+  display: flex;
+  gap: 12px;
   margin-top: 16px;
   padding-top: 16px;
   border-top: 1px solid var(--line);
 }
 
-.compact-metric {
+.metrics-group {
+  flex: 1;
   min-width: 0;
-  padding: 8px 10px;
+}
+
+.metrics-group-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.metrics-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.metric-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 10px;
   background: var(--bg-subtle);
   border: 1px solid var(--line);
   border-radius: var(--radius-xs);
-  transition: border-color var(--transition), background var(--transition);
+  min-width: 90px;
+  transition: background var(--transition), border-color var(--transition);
 }
 
-.model-card:hover .compact-metric {
+.model-card:hover .metric-chip {
   background: var(--surface-raised);
 }
 
-.compact-metric span {
-  display: block;
-  margin-bottom: 3px;
+.metric-chip-label {
   font-size: 10px;
-  font-weight: 700;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.compact-metric strong {
-  display: block;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-  font-family: "JetBrains Mono", "SF Mono", "Cascadia Code", ui-monospace, monospace;
-  font-size: 12px;
   font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.metric-chip-value {
+  font-family: "JetBrains Mono", "SF Mono", "Cascadia Code", ui-monospace, monospace;
+  font-size: 13px;
+  font-weight: 700;
   color: var(--text-secondary);
+  letter-spacing: -0.02em;
 }
-
-.compact-metric.wide {
-  grid-column: span 2;
-}
-
-/* ── Win Rate Bar ── */
-.winrate-bar-wrap {
-  margin-top: 3px;
-  height: 4px;
-  background: var(--surface-hover);
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.winrate-bar {
-  height: 100%;
-  border-radius: 2px;
-  transition: width 0.5s ease;
-}
-
-.winrate-bar.high { background: linear-gradient(90deg, #22c55e, #4ade80); }
-.winrate-bar.mid  { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
-.winrate-bar.low  { background: linear-gradient(90deg, #ef4444, #f87171); }
 
 /* ── Detail Panel (expandable) ── */
 .card-detail {
@@ -526,7 +500,7 @@ body::before {
 }
 
 .model-card.expanded .card-detail {
-  max-height: 2000px;
+  max-height: 4000px;
   padding-top: 20px;
   opacity: 1;
 }
@@ -645,8 +619,8 @@ body::before {
 
 .run-metrics {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 6px;
 }
 
 .run-metric {
@@ -693,13 +667,6 @@ body::before {
   border-radius: var(--radius-xs);
 }
 
-.run-submeta .hash-line {
-  flex-basis: 100%;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-  font-family: "JetBrains Mono", "SF Mono", "Cascadia Code", ui-monospace, monospace;
-}
-
 /* ========== Footer ========== */
 .footer {
   flex-shrink: 0;
@@ -723,9 +690,7 @@ body::before {
   flex-wrap: wrap;
 }
 
-.footer-sep {
-  opacity: 0.3;
-}
+.footer-sep { opacity: 0.3; }
 
 /* ========== Responsive ========== */
 @media (max-width: 768px) {
@@ -755,16 +720,22 @@ body::before {
 
   .card-stats {
     width: 100%;
-    justify-content: flex-end;
+    justify-content: flex-start;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .metrics-row {
+    flex-direction: column;
     gap: 10px;
   }
 
-  .compact-run {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  .metrics-chips {
+    gap: 6px;
   }
 
-  .compact-metric.wide {
-    grid-column: span 3;
+  .metric-chip {
+    min-width: 80px;
   }
 
   .run-head {
@@ -782,17 +753,13 @@ body::before {
   .header-title { font-size: 15px; }
   .header-icon { width: 34px; height: 34px; font-size: 16px; }
 
-  .compact-run {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+  .stat-value { font-size: 16px; }
+  .stat-value.rank-val { font-size: 18px; }
 
-  .compact-metric.wide {
-    grid-column: span 2;
-  }
+  .metric-chip { min-width: 70px; padding: 5px 8px; }
+  .metric-chip-value { font-size: 12px; }
 
-  .stat-value { font-size: 17px; }
+  .detail-grid { grid-template-columns: 1fr; }
 
-  .detail-grid {
-    grid-template-columns: 1fr;
-  }
+  .run-metrics { grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); }
 }
