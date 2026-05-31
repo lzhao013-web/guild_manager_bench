@@ -170,6 +170,9 @@ def test_openai_agent_sends_chat_completion_request_and_parses_tool_call() -> No
     )
 
     assert captured["url"] == "https://example.test/v1/chat/completions"
+    assert captured["headers"]["Accept"] == "application/json"
+    assert captured["headers"]["Content-Type"] == "application/json"
+    assert captured["headers"]["User-Agent"] == "guild-manager-bench/0.1"
     assert captured["headers"]["Authorization"] == "Bearer test-key"
     assert captured["body"]["model"] == "test-model"
     assert captured["body"]["tool_choice"] == "auto"

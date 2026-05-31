@@ -207,11 +207,12 @@ class SearchOperator:
                 iid = item["instance_id"]
                 slot = item["slot"]
                 item_stats = item.get("stats", {})
+                # ATK 优先权重——打赢才有收入
                 item_value = (
-                    item_stats.get("attack", 0) * 2.0
-                    + item_stats.get("defense", 0) * 1.5
-                    + item_stats.get("speed", 0) * 1.8
-                    + item_stats.get("hp", 0) * 0.3
+                    item_stats.get("attack", 0) * 3.0
+                    + item_stats.get("speed", 0) * 2.0
+                    + item_stats.get("defense", 0) * 1.0
+                    + item_stats.get("hp", 0) * 0.2
                 )
 
                 for adv in all_advs:
@@ -219,7 +220,10 @@ class SearchOperator:
                     if not shadow.can_equip(aid, iid):
                         continue
                     adv_slots = shadow.equipped.get(aid, {})
+                    # 双手冲突检查
                     if slot in ("main_hand", "off_hand") and "two_hand" in adv_slots:
+                        continue
+                    if slot == "two_hand" and ("main_hand" in adv_slots or "off_hand" in adv_slots):
                         continue
 
                     # 减去被替换物品的属性
@@ -228,10 +232,10 @@ class SearchOperator:
                     if current_iid and current_iid in shadow.inventory:
                         old_stats = shadow.inventory[current_iid].get("stats", {})
                         replacement_cost = (
-                            old_stats.get("attack", 0) * 2.0
-                            + old_stats.get("defense", 0) * 1.5
-                            + old_stats.get("speed", 0) * 1.8
-                            + old_stats.get("hp", 0) * 0.3
+                            old_stats.get("attack", 0) * 3.0
+                            + old_stats.get("speed", 0) * 2.0
+                            + old_stats.get("defense", 0) * 1.0
+                            + old_stats.get("hp", 0) * 0.2
                         )
 
                     score = item_value - replacement_cost
@@ -290,10 +294,10 @@ class SearchOperator:
                 proximity = 1.0 - (remaining / max(required, 1))
                 growth = adv.get("stat_growth_per_level", {})
                 growth_value = (
-                    growth.get("attack", 0) * 2.0
-                    + growth.get("defense", 0) * 1.5
-                    + growth.get("speed", 0) * 1.8
-                    + growth.get("hp", 0) * 0.3
+                    growth.get("attack", 0) * 3.0
+                    + growth.get("speed", 0) * 2.0
+                    + growth.get("defense", 0) * 1.0
+                    + growth.get("hp", 0) * 0.2
                 )
                 score = proximity * 50.0 + growth_value
 
@@ -323,14 +327,11 @@ class SearchOperator:
     ) -> list[dict[str, str]]:
         """使用启发式评分 + 最优分配算法选择狩猎配对。"""
 
+        # 只使用 shadow 状态的冒险者（它们与 beam 选择的动作一致）
         adventurers = [
-            a for a in obs["adventurers"]
-            if a["resources"]["current_hp"] > 0
+            adv for adv in shadow.adventurers.values()
+            if adv.get("resources", {}).get("current_hp", 0) > 0
         ]
-        obs_ids = {a["adventurer_id"] for a in adventurers}
-        for aid, adv in shadow.adventurers.items():
-            if aid not in obs_ids and adv.get("resources", {}).get("current_hp", 0) > 0:
-                adventurers.append(adv)
 
         monsters = list(obs["monsters"])
         if not adventurers or not monsters:
@@ -339,7 +340,7 @@ class SearchOperator:
         matrix = [
             [
                 estimate_matchup_score(
-                    adv["effective_stats"],
+                    {**adv["effective_stats"], "hp": adv["resources"]["current_hp"]},
                     mon["stats"],
                 )
                 for mon in monsters
@@ -386,25 +387,35 @@ class SearchOperator:
                         healers += 1
                         break
 
-        # 属性权重对齐 GreedyOperator 已验证的评分
+        # ATK 权重最高——打猎收入是经济命脉；HP 对评分贡献低
         stat_power = (
-            total_attack * 2.0
-            + total_speed * 1.8
-            + total_defense * 1.5
+            total_attack * 3.0
+            + total_speed * 2.0
+            + total_defense * 0.8
             + total_recovery * 0.5
             + total_mp_recovery * 0.5
-            + total_hp * 0.3
+            + total_hp * 0.1
         )
 
         # 队伍人数奖励
-        party_bonus = 10.0 * shadow.party_size
-        # 人口上限价值：按已有人均战力估算，确保无属性的扩容升级也能在 beam 中存活
+        party_bonus = 15.0 * shadow.party_size
+
+        # 人口上限价值：未解锁的空位按人均战力估价
         avg_member_power = stat_power / max(shadow.party_size, 1)
-        capacity_per_slot = max(avg_member_power * 0.8, 80.0)
+        capacity_per_slot = max(avg_member_power * 1.0, 100.0)
         capacity_bonus = capacity_per_slot * shadow.party_size_limit
 
-        # 剩余资源的轻微正价值
-        resource_value = 0.1 * shadow.gold + 0.2 * shadow.experience_pool
+        # 金币价值：有扩编未买时，金币越多越值钱（渐进式，不阻断早期打造）
+        gold_weight = 0.1
+        expansion_cost = _next_expansion_cost(obs, shadow)
+        if expansion_cost > 0 and shadow.party_size >= 3:
+            # 金币超过扩编成本的 30% 后开始加速增值
+            threshold = expansion_cost * 0.3
+            if shadow.gold > threshold:
+                excess_ratio = (shadow.gold - threshold) / (expansion_cost - threshold)
+                gold_weight = 0.1 + 1.0 * min(excess_ratio, 1.0)
+
+        resource_value = gold_weight * shadow.gold + 0.2 * shadow.experience_pool
 
         # 治疗者奖励
         healer_bonus = 8.0 * healers
@@ -414,10 +425,29 @@ class SearchOperator:
         for item in shadow.unequipped_items():
             item_stats = item.get("stats", {})
             item_potential += (
-                item_stats.get("attack", 0) * 1.0
-                + item_stats.get("defense", 0) * 0.75
-                + item_stats.get("speed", 0) * 0.9
-                + item_stats.get("hp", 0) * 0.15
+                item_stats.get("attack", 0) * 1.5
+                + item_stats.get("defense", 0) * 0.5
+                + item_stats.get("speed", 0) * 1.0
+                + item_stats.get("hp", 0) * 0.1
             )
 
         return stat_power + party_bonus + capacity_bonus + healer_bonus + resource_value + item_potential
+
+
+def _next_expansion_cost(
+    obs: dict[str, Any],
+    shadow: ShadowState,
+) -> int:
+    """返回下一个扩编升级的金币成本；若已满编返回 0。"""
+
+    for upgrade in obs.get("global_upgrades", []):
+        if upgrade.get("party_size_bonus", 0) <= 0:
+            continue
+        if upgrade["upgrade_id"] in shadow.unlocked_upgrade_ids:
+            continue
+        if upgrade["upgrade_id"] == "roster_expansion_2":
+            # roster_expansion_1 是前置条件，如果还没买就先看 1
+            if "roster_expansion_1" not in shadow.unlocked_upgrade_ids:
+                continue
+        return upgrade["gold_cost"]
+    return 0

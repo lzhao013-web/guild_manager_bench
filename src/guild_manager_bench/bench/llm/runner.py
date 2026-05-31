@@ -230,6 +230,7 @@ def run_llm_game(
                         traces=traces,
                         final_observation=observation,
                         score=score,
+                        stats=_compute_run_stats(run),
                     )
                     _emit(emit, "run_completed", run=_run_summary(run))
                     return run
@@ -273,6 +274,7 @@ def run_llm_game(
                         traces=traces,
                         final_observation=final_observation,
                         failure_reason=turn_trace.failure_reason,
+                        stats=_compute_run_stats(run),
                     )
                     _emit(emit, "run_failed", run=_run_summary(run))
                     return run
@@ -1805,6 +1807,7 @@ def _write_replay(
     final_observation: Mapping[str, Any] | None = None,
     failure_reason: str | None = None,
     score: Mapping[str, Any] | None = None,
+    stats: Mapping[str, Any] | None = None,
 ) -> None:
     if archive_writer is None:
         return
@@ -1817,6 +1820,7 @@ def _write_replay(
         final_observation=final_observation,
         failure_reason=failure_reason,
         score=score,
+        stats=stats,
     )
 
 

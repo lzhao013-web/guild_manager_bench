@@ -102,6 +102,7 @@ class LlmRunArchiveWriter:
         final_observation: Mapping[str, Any] | None = None,
         failure_reason: str | None = None,
         score: Mapping[str, Any] | None = None,
+        stats: Mapping[str, Any] | None = None,
     ) -> None:
         """原子更新 replay.json。"""
 
@@ -120,6 +121,7 @@ class LlmRunArchiveWriter:
             final_observation=final_observation,
             failure_reason=failure_reason,
             score=score,
+            stats=stats,
         )
         _write_json_atomic(self.replay_path, replay)
 
@@ -211,6 +213,7 @@ def build_llm_run_replay(
     final_observation: Mapping[str, Any] | None = None,
     failure_reason: str | None = None,
     score: Mapping[str, Any] | None = None,
+    stats: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """生成足以复原 LLM 操作流程的精简 replay。"""
 
@@ -233,6 +236,7 @@ def build_llm_run_replay(
             else dict(final_observation)
         ),
         "score": None if score is None else dict(score),
+        "stats": None if stats is None else dict(stats),
     }
 
 

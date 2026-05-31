@@ -830,6 +830,8 @@ function renderOverview() {
     }
     if (stats.tool_calls && stats.tool_calls.total > 0) parts.push(`🔧 ${stats.tool_calls.total} (✓${stats.tool_calls.successful} ✗${stats.tool_calls.failed})`);
     if (stats.game_actions && stats.game_actions.battles_total > 0) parts.push(`⚔ ${stats.game_actions.battles_won}/${stats.game_actions.battles_total}胜`);
+    if (stats.game_actions && stats.game_actions.total_gold_earned > 0) parts.push(`💰 ${stats.game_actions.total_gold_earned.toLocaleString()}`);
+    if (stats.game_actions && stats.game_actions.total_experience_earned > 0) parts.push(`⭐ ${stats.game_actions.total_experience_earned.toLocaleString()}`);
     DOM.ovStats.textContent = parts.length ? parts.join(' · ') : '—';
   } else {
     DOM.ovStats.textContent = '—';
@@ -1030,8 +1032,16 @@ function computeReplayStats(replay) {
   let totalMs = 0, inputTokens = 0, outputTokens = 0, cacheRead = 0, cacheWrite = 0;
   let totalCalls = 0, successfulCalls = 0, failedCalls = 0;
   let battlesTotal = 0, battlesWon = 0, battlesLost = 0;
+  let goldEarned = 0, expEarned = 0;
   let crafted = 0, upgrades = 0, allocated = 0, recruited = 0, dismissed = 0, equipped = 0, unequipped = 0;
   let modelSteps = 0, turnsCompleted = 0, turnsFailed = 0;
+
+  // Prefer pre-computed stats from replay.json
+  const savedGA = replay.stats && replay.stats.game_actions;
+  if (savedGA) {
+    goldEarned = savedGA.total_gold_earned || 0;
+    expEarned = savedGA.total_experience_earned || 0;
+  }
 
   for (const turn of replay.turns) {
     if (!turn || typeof turn !== "object") continue;
@@ -1077,6 +1087,21 @@ function computeReplayStats(replay) {
           else if (name === "end_turn") {
             const bm = content.match(/(\d+)\s*场战斗[,，]\s*(\d+)\s*胜\s*(\d+)\s*负/);
             if (bm) { battlesTotal += parseInt(bm[1], 10); battlesWon += parseInt(bm[2], 10); battlesLost += parseInt(bm[3], 10); }
+            // Fallback: extract gold/experience from step text when replay.stats is absent
+            if (!savedGA) {
+              const goldRe = /[=＝](\d+)/g;
+              let m;
+              const goldSegments = content.split("金币");
+              for (let i = 1; i < goldSegments.length; i++) {
+                m = goldSegments[i].match(/^[=＝](\d+)/);
+                if (m) goldEarned += parseInt(m[1], 10);
+              }
+              const expSegments = content.split("经验");
+              for (let i = 1; i < expSegments.length; i++) {
+                m = expSegments[i].match(/^[=＝](\d+)/);
+                if (m) expEarned += parseInt(m[1], 10);
+              }
+            }
           }
         } else {
           failedCalls++;
@@ -1095,7 +1120,7 @@ function computeReplayStats(replay) {
     token_usage: tokenUsage,
     game_actions: {
       battles_total: battlesTotal, battles_won: battlesWon, battles_lost: battlesLost,
-      total_gold_earned: 0, total_experience_earned: 0,
+      total_gold_earned: goldEarned, total_experience_earned: expEarned,
       total_equipment_crafted: crafted, total_upgrades_purchased: upgrades,
       total_recruits: recruited, total_dismissals: dismissed,
       total_experience_allocated: allocated, total_equips: equipped, total_unequips: unequipped,

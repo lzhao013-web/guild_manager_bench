@@ -2110,6 +2110,13 @@ function computeReplayStats(replay) {
   let crafted = 0, upgrades = 0, allocated = 0, recruited = 0, dismissed = 0, equipped = 0, unequipped = 0;
   let modelSteps = 0, turnsCompleted = 0, turnsFailed = 0;
 
+  // Prefer pre-computed stats from replay.json
+  const savedGA = replay.stats && replay.stats.game_actions;
+  if (savedGA) {
+    goldEarned = savedGA.total_gold_earned || 0;
+    expEarned = savedGA.total_experience_earned || 0;
+  }
+
   for (const turn of replay.turns) {
     if (!turn || typeof turn !== "object") continue;
     // Turn status
@@ -2166,6 +2173,20 @@ function computeReplayStats(replay) {
               battlesTotal += total;
               battlesWon += won;
               battlesLost += lost;
+            }
+            // Fallback: extract gold/experience from step text when replay.stats is absent
+            if (!savedGA) {
+              let m;
+              const goldSegments = content.split("金币");
+              for (let i = 1; i < goldSegments.length; i++) {
+                m = goldSegments[i].match(/^[=＝](\d+)/);
+                if (m) goldEarned += parseInt(m[1], 10);
+              }
+              const expSegments = content.split("经验");
+              for (let i = 1; i < expSegments.length; i++) {
+                m = expSegments[i].match(/^[=＝](\d+)/);
+                if (m) expEarned += parseInt(m[1], 10);
+              }
             }
           }
         } else {

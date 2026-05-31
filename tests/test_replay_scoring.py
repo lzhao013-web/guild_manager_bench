@@ -55,6 +55,10 @@ def test_leaderboard_uses_final_observation_rank_fallback(tmp_path: Path) -> Non
     model = data["models"][0]
     assert model["model"] == "test-model"
     assert model["rank_score"]["best"] == expected["score"]["rank_score"]
+    assert model["run_details"][0]["run_id"] == "replay"
+    assert model["run_details"][0]["score"] == 12.34
+    assert model["run_details"][0]["rank_score"] == expected["score"]["rank_score"]
+    assert model["run_details"][0]["preset"] == "default"
 
 
 def _legacy_replay(definition):
