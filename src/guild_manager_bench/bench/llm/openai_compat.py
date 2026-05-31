@@ -126,6 +126,7 @@ class OpenAIChatCompletionsConfig:
     top_p: float | None = None
     max_tokens: int | None = None
     tool_choice: str | Mapping[str, Any] | None = "auto"
+    reasoning_effort: str | None = None
     extra_body: Mapping[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -141,6 +142,7 @@ class OpenAIChatCompletionsConfig:
         top_p: float | None = None,
         max_tokens: int | None = None,
         tool_choice: str | Mapping[str, Any] | None = "auto",
+        reasoning_effort: str | None = None,
         extra_body: Mapping[str, Any] | None = None,
     ) -> OpenAIChatCompletionsConfig:
         """从显式参数、进程环境变量或 dotenv 文件创建配置。"""
@@ -176,6 +178,11 @@ class OpenAIChatCompletionsConfig:
             top_p=top_p,
             max_tokens=max_tokens,
             tool_choice=tool_choice,
+            reasoning_effort=_first_config_value(
+                reasoning_effort,
+                dotenv_values,
+                "OPENAI_REASONING_EFFORT",
+            ),
             extra_body={} if extra_body is None else dict(extra_body),
         )
 
@@ -207,6 +214,7 @@ class OpenAIChatCompletionsAgent:
         top_p: float | None = None,
         max_tokens: int | None = None,
         tool_choice: str | Mapping[str, Any] | None = "auto",
+        reasoning_effort: str | None = None,
         extra_body: Mapping[str, Any] | None = None,
     ) -> OpenAIChatCompletionsAgent:
         """从 OPENAI_* 或 OPENAI_COMPAT_* 配置创建适配器。"""
@@ -222,6 +230,7 @@ class OpenAIChatCompletionsAgent:
                 top_p=top_p,
                 max_tokens=max_tokens,
                 tool_choice=tool_choice,
+                reasoning_effort=reasoning_effort,
                 extra_body=extra_body,
             )
         )
@@ -380,6 +389,8 @@ class OpenAIChatCompletionsAgent:
             body["top_p"] = self.config.top_p
         if self.config.max_tokens is not None:
             body["max_tokens"] = self.config.max_tokens
+        if self.config.reasoning_effort is not None:
+            body["reasoning_effort"] = self.config.reasoning_effort
         body.update(dict(self.config.extra_body))
         return body
 

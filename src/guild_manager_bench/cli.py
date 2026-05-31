@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from typing import Mapping
 
 
 def main() -> None:
@@ -40,7 +41,9 @@ def main() -> None:
     run_parser.add_argument("--game-seed", type=int, default=None, help="游戏随机种子")
     run_parser.add_argument("--scoring-seed", type=int, default=None, help="评分随机种子")
     run_parser.add_argument("--archive-dir", default="runs/llm", help="存档目录 (默认: runs/llm，设为 none 禁用存档)")
+    run_parser.add_argument("--resume", default=None, help="从指定存档目录续跑 (传入 archive run 目录路径)")
     run_parser.add_argument("--max-tool-calls-per-turn", type=int, default=20, help="每回合最大工具调用次数 (默认: 20)")
+    run_parser.add_argument("--reasoning-effort", default=None, choices=["none", "minimal", "low", "medium", "high", "xhigh"], help="推理强度 (默认不传)")
     run_parser.add_argument("--no-stream", action="store_true", help="禁用流式输出")
     run_parser.add_argument("--quiet", "-q", action="store_true", help="静默模式，只输出最终结果")
 
@@ -84,6 +87,7 @@ def _run(args: argparse.Namespace) -> None:
         model=args.model,
         api_key=args.api_key,
         base_url=args.base_url,
+        reasoning_effort=args.reasoning_effort,
     )
 
     # 禁用流式：移除 respond_stream 使 runner 回退到 respond
@@ -108,41 +112,75 @@ def _run(args: argparse.Namespace) -> None:
         if not quiet:
             print(*parts, flush=True)
 
+    def _short_args(arguments: dict | None, max_len: int = 60) -> str:
+        """将工具参数格式化为短摘要。"""
+        if not arguments:
+            return ""
+        # 隐藏 session_id，它每次都一样
+        filtered = {k: v for k, v in arguments.items() if k != "session_id"}
+        if not filtered:
+            return ""
+        parts = []
+        for k, v in filtered.items():
+            s = str(v)
+            if len(s) > 20:
+                s = s[:18] + "…"
+            parts.append(f"{k}={s}")
+        text = ", ".join(parts)
+        if len(text) > max_len:
+            text = text[: max_len - 1] + "…"
+        return f"  ({text})"
+
     def on_event(event: dict) -> None:
         t = event["type"]
 
         if t == "run_started":
-            _print(f"Run started  session={event['session_id']}")
+            _print(f"🚀 Run started  session={event['session_id']}")
 
         elif t == "turn_started":
-            _print(f"Turn {event['turn']} started")
+            _print(f"\n── Turn {event['turn']} ──")
 
         elif t == "tool_call":
-            _print(f"  → {event['name']}")
+            args = event.get("arguments")
+            _print(f"  → {event['name']}{_short_args(args)}")
 
         elif t == "tool_result":
             result = event.get("result", {})
             ok = result.get("ok")
-            if ok is True:
-                _print(f"    ✓")
-            elif event["name"] != "end_turn":
-                err = result.get("error", "unknown error")
+            name = event.get("name", "")
+            # ok=True → 写操作成功；ok=None → 只读查询（get_party 等，无 ok 字段）
+            # ok=False → 操作失败
+            if ok is not False:
+                summary = _tool_success_summary(name, result)
+                _print(f"    ✓ {summary}" if summary else "    ✓")
+            elif name != "end_turn":
+                err = result.get("error") or "unknown error"
                 _print(f"    ✗ {err}")
 
         elif t == "turn_completed":
             trace = event.get("trace", {})
             turn = trace.get("turn", "?")
-            tool_count = len(trace.get("tool_calls", []))
-            _print(f"Turn {turn} completed  ({tool_count} tool calls)")
+            tool_calls = trace.get("tool_calls", [])
+            tool_count = len(tool_calls)
+            fail_count = sum(1 for c in tool_calls if c.get("result", {}).get("ok") is False)
+            ok_count = tool_count - fail_count
+            detail = f"{ok_count} ok"
+            if fail_count:
+                detail += f", {fail_count} failed"
+            _print(f"  ✅ Turn {turn} completed  ({detail})")
 
         elif t == "turn_failed":
             trace = event.get("trace", {})
             turn = trace.get("turn", "?")
             reason = trace.get("failure_reason", "unknown")
-            _print(f"Turn {turn} failed  reason={reason}")
+            tool_calls = trace.get("tool_calls", [])
+            _print(f"  ❌ Turn {turn} failed  reason={reason}  ({len(tool_calls)} tool calls)")
 
         elif t == "retry":
-            _print(f"  ↻ retry  turn={event.get('turn')}  reason={event.get('reason')}")
+            reason = event.get("reason", "")
+            msg = event.get("message", "")
+            short = msg[:80] + "…" if len(msg) > 80 else msg
+            _print(f"  ↻ retry  reason={reason}  {short}")
 
         elif t == "run_completed":
             _print()
@@ -151,12 +189,14 @@ def _run(args: argparse.Namespace) -> None:
             _print()
 
     # ── 执行 ──
+    resume_dir = args.resume
     try:
         run = run_llm_game(
             agent,
             data_dir=data_preset.data_dir,
             config=config,
             event_sink=on_event,
+            resume_archive_dir=resume_dir,
             data_source=data_preset.to_dict(),
         )
     except KeyboardInterrupt:
@@ -201,6 +241,83 @@ def _run(args: argparse.Namespace) -> None:
     if not quiet:
         print(f"\n(stats json)")
         print(json.dumps(stats, indent=2, ensure_ascii=False))
+
+
+def _tool_success_summary(name: str, result: dict) -> str:
+    """从成功的工具结果中提取一句话摘要，空字符串表示无摘要。"""
+    if name == "start_session":
+        sid = result.get("session_id", "")
+        return f"session={sid}" if sid else ""
+    if name == "end_turn":
+        turn_result = result.get("turn_result")
+        if isinstance(turn_result, Mapping):
+            parts = []
+            battles = turn_result.get("battles") or []
+            if battles:
+                won = sum(1 for b in battles if b.get("won"))
+                parts.append(f"{won}/{len(battles)} battles won")
+            crafted = turn_result.get("crafted_equipment_ids") or []
+            if crafted:
+                parts.append(f"{len(crafted)} crafted")
+            purchased = turn_result.get("purchased_upgrade_ids") or []
+            if purchased:
+                parts.append(f"{len(purchased)} upgrades")
+            recruited = turn_result.get("recruited_adventurer_ids") or []
+            if recruited:
+                parts.append(f"{len(recruited)} recruited")
+            return ", ".join(parts) if parts else "turn ended"
+        return "turn ended"
+    if name == "craft_equipment":
+        event = result.get("event")
+        if isinstance(event, Mapping):
+            return event.get("summary", "")
+        return ""
+    if name == "purchase_upgrade":
+        event = result.get("event")
+        if isinstance(event, Mapping):
+            return event.get("summary", "")
+        return ""
+    if name == "allocate_experience":
+        event = result.get("event")
+        if isinstance(event, Mapping):
+            return event.get("summary", "")
+        return ""
+    if name == "recruit_adventurer":
+        adv = result.get("recruited_adventurer")
+        if isinstance(adv, Mapping):
+            adv_name = adv.get("name", "")
+            return f"recruited {adv_name}" if adv_name else "recruited"
+        return ""
+    if name == "dismiss_adventurer":
+        event = result.get("event")
+        if isinstance(event, Mapping):
+            return event.get("summary", "")
+        return ""
+    if name == "equip_item":
+        event = result.get("event")
+        if isinstance(event, Mapping):
+            return event.get("summary", "")
+        return ""
+    if name == "unequip_item":
+        event = result.get("event")
+        if isinstance(event, Mapping):
+            return event.get("summary", "")
+        return ""
+    if name == "write_memo":
+        memo = result.get("memo")
+        if isinstance(memo, Mapping):
+            return f"memo saved ({memo.get('count', '?')} total)"
+        return ""
+    if name == "preview_battle":
+        preview = result.get("preview")
+        if isinstance(preview, Mapping):
+            verdict = preview.get("verdict", "")
+            return f"preview: {verdict}" if verdict else ""
+        return ""
+    # get_party, get_monsters, get_crafting, get_inventory, get_upgrades,
+    # get_recruitment, get_events 都是只读查询，不需要摘要
+    return ""
+
 
 def _serve(data_dir: str, preset: str | None, host: str, port: int) -> None:
     """启动可视化服务。"""
