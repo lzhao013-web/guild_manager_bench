@@ -9,8 +9,7 @@ from guild_manager_bench.bench.llm.refs import (
 from guild_manager_bench.game.state import MATERIAL_NAMES
 
 DEFAULT_OBJECTIVE = (
-    "最大化终局 Arena 评分（0-100 分）。\n"
-    "- 评分基于队伍在游戏结束后，模拟 1000 波怪物战斗中的整体表现，队伍越强评分越高。\n"
+    "最大程度地获取资源、加强冒险者，以使你的队伍的每个队员在回合限制达到上限时，获得最高的终局战力。每个队员的终局战力评分之和，就是你的最终得分。。"
 )
 
 
