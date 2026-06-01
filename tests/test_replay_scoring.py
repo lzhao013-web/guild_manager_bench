@@ -46,6 +46,41 @@ def test_leaderboard_uses_final_observation_rank_fallback(tmp_path: Path) -> Non
     definition = _small_scoring_definition()
     replay = _legacy_replay(definition)
     replay["agent"] = {"config": {"model": "test-model"}}
+    replay["stats"] = {
+        "tool_calls": {
+            "total": 3,
+            "successful": 2,
+            "failed": 1,
+            "by_name": {"end_turn": 1, "get_party": 2},
+            "by_name_detail": {
+                "end_turn": {"total": 1, "successful": 1, "failed": 0},
+                "get_party": {"total": 2, "successful": 1, "failed": 1},
+            },
+        },
+        "game_actions": {
+            "battles_total": 1,
+            "battles_won": 1,
+            "battles_lost": 0,
+            "total_gold_earned": 12,
+            "total_experience_earned": 34,
+            "economy_curve": [
+                {
+                    "turn": 1,
+                    "gold_earned": 12,
+                    "experience_earned": 34,
+                    "cumulative_gold_earned": 12,
+                    "cumulative_experience_earned": 34,
+                },
+            ],
+            "strongest_defeated_enemy": {
+                "turn": 1,
+                "monster_id": "m1",
+                "name": "测试怪物",
+                "power": 123,
+                "stats": {"hp": 50, "attack": 5},
+            },
+        },
+    }
     expected = with_rank_score_from_final_observation(replay, strict=True)
     replay_path = tmp_path / "replay.json"
     replay_path.write_text(json.dumps(replay), encoding="utf-8")
@@ -62,6 +97,9 @@ def test_leaderboard_uses_final_observation_rank_fallback(tmp_path: Path) -> Non
     assert model["run_details"][0]["rank_score"] == expected["score"]["rank_score"]
     assert model["run_details"][0]["rank_score_per_adventurer"]
     assert model["run_details"][0]["preset"] == "default"
+    assert model["run_details"][0]["tool_calls"]["by_name_detail"]["get_party"]["failed"] == 1
+    assert model["run_details"][0]["game_actions"]["economy_curve"][0]["cumulative_gold_earned"] == 12
+    assert model["run_details"][0]["game_actions"]["strongest_defeated_enemy"]["name"] == "测试怪物"
 
 
 def _legacy_replay(definition):

@@ -34,7 +34,7 @@ from guild_manager_bench.bench.replay_scoring import (
 )
 
 # Incremental build cache version — bump when _extract_run_info schema changes.
-_CACHE_VERSION = 4
+_CACHE_VERSION = 5
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -101,6 +101,11 @@ def _extract_run_info(replay: dict, *, source_path: Path | None = None) -> dict 
     fallback_timing = _aggregate_turn_timing(turns_list) if not stats.get("timing") else None
     fallback_tokens = _aggregate_turn_tokens(turns_list) if not stats.get("token_usage") else None
 
+    tool_calls = _merge_tool_calls(
+        _extract_tool_calls(stats),
+        _count_turn_tool_calls(turns_list),
+    )
+
     return {
         "run_id": source_path.stem if source_path is not None else replay.get("session_id", ""),
         "session_id": replay.get("session_id"),
@@ -132,7 +137,7 @@ def _extract_run_info(replay: dict, *, source_path: Path | None = None) -> dict 
         "rank_score_curve": rank_score_curve or None,
         "token_usage": _extract_token_usage(stats) or fallback_tokens,
         "timing": _extract_timing(stats) or fallback_timing,
-        "tool_calls": _extract_tool_calls(stats) or _count_turn_tool_calls(turns_list),
+        "tool_calls": tool_calls,
         "game_actions": _compute_game_actions(turns_list, final_observation, stats),
     }
 
@@ -141,7 +146,7 @@ def _extract_token_usage(stats: dict) -> dict | None:
     tu = stats.get("token_usage")
     if not isinstance(tu, dict):
         return None
-    result: dict[str, int] = {}
+    result: dict[str, Any] = {}
     for key in ("input_tokens", "output_tokens"):
         val = tu.get(key)
         if isinstance(val, int):
@@ -172,8 +177,36 @@ def _extract_tool_calls(stats: dict) -> dict | None:
         return None
     total = tc.get("total")
     if isinstance(total, int):
-        return {"total": total, "successful": tc.get("successful", 0), "failed": tc.get("failed", 0)}
+        result = {
+            "total": total,
+            "successful": tc.get("successful", 0),
+            "failed": tc.get("failed", 0),
+        }
+        by_name = _int_dict(tc.get("by_name"))
+        if by_name:
+            result["by_name"] = by_name
+        by_name_detail = _tool_call_detail_dict(tc.get("by_name_detail"))
+        if by_name_detail:
+            result["by_name_detail"] = by_name_detail
+        return result
     return None
+
+
+def _merge_tool_calls(primary: dict | None, fallback: dict | None) -> dict | None:
+    if primary is None:
+        return fallback
+    if fallback is None:
+        return primary
+    result = dict(primary)
+    if result.get("total") == fallback.get("total"):
+        for key in ("successful", "failed"):
+            val = fallback.get(key)
+            if isinstance(val, int):
+                result[key] = val
+    for key in ("by_name", "by_name_detail"):
+        if key not in result and fallback.get(key):
+            result[key] = fallback[key]
+    return result
 
 
 def _extract_game_actions(stats: dict) -> dict | None:
@@ -189,10 +222,52 @@ def _extract_game_actions(stats: dict) -> dict | None:
         "total_equipment_crafted": ga.get("total_equipment_crafted"),
         "total_upgrades_purchased": ga.get("total_upgrades_purchased"),
         "total_recruits": ga.get("total_recruits"),
+        "total_dismissals": ga.get("total_dismissals"),
+        "total_experience_allocated": ga.get("total_experience_allocated"),
+        "total_equips": ga.get("total_equips"),
+        "total_unequips": ga.get("total_unequips"),
     }
-    if not any(isinstance(v, int) for v in fields.values()):
+    economy_curve = _sanitize_economy_curve(ga.get("economy_curve"))
+    strongest = _sanitize_strongest_enemy(ga.get("strongest_defeated_enemy"))
+    if (
+        not any(isinstance(v, int) for v in fields.values())
+        and not economy_curve
+        and not strongest
+    ):
         return None
-    return {k: v for k, v in fields.items() if isinstance(v, int)}
+    result: dict[str, Any] = {k: v for k, v in fields.items() if isinstance(v, int)}
+    if economy_curve:
+        result["economy_curve"] = economy_curve
+    if strongest:
+        result["strongest_defeated_enemy"] = strongest
+    return result
+
+
+def _int_dict(value: Any) -> dict[str, int]:
+    if not isinstance(value, dict):
+        return {}
+    return {
+        str(key): val
+        for key, val in value.items()
+        if isinstance(val, int)
+    }
+
+
+def _tool_call_detail_dict(value: Any) -> dict[str, dict[str, int]]:
+    if not isinstance(value, dict):
+        return {}
+    result: dict[str, dict[str, int]] = {}
+    for name, counts in value.items():
+        if not isinstance(counts, dict):
+            continue
+        detail = {
+            key: val
+            for key, val in counts.items()
+            if key in {"total", "successful", "failed"} and isinstance(val, int)
+        }
+        if detail:
+            result[str(name)] = detail
+    return result
 
 
 def _compute_game_actions(
@@ -268,12 +343,418 @@ def _compute_game_actions(
             "total_upgrades_purchased",
             "total_recruits",
             "total_dismissals",
+            "total_experience_allocated",
+            "total_equips",
+            "total_unequips",
         ):
             val = stats_result.get(key)
             if isinstance(val, int):
                 result[key] = val
 
+    economy_curve = (
+        stats_result.get("economy_curve")
+        if isinstance(stats_result, dict)
+        else None
+    )
+    if not economy_curve:
+        economy_curve = _compute_economy_curve_from_turns(turns_list)
+    if economy_curve:
+        result["economy_curve"] = economy_curve
+
+    strongest = (
+        stats_result.get("strongest_defeated_enemy")
+        if isinstance(stats_result, dict)
+        else None
+    )
+    if not strongest:
+        strongest = _compute_strongest_defeated_enemy(turns_list)
+    if strongest:
+        result["strongest_defeated_enemy"] = strongest
+
     return result if result else None
+
+
+def _sanitize_economy_curve(value: Any) -> list[dict[str, int]] | None:
+    if not isinstance(value, list):
+        return None
+    result: list[dict[str, int]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        turn = item.get("turn")
+        if not isinstance(turn, int):
+            continue
+        point: dict[str, int] = {"turn": turn}
+        for key in (
+            "gold_earned",
+            "experience_earned",
+            "cumulative_gold_earned",
+            "cumulative_experience_earned",
+        ):
+            val = item.get(key)
+            if isinstance(val, int):
+                point[key] = val
+        if len(point) > 1:
+            result.append(point)
+    return result or None
+
+
+def _sanitize_strongest_enemy(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+    power = value.get("power")
+    if not isinstance(power, (int, float)):
+        return None
+    result = {
+        "turn": value.get("turn"),
+        "monster_id": value.get("monster_id"),
+        "name": value.get("name"),
+        "power": power,
+    }
+    for key in ("tier", "archetype_id", "stats", "reward"):
+        val = value.get(key)
+        if val is not None:
+            result[key] = val
+    return result
+
+
+def _compute_economy_curve_from_turns(turns_list: list) -> list[dict[str, int]] | None:
+    cumulative_gold = 0
+    cumulative_exp = 0
+    curve: list[dict[str, int]] = []
+
+    for index, turn in enumerate(turns_list):
+        if not isinstance(turn, dict):
+            continue
+        if turn.get("status") != "completed":
+            continue
+        turn_gold = 0
+        turn_exp = 0
+        for step in turn.get("steps") or []:
+            if not (
+                isinstance(step, dict)
+                and step.get("type") == "tool_result"
+                and step.get("name") == "end_turn"
+            ):
+                continue
+            structured = _battle_reward_stats_from_step(step)
+            if structured is not None:
+                turn_gold += structured.get("gold_earned", 0)
+                turn_exp += structured.get("experience_earned", 0)
+            else:
+                rewards = _reward_stats_from_text(step.get("content"))
+                turn_gold += rewards.get("gold_earned", 0)
+                turn_exp += rewards.get("experience_earned", 0)
+        cumulative_gold += turn_gold
+        cumulative_exp += turn_exp
+        turn_number = turn.get("turn")
+        curve.append(
+            {
+                "turn": turn_number if isinstance(turn_number, int) else index + 1,
+                "gold_earned": turn_gold,
+                "experience_earned": turn_exp,
+                "cumulative_gold_earned": cumulative_gold,
+                "cumulative_experience_earned": cumulative_exp,
+            }
+        )
+
+    return curve or None
+
+
+def _battle_reward_stats_from_step(step: dict) -> dict[str, int] | None:
+    result = step.get("result")
+    if not isinstance(result, dict):
+        return None
+    turn_result = result.get("turn_result")
+    if not isinstance(turn_result, dict):
+        return None
+    battles = turn_result.get("battles")
+    if not isinstance(battles, list):
+        return None
+    gold = 0
+    exp = 0
+    for battle in battles:
+        if not isinstance(battle, dict):
+            continue
+        reward = battle.get("reward")
+        if not isinstance(reward, dict):
+            continue
+        g = reward.get("gold")
+        e = reward.get("experience")
+        if isinstance(g, (int, float)):
+            gold += int(g)
+        if isinstance(e, (int, float)):
+            exp += int(e)
+    return {"gold_earned": gold, "experience_earned": exp}
+
+
+def _reward_stats_from_text(content: Any) -> dict[str, int]:
+    import re
+
+    text = content if isinstance(content, str) else ""
+    reward_lines = [
+        line
+        for line in text.splitlines()
+        if "奖励" in line or "reward" in line.lower()
+    ]
+    battle_reward_lines = [
+        line
+        for line in reward_lines
+        if line.lstrip().startswith("-")
+    ]
+    gold = 0
+    exp = 0
+    for line in battle_reward_lines or reward_lines:
+        gm = re.search(r"(?:金币|gold)\s*[:=＝]\s*(\d+)", line, re.IGNORECASE)
+        em = re.search(
+            r"(?:经验|experience|exp)\s*[:=＝]\s*(\d+)",
+            line,
+            re.IGNORECASE,
+        )
+        if gm:
+            gold += int(gm.group(1))
+        if em:
+            exp += int(em.group(1))
+    return {"gold_earned": gold, "experience_earned": exp}
+
+
+def _compute_strongest_defeated_enemy(turns_list: list) -> dict[str, Any] | None:
+    best: dict[str, Any] | None = None
+    for turn in turns_list:
+        if not isinstance(turn, dict):
+            continue
+        observation = turn.get("observation_before")
+        observation = observation if isinstance(observation, dict) else None
+        turn_number = turn.get("turn")
+        if not isinstance(turn_number, int):
+            turn_number = 0
+        for step in turn.get("steps") or []:
+            if not (
+                isinstance(step, dict)
+                and step.get("type") == "tool_result"
+                and step.get("name") == "end_turn"
+            ):
+                continue
+            candidate = _strongest_enemy_from_step_result(step, observation, turn_number)
+            if candidate is None:
+                candidate = _strongest_enemy_from_step_text(step, observation, turn_number)
+            best = _stronger_enemy(best, candidate)
+    return best
+
+
+def _strongest_enemy_from_step_result(
+    step: dict,
+    observation: dict | None,
+    turn_number: int,
+) -> dict[str, Any] | None:
+    result = step.get("result")
+    if not isinstance(result, dict):
+        return None
+    turn_result = result.get("turn_result")
+    if not isinstance(turn_result, dict):
+        return None
+    battles = turn_result.get("battles")
+    if not isinstance(battles, list):
+        return None
+    best: dict[str, Any] | None = None
+    for battle in battles:
+        if not isinstance(battle, dict) or _battle_won_dict(battle) is not True:
+            continue
+        best = _stronger_enemy(
+            best,
+            _defeated_enemy_from_battle_dict(battle, observation, turn_number),
+        )
+    return best
+
+
+def _strongest_enemy_from_step_text(
+    step: dict,
+    observation: dict | None,
+    turn_number: int,
+) -> dict[str, Any] | None:
+    import re
+
+    content = step.get("content")
+    if not isinstance(content, str):
+        return None
+    best: dict[str, Any] | None = None
+    for line in content.splitlines():
+        if not line.lstrip().startswith("-") or " vs " not in line:
+            continue
+        match = re.match(
+            r"^\s*-\s+(?:(\d+)\s+)?(.+?)\s+vs\s+(?:(\d+)\s+)?(.+?)[:：]\s*([^;；]+)",
+            line,
+            re.IGNORECASE,
+        )
+        if not match:
+            continue
+        outcome = match.group(5).strip().lower()
+        if "负" in outcome or outcome in {
+            "right_win",
+            "monster_win",
+            "enemy_win",
+            "loss",
+            "lost",
+            "defeat",
+        }:
+            continue
+        if "胜" not in outcome and outcome not in {
+            "left_win",
+            "adventurer_win",
+            "player_win",
+            "win",
+            "won",
+            "victory",
+        }:
+            continue
+        battle: dict[str, Any] = {"monster_name": match.group(4).strip()}
+        monster_id = _monster_id_from_ref(observation, match.group(3))
+        if monster_id is not None:
+            battle["monster_id"] = monster_id
+        best = _stronger_enemy(
+            best,
+            _defeated_enemy_from_battle_dict(battle, observation, turn_number),
+        )
+    return best
+
+
+def _battle_won_dict(battle: dict) -> bool | None:
+    won = battle.get("won")
+    if isinstance(won, bool):
+        return won
+    outcome = battle.get("outcome") or battle.get("result") or battle.get("winner") or battle.get("status")
+    if not isinstance(outcome, str):
+        return None
+    value = outcome.lower()
+    if value in {"left_win", "adventurer_win", "player_win", "win", "won", "victory"}:
+        return True
+    if value in {"right_win", "monster_win", "enemy_win", "loss", "lost", "defeat"}:
+        return False
+    return None
+
+
+def _monster_id_from_ref(observation: dict | None, ref: str | None) -> str | None:
+    if ref is None or not isinstance(observation, dict):
+        return None
+    try:
+        index = int(ref) - 1
+    except ValueError:
+        return None
+    monsters = observation.get("monsters")
+    if not isinstance(monsters, list) or index < 0 or index >= len(monsters):
+        return None
+    monster = monsters[index]
+    if not isinstance(monster, dict):
+        return None
+    monster_id = monster.get("monster_id")
+    return str(monster_id) if monster_id is not None else None
+
+
+def _defeated_enemy_from_battle_dict(
+    battle: dict,
+    observation: dict | None,
+    turn_number: int,
+) -> dict[str, Any] | None:
+    monster = _monster_from_observation_dict(battle, observation)
+    stats_source = monster.get("stats") if isinstance(monster, dict) else None
+    if not isinstance(stats_source, dict):
+        stats_source = battle.get("monster_stats")
+    if not isinstance(stats_source, dict):
+        stats_source = battle.get("stats")
+    if not isinstance(stats_source, dict):
+        return None
+    stats = _numeric_map(stats_source)
+    if not stats:
+        return None
+
+    reward_source = (
+        monster.get("reward")
+        if isinstance(monster, dict) and isinstance(monster.get("reward"), dict)
+        else battle.get("reward")
+    )
+    reward = _numeric_map(reward_source) if isinstance(reward_source, dict) else {}
+    monster_id = monster.get("monster_id") if isinstance(monster, dict) else battle.get("monster_id")
+    name = (
+        battle.get("monster_name")
+        or (monster.get("name") if isinstance(monster, dict) else None)
+        or battle.get("monster")
+        or monster_id
+    )
+    result: dict[str, Any] = {
+        "turn": turn_number,
+        "monster_id": None if monster_id is None else str(monster_id),
+        "name": None if name is None else str(name),
+        "power": _monster_power(stats),
+        "stats": stats,
+    }
+    if reward:
+        result["reward"] = reward
+    if isinstance(monster, dict):
+        for key in ("tier", "archetype_id"):
+            value = monster.get(key)
+            if value is not None:
+                result[key] = value
+    return result
+
+
+def _monster_from_observation_dict(
+    battle: dict,
+    observation: dict | None,
+) -> dict | None:
+    if not isinstance(observation, dict):
+        return None
+    monsters = observation.get("monsters")
+    if not isinstance(monsters, list):
+        return None
+    monster_id = battle.get("monster_id")
+    if monster_id is not None:
+        monster_id_text = str(monster_id)
+        for monster in monsters:
+            if isinstance(monster, dict) and str(monster.get("monster_id")) == monster_id_text:
+                return monster
+    monster_name = battle.get("monster_name") or battle.get("monster")
+    if monster_name is not None:
+        for monster in monsters:
+            if isinstance(monster, dict) and monster.get("name") == monster_name:
+                return monster
+    return None
+
+
+def _numeric_map(values: dict) -> dict[str, int]:
+    return {
+        str(key): int(value)
+        for key, value in values.items()
+        if isinstance(value, (int, float)) and not isinstance(value, bool)
+    }
+
+
+def _monster_power(stats: dict[str, int]) -> int:
+    return (
+        int(stats.get("hp", 0))
+        + int(stats.get("mp", 0))
+        + int(stats.get("attack", 0)) * 8
+        + int(stats.get("defense", 0)) * 8
+        + int(stats.get("speed", 0)) * 5
+        + int(stats.get("recovery", 0)) * 5
+        + int(stats.get("mp_recovery", 0)) * 5
+    )
+
+
+def _stronger_enemy(
+    current: dict[str, Any] | None,
+    candidate: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    if candidate is None:
+        return current
+    if current is None:
+        return candidate
+    current_power = current.get("power")
+    candidate_power = candidate.get("power")
+    if not isinstance(current_power, (int, float)):
+        return candidate
+    if not isinstance(candidate_power, (int, float)):
+        return current
+    return candidate if candidate_power > current_power else current
 
 
 def _parse_battle_stats_from_text(turns_list: list) -> dict | None:
@@ -443,6 +924,10 @@ def _aggregate_turn_tokens(turns_list: list) -> dict | None:
 def _count_turn_tool_calls(turns_list: list) -> dict | None:
     """Count tool_result entries in per-turn steps as a rough tool call proxy."""
     total = 0
+    successful = 0
+    failed = 0
+    by_name: dict[str, int] = {}
+    by_name_detail: dict[str, dict[str, int]] = {}
     for t in turns_list:
         if not isinstance(t, dict):
             continue
@@ -452,9 +937,58 @@ def _count_turn_tool_calls(turns_list: list) -> dict | None:
         for step in steps:
             if isinstance(step, dict) and step.get("type") == "tool_result":
                 total += 1
+                name = str(step.get("name") or "?")
+                by_name[name] = by_name.get(name, 0) + 1
+                detail = by_name_detail.setdefault(
+                    name,
+                    {"total": 0, "successful": 0, "failed": 0},
+                )
+                detail["total"] += 1
+                ok = _tool_step_succeeded(step)
+                if ok:
+                    successful += 1
+                    detail["successful"] += 1
+                else:
+                    failed += 1
+                    detail["failed"] += 1
     if total == 0:
         return None
-    return {"total": total, "successful": total, "failed": 0}
+    return {
+        "total": total,
+        "successful": successful,
+        "failed": failed,
+        "by_name": by_name,
+        "by_name_detail": by_name_detail,
+    }
+
+
+def _tool_step_succeeded(step: dict) -> bool:
+    if step.get("ok") is True:
+        return True
+    if step.get("ok") is False or step.get("error"):
+        return False
+    result = step.get("result")
+    if isinstance(result, dict) and isinstance(result.get("ok"), bool):
+        return bool(result["ok"])
+    content = step.get("content")
+    if isinstance(content, str):
+        stripped = content.lstrip()
+        if stripped.startswith("OK ") or stripped.startswith("成功 "):
+            return True
+        if (
+            stripped.startswith("FAIL ")
+            or stripped.startswith("失败 ")
+            or stripped.startswith("ERROR ")
+            or stripped.startswith("错误 ")
+        ):
+            return False
+        try:
+            parsed = json.loads(stripped)
+        except json.JSONDecodeError:
+            parsed = None
+        if isinstance(parsed, dict) and isinstance(parsed.get("ok"), bool):
+            return bool(parsed["ok"])
+    return True
 
 
 # ── Aggregation ───────────────────────────────────────────────────────────────

@@ -84,6 +84,7 @@ let _leaderboardData = null;
 let _modelNotes = {};       // model name -> note string
 let _curveChart = null;
 let _curveRunSelection = {}; // key: "model::run_id" -> boolean
+let _curveMetric = 'rank_score';
 
 // Palette for curve lines — distinct colors readable on dark background
 const CURVE_COLORS = [
@@ -101,6 +102,53 @@ const CURVE_COLORS = [
 
 function curveColor(index) {
   return CURVE_COLORS[index % CURVE_COLORS.length];
+}
+
+const CURVE_METRICS = {
+  rank_score: {
+    label: '段位积分',
+    empty: '没有可用的段位积分曲线数据',
+    value: (pt) => pt?.rank_score,
+    curve: (run) => Array.isArray(run.rank_score_curve) ? run.rank_score_curve : [],
+  },
+  gold: {
+    label: '累计金币收入',
+    empty: '没有可用的累计金币收入曲线数据',
+    value: (pt) => pt?.cumulative_gold_earned,
+    curve: (run) => Array.isArray(run.game_actions?.economy_curve) ? run.game_actions.economy_curve : [],
+  },
+  experience: {
+    label: '累计经验收入',
+    empty: '没有可用的累计经验收入曲线数据',
+    value: (pt) => pt?.cumulative_experience_earned,
+    curve: (run) => Array.isArray(run.game_actions?.economy_curve) ? run.game_actions.economy_curve : [],
+  },
+};
+
+function currentCurveMetric() {
+  return CURVE_METRICS[_curveMetric] || CURVE_METRICS.rank_score;
+}
+
+function toolLabel(name) {
+  const labels = {
+    get_party: '查看队伍',
+    get_monsters: '查看怪物',
+    get_crafting: '查看制作',
+    get_inventory: '查看背包',
+    get_upgrades: '查看升级',
+    get_recruitment: '查看招募',
+    get_events: '查看事件',
+    preview_battle: '预览战斗',
+    craft_equipment: '制作装备',
+    purchase_upgrade: '购买升级',
+    allocate_experience: '分配经验',
+    recruit_adventurer: '招募冒险者',
+    dismiss_adventurer: '遣散冒险者',
+    equip_item: '装备物品',
+    unequip_item: '卸下装备',
+    end_turn: '结束回合',
+  };
+  return labels[name] || name || '未知工具';
 }
 
 // ============================================================================
@@ -127,21 +175,23 @@ function initTabs() {
 // ============================================================================
 
 /**
- * Collect all runs across all models that have a rank_score_curve.
+ * Collect all runs across all models that have the selected metric curve.
  * Returns [{model, run, key, colorIndex}]
  */
 function allCurveRuns(data) {
   const runs = [];
   let idx = 0;
+  const metric = currentCurveMetric();
   for (const m of data.models) {
     for (const run of (m.run_details || [])) {
-      const curve = run.rank_score_curve;
-      if (Array.isArray(curve) && curve.length > 0) {
+      const curve = metric.curve(run).filter((pt) => metric.value(pt) != null);
+      if (curve.length > 0) {
         runs.push({
           model: m.model,
           run,
           key: `${m.model}::${run.run_id || run.session_id}`,
           colorIndex: idx++,
+          curve,
         });
       }
     }
@@ -153,11 +203,21 @@ function renderCurvePanel() {
   const data = _leaderboardData;
   if (!data) return;
 
+  const metricSelect = $('#curveMetricSelect');
+  if (metricSelect) {
+    metricSelect.value = _curveMetric;
+    metricSelect.onchange = () => {
+      _curveMetric = metricSelect.value;
+      renderCurvePanel();
+    };
+  }
+
   const runs = allCurveRuns(data);
   const legend = $('#curveLegend');
+  const metric = currentCurveMetric();
 
   if (!runs.length) {
-    legend.innerHTML = '<div class="curve-legend-placeholder">没有可用的 rank_score 曲线数据</div>';
+    legend.innerHTML = `<div class="curve-legend-placeholder">${esc(metric.empty)}</div>`;
     if (_curveChart) { _curveChart.destroy(); _curveChart = null; }
     return;
   }
@@ -165,6 +225,12 @@ function renderCurvePanel() {
   // Default: select all runs on first render
   if (Object.keys(_curveRunSelection).length === 0) {
     runs.forEach((r) => { _curveRunSelection[r.key] = true; });
+  } else {
+    runs.forEach((r) => {
+      if (!Object.prototype.hasOwnProperty.call(_curveRunSelection, r.key)) {
+        _curveRunSelection[r.key] = true;
+      }
+    });
   }
 
   // Build legend items
@@ -174,12 +240,14 @@ function renderCurvePanel() {
     const rs = r.run.rank_score;
     const rsLabel = rs != null ? fmtRankScore(rs) : '—';
     const timeLabel = fmtTimestamp(r.run.created_at);
+    const finalValue = r.curve.length ? metric.value(r.curve[r.curve.length - 1]) : null;
+    const metricLabel = finalValue != null ? fmtInt(finalValue) : rsLabel;
     return `
       <label class="curve-legend-item">
         <input type="checkbox" data-curve-key="${esc(r.key)}" ${checked} />
         <span class="curve-color-dot" style="background:${color}"></span>
         <span class="curve-legend-model">${esc(r.model)}</span>
-        <span class="curve-legend-meta">${esc(timeLabel)} · ${esc(rsLabel)}</span>
+        <span class="curve-legend-meta">${esc(timeLabel)} · ${esc(metricLabel)}</span>
       </label>`;
   }).join('');
 
@@ -221,11 +289,12 @@ function updateCurveChart(data) {
     return;
   }
 
-  // Build datasets — curve is already filtered to {turn, rank_score} objects
+  const metric = currentCurveMetric();
+
+  // Build datasets — curve is already filtered to points for the selected metric.
   const datasets = selected.map((r) => {
     const color = curveColor(r.colorIndex);
-    const curve = r.run.rank_score_curve || [];
-    const points = curve.map((pt) => ({ x: pt.turn, y: pt.rank_score }));
+    const points = r.curve.map((pt) => ({ x: pt.turn, y: metric.value(pt) }));
     return {
       label: r.model,
       data: points,
@@ -242,6 +311,9 @@ function updateCurveChart(data) {
 
   if (_curveChart) {
     _curveChart.data.datasets = datasets;
+    if (_curveChart.options?.scales?.y?.title) {
+      _curveChart.options.scales.y.title.text = metric.label;
+    }
     _curveChart.update();
   } else {
     const ctx = document.getElementById('curveChart');
@@ -294,7 +366,7 @@ function updateCurveChart(data) {
           y: {
             title: {
               display: true,
-              text: 'Rank Score',
+              text: metric.label,
               color: '#5c6585',
               font: { family: 'Inter', size: 12 },
             },
@@ -518,6 +590,10 @@ function renderRunDetails(runs) {
     const timing = run.timing || {};
     const tc = run.tool_calls || {};
     const ga = run.game_actions || {};
+    const strongestEnemy = ga.strongest_defeated_enemy || {};
+    const defeatedText = strongestEnemy.name
+      ? `${strongestEnemy.name}（强度 ${fmtInt(strongestEnemy.power) || '—'}）`
+      : null;
 
     const partyText = run.party_size != null
       ? `${run.party_size}/${run.party_size_limit ?? '—'}`
@@ -528,6 +604,7 @@ function renderRunDetails(runs) {
       run.scoring_seed != null ? `score ${fmtInt(run.scoring_seed)}` : null,
     ].filter(Boolean).join(' · ');
     const contributors = renderRankContributors(run.rank_score_per_adventurer);
+    const toolBreakdown = renderToolBreakdown(tc);
 
     return `
       <div class="run-item">
@@ -543,7 +620,7 @@ function renderRunDetails(runs) {
           ${runMetric('回合', `${run.turns ?? '—'}/${run.max_turns ?? '—'}`)}
           ${runMetric('最强', bestText)}
         </div>
-        ${(tu.input_tokens || timing.total_seconds || tc.total) ? `
+        ${(tu.input_tokens || timing.total_seconds || tc.total || defeatedText || ga.total_gold_earned != null || ga.total_experience_earned != null) ? `
         <div class="run-metrics" style="margin-top:6px">
           ${tu.input_tokens ? runMetric('Input Tokens', fmtInt(tu.input_tokens)) : ''}
           ${tu.output_tokens ? runMetric('Output Tokens', fmtInt(tu.output_tokens)) : ''}
@@ -552,6 +629,7 @@ function renderRunDetails(runs) {
           ${ga.battles_won != null && ga.battles_total ? runMetric('战斗胜率', `${ga.battles_won}/${ga.battles_total}`) : ''}
           ${ga.total_gold_earned != null ? runMetric('金币', fmtInt(ga.total_gold_earned)) : ''}
           ${ga.total_experience_earned != null ? runMetric('经验', fmtInt(ga.total_experience_earned)) : ''}
+          ${defeatedText ? runMetric('最强击败', defeatedText) : ''}
         </div>` : ''}
         <div class="run-submeta">
           ${run.preset ? `<span>${esc(run.preset)}</span>` : ''}
@@ -559,6 +637,7 @@ function renderRunDetails(runs) {
           ${run.score_mode ? `<span>${esc(run.score_mode)}</span>` : ''}
           ${run.rank_score_source ? `<span>rank ${esc(run.rank_score_source)}</span>` : ''}
         </div>
+        ${toolBreakdown}
         ${contributors}
       </div>`;
   }).join('');
@@ -567,6 +646,40 @@ function renderRunDetails(runs) {
     <div class="detail-section run-section">
       <div class="detail-title">运行明细</div>
       <div class="run-list">${items}</div>
+    </div>`;
+}
+
+function toolBreakdownItems(toolCalls) {
+  const detail = toolCalls?.by_name_detail && Object.keys(toolCalls.by_name_detail).length
+    ? toolCalls.by_name_detail
+    : null;
+  const items = detail
+    ? Object.entries(detail).map(([name, counts]) => ({
+        name,
+        total: counts.total || 0,
+        failed: counts.failed || 0,
+      }))
+    : Object.entries(toolCalls?.by_name || {}).map(([name, total]) => ({
+        name,
+        total: Number(total) || 0,
+        failed: 0,
+      }));
+  return items
+    .filter((item) => item.total > 0)
+    .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+}
+
+function renderToolBreakdown(toolCalls) {
+  const items = toolBreakdownItems(toolCalls);
+  if (!items.length) return '';
+  return `
+    <div class="rank-contrib-list tool-breakdown-list">
+      ${items.slice(0, 12).map((item) => `
+        <div class="rank-contrib-chip" title="${esc(item.name)}">
+          <strong>${esc(toolLabel(item.name))}</strong>
+          <em>${esc(fmtInt(item.total))}</em>
+          ${item.failed ? `<span>失败 ${esc(fmtInt(item.failed))}</span>` : ''}
+        </div>`).join('')}
     </div>`;
 }
 

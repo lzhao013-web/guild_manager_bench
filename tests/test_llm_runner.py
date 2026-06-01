@@ -1002,12 +1002,59 @@ def test_compute_run_stats_tool_call_success_and_failure() -> None:
     assert stats["tool_calls"]["failed"] == 1
     assert stats["tool_calls"]["by_name"]["craft_equipment"] == 2
     assert stats["tool_calls"]["by_name"]["end_turn"] == 1
+    assert stats["tool_calls"]["by_name_detail"]["craft_equipment"] == {
+        "total": 2,
+        "successful": 1,
+        "failed": 1,
+    }
     # Game actions: only successful craft_equipment counted
     assert stats["game_actions"]["total_equipment_crafted"] == 1
 
 
 def test_compute_run_stats_battle_results() -> None:
-    turn = TurnTrace(turn=1, prompt="test")
+    turn = TurnTrace(
+        turn=1,
+        prompt="test",
+        observation_before={
+            "monsters": [
+                {
+                    "monster_id": "m1",
+                    "name": "史莱姆",
+                    "tier": "normal",
+                    "stats": {"hp": 20, "attack": 2, "defense": 1, "speed": 1},
+                    "reward": {"gold": 50, "experience": 30},
+                },
+                {
+                    "monster_id": "m2",
+                    "name": "巨魔",
+                    "tier": "elite",
+                    "stats": {"hp": 200, "attack": 30, "defense": 20, "speed": 8},
+                    "reward": {"gold": 0, "experience": 0},
+                },
+                {
+                    "monster_id": "m3",
+                    "name": "哥布林队长",
+                    "tier": "elite",
+                    "stats": {"hp": 80, "attack": 10, "defense": 8, "speed": 6},
+                    "reward": {"gold": 25, "experience": 15},
+                },
+                {
+                    "monster_id": "m4",
+                    "name": "幽影",
+                    "tier": "normal",
+                    "stats": {"hp": 30, "attack": 4, "defense": 2, "speed": 12},
+                    "reward": {"gold": 10, "experience": 5},
+                },
+                {
+                    "monster_id": "m5",
+                    "name": "石像",
+                    "tier": "normal",
+                    "stats": {"hp": 60, "attack": 8, "defense": 12, "speed": 1},
+                    "reward": {"gold": 0, "experience": 0},
+                },
+            ],
+        },
+    )
     turn.tool_calls.append(
         ToolCallRecord(
             name="end_turn",
@@ -1017,22 +1064,32 @@ def test_compute_run_stats_battle_results() -> None:
                 "turn_result": {
                     "battles": [
                         {
+                            "monster_id": "m1",
+                            "monster_name": "史莱姆",
                             "won": True,
                             "reward": {"gold": 50, "experience": 30, "materials": {}},
                         },
                         {
+                            "monster_id": "m2",
+                            "monster_name": "巨魔",
                             "won": False,
                             "reward": {"gold": 0, "experience": 0, "materials": {}},
                         },
                         {
+                            "monster_id": "m3",
+                            "monster_name": "哥布林队长",
                             "won": True,
                             "reward": {"gold": 25, "experience": 15, "materials": {}},
                         },
                         {
+                            "monster_id": "m4",
+                            "monster_name": "幽影",
                             "result": "left_win",
                             "reward": {"gold": 10, "experience": 5, "materials": {}},
                         },
                         {
+                            "monster_id": "m5",
+                            "monster_name": "石像",
                             "outcome": "right_win",
                             "reward": {"gold": 0, "experience": 0, "materials": {}},
                         },
@@ -1058,6 +1115,17 @@ def test_compute_run_stats_battle_results() -> None:
     assert ga["battles_lost"] == 2
     assert ga["total_gold_earned"] == 85
     assert ga["total_experience_earned"] == 50
+    assert ga["economy_curve"] == [
+        {
+            "turn": 1,
+            "gold_earned": 85,
+            "experience_earned": 50,
+            "cumulative_gold_earned": 85,
+            "cumulative_experience_earned": 50,
+        }
+    ]
+    assert ga["strongest_defeated_enemy"]["monster_id"] == "m3"
+    assert ga["strongest_defeated_enemy"]["name"] == "哥布林队长"
 
 
 def test_compute_run_stats_mixed_game_actions() -> None:

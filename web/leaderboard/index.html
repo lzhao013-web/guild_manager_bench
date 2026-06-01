@@ -83,6 +83,12 @@
     <div class="curve-panel">
       <div class="curve-toolbar">
         <div class="curve-toolbar-left">
+          <span class="curve-toolbar-label">指标：</span>
+          <select class="curve-select" id="curveMetricSelect" aria-label="选择曲线指标">
+            <option value="rank_score">段位积分</option>
+            <option value="gold">累计金币收入</option>
+            <option value="experience">累计经验收入</option>
+          </select>
           <span class="curve-toolbar-label">选择运行：</span>
           <button class="curve-btn" id="curveSelectAll">全选</button>
           <button class="curve-btn" id="curveDeselectAll">清除</button>

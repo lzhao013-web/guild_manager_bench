@@ -1020,6 +1020,18 @@ body::before {
   color: var(--text-secondary);
 }
 
+.curve-select {
+  height: 30px;
+  background: var(--surface-hover);
+  border: 1px solid var(--line-strong);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 0 10px;
+  border-radius: var(--radius-xs);
+}
+
 .curve-btn {
   background: var(--surface-hover);
   border: 1px solid var(--line-strong);

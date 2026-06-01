@@ -719,15 +719,79 @@ function hideBattleOverlay() {
 function showRankChart() {
   if (!S.replay || !S.replay.turns) return;
   const turns = S.replay.turns;
-  const labels = [];
-  const data = [];
-  const pointBgColors = [];
+  const stats = computeReplayStats(S.replay);
+  const economyCurve = stats?.game_actions?.economy_curve || [];
+  const turnSet = new Set();
+  turns.forEach((t, i) => turnSet.add(t.turn != null ? t.turn : i + 1));
+  economyCurve.forEach(pt => { if (pt && pt.turn != null) turnSet.add(pt.turn); });
+  const labels = Array.from(turnSet).sort((a, b) => Number(a) - Number(b));
+  const rankByTurn = new Map();
+  const goldByTurn = new Map();
+  const expByTurn = new Map();
+  const currentTurnNumber = turns[S.currentTurnIdx]?.turn != null ? turns[S.currentTurnIdx].turn : S.currentTurnIdx + 1;
 
   turns.forEach((t, i) => {
-    labels.push(t.turn != null ? t.turn : i + 1);
-    data.push(t.rank_score != null ? Math.round(t.rank_score) : null);
-    pointBgColors.push(i === S.currentTurnIdx ? '#f59e0b' : '#6366f1');
+    const turnNumber = t.turn != null ? t.turn : i + 1;
+    rankByTurn.set(turnNumber, t.rank_score != null ? Math.round(t.rank_score) : null);
   });
+  economyCurve.forEach(pt => {
+    if (!pt || pt.turn == null) return;
+    goldByTurn.set(pt.turn, Number(pt.cumulative_gold_earned ?? 0));
+    expByTurn.set(pt.turn, Number(pt.cumulative_experience_earned ?? 0));
+  });
+
+  const rankData = labels.map(turn => rankByTurn.has(turn) ? rankByTurn.get(turn) : null);
+  const goldData = labels.map(turn => goldByTurn.has(turn) ? goldByTurn.get(turn) : null);
+  const expData = labels.map(turn => expByTurn.has(turn) ? expByTurn.get(turn) : null);
+  const pointBgColors = labels.map(turn => turn === currentTurnNumber ? '#f59e0b' : '#6366f1');
+  const datasets = [];
+  if (rankData.some(v => v != null)) {
+    datasets.push({
+      label: 'Rank Score',
+      data: rankData,
+      yAxisID: 'rank',
+      borderColor: '#6366f1',
+      backgroundColor: 'rgba(99, 102, 241, 0.10)',
+      pointBackgroundColor: pointBgColors,
+      pointBorderColor: pointBgColors,
+      pointRadius: rankData.length > 50 ? 2 : 4,
+      pointHoverRadius: 6,
+      borderWidth: 2,
+      fill: true,
+      tension: 0.3,
+      spanGaps: true,
+    });
+  }
+  if (goldData.some(v => v != null)) {
+    datasets.push({
+      label: '累计金币收入',
+      data: goldData,
+      yAxisID: 'economy',
+      borderColor: '#f59e0b',
+      backgroundColor: 'rgba(245, 158, 11, 0.08)',
+      pointBackgroundColor: '#f59e0b',
+      pointRadius: goldData.length > 50 ? 2 : 3,
+      borderWidth: 2,
+      fill: false,
+      tension: 0.2,
+      spanGaps: true,
+    });
+  }
+  if (expData.some(v => v != null)) {
+    datasets.push({
+      label: '累计经验收入',
+      data: expData,
+      yAxisID: 'economy',
+      borderColor: '#10b981',
+      backgroundColor: 'rgba(16, 185, 129, 0.08)',
+      pointBackgroundColor: '#10b981',
+      pointRadius: expData.length > 50 ? 2 : 3,
+      borderWidth: 2,
+      fill: false,
+      tension: 0.2,
+      spanGaps: true,
+    });
+  }
 
   // Destroy previous instance
   if (S.rankChartInstance) { S.rankChartInstance.destroy(); S.rankChartInstance = null; }
@@ -737,26 +801,13 @@ function showRankChart() {
     type: 'line',
     data: {
       labels,
-      datasets: [{
-        label: 'Rank Score',
-        data,
-        borderColor: '#6366f1',
-        backgroundColor: 'rgba(99, 102, 241, 0.10)',
-        pointBackgroundColor: pointBgColors,
-        pointBorderColor: pointBgColors,
-        pointRadius: data.length > 50 ? 2 : 4,
-        pointHoverRadius: 6,
-        borderWidth: 2,
-        fill: true,
-        tension: 0.3,
-        spanGaps: true,
-      }],
+      datasets,
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: { display: false },
+        legend: { display: datasets.length > 1, labels: { color: '#a8b2cc' } },
         tooltip: {
           backgroundColor: '#161c2e',
           borderColor: '#1d2440',
@@ -767,7 +818,7 @@ function showRankChart() {
           cornerRadius: 6,
           callbacks: {
             title: items => `回合 ${items[0].label}`,
-            label: item => item.raw != null ? `Rank: ${item.raw}` : '无数据',
+            label: item => item.raw != null ? `${item.dataset.label}: ${item.raw.toLocaleString()}` : `${item.dataset.label}: 无数据`,
           },
         },
       },
@@ -777,11 +828,23 @@ function showRankChart() {
           grid: { color: 'rgba(29, 36, 64, 0.6)' },
           ticks: { color: '#636d8c', maxTicksLimit: 20 },
         },
-        y: {
+        rank: {
+          type: 'linear',
+          position: 'left',
+          display: rankData.some(v => v != null),
           title: { display: true, text: 'Rank Score', color: '#636d8c', font: { size: 12 } },
           grid: { color: 'rgba(29, 36, 64, 0.6)' },
           ticks: { color: '#636d8c' },
           beginAtZero: false,
+        },
+        economy: {
+          type: 'linear',
+          position: 'right',
+          display: goldData.some(v => v != null) || expData.some(v => v != null),
+          title: { display: true, text: '累计收入', color: '#636d8c', font: { size: 12 } },
+          grid: { drawOnChartArea: false },
+          ticks: { color: '#636d8c' },
+          beginAtZero: true,
         },
       },
       animation: { duration: 400, easing: 'easeOutCubic' },
@@ -906,10 +969,15 @@ function renderOverview() {
       if (stats.token_usage.output_tokens) tp.push(`out ${stats.token_usage.output_tokens.toLocaleString()}`);
       if (tp.length) parts.push(`🔤 ${tp.join('·')}`);
     }
-    if (stats.tool_calls && stats.tool_calls.total > 0) parts.push(`🔧 ${stats.tool_calls.total} (✓${stats.tool_calls.successful} ✗${stats.tool_calls.failed})`);
+    if (stats.tool_calls && stats.tool_calls.total > 0) {
+      const breakdown = formatToolBreakdown(stats.tool_calls);
+      parts.push(`🔧 ${stats.tool_calls.total} (✓${stats.tool_calls.successful} ✗${stats.tool_calls.failed})${breakdown ? `：${breakdown}` : ''}`);
+    }
     if (stats.game_actions && stats.game_actions.battles_total > 0) parts.push(`⚔ ${stats.game_actions.battles_won}/${stats.game_actions.battles_total}胜`);
     if (stats.game_actions && stats.game_actions.total_gold_earned > 0) parts.push(`💰 ${stats.game_actions.total_gold_earned.toLocaleString()}`);
     if (stats.game_actions && stats.game_actions.total_experience_earned > 0) parts.push(`⭐ ${stats.game_actions.total_experience_earned.toLocaleString()}`);
+    const strongest = stats.game_actions && stats.game_actions.strongest_defeated_enemy;
+    if (strongest && strongest.name) parts.push(`🏆 ${strongest.name} 强度 ${fmt(strongest.power)}`);
     DOM.ovStats.textContent = parts.length ? parts.join(' · ') : '—';
   } else {
     DOM.ovStats.textContent = '—';
@@ -1104,6 +1172,27 @@ function slotIcon(s) { const m={main_hand:'⚔️',off_hand:'🛡️',two_hand:'
 function fmtMap(o) { if(!o||!Object.keys(o).length)return'—'; return Object.entries(o).map(([k,v])=>`${statLabel(k)}:${fmt(v)}`).join(' '); }
 function skillTip(s) { const p=[]; if(s.kind)p.push(`类型:${s.kind}`); if(s.mp_cost!=null)p.push(`MP:${s.mp_cost}`); if(s.condition)p.push(`条件:${s.condition}`); if(s.effects){p.push('效果:'+(Array.isArray(s.effects)?s.effects:[s.effects]).map(e=>`${e.type||'?'}:${e.value!=null?(e.value>0?'+':'')+e.value:'?'}`).join(', '));} return p.join('\n'); }
 function refId(refs,c,id) { return (refs&&refs[c]&&id)?(refs[c][id]??null):null; }
+function toolLabel(name) {
+  const m = {
+    get_party: '查看队伍',
+    get_monsters: '查看怪物',
+    get_crafting: '查看制作',
+    get_inventory: '查看背包',
+    get_upgrades: '查看升级',
+    get_recruitment: '查看招募',
+    get_events: '查看事件',
+    preview_battle: '预览战斗',
+    craft_equipment: '制作装备',
+    purchase_upgrade: '购买升级',
+    allocate_experience: '分配经验',
+    recruit_adventurer: '招募冒险者',
+    dismiss_adventurer: '遣散冒险者',
+    equip_item: '装备物品',
+    unequip_item: '卸下装备',
+    end_turn: '结束回合',
+  };
+  return m[name] || name || '未知工具';
+}
 function setStatus(m,e) { DOM.statusText.textContent=m; DOM.statusText.style.color=e?'var(--danger)':'var(--muted)'; }
 function keyById(arr,key) { const m={}; for(const it of arr){if(it&&it[key])m[it[key]]=it;} return m; }
 
@@ -1188,7 +1277,7 @@ function toolStepSucceeded(step, content) {
     const data = JSON.parse(stripped);
     if (typeof data?.ok === "boolean") return data.ok;
   } catch {}
-  return false;
+  return true;
 }
 
 function textRewardStats(content) {
@@ -1208,24 +1297,147 @@ function textRewardStats(content) {
   return { goldEarned, expEarned };
 }
 
+function strongestDefeatedEnemyFromStep(step, observation, turnNumber) {
+  const battles = step?.result?.turn_result?.battles;
+  let best = null;
+  if (Array.isArray(battles)) {
+    for (const battle of battles) {
+      if (!battle || typeof battle !== "object" || battleWon(battle) !== true) continue;
+      best = strongerEnemy(best, defeatedEnemyFromBattle(battle, observation, turnNumber));
+    }
+    return best;
+  }
+  return strongestDefeatedEnemyFromText(step?.content, observation, turnNumber);
+}
+
+function strongestDefeatedEnemyFromText(content, observation, turnNumber) {
+  if (typeof content !== "string") return null;
+  let best = null;
+  for (const line of content.split(/\r?\n/)) {
+    if (!/^\s*-/.test(line) || !line.includes(" vs ")) continue;
+    const match = line.match(/^\s*-\s+(?:(\d+)\s+)?(.+?)\s+vs\s+(?:(\d+)\s+)?(.+?)[:：]\s*([^;；]+)/i);
+    if (!match) continue;
+    const outcome = String(match[5] || "").trim().toLowerCase();
+    if (outcome.includes("负") || ["right_win", "monster_win", "enemy_win", "loss", "lost", "defeat"].includes(outcome)) continue;
+    if (!outcome.includes("胜") && !["left_win", "adventurer_win", "player_win", "win", "won", "victory"].includes(outcome)) continue;
+    const battle = { monster_name: match[4].trim() };
+    const monsterId = monsterIdFromObservationRef(observation, match[3]);
+    if (monsterId != null) battle.monster_id = monsterId;
+    best = strongerEnemy(best, defeatedEnemyFromBattle(battle, observation, turnNumber));
+  }
+  return best;
+}
+
+function defeatedEnemyFromBattle(battle, observation, turnNumber) {
+  const monster = monsterFromObservation(battle, observation);
+  const statsSource = (monster && typeof monster.stats === "object") ? monster.stats : (battle.monster_stats || battle.stats);
+  const stats = numericMap(statsSource);
+  if (!Object.keys(stats).length) return null;
+  const rewardSource = (monster && typeof monster.reward === "object") ? monster.reward : battle.reward;
+  const reward = numericMap(rewardSource);
+  const monsterId = monster?.monster_id ?? battle.monster_id ?? null;
+  const name = battle.monster_name ?? monster?.name ?? battle.monster ?? monsterId;
+  const result = {
+    turn: turnNumber,
+    monster_id: monsterId != null ? String(monsterId) : null,
+    name: name != null ? String(name) : null,
+    power: monsterPower(stats),
+    stats,
+  };
+  if (Object.keys(reward).length) result.reward = reward;
+  if (monster?.tier != null) result.tier = monster.tier;
+  if (monster?.archetype_id != null) result.archetype_id = monster.archetype_id;
+  return result;
+}
+
+function monsterFromObservation(battle, observation) {
+  const monsters = Array.isArray(observation?.monsters) ? observation.monsters : [];
+  const monsterId = battle?.monster_id != null ? String(battle.monster_id) : null;
+  if (monsterId) {
+    const found = monsters.find(monster => monster && String(monster.monster_id) === monsterId);
+    if (found) return found;
+  }
+  const monsterName = battle?.monster_name ?? battle?.monster;
+  if (monsterName != null) {
+    const found = monsters.find(monster => monster && monster.name === String(monsterName));
+    if (found) return found;
+  }
+  return null;
+}
+
+function monsterIdFromObservationRef(observation, ref) {
+  const index = Number.parseInt(ref, 10) - 1;
+  const monsters = Array.isArray(observation?.monsters) ? observation.monsters : [];
+  if (!Number.isInteger(index) || index < 0 || index >= monsters.length) return null;
+  const monsterId = monsters[index]?.monster_id;
+  return monsterId != null ? String(monsterId) : null;
+}
+
+function numericMap(value) {
+  if (!value || typeof value !== "object") return {};
+  const result = {};
+  for (const [key, raw] of Object.entries(value)) {
+    const num = Number(raw);
+    if (Number.isFinite(num)) result[key] = Math.trunc(num);
+  }
+  return result;
+}
+
+function monsterPower(stats) {
+  return (stats.hp || 0)
+    + (stats.mp || 0)
+    + (stats.attack || 0) * 8
+    + (stats.defense || 0) * 8
+    + (stats.speed || 0) * 5
+    + (stats.recovery || 0) * 5
+    + (stats.mp_recovery || 0) * 5;
+}
+
+function strongerEnemy(current, candidate) {
+  if (!candidate) return current;
+  if (!current) return candidate;
+  return Number(candidate.power || 0) > Number(current.power || 0) ? candidate : current;
+}
+
+function formatToolBreakdown(toolCalls, limit = 5) {
+  const detail = toolCalls?.by_name_detail && Object.keys(toolCalls.by_name_detail).length
+    ? toolCalls.by_name_detail
+    : null;
+  const items = detail
+    ? Object.entries(detail).map(([name, counts]) => ({ name, total: counts.total || 0, failed: counts.failed || 0 }))
+    : Object.entries(toolCalls?.by_name || {}).map(([name, total]) => ({ name, total: Number(total) || 0, failed: 0 }));
+  return items
+    .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name))
+    .slice(0, limit)
+    .map(item => `${toolLabel(item.name)} ${item.total}${item.failed ? `/失败${item.failed}` : ""}`)
+    .join("，");
+}
+
 function computeReplayStats(replay) {
   if (!replay || !Array.isArray(replay.turns)) return null;
   let totalMs = 0, inputTokens = 0, outputTokens = 0, cacheRead = 0, cacheWrite = 0;
   let totalCalls = 0, successfulCalls = 0, failedCalls = 0;
+  const callsByName = {};
+  const callsByNameDetail = {};
   let battlesTotal = 0, battlesWon = 0, battlesLost = 0;
   let goldEarned = 0, expEarned = 0;
   let crafted = 0, upgrades = 0, allocated = 0, recruited = 0, dismissed = 0, equipped = 0, unequipped = 0;
   let modelSteps = 0, turnsCompleted = 0, turnsFailed = 0;
+  let cumulativeGoldEarned = 0, cumulativeExpEarned = 0;
+  const economyCurve = [];
 
   // Prefer pre-computed stats from replay.json
   const savedGA = replay.stats && replay.stats.game_actions;
+  const savedEconomyCurve = Array.isArray(savedGA?.economy_curve) ? savedGA.economy_curve : null;
+  let strongestDefeatedEnemy = savedGA?.strongest_defeated_enemy || null;
   if (savedGA) {
     goldEarned = savedGA.total_gold_earned || 0;
     expEarned = savedGA.total_experience_earned || 0;
   }
 
-  for (const turn of replay.turns) {
+  for (const [turnIndex, turn] of replay.turns.entries()) {
     if (!turn || typeof turn !== "object") continue;
+    let turnGoldEarned = 0, turnExpEarned = 0;
     if (turn.status === "completed") turnsCompleted++;
     else if (turn.status === "failed") turnsFailed++;
 
@@ -1254,10 +1466,15 @@ function computeReplayStats(replay) {
       if (step.type === "tool_result") {
         totalCalls++;
         const name = step.name || "";
+        callsByName[name] = (callsByName[name] || 0) + 1;
+        const detail = callsByNameDetail[name] || { total: 0, successful: 0, failed: 0 };
+        detail.total++;
+        callsByNameDetail[name] = detail;
         const content = typeof step.content === "string" ? step.content : "";
         const ok = toolStepSucceeded(step, content);
         if (ok) {
           successfulCalls++;
+          detail.successful++;
           if (name === "craft_equipment") crafted++;
           else if (name === "purchase_upgrade") upgrades++;
           else if (name === "allocate_experience") allocated++;
@@ -1271,6 +1488,8 @@ function computeReplayStats(replay) {
               battlesTotal += structured.battlesTotal;
               battlesWon += structured.battlesWon;
               battlesLost += structured.battlesLost;
+              turnGoldEarned += structured.goldEarned;
+              turnExpEarned += structured.expEarned;
               if (!savedGA) {
                 goldEarned += structured.goldEarned;
                 expEarned += structured.expEarned;
@@ -1278,17 +1497,35 @@ function computeReplayStats(replay) {
             } else {
               const bm = content.match(/(\d+)\s*场战斗[,，]\s*(\d+)\s*胜\s*(\d+)\s*负/);
               if (bm) { battlesTotal += parseInt(bm[1], 10); battlesWon += parseInt(bm[2], 10); battlesLost += parseInt(bm[3], 10); }
+              const rewards = textRewardStats(content);
+              turnGoldEarned += rewards.goldEarned;
+              turnExpEarned += rewards.expEarned;
               if (!savedGA) {
-                const rewards = textRewardStats(content);
                 goldEarned += rewards.goldEarned;
                 expEarned += rewards.expEarned;
               }
             }
+            strongestDefeatedEnemy = strongerEnemy(
+              strongestDefeatedEnemy,
+              strongestDefeatedEnemyFromStep(step, turn.observation_before, turn.turn ?? turnIndex + 1),
+            );
           }
         } else {
           failedCalls++;
+          detail.failed++;
         }
       }
+    }
+    if (turn.status === "completed") {
+      cumulativeGoldEarned += turnGoldEarned;
+      cumulativeExpEarned += turnExpEarned;
+      economyCurve.push({
+        turn: turn.turn ?? turnIndex + 1,
+        gold_earned: turnGoldEarned,
+        experience_earned: turnExpEarned,
+        cumulative_gold_earned: cumulativeGoldEarned,
+        cumulative_experience_earned: cumulativeExpEarned,
+      });
     }
   }
 
@@ -1298,7 +1535,7 @@ function computeReplayStats(replay) {
 
   return {
     timing: { total_duration_ms: Math.round(totalMs), total_duration_seconds: Math.round(totalMs) / 1000 },
-    tool_calls: { total: totalCalls, successful: successfulCalls, failed: failedCalls },
+    tool_calls: { total: totalCalls, successful: successfulCalls, failed: failedCalls, by_name: callsByName, by_name_detail: callsByNameDetail },
     token_usage: tokenUsage,
     game_actions: {
       battles_total: battlesTotal, battles_won: battlesWon, battles_lost: battlesLost,
@@ -1306,6 +1543,8 @@ function computeReplayStats(replay) {
       total_equipment_crafted: crafted, total_upgrades_purchased: upgrades,
       total_recruits: recruited, total_dismissals: dismissed,
       total_experience_allocated: allocated, total_equips: equipped, total_unequips: unequipped,
+      economy_curve: savedEconomyCurve || economyCurve,
+      strongest_defeated_enemy: strongestDefeatedEnemy,
     },
     model_interaction: { total_model_steps: modelSteps, total_turns_completed: turnsCompleted, total_turns_failed: turnsFailed },
   };

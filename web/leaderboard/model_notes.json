@@ -1,11 +1,12 @@
 {
   "glm-5.1": "OpenCode GO 套餐",
-  "gpt-5.5": "推理强度medium，第三方反代",
+  "gpt5.5": "推理强度medium，第三方反代",
   "kimi-k2.6": "OpenCode GO 套餐",
   "deepseek-v4-pro": "官方api",
   "deepseek-v4-flash": "官方api",
   "step-3-7-flash-IQ4XS":"本地部署",
   "gemma-4-26b-a4b-it-q8-0": "本地部署",
+  "minimax-m2.7": "OpenCode GO 套餐",
   "qwen-3-6-35b-a3b-ud-q8-k-xl:preserve_thinking": "本地部署"
 }
 
