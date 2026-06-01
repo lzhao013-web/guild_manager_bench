@@ -36,9 +36,45 @@
 
   <!-- ===== Leaderboard Content ===== -->
   <main class="main" id="leaderboardMain">
-    <div class="loading-state" id="loadingState">
-      <div class="loading-spinner"></div>
-      <p>正在加载排行榜数据…</p>
+    <!-- 设计说明 -->
+    <section class="intro-card" id="introCard">
+      <div class="intro-header">
+        <h2 class="intro-title">设计思路</h2>
+        <button class="intro-toggle" id="introToggle" title="收起说明">收起</button>
+      </div>
+      <div class="intro-body">
+        <p class="intro-text">
+          Guild Manager Bench 是一个<strong>LLM Agent 长程决策能力</strong>评测基准。每个模型作为冒险者公会的管理者，
+          在有限回合内通过招募、训练、装备和战斗来培养队伍，最终以队伍战力接受排名。
+        </p>
+        <div class="intro-grid">
+          <div class="intro-col">
+            <h4 class="intro-col-title">评测设计</h4>
+            <ul class="intro-list">
+              <li>模型在<strong>同一游戏种子</strong>下运行，保证公平可比</li>
+              <li>每回合模型观察完整游戏状态，产出<strong>多步操作序列</strong>（行动、装备、训练等）</li>
+              <li>考察的是<strong>长期规划</strong>而非单步最优：每一轮决策都会影响后续的资源积累和队伍成长</li>
+              <li>终局通过<strong>多难度竞技场模拟</strong>评估队伍真实战力，而非简单结算数值</li>
+            </ul>
+          </div>
+          <div class="intro-col">
+            <h4 class="intro-col-title">排序依据</h4>
+            <ul class="intro-list">
+              <li>排行榜按 <strong>Rank Score（最佳）</strong> 降序排列</li>
+              <li>Rank Score 越高，代表模型培养的队伍在<strong>高难度</strong>战斗中胜率越高</li>
+              <li>均值和中位 Rank Score 用于评估模型的<strong>稳定性</strong></li>
+              <li>Arena Score（竞技场分）和游戏质量指标作为辅助参考</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div id="cardListContainer">
+      <div class="loading-state" id="loadingState">
+        <div class="loading-spinner"></div>
+        <p>正在加载排行榜数据…</p>
+      </div>
     </div>
   </main>
 
@@ -66,13 +102,33 @@
   <!-- ===== Footer ===== -->
   <footer class="footer">
     <div class="footer-inner">
-      <span>将 replay JSON 放入 <code>web/leaderboard/data/</code></span>
-      <span class="footer-sep">·</span>
-      <span>运行 <code>uv run guild-manager build-leaderboard</code> 生成数据</span>
+      <span>Guild Manager Bench · LLM Agent 战力评估排行榜</span>
     </div>
   </footer>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script src="app.js"></script>
+
+  <!-- Rank Score 释义浮窗 -->
+  <div class="rs-popover" id="rsPopover" aria-hidden="true">
+    <div class="rs-popover-content">
+      <button class="rs-popover-close" aria-label="关闭">×</button>
+      <h3 class="rs-popover-title">Rank Score（段位积分）</h3>
+      <p class="rs-popover-text">
+        Rank Score 衡量冒险者队伍的<strong>综合战力</strong>。系统在从低到高的多个难度等级上模拟竞技场战斗：
+      </p>
+      <p class="rs-popover-formula">
+        单项贡献 = (战斗评分 ÷ 100) × 难度系数
+      </p>
+      <p class="rs-popover-text">
+        最终得分 = <strong>各难度等级贡献之和</strong>。队伍在<em>高难度</em>下表现越好，Rank Score 越高。
+        每位冒险者的贡献值和占比可在展开卡片后查看。
+      </p>
+      <p class="rs-popover-text rs-popover-sub">
+        曲线对比面板展示每回合的 Rank Score 变化，反映队伍战力随培养进程的成长轨迹。
+      </p>
+    </div>
+  </div>
+  <div class="rs-popover-backdrop" id="rsBackdrop" aria-hidden="true"></div>
 </body>
 </html>

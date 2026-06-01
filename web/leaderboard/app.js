@@ -55,6 +55,12 @@ function shortRunId(value) {
   return `${text.slice(0, 12)}…${text.slice(-8)}`;
 }
 
+function renderModelNote(modelName) {
+  const note = _modelNotes[modelName];
+  if (!note || !note.trim()) return '';
+  return `<span class="model-note-tag" title="${esc(note)}">${esc(note)}</span>`;
+}
+
 function fmtDuration(seconds) {
   if (seconds == null) return null;
   if (seconds < 60) return `${Math.round(seconds)}s`;
@@ -75,6 +81,7 @@ const MEDALS = ['🥇', '🥈', '🥉'];
 // Global State
 // ============================================================================
 let _leaderboardData = null;
+let _modelNotes = {};       // model name -> note string
 let _curveChart = null;
 let _curveRunSelection = {}; // key: "model::run_id" -> boolean
 
@@ -311,16 +318,17 @@ function updateCurveChart(data) {
 function renderLeaderboard(data) {
   const main = $('#leaderboardMain');
   const meta = $('#topMeta');
+  const container = $('#cardListContainer');
 
   // Top bar meta
   const genTime = data.generated_at ? data.generated_at.replace('T', ' ') : '—';
   meta.innerHTML = `<span>${esc(data.total_runs)} 次运行 · ${data.models.length} 个模型 · 更新于 ${esc(genTime)}</span>`;
 
   if (!data.models.length) {
-    main.innerHTML = `
+    container.innerHTML = `
       <div class="empty-state">
         <h2>暂无数据</h2>
-        <p>将 replay JSON 放入 <code>web/leaderboard/data/</code>，然后运行 <code>uv run guild-manager build-leaderboard</code></p>
+        <p>暂无排行榜数据，请稍后再来查看。</p>
       </div>`;
     return;
   }
@@ -334,7 +342,7 @@ function renderLeaderboard(data) {
     );
   }).join('');
 
-  main.innerHTML = `<div class="card-list">${cards}</div>`;
+  container.innerHTML = `<div class="card-list">${cards}</div>`;
 
   // Bind expand toggle
   $$('.model-card').forEach((card) => {
@@ -393,7 +401,7 @@ function renderCard(m) {
       <div class="card-header">
         <div class="rank-badge">${medal}${rank}</div>
         <div class="model-info">
-          <div class="model-name" title="${esc(m.model)}">${esc(m.model)}</div>
+          <div class="model-name" title="${esc(m.model)}">${esc(m.model)}${renderModelNote(m.model)}</div>
           <div class="model-meta">
             <span>${m.runs} 次运行</span>
             ${latestRun.preset ? `<span>${esc(latestRun.preset)}</span>` : ''}
@@ -402,7 +410,7 @@ function renderCard(m) {
         </div>
         <div class="card-stats">
           <div class="stat-block primary-stat">
-            <div class="stat-label">Rank Score</div>
+            <div class="stat-label">Rank Score<button class="rs-help-btn" data-action="show-rs-help" title="Rank Score 释义">?</button></div>
             <div class="stat-value rank-val">${rankScoreVal}</div>
           </div>
         </div>
@@ -519,6 +527,7 @@ function renderRunDetails(runs) {
       run.game_seed != null ? `game ${fmtInt(run.game_seed)}` : null,
       run.scoring_seed != null ? `score ${fmtInt(run.scoring_seed)}` : null,
     ].filter(Boolean).join(' · ');
+    const contributors = renderRankContributors(run.rank_score_per_adventurer);
 
     return `
       <div class="run-item">
@@ -550,6 +559,7 @@ function renderRunDetails(runs) {
           ${run.score_mode ? `<span>${esc(run.score_mode)}</span>` : ''}
           ${run.rank_score_source ? `<span>rank ${esc(run.rank_score_source)}</span>` : ''}
         </div>
+        ${contributors}
       </div>`;
   }).join('');
 
@@ -557,6 +567,39 @@ function renderRunDetails(runs) {
     <div class="detail-section run-section">
       <div class="detail-title">运行明细</div>
       <div class="run-list">${items}</div>
+    </div>`;
+}
+
+function rankContributorItems(values) {
+  if (!Array.isArray(values)) return [];
+  return values
+    .filter((item) => item && typeof item === 'object')
+    .map((item) => {
+      const score = item.rank_score_contribution ?? item.rank_score;
+      return {
+        name: item.name || item.adventurer_id || '?',
+        score: Number(score),
+        share: item.rank_score_share != null ? Number(item.rank_score_share) : null,
+      };
+    })
+    .filter((item) => Number.isFinite(item.score))
+    .sort((a, b) => b.score - a.score);
+}
+
+function renderRankContributors(values) {
+  const items = rankContributorItems(values);
+  if (!items.length) return '';
+  return `
+    <div class="rank-contrib-list">
+      ${items.map((item) => {
+        const share = item.share != null ? `<span>${esc(fmtPct(item.share))}</span>` : '';
+        return `
+          <div class="rank-contrib-chip" title="${esc(item.name)}">
+            <strong>${esc(item.name)}</strong>
+            <em>${esc(fmtRankScore(item.score))}</em>
+            ${share}
+          </div>`;
+      }).join('')}
     </div>`;
 }
 
@@ -585,16 +628,106 @@ function showError(msg) {
 // ============================================================================
 async function init() {
   try {
-    const res = await fetch('leaderboard_data.json');
+    const [res, notesRes] = await Promise.all([
+      fetch('leaderboard_data.json'),
+      fetch('model_notes.json'),
+    ]);
     if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     const data = await res.json();
     _leaderboardData = data;
+    if (notesRes.ok) {
+      try { _modelNotes = await notesRes.json(); } catch (_) { /* ignore malformed notes */ }
+    }
     $('#loadingState')?.remove();
     renderLeaderboard(data);
     initTabs();
+    initIntroToggle();
+    initRankScoreHelp();
   } catch (e) {
     showError(`无法加载 leaderboard_data.json: ${e.message}`);
   }
+}
+
+// ============================================================================
+// Intro Card Toggle
+// ============================================================================
+function initIntroToggle() {
+  const card = $('#introCard');
+  const btn = $('#introToggle');
+  if (!card || !btn) return;
+  btn.addEventListener('click', () => {
+    card.classList.toggle('collapsed');
+    btn.textContent = card.classList.contains('collapsed') ? '展开' : '收起';
+  });
+}
+
+// ============================================================================
+// Rank Score Help Popover
+// ============================================================================
+function initRankScoreHelp() {
+  const popover = $('#rsPopover');
+  const backdrop = $('#rsBackdrop');
+
+  function openPopover(anchor) {
+    popover.setAttribute('aria-hidden', 'false');
+    backdrop.setAttribute('aria-hidden', 'false');
+
+    // Position above/below the anchor button, centered
+    const rect = anchor.getBoundingClientRect();
+    const popW = popover.offsetWidth;
+    let left = rect.left + rect.width / 2 - popW / 2;
+    left = Math.max(8, Math.min(left, window.innerWidth - popW - 8));
+    popover.style.left = left + 'px';
+
+    // Place below with a small gap, flip above if too close to bottom
+    const gap = 10;
+    const popH = popover.offsetHeight;
+    if (rect.bottom + gap + popH > window.innerHeight - 16) {
+      popover.style.top = (rect.top - popH - gap) + 'px';
+      popover.style.bottom = 'auto';
+    } else {
+      popover.style.top = (rect.bottom + gap) + 'px';
+      popover.style.bottom = 'auto';
+    }
+  }
+
+  function closePopover() {
+    popover.setAttribute('aria-hidden', 'true');
+    backdrop.setAttribute('aria-hidden', 'true');
+  }
+
+  // Event delegation: open on help button click
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-action="show-rs-help"]');
+    if (btn) {
+      e.stopPropagation();
+      if (popover.getAttribute('aria-hidden') === 'false') {
+        closePopover();
+      } else {
+        openPopover(btn);
+      }
+      return;
+    }
+    // Close button inside popover
+    if (e.target.closest('.rs-popover-close')) {
+      closePopover();
+      return;
+    }
+    // Click outside popover closes it
+    if (!e.target.closest('.rs-popover') && !e.target.closest('[data-action="show-rs-help"]')) {
+      closePopover();
+    }
+  });
+
+  // Backdrop click closes
+  backdrop.addEventListener('click', closePopover);
+
+  // Escape key closes
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && popover.getAttribute('aria-hidden') === 'false') {
+      closePopover();
+    }
+  });
 }
 
 document.addEventListener('DOMContentLoaded', init);
