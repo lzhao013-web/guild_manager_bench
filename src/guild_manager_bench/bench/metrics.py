@@ -32,6 +32,8 @@ class AdventurerScoreBreakdown:
     assignments: int
     average_score: float
     win_rate: float
+    rank_score: float = 0.0
+    rank_score_share: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -40,6 +42,9 @@ class AdventurerScoreBreakdown:
             "assignments": self.assignments,
             "average_score": self.average_score,
             "win_rate": self.win_rate,
+            "rank_score": self.rank_score,
+            "rank_score_contribution": self.rank_score,
+            "rank_score_share": self.rank_score_share,
         }
 
 
@@ -60,6 +65,7 @@ class ScoreReport:
     chosen_battles: int
     chosen_win_rate: float
     per_adventurer: tuple[AdventurerScoreBreakdown, ...]
+    rank_score_per_adventurer: tuple[dict[str, Any], ...]
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -76,6 +82,9 @@ class ScoreReport:
             "chosen_battles": self.chosen_battles,
             "chosen_win_rate": self.chosen_win_rate,
             "per_adventurer": [item.to_dict() for item in self.per_adventurer],
+            "rank_score_per_adventurer": [
+                dict(item) for item in self.rank_score_per_adventurer
+            ],
         }
 
 
@@ -96,9 +105,17 @@ class _BattleEvaluation:
 @dataclass(frozen=True, slots=True)
 class _ObservationAdventurer:
     adventurer_id: str
+    name: str
     stats: CombatStats
     resources: CombatResources
     skills: tuple[Skill, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class _RankScoreResult:
+    rank_score: float
+    per_adventurer_score: dict[str, float]
+    per_adventurer_assignments: dict[str, int]
 
 
 def total_effective_level(state: GameState) -> int:
@@ -118,7 +135,9 @@ def score_final_state(
     rules = definition.scoring
     wave_count = waves if waves is not None else rules.waves
     arena_result = _run_arena(definition, state, waves=wave_count)
+    rank_result = compute_rank_score_breakdown(definition, state)
     adventurers = tuple(state.adventurers)
+    rank_score = rank_result.rank_score
 
     per_adventurer = tuple(
         AdventurerScoreBreakdown(
@@ -133,12 +152,17 @@ def score_final_state(
                 arena_result.per_adventurer_wins[adventurer.adventurer_id],
                 arena_result.per_adventurer_assignments[adventurer.adventurer_id],
             ),
+            rank_score=rank_result.per_adventurer_score.get(adventurer.adventurer_id, 0.0),
+            rank_score_share=_rank_score_share(
+                rank_result.per_adventurer_score.get(adventurer.adventurer_id, 0.0),
+                rank_score,
+            ),
         )
         for adventurer in adventurers
     )
     return ScoreReport(
         score=arena_result.score,
-        rank_score=compute_rank_score(definition, state),
+        rank_score=rank_score,
         mode=rules.mode,
         seed=rules.seed,
         waves=rules.waves,
@@ -150,12 +174,16 @@ def score_final_state(
         chosen_battles=arena_result.chosen_battles,
         chosen_win_rate=arena_result.chosen_win_rate,
         per_adventurer=per_adventurer,
+        rank_score_per_adventurer=_rank_score_contribution_items(
+            adventurers,
+            rank_result,
+        ),
     )
 
 
 def _compute_difficulty_tier(
     args: tuple[int, GameDefinition, tuple[_ObservationAdventurer, ...], int],
-) -> tuple[int, float]:
+) -> tuple[int, float, dict[str, float], dict[str, int]]:
     """Compute arena score for a single difficulty level.
 
     Top-level function so it can be pickled by ProcessPoolExecutor.
@@ -176,12 +204,17 @@ def _compute_difficulty_tier(
     )
     tier_definition = replace(definition, scoring=tier_scoring)
     tier_result = _run_observation_arena(tier_definition, adventurers, waves=rank_waves)
-    return difficulty, tier_result.score
+    return (
+        difficulty,
+        tier_result.score,
+        tier_result.per_adventurer_score,
+        tier_result.per_adventurer_assignments,
+    )
 
 
 def _compute_difficulty_tier_state(
     args: tuple[int, GameDefinition, GameState, int],
-) -> tuple[int, float]:
+) -> tuple[int, float, dict[str, float], dict[str, int]]:
     """Compute arena score for a single difficulty level (live state version).
 
     Top-level function so it can be pickled by ProcessPoolExecutor.
@@ -202,7 +235,12 @@ def _compute_difficulty_tier_state(
     )
     tier_definition = replace(definition, scoring=tier_scoring)
     tier_result = _run_arena(tier_definition, state, waves=rank_waves)
-    return difficulty, tier_result.score
+    return (
+        difficulty,
+        tier_result.score,
+        tier_result.per_adventurer_score,
+        tier_result.per_adventurer_assignments,
+    )
 
 
 def rank_score_from_final_observation(
@@ -211,25 +249,56 @@ def rank_score_from_final_observation(
 ) -> float:
     """从 replay 的终局 observation 估算段位积分。"""
 
+    return rank_score_breakdown_from_final_observation(
+        definition,
+        observation,
+    )["rank_score"]
+
+
+def rank_score_breakdown_from_final_observation(
+    definition: GameDefinition,
+    observation: Mapping[str, Any],
+) -> dict[str, Any]:
+    """从 replay 终局 observation 计算总段位分和冒险者贡献。"""
+
     adventurers = _observation_adventurers(observation)
     if not adventurers:
-        return 0.0
+        return {
+            "rank_score": 0.0,
+            "per_adventurer": [],
+        }
 
+    rank_result = _compute_observation_rank_score_breakdown(
+        definition,
+        adventurers,
+    )
+    return {
+        "rank_score": rank_result.rank_score,
+        "per_adventurer": list(
+            _rank_score_contribution_items(adventurers, rank_result)
+        ),
+    }
+
+
+def _compute_observation_rank_score_breakdown(
+    definition: GameDefinition,
+    adventurers: tuple[_ObservationAdventurer, ...],
+) -> _RankScoreResult:
     rules = definition.scoring
     difficulties = list(range(rules.rank_min_diff, rules.rank_max_diff + 1, rules.rank_step))
-    if not difficulties:
-        return 0.0
+    if not adventurers or not difficulties:
+        return _empty_rank_score_result(adventurers)
 
     args_iter = (
         (d, definition, adventurers, rules.rank_waves) for d in difficulties
     )
-    rank_score = 0.0
     with ProcessPoolExecutor() as executor:
-        for difficulty, score in executor.map(_compute_difficulty_tier, args_iter):
-            performance = score / 100.0
-            rank_score += performance * difficulty
+        rows = list(executor.map(_compute_difficulty_tier, args_iter))
 
-    return _round_score(rank_score)
+    return _aggregate_rank_score_rows(
+        tuple(item.adventurer_id for item in adventurers),
+        rows,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -383,30 +452,128 @@ def compute_rank_score(
 
     如果传入 *executor*，则复用该进程池，避免反复创建/销毁的开销。
     """
+    return compute_rank_score_breakdown(
+        definition,
+        state,
+        executor=executor,
+    ).rank_score
+
+
+def compute_rank_score_breakdown(
+    definition: GameDefinition,
+    state: GameState,
+    *,
+    executor: ProcessPoolExecutor | None = None,
+) -> _RankScoreResult:
+    """计算段位积分，并拆出每个冒险者的加权贡献。"""
+
     rules = definition.scoring
     adventurers = tuple(state.adventurers)
     if not adventurers:
-        return 0.0
+        return _empty_rank_score_result(adventurers)
 
     difficulties = list(range(rules.rank_min_diff, rules.rank_max_diff + 1, rules.rank_step))
     if not difficulties:
-        return 0.0
+        return _empty_rank_score_result(adventurers)
 
     args_iter = (
         (d, definition, state, rules.rank_waves) for d in difficulties
     )
-    rank_score = 0.0
     if executor is not None:
-        for difficulty, score in executor.map(_compute_difficulty_tier_state, args_iter):
-            performance = score / 100.0
-            rank_score += performance * difficulty
+        rows = list(executor.map(_compute_difficulty_tier_state, args_iter))
     else:
         with ProcessPoolExecutor() as pool:
-            for difficulty, score in pool.map(_compute_difficulty_tier_state, args_iter):
-                performance = score / 100.0
-                rank_score += performance * difficulty
+            rows = list(pool.map(_compute_difficulty_tier_state, args_iter))
 
-    return _round_score(rank_score)
+    return _aggregate_rank_score_rows(
+        tuple(item.adventurer_id for item in adventurers),
+        rows,
+    )
+
+
+def _aggregate_rank_score_rows(
+    adventurer_ids: tuple[str, ...],
+    rows: list[tuple[int, float, dict[str, float], dict[str, int]]],
+) -> _RankScoreResult:
+    per_adventurer_score = {adventurer_id: 0.0 for adventurer_id in adventurer_ids}
+    per_adventurer_assignments = {adventurer_id: 0 for adventurer_id in adventurer_ids}
+    rank_score = 0.0
+
+    for difficulty, score, tier_scores, tier_assignments in rows:
+        tier_contribution = (score / 100.0) * difficulty
+        rank_score += tier_contribution
+        tier_total = sum(
+            value
+            for value in tier_scores.values()
+            if isinstance(value, (int, float))
+        )
+        for adventurer_id in adventurer_ids:
+            adventurer_score = tier_scores.get(adventurer_id, 0.0)
+            if tier_total > 0:
+                per_adventurer_score[adventurer_id] += (
+                    tier_contribution * adventurer_score / tier_total
+                )
+            per_adventurer_assignments[adventurer_id] += int(
+                tier_assignments.get(adventurer_id, 0)
+            )
+
+    return _RankScoreResult(
+        rank_score=_round_score(rank_score),
+        per_adventurer_score={
+            adventurer_id: _round_score(score)
+            for adventurer_id, score in per_adventurer_score.items()
+        },
+        per_adventurer_assignments=per_adventurer_assignments,
+    )
+
+
+def _empty_rank_score_result(adventurers) -> _RankScoreResult:
+    return _RankScoreResult(
+        rank_score=0.0,
+        per_adventurer_score={
+            adventurer.adventurer_id: 0.0
+            for adventurer in adventurers
+        },
+        per_adventurer_assignments={
+            adventurer.adventurer_id: 0
+            for adventurer in adventurers
+        },
+    )
+
+
+def _rank_score_contribution_items(
+    adventurers,
+    rank_result: _RankScoreResult,
+) -> tuple[dict[str, Any], ...]:
+    return tuple(
+        {
+            "adventurer_id": adventurer.adventurer_id,
+            "name": getattr(adventurer, "name", adventurer.adventurer_id),
+            "rank_score": rank_result.per_adventurer_score.get(
+                adventurer.adventurer_id,
+                0.0,
+            ),
+            "rank_score_contribution": rank_result.per_adventurer_score.get(
+                adventurer.adventurer_id,
+                0.0,
+            ),
+            "rank_score_share": _rank_score_share(
+                rank_result.per_adventurer_score.get(adventurer.adventurer_id, 0.0),
+                rank_result.rank_score,
+            ),
+            "assignments": rank_result.per_adventurer_assignments.get(
+                adventurer.adventurer_id,
+                0,
+            ),
+        }
+        for adventurer in adventurers
+    )
+
+
+def _rank_score_share(contribution: float, total: float) -> float:
+    if total <= 0:
+        return 0.0
+    return _round_score(contribution / total)
 
 
 def _sample_arena_monster(
@@ -578,6 +745,7 @@ def _observation_adventurers(
     for index, data in enumerate(values, start=1):
         if not isinstance(data, Mapping):
             raise ValueError(f"final_observation.adventurers[{index}] must be an object")
+        adventurer_id = str(data.get("adventurer_id") or f"adventurer_{index}")
         stats_data = data.get("effective_stats") or data.get("base_stats")
         if not isinstance(stats_data, Mapping):
             raise ValueError(f"final_observation.adventurers[{index}] missing effective_stats")
@@ -593,7 +761,8 @@ def _observation_adventurers(
             raise ValueError(f"final_observation.adventurers[{index}].skills must be a list")
         adventurers.append(
             _ObservationAdventurer(
-                adventurer_id=str(data.get("adventurer_id") or f"adventurer_{index}"),
+                adventurer_id=adventurer_id,
+                name=str(data.get("name") or adventurer_id),
                 stats=stats,
                 resources=resources,
                 skills=tuple(

@@ -6,7 +6,11 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from guild_manager_bench.bench.metrics import compute_rank_score, rank_score_from_final_observation
+from guild_manager_bench.bench.metrics import (
+    compute_rank_score,
+    rank_score_breakdown_from_final_observation,
+    rank_score_from_final_observation,
+)
 from guild_manager_bench.game.loader import load_game_definition
 from guild_manager_bench.game.state import GameDefinition
 
@@ -33,7 +37,9 @@ def with_rank_score_from_final_observation(
 
     result = dict(replay)
     score = result.get("score")
-    if isinstance(score, Mapping) and score.get("rank_score") is not None:
+    needs_rank_score = not isinstance(score, Mapping) or score.get("rank_score") is None
+    needs_breakdown = not isinstance(score, Mapping) or not _has_rank_score_breakdown(score)
+    if not needs_rank_score and not needs_breakdown:
         return result
 
     observation = result.get("final_observation")
@@ -42,7 +48,7 @@ def with_rank_score_from_final_observation(
 
     try:
         definition = _definition_for_replay(result, project_root=project_root)
-        rank_score = rank_score_from_final_observation(definition, observation)
+        breakdown = rank_score_breakdown_from_final_observation(definition, observation)
     except (OSError, ValueError, TypeError, KeyError) as exc:
         if strict:
             raise
@@ -51,14 +57,69 @@ def with_rank_score_from_final_observation(
     score_data = dict(score) if isinstance(score, Mapping) else {}
     score_data.setdefault("mode", definition.scoring.mode)
     score_data.setdefault("seed", definition.scoring.seed)
-    score_data["rank_score"] = rank_score
-    score_data["rank_score_source"] = "final_observation"
+    if needs_rank_score:
+        score_data["rank_score"] = breakdown["rank_score"]
+        score_data["rank_score_source"] = "final_observation"
+    if needs_breakdown:
+        per_adventurer = breakdown.get("per_adventurer")
+        if isinstance(per_adventurer, list):
+            score_data["rank_score_per_adventurer"] = per_adventurer
+            score_data["per_adventurer"] = _merge_rank_score_breakdown(
+                score_data.get("per_adventurer"),
+                per_adventurer,
+            )
     result["score"] = score_data
 
     if save_path is not None:
         _write_json_atomic(save_path, result)
 
     return result
+
+
+def _has_rank_score_breakdown(score: Mapping[str, Any]) -> bool:
+    if _has_rank_score_items(score.get("rank_score_per_adventurer")):
+        return True
+    return _has_rank_score_items(score.get("per_adventurer"))
+
+
+def _has_rank_score_items(value: Any) -> bool:
+    if not isinstance(value, list):
+        return False
+    for item in value:
+        if not isinstance(item, Mapping):
+            continue
+        if item.get("rank_score") is not None or item.get("rank_score_contribution") is not None:
+            return True
+    return False
+
+
+def _merge_rank_score_breakdown(
+    existing: Any,
+    contributions: list[Any],
+) -> list[dict[str, Any]]:
+    by_id = {
+        str(item.get("adventurer_id")): item
+        for item in contributions
+        if isinstance(item, Mapping) and item.get("adventurer_id") is not None
+    }
+    merged: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    if isinstance(existing, list):
+        for item in existing:
+            if not isinstance(item, Mapping):
+                continue
+            data = dict(item)
+            adventurer_id = data.get("adventurer_id")
+            key = str(adventurer_id) if adventurer_id is not None else ""
+            contribution = by_id.get(key)
+            if contribution is not None:
+                data.update(dict(contribution))
+                seen.add(key)
+            merged.append(data)
+    for key, item in by_id.items():
+        if key not in seen:
+            merged.append(dict(item))
+    return merged
 
 
 def _definition_for_replay(
