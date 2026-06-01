@@ -155,11 +155,11 @@ def _resolve_ref(
     if numeric is None:
         return value
     if numeric <= 0:
-        raise ValueError(f"{field} must be a positive numeric id")
+        raise ValueError(f"{field} 必须是正整数 ID")
     for canonical_id, ref in refs.get(category, {}).items():
         if ref == numeric:
             return canonical_id
-    raise ValueError(f"{field} numeric id not found: {numeric}")
+    raise ValueError(f"{field} 数字 ID 未找到：{numeric}")
 
 
 def _numeric_value(value: Any) -> int | None:

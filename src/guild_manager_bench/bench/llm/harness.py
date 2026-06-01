@@ -94,6 +94,10 @@ class MemoStore:
         self.entries.clear()
         return entries
 
+    def restore(self, entries: tuple[str, ...]) -> None:
+        """恢复备忘录快照。"""
+        self.entries = list(entries)
+
     def clear(self) -> None:
         self.entries.clear()
 
@@ -143,15 +147,15 @@ class TurnToolHarness:
         """调用一个 LLM 工具，并附加当前回合预算状态。"""
 
         if self.ended:
-            return self._error("turn already ended")
+            return self._error("回合已结束")
 
         if name != "end_turn" and self.budget.exhausted:
-            return self._error("tool call budget exhausted; only end_turn is allowed")
+            return self._error("工具调用次数已用尽；仅允许使用 end_turn")
 
         if name == "preview_battle" and self._battle_preview_count >= self.max_battle_preview_per_turn:
             return self._error(
-                f"preview_battle limit exceeded ({self.max_battle_preview_per_turn} per turn); "
-                "only use preview_battle for critical matchups"
+                f"preview_battle 次数已达上限（每回合 {self.max_battle_preview_per_turn} 次）；"
+                "请仅在关键对战时使用 preview_battle"
             )
 
         if name != "end_turn":
@@ -266,7 +270,7 @@ def memo_entries_from_tool_steps(turns: Sequence[Any]) -> tuple[str, ...]:
             if step.get("type") != "tool_result" or step.get("name") != "write_memo":
                 continue
             content = step.get("content")
-            if not (isinstance(content, str) and content.lstrip().startswith("OK ")):
+            if not (isinstance(content, str) and (content.lstrip().startswith("成功 ") or content.lstrip().startswith("OK "))):
                 continue
             arguments = step.get("arguments")
             if isinstance(arguments, Mapping):

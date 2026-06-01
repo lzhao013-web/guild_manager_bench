@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from concurrent.futures import ProcessPoolExecutor
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
@@ -93,6 +94,7 @@ class LlmRunConfig:
     max_empty_responses: int = 2
     max_end_turn_attempts: int = 3
     max_model_steps_per_turn: int = 50
+    max_turn_retries: int = 2
     archive_dir: str | Path | None = "runs/llm"
     game_seed: int | None = None
     scoring_seed: int | None = None
@@ -102,6 +104,7 @@ class LlmRunConfig:
         _require_positive("max_empty_responses", self.max_empty_responses)
         _require_positive("max_end_turn_attempts", self.max_end_turn_attempts)
         _require_positive("max_model_steps_per_turn", self.max_model_steps_per_turn)
+        _require_non_negative("max_turn_retries", self.max_turn_retries)
         _require_optional_int("game_seed", self.game_seed)
         _require_optional_int("scoring_seed", self.scoring_seed)
 
@@ -178,6 +181,7 @@ def run_llm_game(
         )
 
     active_turn_trace: TurnTrace | None = None
+    turn_retry_count = 0
 
     def update_replay(active_turn: TurnTrace | None = None) -> None:
         nonlocal active_turn_trace
@@ -235,6 +239,8 @@ def run_llm_game(
                     _emit(emit, "run_completed", run=_run_summary(run))
                     return run
 
+                # 回合级别重试循环：对无异动回合失败自动重试
+                memo_snapshot = memo_store.snapshot()
                 turn_trace = run_llm_turn(
                     agent,
                     tools,
@@ -245,6 +251,24 @@ def run_llm_game(
                     trace_update=update_replay,
                     system_prompt=system_prompt,
                 )
+                if (
+                    turn_trace.status == "failed"
+                    and _is_retryable(turn_trace)
+                    and turn_retry_count < config.max_turn_retries
+                ):
+                    turn_retry_count += 1
+                    traces.append(turn_trace)
+                    _emit(
+                        emit,
+                        "turn_retry",
+                        turn=observation["turn"],
+                        retry_count=turn_retry_count,
+                        total_allowed=config.max_turn_retries,
+                        reason=turn_trace.failure_reason,
+                    )
+                    memo_store.restore(memo_snapshot)
+                    continue
+
                 traces.append(turn_trace)
                 if turn_trace.status == "completed":
                     turn_trace.rank_score = compute_rank_score(
@@ -252,6 +276,7 @@ def run_llm_game(
                         tools.get_state(session_id),
                         executor=rank_executor,
                     )
+                    turn_retry_count = 0
                 active_turn_trace = None
                 update_replay()
                 if turn_trace.status == "failed":
@@ -417,7 +442,12 @@ def run_llm_turn(
                     event_sink,
                     trace_update,
                 )
-            retry = _retry_message_empty_response()
+            if empty_responses == config.max_empty_responses - 1:
+                retry = _retry_message_empty_response_last()
+            elif empty_responses >= 2:
+                retry = _retry_message_empty_response_urgent()
+            else:
+                retry = _retry_message_empty_response()
             turn_trace.messages.append(retry)
             _notify_trace_update(trace_update, turn_trace)
             _emit(event_sink, "retry", turn=observation["turn"], reason="empty_response", message=retry["content"])
@@ -578,9 +608,9 @@ def _replay_tool_step_succeeded(step: Mapping[str, Any]) -> bool:
     content = step.get("content")
     if isinstance(content, str):
         stripped = content.lstrip()
-        if stripped.startswith("OK "):
+        if stripped.startswith("成功 ") or stripped.startswith("OK "):
             return True
-        if stripped.startswith("FAIL "):
+        if stripped.startswith("失败 ") or stripped.startswith("FAIL "):
             return False
         parsed = _parse_json_mapping(stripped)
         if parsed is not None and parsed.get("ok") is True:
@@ -766,13 +796,13 @@ def _format_tool_result_for_model(name: str, result: Mapping[str, Any]) -> str:
     ok = result.get("ok")
     lines: list[str] = []
     if ok is False:
-        lines.append(f"FAIL {name}: {result.get('error', 'unknown error')}")
+        lines.append(f"失败 {name}：{result.get('error', '未知错误')}")
         event = result.get("event")
         if isinstance(event, Mapping) and event.get("summary"):
             lines.append(f"事件: {event['summary']}")
         return "\n".join(_append_budget_lines(lines, result))
 
-    lines.append(f"OK {name}")
+    lines.append(f"成功 {name}")
     if name == "get_party":
         _append_party_result_lines(lines, result, _result_refs(result))
     elif name == "get_monsters":
@@ -792,7 +822,7 @@ def _format_tool_result_for_model(name: str, result: Mapping[str, Any]) -> str:
     elif name == "write_memo" and isinstance(result.get("memo"), Mapping):
         memo = result["memo"]
         lines[0] = (
-            "OK write_memo: "
+            "成功 write_memo："
             f"已记录备忘 {memo.get('count')} 条，仅下回合出现在提示词中，之后自动消失"
         )
         dropped = memo.get("dropped_oldest")
@@ -803,7 +833,7 @@ def _format_tool_result_for_model(name: str, result: Mapping[str, Any]) -> str:
         if isinstance(event, Mapping):
             summary = event.get("summary")
             if summary:
-                lines[0] = f"OK {name}: {summary}"
+                lines[0] = f"成功 {name}：{summary}"
             _append_changes_lines(lines, event.get("changes"), _result_refs(result))
             has_event_battles = _append_battles_lines(
                 lines,
@@ -872,7 +902,7 @@ def _append_battle_preview_lines(
     reward = preview.get("reward")
     reward_text = _reward_inline(reward) if isinstance(reward, Mapping) else "{}"
     lines[0] = (
-        "OK preview_battle: "
+        "成功 preview_battle："
         f"冒险者 {display_ref(refs, 'adventurer', preview.get('adventurer_id'))} "
         f"{preview.get('adventurer_name')} vs "
         f"怪物 {display_ref(refs, 'monster', preview.get('monster_id'))} "
@@ -886,7 +916,8 @@ def _append_battle_preview_lines(
     )
     lines.append(
         "战斗: "
-        f"结果 {preview.get('outcome')}; 原因 {preview.get('reason')}; "
+        f"结果 {_combat_outcome_zh(preview.get('outcome'))}；"
+        f"原因 {_combat_reason_zh(preview.get('reason'))}；"
         f"动作数 {preview.get('actions_taken')}; 耗时 {preview.get('time_elapsed')}"
     )
     lines.append(f"胜利奖励: {reward_text}")
@@ -965,11 +996,7 @@ def _append_observation_lines(lines: list[str], observation: Mapping[str, Any]) 
         for recipe in recipes:
             availability = "可制作" if recipe.get("can_craft") else "不可制作"
             missing = recipe.get("missing")
-            missing_text = (
-                f"; 缺少 {_mapping_inline(missing)}"
-                if isinstance(missing, Mapping) and missing
-                else ""
-            )
+            missing_text = _missing_suffix_zh(missing, refs)
             lines.append(
                 "- "
                 f"{display_ref(refs, 'recipe', recipe.get('recipe_id'))} "
@@ -1167,11 +1194,7 @@ def _append_recruit_candidate_lines(
     for candidate in values:
         availability = "可招募" if candidate.get("can_recruit") else "不可招募"
         missing = candidate.get("missing")
-        missing_text = (
-            f"; 缺少 {_mapping_inline(missing)}"
-            if isinstance(missing, Mapping) and missing
-            else ""
-        )
+        missing_text = _missing_suffix_zh(missing, refs)
         stats = candidate.get("base_stats")
         if not isinstance(stats, Mapping):
             stats = {}
@@ -1241,11 +1264,7 @@ def _append_recipe_lines(
     for recipe in values:
         availability = "可制作" if recipe.get("can_craft") else "不可制作"
         missing = recipe.get("missing")
-        missing_text = (
-            f"; 缺少 {_mapping_inline(missing)}"
-            if isinstance(missing, Mapping) and missing
-            else ""
-        )
+        missing_text = _missing_suffix_zh(missing, refs)
         lines.append(
             "- "
             f"{display_ref(refs, 'recipe', recipe.get('recipe_id'))} "
@@ -1321,12 +1340,24 @@ def _format_missing_zh(
             if isinstance(value, Mapping):
                 current = value.get("current", "?")
                 limit = value.get("limit", "?")
-                parts.append(f"队伍已满 {current}/{limit}")
+                parts.append(f"队伍空位（当前 {current}/{limit}）")
             else:
-                parts.append(f"队伍已满 {value}")
+                parts.append(f"队伍空位（{value}）")
         else:
-            parts.append(f"{key} {value}")
+            parts.append(f"{_mapping_key(key)} {value}")
     return "；".join(parts)
+
+
+def _missing_suffix_zh(
+    missing: Any,
+    refs: Mapping[str, Mapping[str, int]],
+) -> str:
+    if not isinstance(missing, Mapping) or not missing:
+        return ""
+    missing_text = _format_missing_zh(missing, refs)
+    if not missing_text:
+        return ""
+    return f"；缺少 {missing_text}"
 
 
 def _append_upgrade_lines(
@@ -1591,6 +1622,30 @@ def _reward_inline(reward: Mapping[str, Any]) -> str:
     )
 
 
+def _combat_outcome_zh(value: Any) -> str:
+    labels = {
+        "left_win": "冒险者胜利",
+        "right_win": "怪物胜利",
+        "draw": "平局",
+    }
+    return labels.get(value, str(value))
+
+
+def _combat_reason_zh(value: Any) -> str:
+    labels = {
+        "target_defeated": "目标被击败",
+        "actor_defeated": "行动者被击败",
+        "status_defeated_actor": "行动者被状态效果击败",
+        "both_defeated": "双方同时被击败",
+        "max_actions_reached": "达到最大行动次数",
+        "no_combatant_can_act": "双方都无法行动",
+        "right_already_defeated": "右侧已被击败",
+        "left_already_defeated": "左侧已被击败",
+        "both_already_defeated": "双方已被击败",
+    }
+    return labels.get(value, str(value))
+
+
 def _mapping_inline(value: Any) -> str:
     if not isinstance(value, Mapping) or not value:
         return "{}"
@@ -1696,6 +1751,11 @@ def _agent_response(
     return agent.respond(messages=messages, tools=tools)
 
 
+def _is_retryable(turn: TurnTrace) -> bool:
+    """回合是否可安全重试：没有工具调用意味着游戏状态无变化。"""
+    return not turn.tool_calls
+
+
 def _retry_message_empty_response() -> dict[str, str]:
     return {
         "role": "user",
@@ -1703,10 +1763,30 @@ def _retry_message_empty_response() -> dict[str, str]:
     }
 
 
+def _retry_message_empty_response_urgent() -> dict[str, str]:
+    return {
+        "role": "user",
+        "content": (
+            "你已经连续多次没有调用任何工具了。必须立刻调用工具（如 get_party、get_monsters 等查询工具），"
+            "然后调用 end_turn 提交讨伐列表结束本回合。否则本回合将失败。"
+        ),
+    }
+
+
+def _retry_message_empty_response_last() -> dict[str, str]:
+    return {
+        "role": "user",
+        "content": (
+            "这是本回合最后一次机会。如果你还不调用任何工具并调用 end_turn，本回合将判定失败。"
+            "请立即调用工具。"
+        ),
+    }
+
+
 def _retry_message_end_turn_failed(result: Mapping[str, Any]) -> dict[str, str]:
     return {
         "role": "user",
-        "content": f"end_turn 调用失败：{result.get('error', 'unknown error')}。请修正讨伐列表后再次调用 end_turn。",
+        "content": f"end_turn 调用失败：{result.get('error', '未知错误')}。请修正讨伐列表后再次调用 end_turn。",
     }
 
 
@@ -1811,8 +1891,8 @@ def _write_replay(
 ) -> None:
     if archive_writer is None:
         return
-    turns = list(traces)
-    if active_turn is not None and active_turn not in turns:
+    turns = [t for t in traces if t.status is not None]
+    if active_turn is not None and active_turn.status is not None and active_turn not in turns:
         turns.append(active_turn)
     archive_writer.write_replay(
         status=status,
@@ -1869,6 +1949,7 @@ def _config_to_dict(config: LlmRunConfig) -> dict[str, Any]:
         "max_empty_responses": config.max_empty_responses,
         "max_end_turn_attempts": config.max_end_turn_attempts,
         "max_model_steps_per_turn": config.max_model_steps_per_turn,
+        "max_turn_retries": config.max_turn_retries,
         "archive_dir": None if config.archive_dir is None else str(config.archive_dir),
         "game_seed": config.game_seed,
         "scoring_seed": config.scoring_seed,
@@ -1938,6 +2019,10 @@ def _compute_run_stats(run: LlmGameRun) -> dict[str, Any]:
     total_turns_failed: int = 0
 
     for turn in run.turns:
+        tool_content_by_id, tool_content_by_name = _tool_result_content_lookup(
+            turn.messages
+        )
+
         # Model interaction
         total_model_steps += len(turn.model_responses)
         if turn.status == "completed":
@@ -1980,7 +2065,16 @@ def _compute_run_stats(run: LlmGameRun) -> dict[str, Any]:
             total_tool_calls += 1
             calls_by_name[call.name] = calls_by_name.get(call.name, 0) + 1
 
-            if call.ok is True:
+            tool_content = _tool_result_content_for_call(
+                call,
+                tool_content_by_id,
+                tool_content_by_name,
+            )
+            call_ok = call.ok
+            if call_ok is None:
+                call_ok = _tool_content_ok(tool_content)
+
+            if call_ok is True:
                 successful_tool_calls += 1
 
                 # Game action counts by tool name
@@ -1999,27 +2093,14 @@ def _compute_run_stats(run: LlmGameRun) -> dict[str, Any]:
                 elif call.name == "unequip_item":
                     total_unequips += 1
                 elif call.name == "end_turn":
-                    # Extract battle results
-                    turn_result = call.result.get("turn_result")
-                    if isinstance(turn_result, dict):
-                        battles = turn_result.get("battles")
-                        if isinstance(battles, list):
-                            for battle in battles:
-                                if not isinstance(battle, dict):
-                                    continue
-                                battles_total += 1
-                                if battle.get("won") is True:
-                                    battles_won += 1
-                                else:
-                                    battles_lost += 1
-                                reward = battle.get("reward")
-                                if isinstance(reward, dict):
-                                    gold = reward.get("gold")
-                                    if isinstance(gold, (int, float)):
-                                        total_gold_earned += int(gold)
-                                    exp = reward.get("experience")
-                                    if isinstance(exp, (int, float)):
-                                        total_experience_earned += int(exp)
+                    stats = _battle_stats_from_tool_result(call.result)
+                    if stats is None:
+                        stats = _battle_stats_from_tool_content(tool_content)
+                    battles_total += stats["battles_total"]
+                    battles_won += stats["battles_won"]
+                    battles_lost += stats["battles_lost"]
+                    total_gold_earned += stats["gold_earned"]
+                    total_experience_earned += stats["experience_earned"]
             else:
                 failed_tool_calls += 1
 
@@ -2064,6 +2145,146 @@ def _compute_run_stats(run: LlmGameRun) -> dict[str, Any]:
             "total_turns_completed": total_turns_completed,
             "total_turns_failed": total_turns_failed,
         },
+    }
+
+
+def _tool_result_content_lookup(
+    messages: Sequence[Mapping[str, Any]],
+) -> tuple[dict[str, str], dict[str, list[str]]]:
+    by_id: dict[str, str] = {}
+    by_name: dict[str, list[str]] = {}
+    for message in messages:
+        if message.get("role") != "tool":
+            continue
+        content = message.get("content")
+        if not isinstance(content, str):
+            continue
+        call_id = message.get("tool_call_id")
+        if isinstance(call_id, str):
+            by_id[call_id] = content
+        name = message.get("name")
+        if isinstance(name, str):
+            by_name.setdefault(name, []).append(content)
+    return by_id, by_name
+
+
+def _tool_result_content_for_call(
+    call: ToolCallRecord,
+    by_id: Mapping[str, str],
+    by_name: dict[str, list[str]],
+) -> str:
+    if call.call_id is not None:
+        content = by_id.get(call.call_id)
+        if content is not None:
+            return content
+    values = by_name.get(call.name)
+    if values:
+        return values.pop(0)
+    return ""
+
+
+def _tool_content_ok(content: str) -> bool | None:
+    stripped = content.lstrip()
+    if stripped.startswith("OK ") or stripped.startswith("成功 "):
+        return True
+    if stripped.startswith("FAIL ") or stripped.startswith("失败 "):
+        return False
+    parsed = _parse_json_mapping(stripped)
+    if parsed is not None:
+        ok = parsed.get("ok")
+        if isinstance(ok, bool):
+            return ok
+    return None
+
+
+def _battle_stats_from_tool_result(result: Mapping[str, Any]) -> dict[str, int] | None:
+    turn_result = result.get("turn_result")
+    if not isinstance(turn_result, Mapping):
+        return None
+    battles = turn_result.get("battles")
+    if not isinstance(battles, Sequence) or isinstance(battles, str):
+        return None
+
+    stats = _empty_battle_stats()
+    for battle in battles:
+        if not isinstance(battle, Mapping):
+            continue
+        stats["battles_total"] += 1
+        won = _battle_won(battle)
+        if won is True:
+            stats["battles_won"] += 1
+        elif won is False:
+            stats["battles_lost"] += 1
+        reward = battle.get("reward")
+        if isinstance(reward, Mapping):
+            gold = reward.get("gold")
+            if isinstance(gold, (int, float)):
+                stats["gold_earned"] += int(gold)
+            exp = reward.get("experience")
+            if isinstance(exp, (int, float)):
+                stats["experience_earned"] += int(exp)
+    return stats
+
+
+def _battle_won(battle: Mapping[str, Any]) -> bool | None:
+    won = battle.get("won")
+    if isinstance(won, bool):
+        return won
+    outcome = (
+        battle.get("outcome")
+        or battle.get("result")
+        or battle.get("winner")
+        or battle.get("status")
+    )
+    if not isinstance(outcome, str):
+        return None
+    value = outcome.lower()
+    if value in {"left_win", "adventurer_win", "player_win", "win", "won", "victory"}:
+        return True
+    if value in {"right_win", "monster_win", "enemy_win", "loss", "lost", "defeat"}:
+        return False
+    return None
+
+
+def _battle_stats_from_tool_content(content: str) -> dict[str, int]:
+    stats = _empty_battle_stats()
+    summary = re.search(r"(\d+)\s*场战斗[,，]\s*(\d+)\s*胜\s*(\d+)\s*负", content)
+    if summary:
+        stats["battles_total"] += int(summary.group(1))
+        stats["battles_won"] += int(summary.group(2))
+        stats["battles_lost"] += int(summary.group(3))
+
+    reward_lines = [
+        line
+        for line in content.splitlines()
+        if "奖励" in line or "reward" in line.lower()
+    ]
+    battle_reward_lines = [
+        line
+        for line in reward_lines
+        if line.lstrip().startswith("-")
+    ]
+    for line in battle_reward_lines or reward_lines:
+        gold = re.search(r"(?:金币|gold)\s*[:=＝]\s*(\d+)", line, re.IGNORECASE)
+        if gold:
+            stats["gold_earned"] += int(gold.group(1))
+        exp = re.search(
+            r"(?:经验|experience|exp)\s*[:=＝]\s*(\d+)",
+            line,
+            re.IGNORECASE,
+        )
+        if exp:
+            stats["experience_earned"] += int(exp.group(1))
+    return stats
+
+
+def _empty_battle_stats() -> dict[str, int]:
+    return {
+        "battles_total": 0,
+        "battles_won": 0,
+        "battles_lost": 0,
+        "gold_earned": 0,
+        "experience_earned": 0,
     }
 
 

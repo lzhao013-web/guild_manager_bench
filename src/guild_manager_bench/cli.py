@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 from typing import Mapping
 
@@ -48,6 +49,7 @@ def main() -> None:
     run_parser.add_argument("--resume", default=None, help="从指定存档目录续跑 (传入 archive run 目录路径)")
     run_parser.add_argument("--max-tool-calls-per-turn", type=int, default=20, help="每回合最大工具调用次数 (默认: 20)")
     run_parser.add_argument("--reasoning-effort", default=None, choices=["none", "minimal", "low", "medium", "high", "xhigh"], help="推理强度 (默认不传)")
+    run_parser.add_argument("--timeout", type=float, default=None, help="API 请求超时秒数 (也可通过 OPENAI_TIMEOUT 或 OPENAI_COMPAT_TIMEOUT 环境变量设置)")
     run_parser.add_argument("--no-stream", action="store_true", help="禁用流式输出")
     run_parser.add_argument("--quiet", "-q", action="store_true", help="静默模式，只输出最终结果")
 
@@ -92,6 +94,7 @@ def _run(args: argparse.Namespace) -> None:
         api_key=args.api_key,
         base_url=args.base_url,
         reasoning_effort=args.reasoning_effort,
+        timeout=args.timeout,
     )
 
     # 禁用流式：移除 respond_stream 使 runner 回退到 respond
@@ -114,7 +117,15 @@ def _run(args: argparse.Namespace) -> None:
     # ── 事件回调 ──
     def _print(*parts: str) -> None:
         if not quiet:
-            print(*parts, flush=True)
+            try:
+                print(*parts, flush=True)
+            except UnicodeEncodeError:
+                enc = sys.stdout.encoding or "ascii"
+                safe = tuple(
+                    part.encode(enc, errors="replace").decode(enc)
+                    for part in parts
+                )
+                print(*safe, flush=True)
 
     def _short_args(arguments: dict | None, max_len: int = 60) -> str:
         """将工具参数格式化为短摘要。"""
