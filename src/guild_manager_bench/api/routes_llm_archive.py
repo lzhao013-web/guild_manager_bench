@@ -93,17 +93,17 @@ def llm_archive_router(base_dir: str | Path = "runs/llm") -> APIRouter:
 def _replay_path(base_dir: Path, run_id: str) -> Path:
     replay_path = _run_directory(base_dir, run_id) / "replay.json"
     if not replay_path.exists():
-        raise HTTPException(status_code=404, detail="replay not found")
+        raise HTTPException(status_code=404, detail="找不到 replay，可能归档已移动或不存在")
     return replay_path
 
 
 def _run_directory(base_dir: Path, run_id: str) -> Path:
     if not run_id or any(char in run_id for char in "\\/"):
-        raise HTTPException(status_code=400, detail="invalid run id")
+        raise HTTPException(status_code=400, detail="无效的 run id")
     resolved_base = base_dir.resolve()
     resolved_path = (resolved_base / run_id).resolve()
     if resolved_path.parent != resolved_base:
-        raise HTTPException(status_code=400, detail="invalid run id")
+        raise HTTPException(status_code=400, detail="无效的 run id")
     return resolved_path
 
 
@@ -158,8 +158,15 @@ def _read_replay(path: Path) -> dict[str, Any]:
 
 
 def _with_scores(replay: dict[str, Any], *, save_path: Path) -> dict[str, Any]:
-    scored = with_rank_score_from_final_observation(replay, save_path=save_path)
-    return with_rank_score_curve(scored, save_path=save_path)
+    try:
+        scored = with_rank_score_from_final_observation(replay, save_path=save_path)
+        return with_rank_score_curve(scored, save_path=save_path)
+    except HTTPException:
+        raise
+    except (OSError, ValueError, TypeError, KeyError) as exc:
+        raise HTTPException(status_code=422, detail=f"无法补全 replay 分数: {exc}") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"补全 replay 分数失败: {exc}") from exc
 
 
 def _read_json(path: Path) -> Any:

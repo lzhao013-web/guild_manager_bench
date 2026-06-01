@@ -17,7 +17,10 @@ from guild_manager_bench.bench.llm import (
     run_llm_turn,
 )
 from guild_manager_bench.bench.llm.formatting import skill_summary
-from guild_manager_bench.bench.llm.runner import _compute_run_stats
+from guild_manager_bench.bench.llm.runner import (
+    _compute_run_stats,
+    _format_tool_result_for_model,
+)
 from guild_manager_bench.bench.llm.trace import (
     LlmGameRun,
     ModelResponseRecord,
@@ -226,7 +229,7 @@ def test_run_llm_turn_emits_debug_events() -> None:
     model_requests = [event for event in events if event["type"] == "model_request"]
     tool_message = model_requests[1]["request"]["messages"][-1]
     assert tool_message["role"] == "tool"
-    assert tool_message["content"].startswith("OK get_party")
+    assert tool_message["content"].startswith("成功 get_party")
     assert not tool_message["content"].lstrip().startswith("{")
     assert "队伍: 回合 1/" in tool_message["content"]
     assert "冒险者: 无" in tool_message["content"]
@@ -251,7 +254,7 @@ def test_recruitment_tool_returns_compact_model_visible_text() -> None:
         for message in trace.messages
         if message.get("role") == "tool" and message.get("name") == "get_recruitment"
     )
-    assert tool_message["content"].startswith("OK get_recruitment")
+    assert tool_message["content"].startswith("成功 get_recruitment")
     assert "招募: 回合 1/" in tool_message["content"]
     assert "队伍 0/3" in tool_message["content"]
     assert "招募候选:" in tool_message["content"]
@@ -259,6 +262,82 @@ def test_recruitment_tool_returns_compact_model_visible_text() -> None:
     assert "费用" in tool_message["content"]
     assert "每级属性成长" in tool_message["content"]
     assert "预算: 已用 1/" in tool_message["content"]
+
+
+def test_recruitment_missing_party_limit_is_model_visible_chinese() -> None:
+    content = _format_tool_result_for_model(
+        "get_recruitment",
+        {
+            "ok": True,
+            "turn": 1,
+            "max_turns": 10,
+            "gold": 100,
+            "party_size": 3,
+            "party_size_limit": 3,
+            "recruit_candidates": [
+                {
+                    "candidate_id": "candidate-1",
+                    "template_id": "warrior",
+                    "name": "先锋",
+                    "recruit_gold": 10,
+                    "base_stats": {
+                        "hp": 100,
+                        "mp": 10,
+                        "attack": 12,
+                        "defense": 8,
+                        "speed": 5,
+                        "recovery": 2,
+                        "mp_recovery": 1,
+                    },
+                    "stat_growth_per_level": {},
+                    "skills": [],
+                    "level_skill_unlocks": [],
+                    "can_recruit": False,
+                    "missing": {
+                        "party_size_limit": {
+                            "current": 3,
+                            "limit": 3,
+                        },
+                    },
+                }
+            ],
+        },
+    )
+
+    assert "缺少 队伍空位（当前 3/3）" in content
+    assert "party_size_limit" not in content
+
+
+def test_preview_battle_result_reason_is_model_visible_chinese() -> None:
+    content = _format_tool_result_for_model(
+        "preview_battle",
+        {
+            "ok": True,
+            "preview": {
+                "adventurer_id": "adv-1",
+                "adventurer_name": "先锋",
+                "monster_id": "monster-1",
+                "monster_name": "史莱姆",
+                "won": True,
+                "adventurer_resources": {
+                    "before": {"current_hp": 100, "current_mp": 10},
+                    "after": {"current_hp": 80, "current_mp": 8},
+                },
+                "monster_resources": {
+                    "after": {"current_hp": 0},
+                },
+                "reward": {"gold": 5, "experience": 3, "materials": {}},
+                "outcome": "left_win",
+                "reason": "target_defeated",
+                "actions_taken": 4,
+                "time_elapsed": 120,
+            },
+        },
+    )
+
+    assert "结果 冒险者胜利；原因 目标被击败；" in content
+    assert "left_win" not in content
+    assert "target_defeated" not in content
 
 
 def test_turn_prompt_includes_compact_skill_summaries() -> None:
@@ -319,7 +398,7 @@ def test_system_prompt_includes_static_rules() -> None:
     assert "每回合最多允许 7 次非 end_turn 工具调用" in prompt
     assert "preview_battle 最多 5 次/回合" in prompt
     assert "调用工具使用的所有对象 id 都使用列表左侧的数字 id" in prompt
-    assert "工具会返回 OK/FAIL、budget 和结果摘要" in prompt
+    assert "工具会返回 成功/失败、预算 和结果摘要" in prompt
 
     # Dynamic content should NOT be in system prompt
     assert "当前回合" not in prompt
@@ -432,7 +511,7 @@ def test_memo_tool_content_appears_in_next_turn_prompt() -> None:
         if "当前回合：1/" in prompt
     )
     assert run.turns[0].tool_calls[0].name == "write_memo"
-    assert run.turns[0].messages[3]["content"].startswith("OK write_memo")
+    assert run.turns[0].messages[3]["content"].startswith("成功 write_memo")
 
 
 def test_preview_battle_tool_returns_compact_model_visible_text() -> None:
@@ -472,7 +551,7 @@ def test_preview_battle_tool_returns_compact_model_visible_text() -> None:
         for message in trace.messages
         if message.get("role") == "tool" and message.get("name") == "preview_battle"
     )
-    assert tool_message["content"].startswith("OK preview_battle")
+    assert tool_message["content"].startswith("成功 preview_battle")
     assert "资源:" in tool_message["content"]
     assert "战斗:" in tool_message["content"]
     assert "预算: 已用 1/" in tool_message["content"]
@@ -550,7 +629,7 @@ def test_run_llm_game_archives_trace_and_replay(tmp_path) -> None:
     assert replay["turns"][0]["steps"][2]["timing"]["duration_ms"] >= 0
     assert replay["turns"][0]["steps"][3]["type"] == "tool_result"
     assert replay["turns"][0]["steps"][3]["name"] == "end_turn"
-    assert replay["turns"][0]["steps"][3]["content"].startswith("OK end_turn")
+    assert replay["turns"][0]["steps"][3]["content"].startswith("成功 end_turn")
     assert "result" not in replay["turns"][0]["steps"][3]
     assert run.turns[0].messages[-1]["content"] == replay["turns"][0]["steps"][3]["content"]
 
@@ -949,6 +1028,14 @@ def test_compute_run_stats_battle_results() -> None:
                             "won": True,
                             "reward": {"gold": 25, "experience": 15, "materials": {}},
                         },
+                        {
+                            "result": "left_win",
+                            "reward": {"gold": 10, "experience": 5, "materials": {}},
+                        },
+                        {
+                            "outcome": "right_win",
+                            "reward": {"gold": 0, "experience": 0, "materials": {}},
+                        },
                     ],
                 },
             },
@@ -966,11 +1053,11 @@ def test_compute_run_stats_battle_results() -> None:
     stats = _compute_run_stats(run)
 
     ga = stats["game_actions"]
-    assert ga["battles_total"] == 3
-    assert ga["battles_won"] == 2
-    assert ga["battles_lost"] == 1
-    assert ga["total_gold_earned"] == 75
-    assert ga["total_experience_earned"] == 45
+    assert ga["battles_total"] == 5
+    assert ga["battles_won"] == 3
+    assert ga["battles_lost"] == 2
+    assert ga["total_gold_earned"] == 85
+    assert ga["total_experience_earned"] == 50
 
 
 def test_compute_run_stats_mixed_game_actions() -> None:
@@ -1062,6 +1149,52 @@ def test_compute_run_stats_cache_tokens_absent_when_zero() -> None:
 
     assert "cache_read_input_tokens" not in stats["token_usage"]
     assert "cache_creation_input_tokens" not in stats["token_usage"]
+
+
+def test_compute_run_stats_uses_legacy_replay_text_rewards() -> None:
+    turn = TurnTrace(turn=1, prompt="test")
+    turn.messages.append(
+        {
+            "role": "tool",
+            "tool_call_id": "call_1",
+            "name": "end_turn",
+            "content": "\n".join(
+                [
+                    "OK end_turn: 结束第 1 回合：2 场战斗，2 胜 0 负",
+                    "变化:",
+                    "- 金币: 0 -> 36",
+                    "- 经验池: 0 -> 62",
+                    "战斗:",
+                    "- 先锋 vs 哥布林: 胜; 奖励 {金币:20, 经验:34, 材料:{}}",
+                    "- mystic vs turn_1_monster_2: win; reward {gold:16, exp:28, materials:{}}",
+                ]
+            ),
+        }
+    )
+    turn.tool_calls.append(
+        ToolCallRecord(
+            name="end_turn",
+            arguments={"hunts": []},
+            result={},
+            call_id="call_1",
+        )
+    )
+    turn.complete()
+    run = LlmGameRun(
+        status="completed",
+        session_id="legacy-replay",
+        final_observation={"finished": True},
+        turns=[turn],
+    )
+
+    stats = _compute_run_stats(run)
+
+    assert stats["tool_calls"]["successful"] == 1
+    assert stats["tool_calls"]["failed"] == 0
+    assert stats["game_actions"]["battles_total"] == 2
+    assert stats["game_actions"]["battles_won"] == 2
+    assert stats["game_actions"]["total_gold_earned"] == 36
+    assert stats["game_actions"]["total_experience_earned"] == 62
 
 
 def _data_dir() -> Path:

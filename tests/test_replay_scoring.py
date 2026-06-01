@@ -38,6 +38,8 @@ def test_replay_rank_fallback_adds_missing_rank_score() -> None:
     assert filled["score"]["score"] == 12.34
     assert filled["score"]["rank_score"] >= 0
     assert filled["score"]["rank_score_source"] == "final_observation"
+    assert filled["score"]["rank_score_per_adventurer"]
+    assert filled["score"]["per_adventurer"][0]["rank_score"] >= 0
 
 
 def test_leaderboard_uses_final_observation_rank_fallback(tmp_path: Path) -> None:
@@ -58,6 +60,7 @@ def test_leaderboard_uses_final_observation_rank_fallback(tmp_path: Path) -> Non
     assert model["run_details"][0]["run_id"] == "replay"
     assert model["run_details"][0]["score"] == 12.34
     assert model["run_details"][0]["rank_score"] == expected["score"]["rank_score"]
+    assert model["run_details"][0]["rank_score_per_adventurer"]
     assert model["run_details"][0]["preset"] == "default"
 
 

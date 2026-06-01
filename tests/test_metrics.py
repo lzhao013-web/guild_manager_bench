@@ -23,6 +23,9 @@ def test_score_final_state_is_deterministic_and_bounded() -> None:
     assert first.chosen_battles == len(state.adventurers) * definition.scoring.waves
     assert len(first.per_adventurer) == len(state.adventurers)
     assert "rank_score" in first.to_dict()
+    assert len(first.rank_score_per_adventurer) == len(state.adventurers)
+    assert all(item.rank_score >= 0 for item in first.per_adventurer)
+    assert sum(item["rank_score"] for item in first.rank_score_per_adventurer) >= 0
 
 
 def test_rank_score_is_deterministic() -> None:

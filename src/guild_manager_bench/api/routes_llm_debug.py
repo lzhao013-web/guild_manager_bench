@@ -64,6 +64,7 @@ def llm_debug_router(
                     max_empty_responses=_int_value(payload, "max_empty_responses", 2),
                     max_end_turn_attempts=_int_value(payload, "max_end_turn_attempts", 3),
                     max_model_steps_per_turn=_int_value(payload, "max_model_steps_per_turn", 50),
+                    max_turn_retries=_int_value(payload, "max_turn_retries", 2),
                     game_seed=_optional_int(payload, "game_seed"),
                     scoring_seed=_optional_int(payload, "scoring_seed"),
                 )

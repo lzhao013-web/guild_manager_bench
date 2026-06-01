@@ -10,6 +10,7 @@ class ActionRequest(BaseModel):
 
     type: str
     recipe_id: str | None = None
+    candidate_id: str | None = None
     upgrade_id: str | None = None
     adventurer_id: str | None = None
     equipment_instance_id: str | None = None
