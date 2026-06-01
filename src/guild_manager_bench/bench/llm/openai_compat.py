@@ -137,7 +137,7 @@ class OpenAIChatCompletionsConfig:
         api_key: str | None = None,
         base_url: str | None = None,
         env_file: EnvFile | None = ".env",
-        timeout: float = 180.0,
+        timeout: float | None = None,
         temperature: float | None = None,
         top_p: float | None = None,
         max_tokens: int | None = None,
@@ -158,6 +158,16 @@ class OpenAIChatCompletionsConfig:
             raise OpenAICompatibleError(
                 "model is required or OPENAI_MODEL/OPENAI_COMPAT_MODEL must be set"
             )
+        resolved_timeout = _first_config_value(
+            timeout,
+            dotenv_values,
+            "OPENAI_TIMEOUT",
+            "OPENAI_COMPAT_TIMEOUT",
+        )
+        if resolved_timeout is not None:
+            resolved_timeout = float(resolved_timeout)
+        else:
+            resolved_timeout = 180.0
         return cls(
             model=resolved_model,
             api_key=_first_config_value(
@@ -173,7 +183,7 @@ class OpenAIChatCompletionsConfig:
                 "OPENAI_COMPAT_BASE_URL",
                 default="https://api.openai.com/v1",
             ),
-            timeout=timeout,
+            timeout=resolved_timeout,
             temperature=temperature,
             top_p=top_p,
             max_tokens=max_tokens,
@@ -209,7 +219,7 @@ class OpenAIChatCompletionsAgent:
         api_key: str | None = None,
         base_url: str | None = None,
         env_file: EnvFile | None = ".env",
-        timeout: float = 180.0,
+        timeout: float | None = None,
         temperature: float | None = None,
         top_p: float | None = None,
         max_tokens: int | None = None,
@@ -422,19 +432,25 @@ def _to_openai_tool(schema: Mapping[str, Any]) -> dict[str, Any]:
 def _to_openai_message(message: Mapping[str, Any]) -> dict[str, Any]:
     role = message["role"]
     if role == "assistant":
+        content = message.get("content")
+        reasoning_content = message.get("reasoning_content")
+        tool_calls = message.get("tool_calls") or []
+
         data: dict[str, Any] = {
             "role": "assistant",
-            "content": message.get("content") or None,
+            "content": content if isinstance(content, str) and content else None,
         }
-        reasoning_content = message.get("reasoning_content")
         if isinstance(reasoning_content, str):
             data["reasoning_content"] = reasoning_content
-        tool_calls = message.get("tool_calls") or []
         if tool_calls:
             data["tool_calls"] = [
                 _to_openai_tool_call(call)
                 for call in tool_calls
             ]
+        # Some providers (e.g. Xiaomi) reject assistant messages that have
+        # neither content, reasoning_content, nor tool_calls set.
+        if not data.get("content") and "reasoning_content" not in data and "tool_calls" not in data:
+            data["content"] = ""
         return data
     if role == "tool":
         return {
