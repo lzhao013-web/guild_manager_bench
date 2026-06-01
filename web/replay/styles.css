@@ -545,6 +545,31 @@ h3 { font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bot
 .stat-value.positive { color: var(--ok); }
 .stat-value.negative { color: var(--danger); }
 
+.rank-contrib {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-xs);
+  background: var(--accent-dim);
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.rank-contrib strong {
+  color: var(--accent);
+  font-family: "JetBrains Mono", "SF Mono", "Cascadia Code", ui-monospace, monospace;
+  font-size: 12px;
+}
+
+.rank-contrib em {
+  margin-left: auto;
+  color: var(--muted);
+  font-style: normal;
+  font-family: "JetBrains Mono", "SF Mono", "Cascadia Code", ui-monospace, monospace;
+}
+
 /* HP / MP Bars */
 .resource-bars {
   display: flex;

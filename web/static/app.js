@@ -4,6 +4,7 @@ const state = {
   events: [],
   selectedHunts: new Map(),
   openDetails: new Set(),
+  actionPending: false,
   socket: null,
   watchOnly: new URLSearchParams(window.location.search).get("watch") === "1",
   llm: {
@@ -118,9 +119,11 @@ async function createSession() {
     headers: { "Content-Type": "application/json" },
     body: "{}",
   });
-  const data = await response.json();
-  if (!response.ok) {
-    showError(data.detail || "创建会话失败");
+  let data;
+  try {
+    data = await readJsonOrThrow(response, "创建会话失败");
+  } catch (error) {
+    showError(error?.message || "创建会话失败");
     return;
   }
   setSession(data);
@@ -132,9 +135,11 @@ async function createSession() {
 
 async function loadSession(sessionId) {
   const response = await fetch(`/api/sessions/${sessionId}`);
-  const data = await response.json();
-  if (!response.ok) {
-    showError(data.detail || "读取会话失败");
+  let data;
+  try {
+    data = await readJsonOrThrow(response, "读取会话失败");
+  } catch (error) {
+    showError(error?.message || "读取会话失败");
     return;
   }
   setSession(data);
@@ -145,6 +150,8 @@ function setSession(data) {
   state.observation = data.observation;
   state.events = data.events || [];
   state.selectedHunts.clear();
+  state.openDetails.clear();
+  state.actionPending = false;
   connectSocket();
   render();
 }
@@ -170,33 +177,49 @@ function connectSocket() {
 /* ========== Action Submission ========== */
 
 async function submitAction(payload) {
-  if (state.watchOnly) {
+  if (state.watchOnly || state.actionPending) {
     return;
   }
-  const response = await fetch(`/api/sessions/${state.sessionId}/actions`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  const data = await response.json();
-  if (!response.ok) {
+  state.actionPending = true;
+  render();
+  try {
+    const response = await fetch(`/api/sessions/${state.sessionId}/actions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await readActionResponse(response);
     if (data.event) {
       mergeEvent(data.event);
     }
     if (data.observation) {
       state.observation = data.observation;
-      render();
     }
-    showError(data.detail || "动作失败");
-    return;
+    if (!response.ok || data.__error) {
+      showError(data.detail || data.error || "动作失败");
+    }
+  } catch (error) {
+    showError(error?.message || "动作请求失败");
+  } finally {
+    state.actionPending = false;
+    render();
   }
-  if (data.event) {
-    mergeEvent(data.event);
+}
+
+async function readActionResponse(response) {
+  const contentType = response.headers.get("content-type") || "";
+  if (contentType.includes("application/json")) {
+    try {
+      return await response.json();
+    } catch {
+      return { __error: true, detail: "动作响应不是有效 JSON" };
+    }
   }
-  if (data.observation) {
-    state.observation = data.observation;
-  }
-  render();
+  const text = (await response.text()).trim();
+  return {
+    __error: true,
+    detail: text || `动作失败 (HTTP ${response.status})`,
+  };
 }
 
 /* ========== Render Dispatch ========== */
@@ -206,8 +229,8 @@ function render() {
   if (!obs) {
     return;
   }
-  $("sessionMeta").textContent = `会话 ${obs.session_id} · 回合 ${obs.turn}/${obs.max_turns}`;
-  $("newSessionButton").disabled = state.watchOnly;
+  $("sessionMeta").textContent = `会话 ${obs.session_id || state.sessionId || "未知"} · 回合 ${turnText(obs)}`;
+  $("newSessionButton").disabled = state.watchOnly || state.actionPending;
   updateLlmSeedPlaceholders(obs);
   renderOverview(obs);
   renderAdventurers(obs);
@@ -237,7 +260,7 @@ function renderOverview(obs) {
   const countBadge = count > 0 ? `<span class="hunt-count">${count}</span>` : "";
   $("overview").innerHTML = `
     <div class="overview">
-      ${metric("回合", `${obs.turn}/${obs.max_turns}`, "turn")}
+      ${metric("回合", turnText(obs), "turn")}
       ${metric("种子", seedText(obs), "seed")}
       ${metric("金币", obs.gold, "gold")}
       ${metric("经验池", obs.experience_pool, "exp")}
@@ -266,6 +289,15 @@ function seedText(obs) {
   return `${obs.seed ?? "无"} / ${scoringSeed}`;
 }
 
+function turnText(obs) {
+  const turn = Number(obs.turn);
+  const maxTurns = Number(obs.max_turns);
+  if (!Number.isFinite(turn) || !Number.isFinite(maxTurns)) {
+    return `${obs.turn ?? "?"}/${obs.max_turns ?? "?"}`;
+  }
+  return `${Math.min(turn, maxTurns)}/${maxTurns}`;
+}
+
 function updateLlmSeedPlaceholders(obs) {
   const gameSeedInput = $("llmGameSeed");
   const scoringSeedInput = $("llmScoringSeed");
@@ -291,7 +323,10 @@ function renderAdventurers(obs) {
             <span class="badge">Lv.${adventurer.level}</span>
             ${isDead ? '<span class="badge badge-danger">阵亡</span>' : ""}
           </div>
-          <span class="small muted">${levelText(adventurer)}</span>
+          <div class="inline compact">
+            <span class="small muted">${levelText(adventurer)}</span>
+            <button type="button" class="btn-danger compact" ${disabled()} onclick="dismissAdventurer('${adventurer.adventurer_id}')">解散</button>
+          </div>
         </div>
         <div class="bar-row">
           ${hpBar(adventurer.resources.current_hp, adventurer.effective_stats.hp)}
@@ -414,7 +449,8 @@ function renderUpgrades(obs) {
       </div>
       <div class="small">金币 ${upgrade.gold_cost} · ${statModifierText(upgrade.stats)}${upgrade.party_size_bonus ? ` · 队伍上限 +${upgrade.party_size_bonus}` : ""}</div>
       <div class="small muted">前置：${upgradePrereqText(obs, upgrade.required_upgrade_ids)}</div>
-      <button type="button" ${disabled(!upgrade.can_purchase)} onclick="purchaseUpgrade('${upgrade.upgrade_id}')">购买</button>
+      ${!upgrade.unlocked && !upgrade.can_purchase ? `<div class="small danger">缺少：${missingText(upgrade.missing)}</div>` : ""}
+      ${upgrade.unlocked ? "" : `<button type="button" ${disabled(!upgrade.can_purchase)} onclick="purchaseUpgrade('${upgrade.upgrade_id}')">购买</button>`}
     </div>
   `));
 }
@@ -457,9 +493,10 @@ function renderModalHunts() {
   if (!obs) return;
 
   const aliveAdventurers = obs.adventurers.filter((a) => a.resources.current_hp > 0);
+  const aliveAdventurerIds = new Set(aliveAdventurers.map((a) => a.adventurer_id));
   const validMonsterIds = new Set(obs.monsters.map((m) => m.monster_id));
-  for (const monsterId of Array.from(state.selectedHunts.keys())) {
-    if (!validMonsterIds.has(monsterId)) {
+  for (const [monsterId, adventurerId] of Array.from(state.selectedHunts.entries())) {
+    if (!validMonsterIds.has(monsterId) || !aliveAdventurerIds.has(adventurerId)) {
       state.selectedHunts.delete(monsterId);
     }
   }
@@ -701,7 +738,20 @@ function purchaseUpgrade(upgradeId) {
 
 function allocateExperience(adventurerId) {
   const amount = readExperienceAmount(adventurerId);
+  if (amount <= 0) {
+    showError("请输入要分配的经验值");
+    return;
+  }
   submitAction({ type: "allocate_experience", adventurer_id: adventurerId, amount });
+}
+
+function dismissAdventurer(adventurerId) {
+  const adventurer = state.observation?.adventurers.find((item) => item.adventurer_id === adventurerId);
+  const name = adventurer?.name || adventurerId;
+  if (!window.confirm(`确定解散 ${name}？`)) {
+    return;
+  }
+  submitAction({ type: "dismiss", adventurer_id: adventurerId });
 }
 
 function recruit(candidateId) {
@@ -883,7 +933,29 @@ function missingText(missing) {
   if (!missing || Object.keys(missing).length === 0) {
     return "无";
   }
-  return Object.entries(missing).map(([key, value]) => `${materialName(key)}:${value}`).join(" · ");
+  return Object.entries(missing).map(([key, value]) => missingEntryText(key, value)).join(" · ");
+}
+
+function missingEntryText(key, value) {
+  if (key === "gold") {
+    return `金币 ${value}`;
+  }
+  if (key === "party_size_limit" && value && typeof value === "object") {
+    const current = value.current ?? "?";
+    const limit = value.limit ?? "?";
+    return `队伍已满（${current}/${limit}）`;
+  }
+  if (key === "required_upgrade_ids") {
+    const values = Array.isArray(value) ? value : [value];
+    return `前置升级 ${values.map(upgradeName).join("、")}`;
+  }
+  if (Array.isArray(value)) {
+    return `${materialName(key)} ${value.map(String).join("、")}`;
+  }
+  if (value && typeof value === "object") {
+    return `${materialName(key)} ${Object.entries(value).map(([subKey, subValue]) => `${materialName(subKey)} ${subValue}`).join("、")}`;
+  }
+  return `${materialName(key)} ${value}`;
 }
 
 function materialName(key) {
@@ -968,7 +1040,15 @@ function skillConditionText(cond) {
 
 function statModifierText(stats) {
   const entries = Object.entries(stats || {}).filter(([, value]) => value !== 0);
-  return entries.length ? entries.map(([key, value]) => `${statName(key)} +${value}`).join(" · ") : "无属性";
+  return entries.length ? entries.map(([key, value]) => `${statName(key)} ${signedNumber(value)}`).join(" · ") : "无属性";
+}
+
+function signedNumber(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    return String(value);
+  }
+  return number > 0 ? `+${number}` : String(number);
 }
 
 function upgradePrereqText(obs, ids) {
@@ -977,6 +1057,11 @@ function upgradePrereqText(obs, ids) {
     const u = obs.global_upgrades.find((g) => g.upgrade_id === id);
     return u ? u.name : id;
   }).join("、");
+}
+
+function upgradeName(id) {
+  const upgrade = state.observation?.global_upgrades?.find((item) => item.upgrade_id === id);
+  return upgrade?.name || String(id);
 }
 
 function resolveName(id) {
@@ -1020,7 +1105,9 @@ function readExperienceAmount(adventurerId) {
     return 0;
   }
   const amount = Number.parseInt(input.value || "0", 10);
-  return Number.isFinite(amount) ? Math.max(0, amount) : 0;
+  const pool = Number(state.observation?.experience_pool ?? 0);
+  const max = Number.isFinite(pool) ? Math.max(0, pool) : 0;
+  return Number.isFinite(amount) ? Math.min(Math.max(0, amount), max) : 0;
 }
 
 function experiencePreviewText(adventurer, amount, rules) {
@@ -1070,7 +1157,7 @@ function slotName(slot) {
 }
 
 function disabled(extra = false) {
-  return state.watchOnly || state.observation?.finished || extra ? "disabled" : "";
+  return state.watchOnly || state.actionPending || state.observation?.finished || extra ? "disabled" : "";
 }
 
 function showError(message) {
@@ -1080,6 +1167,10 @@ function showError(message) {
   window.setTimeout(() => {
     toast.hidden = true;
   }, 3600);
+}
+
+function showToast(message) {
+  showError(message);
 }
 
 /* ========== LLM Debug ========== */
@@ -1731,10 +1822,7 @@ async function refreshLlmReplayRuns() {
   renderLlmDebug();
   try {
     const response = await fetch("/api/llm/runs");
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.detail || "刷新归档失败");
-    }
+    const data = await readJsonOrThrow(response, "刷新归档失败");
     replayState.runs = data.runs || [];
     if (!replayState.selectedRunId && replayState.runs.length) {
       replayState.selectedRunId = replayState.runs[0].run_id;
@@ -1759,10 +1847,7 @@ async function loadSelectedLlmReplay() {
   renderLlmDebug();
   try {
     let response = await fetch(`/api/llm/runs/${encodeURIComponent(runId)}/replay`);
-    let replay = await response.json();
-    if (!response.ok) {
-      throw new Error(replay.detail || "加载 replay 失败");
-    }
+    let replay = await readJsonOrThrow(response, "加载 replay 失败");
     if (!hasReplayObservations(replay)) {
       state.llm.replay.status = "缺少回合快照，正在重建";
       renderLlmDebug();
@@ -1784,11 +1869,28 @@ async function postLlmReplayMaintenance(runId, action, fallbackMessage) {
   const response = await fetch(`/api/llm/runs/${encodeURIComponent(runId)}/${action}`, {
     method: "POST",
   });
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.detail || fallbackMessage);
+  return readJsonOrThrow(response, fallbackMessage);
+}
+
+async function readJsonOrThrow(response, fallbackMessage) {
+  const contentType = response.headers.get("content-type") || "";
+  if (contentType.includes("application/json")) {
+    let data;
+    try {
+      data = await response.json();
+    } catch {
+      throw new Error(fallbackMessage);
+    }
+    if (!response.ok) {
+      throw new Error(data?.detail || data?.error || fallbackMessage);
+    }
+    return data;
   }
-  return data;
+  const text = (await response.text()).trim();
+  if (!response.ok) {
+    throw new Error(text || fallbackMessage);
+  }
+  throw new Error(fallbackMessage);
 }
 
 function hasReplayObservations(replay) {
@@ -1802,6 +1904,7 @@ function needsReplayRankScores(replay) {
   const hasFinalObservation = replay.final_observation && typeof replay.final_observation === "object";
   const score = replay.score && typeof replay.score === "object" ? replay.score : null;
   if (hasFinalObservation && (!score || score.rank_score == null)) return true;
+  if (hasFinalObservation && !hasReplayRankScoreContributions(score)) return true;
   return turns.some((turn, index) => {
     if (!turn || typeof turn !== "object" || turn.status !== "completed" || turn.rank_score != null) {
       return false;
@@ -1812,6 +1915,11 @@ function needsReplayRankScores(replay) {
       (index === turns.length - 1 && hasFinalObservation)
     );
   });
+}
+
+function hasReplayRankScoreContributions(score) {
+  if (!score || typeof score !== "object") return false;
+  return replayRankContributionItems(score).length > 0;
 }
 
 function updateLoadedRunMetadata(runId, replay) {
@@ -1893,6 +2001,40 @@ function renderLlmReplayControls() {
   }
 }
 
+function replayRankContributionItems(score) {
+  if (!score || typeof score !== "object") return [];
+  const values = Array.isArray(score.rank_score_per_adventurer)
+    ? score.rank_score_per_adventurer
+    : Array.isArray(score.per_adventurer)
+      ? score.per_adventurer
+      : [];
+  return values
+    .filter((item) => item && typeof item === "object")
+    .map((item) => {
+      const scoreValue = item.rank_score_contribution ?? item.rank_score;
+      return {
+        name: item.name || item.adventurer_id || "?",
+        score: Number(scoreValue),
+        share: item.rank_score_share != null ? Number(item.rank_score_share) : null,
+      };
+    })
+    .filter((item) => Number.isFinite(item.score))
+    .sort((a, b) => b.score - a.score);
+}
+
+function renderReplayRankContributors(score) {
+  const items = replayRankContributionItems(score);
+  if (!items.length) return "";
+  return `
+    <div class="llm-replay-summary">
+      ${items.map((item) => {
+        const share = item.share != null ? ` · ${(item.share * 100).toFixed(1)}%` : "";
+        return `<span>${escapeHtml(item.name)}：${escapeHtml(item.score.toLocaleString(undefined, { maximumFractionDigits: 1 }))}${share}</span>`;
+      }).join("")}
+    </div>
+  `;
+}
+
 function renderLlmReplay() {
   const replay = state.llm.replay.data;
   if (!replay) {
@@ -1901,6 +2043,7 @@ function renderLlmReplay() {
   const gameSeed = replay.final_observation?.seed;
   const scoringSeed = replay.score?.seed ?? replay.final_observation?.scoring?.seed;
   const scoreText = formatScore(replay.score);
+  const rankContrib = renderReplayRankContributors(replay.score);
   const stats = computeReplayStats(replay);
   const statsBadges = stats ? renderReplayStatsBadges(stats) : "";
   const summary = `
@@ -1916,6 +2059,7 @@ function renderLlmReplay() {
       ${scoreText ? `<span>${escapeHtml(scoreText)}</span>` : ""}
       ${statsBadges}
     </div>
+    ${rankContrib}
   `;
   const turns = (replay.turns || []).map((turn) => renderReplayTurn(turn)).join("");
   return summary + turns;
@@ -2117,6 +2261,73 @@ function renderRunSummary(entry) {
   `;
 }
 
+function structuredEndTurnStats(step) {
+  const battles = step?.result?.turn_result?.battles;
+  if (!Array.isArray(battles)) return null;
+  const stats = {
+    battlesTotal: 0,
+    battlesWon: 0,
+    battlesLost: 0,
+    goldEarned: 0,
+    expEarned: 0,
+  };
+  for (const battle of battles) {
+    if (!battle || typeof battle !== "object") continue;
+    stats.battlesTotal++;
+    const won = battleWon(battle);
+    if (won === true) stats.battlesWon++;
+    else if (won === false) stats.battlesLost++;
+    const reward = battle.reward && typeof battle.reward === "object" ? battle.reward : {};
+    const gold = Number(reward.gold);
+    const exp = Number(reward.experience);
+    if (Number.isFinite(gold)) stats.goldEarned += gold;
+    if (Number.isFinite(exp)) stats.expEarned += exp;
+  }
+  return stats;
+}
+
+function battleWon(battle) {
+  if (!battle || typeof battle !== "object") return null;
+  if (battle.won === true) return true;
+  if (battle.won === false) return false;
+  const outcome = battle.outcome ?? battle.result ?? battle.winner ?? battle.status;
+  if (typeof outcome !== "string") return null;
+  const value = outcome.toLowerCase();
+  if (["left_win", "adventurer_win", "player_win", "win", "won", "victory"].includes(value)) return true;
+  if (["right_win", "monster_win", "enemy_win", "loss", "lost", "defeat"].includes(value)) return false;
+  return null;
+}
+
+function toolStepSucceeded(step, content) {
+  if (step?.ok === true || step?.result?.ok === true) return true;
+  if (step?.ok === false || step?.result?.ok === false || step?.error) return false;
+  const stripped = String(content || "").trimStart();
+  if (stripped.startsWith("OK") || stripped.startsWith("成功")) return true;
+  if (stripped.startsWith("FAIL") || stripped.startsWith("失败") || stripped.startsWith("ERROR") || stripped.startsWith("错误")) return false;
+  try {
+    const data = JSON.parse(stripped);
+    if (typeof data?.ok === "boolean") return data.ok;
+  } catch {}
+  return false;
+}
+
+function textRewardStats(content) {
+  const rewardLines = String(content || "")
+    .split(/\r?\n/)
+    .filter(line => /奖励|reward/i.test(line));
+  const battleRewardLines = rewardLines.filter(line => /^\s*-\s+/.test(line));
+  const lines = battleRewardLines.length ? battleRewardLines : rewardLines;
+  let goldEarned = 0;
+  let expEarned = 0;
+  for (const line of lines) {
+    const gold = line.match(/(?:金币|gold)\s*[:=＝]\s*(\d+)/i);
+    const exp = line.match(/(?:经验|experience|exp)\s*[:=＝]\s*(\d+)/i);
+    if (gold) goldEarned += parseInt(gold[1], 10);
+    if (exp) expEarned += parseInt(exp[1], 10);
+  }
+  return { goldEarned, expEarned };
+}
+
 function computeReplayStats(replay) {
   if (!replay || !Array.isArray(replay.turns)) return null;
   let totalMs = 0, inputTokens = 0, outputTokens = 0, cacheRead = 0, cacheWrite = 0;
@@ -2170,7 +2381,7 @@ function computeReplayStats(replay) {
         const name = step.name || "";
         callsByName[name] = (callsByName[name] || 0) + 1;
         const content = typeof step.content === "string" ? step.content : "";
-        const ok = content.startsWith("OK");
+        const ok = toolStepSucceeded(step, content);
         if (ok) {
           successfulCalls++;
           if (name === "craft_equipment") crafted++;
@@ -2181,28 +2392,29 @@ function computeReplayStats(replay) {
           else if (name === "equip_item") equipped++;
           else if (name === "unequip_item") unequipped++;
           else if (name === "end_turn") {
-            // Parse battle summary from content like "OK end_turn: 结束第 X 回合：Y 场战斗，W 胜 L 负"
-            const battleMatch = content.match(/(\d+)\s*场战斗[,，]\s*(\d+)\s*胜\s*(\d+)\s*负/);
-            if (battleMatch) {
-              const total = parseInt(battleMatch[1], 10);
-              const won = parseInt(battleMatch[2], 10);
-              const lost = parseInt(battleMatch[3], 10);
-              battlesTotal += total;
-              battlesWon += won;
-              battlesLost += lost;
-            }
-            // Fallback: extract gold/experience from step text when replay.stats is absent
-            if (!savedGA) {
-              let m;
-              const goldSegments = content.split("金币");
-              for (let i = 1; i < goldSegments.length; i++) {
-                m = goldSegments[i].match(/^[=＝](\d+)/);
-                if (m) goldEarned += parseInt(m[1], 10);
+            const structured = structuredEndTurnStats(step);
+            if (structured) {
+              battlesTotal += structured.battlesTotal;
+              battlesWon += structured.battlesWon;
+              battlesLost += structured.battlesLost;
+              if (!savedGA) {
+                goldEarned += structured.goldEarned;
+                expEarned += structured.expEarned;
               }
-              const expSegments = content.split("经验");
-              for (let i = 1; i < expSegments.length; i++) {
-                m = expSegments[i].match(/^[=＝](\d+)/);
-                if (m) expEarned += parseInt(m[1], 10);
+            } else {
+              const battleMatch = content.match(/(\d+)\s*场战斗[,，]\s*(\d+)\s*胜\s*(\d+)\s*负/);
+              if (battleMatch) {
+                const total = parseInt(battleMatch[1], 10);
+                const won = parseInt(battleMatch[2], 10);
+                const lost = parseInt(battleMatch[3], 10);
+                battlesTotal += total;
+                battlesWon += won;
+                battlesLost += lost;
+              }
+              if (!savedGA) {
+                const rewards = textRewardStats(content);
+                goldEarned += rewards.goldEarned;
+                expEarned += rewards.expEarned;
               }
             }
           }

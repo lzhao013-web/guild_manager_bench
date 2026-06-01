@@ -72,18 +72,27 @@ const DOM = {
 // ============================================================================
 async function init() {
   bindEvents();
-  await loadRunList();
+  const runIds = await loadRunList();
   const hash = window.location.hash;
-  if (hash.startsWith('#run=')) { DOM.runSelector.value = hash.slice(5); await loadReplay(hash.slice(5)); }
+  if (hash.startsWith('#run=')) {
+    const runId = decodeURIComponent(hash.slice(5));
+    if (runIds.has(runId)) {
+      DOM.runSelector.value = runId;
+      await loadReplay(runId);
+    } else {
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      setStatus(`找不到跑局: ${runId}`, true);
+    }
+  }
 }
 
 function bindEvents() {
   DOM.loadButton.addEventListener('click', () => { const rid = DOM.runSelector.value; if (rid) loadReplay(rid); });
-  DOM.btnFirst.addEventListener('click', () => goToTurn(0));
+  DOM.btnFirst.addEventListener('click', () => { if (S.replay) goToTurn(firstCompleted()); });
   DOM.btnPrevTurn.addEventListener('click', prevTurn);
   DOM.btnPlay.addEventListener('click', togglePlay);
   DOM.btnNextTurn.addEventListener('click', nextTurn);
-  DOM.btnLast.addEventListener('click', () => { if (S.replay) goToTurn(S.replay.turns.length - 1); });
+  DOM.btnLast.addEventListener('click', () => { if (S.replay) goToTurn(lastCompleted()); });
   DOM.speedSelect.addEventListener('change', () => { S.playSpeed = parseFloat(DOM.speedSelect.value); });
   DOM.battleOverlay.addEventListener('click', hideBattleOverlay);
   DOM.btnRankChart.addEventListener('click', showRankChart);
@@ -98,8 +107,8 @@ function bindEvents() {
       case 'ArrowRight': e.preventDefault(); nextTurn(); break;
       case 'ArrowUp': e.preventDefault(); prevStep(); break;
       case 'ArrowDown': e.preventDefault(); nextStep(); break;
-      case 'Home': e.preventDefault(); goToTurn(0); break;
-      case 'End': e.preventDefault(); if (S.replay) goToTurn(S.replay.turns.length - 1); break;
+      case 'Home': e.preventDefault(); if (S.replay) goToTurn(firstCompleted()); break;
+      case 'End': e.preventDefault(); if (S.replay) goToTurn(lastCompleted()); break;
       case 'Escape': hideBattleOverlay(); hideRankChart(); break;
     }
   });
@@ -109,36 +118,39 @@ function bindEvents() {
 // Data
 // ============================================================================
 async function loadRunList() {
+  const runIds = new Set();
   try {
     const r = await fetch('/api/llm/runs'); const d = await r.json();
     DOM.runSelector.innerHTML = '<option value="">— 选择 LLM 跑局 —</option>';
     (d.runs||[]).forEach(run => {
       const o = document.createElement('option'); o.value = run.run_id;
+      runIds.add(run.run_id);
       const rank = run.rank_score != null ? ` · R${Math.round(run.rank_score)}` : '';
       o.textContent = `${(run.created_at||'').slice(0,15)} · ${run.preset||'?'} · T${run.turns} · ${run.status}${rank}${run.has_observations?' 📷':''}`;
       DOM.runSelector.appendChild(o);
     });
   } catch(e) { console.error(e); }
+  return runIds;
 }
 
 async function loadReplay(runId) {
   setStatus('加载中...');
   try {
     let resp = await fetch(`/api/llm/runs/${encodeURIComponent(runId)}/replay`);
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    if (!resp.ok) throw new Error(await responseErrorMessage(resp, `加载 replay 失败 (HTTP ${resp.status})`));
     let replay = await resp.json();
     if (!hasObservations(replay)) {
       setStatus('缺少回合快照，正在重建...');
       resp = await fetch(`/api/llm/runs/${encodeURIComponent(runId)}/rebuild`, { method: 'POST' });
-      if (!resp.ok) { const err = await resp.json(); throw new Error(err.detail||'重建失败'); }
+      if (!resp.ok) throw new Error(await responseErrorMessage(resp, '重建失败'));
       replay = await resp.json();
     } else if (needsRankScores(replay)) {
       setStatus('缺少段位分，正在补全...');
       resp = await fetch(`/api/llm/runs/${encodeURIComponent(runId)}/rescore`, { method: 'POST' });
-      if (!resp.ok) { const err = await resp.json(); throw new Error(err.detail||'补分失败'); }
+      if (!resp.ok) throw new Error(await responseErrorMessage(resp, '补分失败'));
       replay = await resp.json();
     }
-    S.replay = replay; S.currentTurnIdx = 0; S.currentStepIdx = -1;
+    S.replay = replay; S.currentTurnIdx = firstCompleted(); S.currentStepIdx = -1;
     stopPlayback(); hideBattleOverlay();
     // Enable rank chart button if any turn has rank_score
     const hasRankData = (replay.turns||[]).some(t => t.rank_score != null);
@@ -147,6 +159,20 @@ async function loadReplay(runId) {
     updateAll(); setStatus(`已加载: ${runId}`);
     DOM.runMeta.innerHTML = `<span>${replay.session_id||runId}</span>`;
   } catch(e) { setStatus(`错误: ${e.message}`, true); console.error(e); }
+}
+
+async function responseErrorMessage(response, fallback) {
+  try {
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      const data = await response.json();
+      return data?.detail || data?.error || fallback;
+    }
+    const text = (await response.text()).trim();
+    return text || fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 function hasObservations(replay) {
@@ -159,6 +185,7 @@ function needsRankScores(replay) {
   const hasFinalObservation = replay.final_observation && typeof replay.final_observation === 'object';
   const score = replay.score && typeof replay.score === 'object' ? replay.score : null;
   if (hasFinalObservation && (!score || score.rank_score == null)) return true;
+  if (hasFinalObservation && !hasRankScoreContributions(score)) return true;
   return turns.some((turn, index) => {
     if (!turn || typeof turn !== 'object' || turn.status !== 'completed' || turn.rank_score != null) return false;
     const nextTurn = turns[index + 1];
@@ -167,6 +194,11 @@ function needsRankScores(replay) {
       (index === turns.length - 1 && hasFinalObservation)
     );
   });
+}
+
+function hasRankScoreContributions(score) {
+  if (!score || typeof score !== 'object') return false;
+  return contributionItems(score).length > 0;
 }
 
 // ============================================================================
@@ -213,11 +245,36 @@ function goToTurn(idx) {
   if (idx<0) idx=0; if (idx>=t.length) idx=t.length-1;
   S.currentTurnIdx = idx; S.currentStepIdx = -1; updateAll();
 }
+function isCompleteTurn(t) { return t.status === 'completed' || t.status === 'failed'; }
+function findPrevCompleted(fromIdx) {
+  const turns = S.replay.turns;
+  for (let i = fromIdx - 1; i >= 0; i--) { if (isCompleteTurn(turns[i])) return i; }
+  return -1;
+}
+function findNextCompleted(fromIdx) {
+  const turns = S.replay.turns;
+  for (let i = fromIdx + 1; i < turns.length; i++) { if (isCompleteTurn(turns[i])) return i; }
+  return -1;
+}
+function firstCompleted() {
+  const turns = S.replay.turns;
+  for (let i = 0; i < turns.length; i++) { if (isCompleteTurn(turns[i])) return i; }
+  return 0;
+}
+function lastCompleted() {
+  const turns = S.replay.turns;
+  for (let i = turns.length - 1; i >= 0; i--) { if (isCompleteTurn(turns[i])) return i; }
+  return turns.length - 1;
+}
 function prevTurn() {
   if (S.currentStepIdx >= 0) { S.currentStepIdx = -1; updateAll(); return; }
-  goToTurn(S.currentTurnIdx - 1);
+  const prev = findPrevCompleted(S.currentTurnIdx);
+  if (prev >= 0) goToTurn(prev);
 }
-function nextTurn() { goToTurn(S.currentTurnIdx + 1); }
+function nextTurn() {
+  const next = findNextCompleted(S.currentTurnIdx);
+  if (next >= 0) goToTurn(next);
+}
 function nextStep() {
   if (!S.replay) return; const turn = currentTurn(); if (!turn) return;
   const steps = turn.steps || [];
@@ -273,8 +330,9 @@ function scheduleNextStep() {
         const battleDelay = Math.max(3500, baseDelay * 3.5);
         S.playTimer = setTimeout(() => {
           hideBattleOverlay();
-          if (S.currentTurnIdx + 1 < S.replay.turns.length) {
-            S.currentTurnIdx++; S.currentStepIdx = -1; updateAll();
+          const nextTurn = findNextCompleted(S.currentTurnIdx);
+          if (nextTurn >= 0) {
+            S.currentTurnIdx = nextTurn; S.currentStepIdx = -1; updateAll();
             S.playTimer = setTimeout(() => scheduleNextStep(), baseDelay * 0.6);
           } else { stopPlayback(); }
         }, battleDelay);
@@ -284,8 +342,9 @@ function scheduleNextStep() {
     }, delay);
   } else {
     S.playTimer = setTimeout(() => {
-      if (S.currentTurnIdx + 1 < S.replay.turns.length) {
-        S.currentTurnIdx++; S.currentStepIdx = -1; updateAll();
+      const nextTurn = findNextCompleted(S.currentTurnIdx);
+      if (nextTurn >= 0) {
+        S.currentTurnIdx = nextTurn; S.currentStepIdx = -1; updateAll();
         S.playTimer = setTimeout(() => scheduleNextStep(), baseDelay * 1.0);
       } else { stopPlayback(); setStatus('播放完毕'); }
     }, baseDelay * 1.0);
@@ -800,11 +859,13 @@ function updateAll() {
 function renderTimeline() {
   if (!S.replay) { DOM.timelineScroll.innerHTML='<div class="timeline-empty muted">加载存档后显示</div>'; DOM.turnBadge.textContent='—'; return; }
   const turns = S.replay.turns;
+  const completedCount = turns.filter(t => t.status === 'completed' || t.status === 'failed').length;
   DOM.turnBadge.textContent = `${S.currentTurnIdx+1}/${turns.length}`;
   let html = '';
   turns.forEach((turn,idx) => {
+    if (turn.status !== 'completed' && turn.status !== 'failed') return;
     let cls = 'timeline-turn'; if (idx===S.currentTurnIdx) cls+=' active'; if (idx===S.currentTurnIdx && S.currentStepIdx>=0) cls+=' step-active';
-    const dotCls = turn.status==='completed'?'completed':turn.status==='failed'?'failed':'';
+    const dotCls = turn.status==='completed'?'completed':'failed';
     const writeSteps = (turn.steps||[]).filter(s=>s.type==='tool_result'&&WRITE_TOOLS.has(s.name));
     const endS = writeSteps.find(s=>s.name==='end_turn');
     let summary = '';
@@ -889,6 +950,13 @@ function adventurerCard(a, refs) {
   const mpPct = s.mp?Math.max(0,Math.min(100,(r.current_mp/s.mp)*100)):0;
   const hpc = hpPct>50?'hp':hpPct>25?'hp warning':'hp danger';
   const skills = a.skills||[]; const slots = a.equipment_slots||[];
+  const rankContribution = rankContributionForAdventurer(a.adventurer_id);
+  const rankContributionHtml = rankContribution ? `
+    <div class="rank-contrib">
+      <span>Rank 贡献</span>
+      <strong>${esc(fmtRankScore(rankContribution.score))}</strong>
+      ${rankContribution.share != null ? `<em>${esc(fmtPct(rankContribution.share))}</em>` : ''}
+    </div>` : '';
   return `<div class="entity-card adventurer-card" data-id="${esc(a.adventurer_id)}">
     <div class="card-header">
       <div class="avatar-slot"><div class="avatar-placeholder">${esc((a.name||'?')[0])}</div></div>
@@ -901,6 +969,7 @@ function adventurerCard(a, refs) {
     <div class="card-stats">${statCell('攻击',s.attack)}${statCell('防御',s.defense)}${statCell('速度',s.speed)}${statCell('恢复',s.recovery)}${statCell('回魔',s.mp_recovery)}</div>
     ${skills.length?`<div class="skill-chips">${skills.map(sk=>`<span class="skill-chip ${sk.kind==='active'?'active':''}" title="${esc(skillTip(sk))}">${esc(sk.name||sk.skill_id)}</span>`).join('')}</div>`:''}
     ${slots.length?`<div class="equipment-slots">${slots.map(sl=>equipSlot(sl,refs)).join('')}</div>`:''}
+    ${rankContributionHtml}
     <div class="card-subtitle" style="margin-top:6px;">经验: ${fmt(a.experience)}${a.next_level?' → Lv.'+(a.next_level.preview_level||'?'):''}</div>
   </div>`;
 }
@@ -939,7 +1008,7 @@ function renderRecipes(recipes, refs) {
 }
 function renderUpgrades(upgrades, refs) {
   DOM.upgradeList.innerHTML = upgrades.length
-    ? upgrades.map(u=>{const rid=refId(refs,'upgrade',u.upgrade_id);const st=u.unlocked?'✅ 已解锁':u.can_purchase?'💰 可购买':'🔒 不可购买';return`<div class="list-item" data-id="${esc(u.upgrade_id)}" style="opacity:${u.unlocked?1:u.can_purchase?0.8:0.5}"><div class="name">${rid?'['+rid+'] ':''}${esc(u.name)}</div><div class="detail">属性:${fmtMap(u.stats)} · 上限+${fmt(u.party_size_bonus)}</div><div class="cost">${st} · 💰${fmt(u.gold_cost)}</div></div>`;}).join('')
+    ? upgrades.map(u=>{const rid=refId(refs,'upgrade',u.upgrade_id);const st=u.unlocked?'✅ 已解锁':u.can_purchase?'💰 可购买':'🔒 不可购买';const prereq=upgradePrereqText(upgrades, u.required_upgrade_ids);return`<div class="list-item" data-id="${esc(u.upgrade_id)}" style="opacity:${u.unlocked?1:u.can_purchase?0.8:0.5}"><div class="name">${rid?'['+rid+'] ':''}${esc(u.name)}</div><div class="detail">属性:${fmtMap(u.stats)} · 上限+${fmt(u.party_size_bonus)}${prereq?`<br>前置：${prereq}`:''}</div><div class="cost">${st} · 💰${fmt(u.gold_cost)}</div></div>`;}).join('')
     : '<div class="muted" style="padding:8px">无升级</div>';
 }
 
@@ -1009,8 +1078,7 @@ function formatTurnMeta(tu) {
 // Controls
 // ============================================================================
 function updateControls() {
-  const h=!!S.replay; const ts=h?S.replay.turns:[];
-  const cp=h&&(S.currentTurnIdx>0||S.currentStepIdx>=0), cn=h&&S.currentTurnIdx<ts.length-1;
+  const h=!!S.replay; const cp=h&&(S.currentTurnIdx>0||S.currentStepIdx>=0); const cn=h&&findNextCompleted(S.currentTurnIdx)>=0;
   DOM.btnFirst.disabled=!cp; DOM.btnPrevTurn.disabled=!cp; DOM.btnPlay.disabled=!h; DOM.btnNextTurn.disabled=!cn; DOM.btnLast.disabled=!cn;
   if (S.playing) { DOM.btnPlay.textContent='⏸'; DOM.btnPlay.classList.add('playing'); }
   else { DOM.btnPlay.textContent='▶'; DOM.btnPlay.classList.remove('playing'); }
@@ -1029,6 +1097,9 @@ function trunc(t,l) { if(!t)return''; const s=String(t); return s.length<=l?s:s.
 function statCell(l,v) { return `<div class="stat-item"><span class="stat-label">${l}</span><span class="stat-value">${fmt(v)}</span></div>`; }
 function statLabel(k) { const m={hp:'HP',mp:'MP',attack:'攻击',defense:'防御',speed:'速度',recovery:'恢复',mp_recovery:'回魔'}; return m[k]||k; }
 function matLabel(k) { const m={iron:'铁',wood:'木',cloth:'布',leather:'皮',gem:'宝石',herb:'草药',crystal:'水晶',essence:'精华'}; return m[k]||k; }
+function upgradePrereqText(upgrades, ids) { if (!ids || !ids.length) return ''; return ids.map((id) => { const u = upgrades.find((g) => g.upgrade_id === id); return u ? u.name : id; }).join('、'); }
+function fmtRankScore(v) { return v == null ? '—' : Number(v).toLocaleString(undefined, { maximumFractionDigits: 1 }); }
+function fmtPct(v) { return v == null ? '—' : `${(Number(v) * 100).toFixed(1)}%`; }
 function slotIcon(s) { const m={main_hand:'⚔️',off_hand:'🛡️',two_hand:'🗡️',helmet:'⛑️',armor:'🛡️',boots:'👢',accessory:'💍'}; return m[s]||'?'; }
 function fmtMap(o) { if(!o||!Object.keys(o).length)return'—'; return Object.entries(o).map(([k,v])=>`${statLabel(k)}:${fmt(v)}`).join(' '); }
 function skillTip(s) { const p=[]; if(s.kind)p.push(`类型:${s.kind}`); if(s.mp_cost!=null)p.push(`MP:${s.mp_cost}`); if(s.condition)p.push(`条件:${s.condition}`); if(s.effects){p.push('效果:'+(Array.isArray(s.effects)?s.effects:[s.effects]).map(e=>`${e.type||'?'}:${e.value!=null?(e.value>0?'+':'')+e.value:'?'}`).join(', '));} return p.join('\n'); }
@@ -1036,12 +1107,105 @@ function refId(refs,c,id) { return (refs&&refs[c]&&id)?(refs[c][id]??null):null;
 function setStatus(m,e) { DOM.statusText.textContent=m; DOM.statusText.style.color=e?'var(--danger)':'var(--muted)'; }
 function keyById(arr,key) { const m={}; for(const it of arr){if(it&&it[key])m[it[key]]=it;} return m; }
 
+function contributionItems(score) {
+  if (!score || typeof score !== 'object') return [];
+  const values = Array.isArray(score.rank_score_per_adventurer)
+    ? score.rank_score_per_adventurer
+    : Array.isArray(score.per_adventurer)
+      ? score.per_adventurer
+      : [];
+  return values
+    .filter(item => item && typeof item === 'object')
+    .map(item => {
+      const scoreValue = item.rank_score_contribution ?? item.rank_score;
+      return {
+        adventurer_id: item.adventurer_id,
+        name: item.name,
+        score: Number(scoreValue),
+        share: item.rank_score_share != null ? Number(item.rank_score_share) : null,
+      };
+    })
+    .filter(item => item.adventurer_id != null && Number.isFinite(item.score));
+}
+
+function rankContributionForAdventurer(adventurerId) {
+  const items = contributionItems(S.replay?.score);
+  return items.find(item => String(item.adventurer_id) === String(adventurerId)) || null;
+}
+
 // ============================================================================
 // Replay Stats (client-side computation from turns/steps)
 // ============================================================================
 function formatReplayDuration(ms) {
   if (ms < 1000) return `${Math.round(ms)} ms`;
   return `${(ms / 1000).toFixed(2)} s`;
+}
+
+function structuredEndTurnStats(step) {
+  const battles = step?.result?.turn_result?.battles;
+  if (!Array.isArray(battles)) return null;
+  const stats = {
+    battlesTotal: 0,
+    battlesWon: 0,
+    battlesLost: 0,
+    goldEarned: 0,
+    expEarned: 0,
+  };
+  for (const battle of battles) {
+    if (!battle || typeof battle !== "object") continue;
+    stats.battlesTotal++;
+    const won = battleWon(battle);
+    if (won === true) stats.battlesWon++;
+    else if (won === false) stats.battlesLost++;
+    const reward = battle.reward && typeof battle.reward === "object" ? battle.reward : {};
+    const gold = Number(reward.gold);
+    const exp = Number(reward.experience);
+    if (Number.isFinite(gold)) stats.goldEarned += gold;
+    if (Number.isFinite(exp)) stats.expEarned += exp;
+  }
+  return stats;
+}
+
+function battleWon(battle) {
+  if (!battle || typeof battle !== "object") return null;
+  if (battle.won === true) return true;
+  if (battle.won === false) return false;
+  const outcome = battle.outcome ?? battle.result ?? battle.winner ?? battle.status;
+  if (typeof outcome !== "string") return null;
+  const value = outcome.toLowerCase();
+  if (["left_win", "adventurer_win", "player_win", "win", "won", "victory"].includes(value)) return true;
+  if (["right_win", "monster_win", "enemy_win", "loss", "lost", "defeat"].includes(value)) return false;
+  return null;
+}
+
+function toolStepSucceeded(step, content) {
+  if (step?.ok === true || step?.result?.ok === true) return true;
+  if (step?.ok === false || step?.result?.ok === false || step?.error) return false;
+  const stripped = String(content || "").trimStart();
+  if (stripped.startsWith("OK") || stripped.startsWith("成功")) return true;
+  if (stripped.startsWith("FAIL") || stripped.startsWith("失败") || stripped.startsWith("ERROR") || stripped.startsWith("错误")) return false;
+  try {
+    const data = JSON.parse(stripped);
+    if (typeof data?.ok === "boolean") return data.ok;
+  } catch {}
+  return false;
+}
+
+function textRewardStats(content) {
+  const rewardLines = String(content || "")
+    .split(/\r?\n/)
+    .filter(line => /奖励|reward/i.test(line));
+  const battleRewardLines = rewardLines.filter(line => /^\s*-\s+/.test(line));
+  const lines = battleRewardLines.length ? battleRewardLines : rewardLines;
+  let goldEarned = 0;
+  let expEarned = 0;
+  for (const line of lines) {
+    const gold = line.match(/(?:金币|gold)\s*[:=＝]\s*(\d+)/i);
+    const exp = line.match(/(?:经验|experience|exp)\s*[:=＝]\s*(\d+)/i);
+    if (gold) goldEarned += parseInt(gold[1], 10);
+    if (exp) expEarned += parseInt(exp[1], 10);
+  }
+  return { goldEarned, expEarned };
 }
 
 function computeReplayStats(replay) {
@@ -1091,7 +1255,7 @@ function computeReplayStats(replay) {
         totalCalls++;
         const name = step.name || "";
         const content = typeof step.content === "string" ? step.content : "";
-        const ok = content.startsWith("OK");
+        const ok = toolStepSucceeded(step, content);
         if (ok) {
           successfulCalls++;
           if (name === "craft_equipment") crafted++;
@@ -1102,21 +1266,22 @@ function computeReplayStats(replay) {
           else if (name === "equip_item") equipped++;
           else if (name === "unequip_item") unequipped++;
           else if (name === "end_turn") {
-            const bm = content.match(/(\d+)\s*场战斗[,，]\s*(\d+)\s*胜\s*(\d+)\s*负/);
-            if (bm) { battlesTotal += parseInt(bm[1], 10); battlesWon += parseInt(bm[2], 10); battlesLost += parseInt(bm[3], 10); }
-            // Fallback: extract gold/experience from step text when replay.stats is absent
-            if (!savedGA) {
-              const goldRe = /[=＝](\d+)/g;
-              let m;
-              const goldSegments = content.split("金币");
-              for (let i = 1; i < goldSegments.length; i++) {
-                m = goldSegments[i].match(/^[=＝](\d+)/);
-                if (m) goldEarned += parseInt(m[1], 10);
+            const structured = structuredEndTurnStats(step);
+            if (structured) {
+              battlesTotal += structured.battlesTotal;
+              battlesWon += structured.battlesWon;
+              battlesLost += structured.battlesLost;
+              if (!savedGA) {
+                goldEarned += structured.goldEarned;
+                expEarned += structured.expEarned;
               }
-              const expSegments = content.split("经验");
-              for (let i = 1; i < expSegments.length; i++) {
-                m = expSegments[i].match(/^[=＝](\d+)/);
-                if (m) expEarned += parseInt(m[1], 10);
+            } else {
+              const bm = content.match(/(\d+)\s*场战斗[,，]\s*(\d+)\s*胜\s*(\d+)\s*负/);
+              if (bm) { battlesTotal += parseInt(bm[1], 10); battlesWon += parseInt(bm[2], 10); battlesLost += parseInt(bm[3], 10); }
+              if (!savedGA) {
+                const rewards = textRewardStats(content);
+                goldEarned += rewards.goldEarned;
+                expEarned += rewards.expEarned;
               }
             }
           }

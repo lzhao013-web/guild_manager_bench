@@ -246,6 +246,12 @@ h2 { font-size: 15px; font-weight: 600; color: var(--text-secondary); }
   gap: 8px;
 }
 
+.inline.compact {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
 /* ========== Adventurer Cards ========== */
 .adv-card {
   background: var(--surface-raised);
@@ -821,6 +827,12 @@ button:hover:not(:disabled) {
 
 button:disabled { cursor: not-allowed; opacity: 0.4; }
 
+button.compact {
+  min-height: 26px;
+  padding: 2px 8px;
+  font-size: 12px;
+}
+
 .btn-primary {
   background: var(--accent);
   border-color: var(--accent);
@@ -831,6 +843,18 @@ button:disabled { cursor: not-allowed; opacity: 0.4; }
 .btn-primary:hover:not(:disabled) {
   background: var(--accent-hover);
   border-color: var(--accent-hover);
+}
+
+.btn-danger {
+  color: var(--danger);
+  border-color: rgba(239, 91, 91, 0.45);
+  background: var(--danger-dim);
+}
+
+.btn-danger:hover:not(:disabled) {
+  color: #fff;
+  border-color: var(--danger);
+  background: var(--danger);
 }
 
 .replay-link {
