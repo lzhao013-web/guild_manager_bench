@@ -34,7 +34,7 @@ from guild_manager_bench.bench.replay_scoring import (
 )
 
 # Incremental build cache version — bump when _extract_run_info schema changes.
-_CACHE_VERSION = 3
+_CACHE_VERSION = 4
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -54,7 +54,11 @@ def _extract_run_info(replay: dict, *, source_path: Path | None = None) -> dict 
         return None
 
     turns = replay.get("turns")
-    turns_count = len(turns) if isinstance(turns, list) else None
+    turns_count = (
+        sum(1 for t in turns if isinstance(t, dict) and t.get("status") == "completed")
+        if isinstance(turns, list)
+        else None
+    )
     data = replay.get("data")
     data = data if isinstance(data, dict) else {}
     final_observation = replay.get("final_observation")
@@ -123,6 +127,7 @@ def _extract_run_info(replay: dict, *, source_path: Path | None = None) -> dict 
         "party_size": final_observation.get("party_size"),
         "party_size_limit": final_observation.get("party_size_limit"),
         "best_adventurer": _best_adventurer(score_data),
+        "rank_score_per_adventurer": _rank_score_per_adventurer(score_data),
         # ── New fields ──
         "rank_score_curve": rank_score_curve or None,
         "token_usage": _extract_token_usage(stats) or fallback_tokens,
@@ -685,7 +690,7 @@ def build_leaderboard(data_dir: Path, output: Path, *, incremental: bool = True)
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, UnicodeDecodeError) as e:
-            print(f"  ⚠ Skipping {path.name}: {e}")
+            print(f"  ! Skipping {path.name}: {e}")
             skipped += 1
             continue
 
@@ -767,10 +772,10 @@ def build_leaderboard(data_dir: Path, output: Path, *, incremental: bool = True)
             parts.append(f"{len(deleted)} deleted")
         if parts:
             inc_info = f" ({', '.join(parts)})"
-    print(f"✓ {len(models)} model(s), {result['total_runs']} run(s)"
+    print(f"OK {len(models)} model(s), {result['total_runs']} run(s)"
           + (f", {skipped} skipped" if skipped else "")
           + inc_info)
-    print(f"  → {output}")
+    print(f"  -> {output}")
     for m in models:
         rs = m.get("rank_score")
         rs_str = f"{rs['best']:,.1f}" if rs else "—"
@@ -808,6 +813,7 @@ def _run_detail(run: dict) -> dict:
         "party_size": run.get("party_size"),
         "party_size_limit": run.get("party_size_limit"),
         "best_adventurer": run.get("best_adventurer"),
+        "rank_score_per_adventurer": run.get("rank_score_per_adventurer"),
         # ── New fields ──
         "rank_score_curve": run.get("rank_score_curve"),
         "token_usage": run.get("token_usage"),
@@ -831,6 +837,35 @@ def _best_adventurer(score_data: dict) -> dict | None:
         "win_rate": best.get("win_rate"),
         "assignments": best.get("assignments"),
     }
+
+
+def _rank_score_per_adventurer(score_data: dict) -> list[dict] | None:
+    values = score_data.get("rank_score_per_adventurer")
+    if not isinstance(values, list):
+        values = score_data.get("per_adventurer")
+    if not isinstance(values, list):
+        return None
+
+    result: list[dict] = []
+    for item in values:
+        if not isinstance(item, dict):
+            continue
+        contribution = item.get("rank_score_contribution")
+        if contribution is None:
+            contribution = item.get("rank_score")
+        if contribution is None:
+            continue
+        result.append(
+            {
+                "adventurer_id": item.get("adventurer_id"),
+                "name": item.get("name"),
+                "rank_score": contribution,
+                "rank_score_contribution": contribution,
+                "rank_score_share": item.get("rank_score_share"),
+                "assignments": item.get("assignments"),
+            }
+        )
+    return result or None
 
 
 def _preset_from_data_dir(value) -> str | None:
