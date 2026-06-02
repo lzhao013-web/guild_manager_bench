@@ -17,8 +17,6 @@ def test_tool_schemas_expose_agent_facing_tools() -> None:
     names = {schema["name"] for schema in schemas}
 
     assert {
-        "get_party",
-        "get_monsters",
         "get_crafting",
         "get_inventory",
         "get_upgrades",
@@ -31,6 +29,7 @@ def test_tool_schemas_expose_agent_facing_tools() -> None:
         "purchase_upgrade",
         "end_turn",
         "get_events",
+        "dismiss_adventurer",
     }.issubset(names)
     assert "start_session" not in names
     assert "get_available_actions" not in names
