@@ -1,12 +1,14 @@
 recruitable_adventurers:
+  # ═══ 1. 佣兵战士 — 前期之王，简单粗暴 ═══
+  # 高基础ATK，无需MP，稳定输出。前期碾压，后期缺乏穿甲手段。
   - id: mercenary_warrior
     name: 佣兵战士
     recruit_gold: 50
     stats:
-      hp: 120
+      hp: 130
       mp: 0
       attack: 18
-      defense: 8
+      defense: 9
       speed: 10
       recovery: 10
       mp_recovery: 10
@@ -22,106 +24,115 @@ recruitable_adventurers:
       - level: 3
         skills: [power_strike]
       - level: 6
-        skills: [battle_fury]
+        skills: [battle_hardening]
       - level: 9
-        skills: [crushing_blow]
+        skills: [execution]
 
+  # ═══ 2. 步行骑士 — 后期铁壁，反蛮力坦克 ═══
+  # 极端DEF/HP，极低ATK。前期打不死怪，后期DEF碾压使蛮力怪物打不动。
+  # 弱点：法术/DoT（真实伤害无视DEF）
   - id: foot_knight
     name: 步行骑士
     recruit_gold: 50
     stats:
-      hp: 150
+      hp: 170
       mp: 0
-      attack: 14
-      defense: 12
-      speed: 7
-      recovery: 12
-      mp_recovery: 12
+      attack: 10
+      defense: 14
+      speed: 6
+      recovery: 16
+      mp_recovery: 0
     stat_growth_per_level:
-      hp: 18
+      hp: 20
       mp: 0
-      attack: 2
-      defense: 3
-      speed: 1
-      recovery: 2
-      mp_recovery: 2
+      attack: 1
+      defense: 4
+      speed: 0
+      recovery: 4
+      mp_recovery: 0
     level_skill_unlocks:
       - level: 3
-        skills: [shield_stance]
+        skills: [iron_wall]
       - level: 6
-        skills: [iron_bastion]
+        skills: [shield_bash]
       - level: 9
-        skills: [last_stand]
+        skills: [unyielding]
 
+  # ═══ 3. 林地射手 — 闪电先手，秒杀专家 ═══
+  # 全游戏最高SPD，前期先手秒杀。后期爆发不够打死血牛。
   - id: woodland_archer
     name: 林地射手
     recruit_gold: 50
     stats:
-      hp: 95
+      hp: 85
       mp: 0
-      attack: 19
-      defense: 5
-      speed: 15
-      recovery: 8
+      attack: 17
+      defense: 4
+      speed: 18
+      recovery: 6
       mp_recovery: 8
     stat_growth_per_level:
-      hp: 10
+      hp: 8
       mp: 0
       attack: 3
       defense: 1
       speed: 3
-      recovery: 2
+      recovery: 1
       mp_recovery: 2
     level_skill_unlocks:
       - level: 3
-        skills: [opening_shot]
+        skills: [first_volley]
       - level: 6
         skills: [hunter_instinct]
       - level: 9
-        skills: [precision_shot]
+        skills: [kill_shot]
 
+  # ═══ 4. 魔弹法师 — 中期法术炮台 ═══
+  # 真伤穿甲，中期MP充足后是打坦克最快的职业。但身板极脆。
   - id: spellshot_mage
     name: 魔弹法师
     recruit_gold: 50
     stats:
       hp: 85
-      mp: 24
-      attack: 15
-      defense: 4
-      speed: 10
-      recovery: 8
+      mp: 30
+      attack: 16
+      defense: 3
+      speed: 9
+      recovery: 6
       mp_recovery: 8
     stat_growth_per_level:
-      hp: 8
-      mp: 4
+      hp: 7
+      mp: 5
       attack: 4
-      defense: 1
+      defense: 2
       speed: 1
-      recovery: 2
+      recovery: 1
       mp_recovery: 2
-    skills: [arcane_bolt]
+    skills: [arcane_missile]
     level_skill_unlocks:
       - level: 3
-        skills: [arcane_focus]
+        skills: [mana_surge]
       - level: 6
-        skills: [mana_burst]
-      - level: 9
         skills: [arcane_barrage]
+      - level: 9
+        skills: [mana_dump]
 
+  # ═══ 5. 神官 — 后期不死之身 ═══
+  # 回血超越DoT，后期REC极高。但爆发型怪物可以秒杀。
   - id: cleric
     name: 神官
     recruit_gold: 50
     stats:
-      hp: 110
-      mp: 36
-      attack: 13
+      hp: 120
+      mp: 30
+      attack: 12
       defense: 8
       speed: 8
-      recovery: 16
+      recovery: 18
       mp_recovery: 16
     stat_growth_per_level:
       hp: 12
-      mp: 5
+      mp: 4
       attack: 2
       defense: 2
       speed: 1
@@ -132,107 +143,113 @@ recruitable_adventurers:
       - level: 3
         skills: [soothing_light]
       - level: 6
-        skills: [holy_smite]
+        skills: [holy_strike]
       - level: 9
-        skills: [divine_protection]
+        skills: [divine_guard]
 
+  # ═══ 6. 连击师(原小丑) — 战斗内蓄力爆发 ═══
+  # 去掉随机性，改为蓄力连击。战斗开始只有普攻，行动次数越多越强。
   - id: jester
-    name: 小丑
+    name: 连击师
     recruit_gold: 50
     stats:
-      hp: 90
+      hp: 95
       mp: 18
-      attack: 16
-      defense: 5
+      attack: 15
+      defense: 6
       speed: 14
       recovery: 8
       mp_recovery: 8
     stat_growth_per_level:
-      hp: 9
+      hp: 10
       mp: 2
       attack: 3
       defense: 1
       speed: 3
       recovery: 2
       mp_recovery: 2
-    skills: [opening_trick]
     level_skill_unlocks:
       - level: 3
-        skills: [trick_escape]
+        skills: [combo_strike]
       - level: 6
-        skills: [chaotic_strike]
+        skills: [combo_momentum]
       - level: 9
-        skills: [grand_finale]
+        skills: [combo_finisher]
 
+  # ═══ 7. 苦行僧 — 超后期无限成长 ═══
+  # 基础属性差，被动按行动次数逐步解锁。战斗越长越无敌。
   - id: ascetic_monk
     name: 苦行僧
     recruit_gold: 50
     stats:
-      hp: 125
+      hp: 130
       mp: 0
-      attack: 13
-      defense: 9
-      speed: 8
-      recovery: 14
+      attack: 11
+      defense: 10
+      speed: 7
+      recovery: 12
       mp_recovery: 14
     stat_growth_per_level:
-      hp: 15
+      hp: 16
       mp: 0
       attack: 3
       defense: 2
       speed: 1
       recovery: 4
       mp_recovery: 4
-    skills: [enduring_focus]
     level_skill_unlocks:
       - level: 3
         skills: [steady_breath]
       - level: 6
-        skills: [iron_body]
+        skills: [inner_power]
       - level: 9
-        skills: [inner_force]
+        skills: [enlightenment]
 
+  # ═══ 8. 吸血魔 — 中期刀尖起舞 ═══
+  # 自伤换高伤害+吸血回复。中期伤害天花板最高，但脆皮怕法术。
   - id: bloodfiend
     name: 吸血魔
     recruit_gold: 50
     stats:
-      hp: 105
-      mp: 22
-      attack: 17
+      hp: 110
+      mp: 24
+      attack: 18
       defense: 5
-      speed: 11
+      speed: 10
       recovery: 6
-      mp_recovery: 6
+      mp_recovery: 8
     stat_growth_per_level:
       hp: 12
       mp: 3
       attack: 4
       defense: 1
       speed: 2
-      recovery: 2
+      recovery: 1
       mp_recovery: 2
     skills: [blood_drain]
     level_skill_unlocks:
       - level: 3
-        skills: [crimson_pact]
+        skills: [blood_pact]
       - level: 6
-        skills: [blood_frenzy]
+        skills: [crimson_frenzy]
       - level: 9
-        skills: [life_tap]
+        skills: [vampiric_embrace]
 
+  # ═══ 9. 炮手 — 后期攻城锤 ═══
+  # 最慢职业（SPD成长0），每次攻击附带大量真伤。专打高DEF怪物。
   - id: cannoneer
     name: 炮手
     recruit_gold: 50
     stats:
-      hp: 100
-      mp: 18
-      attack: 13
-      defense: 6
-      speed: 7
+      hp: 115
+      mp: 20
+      attack: 14
+      defense: 7
+      speed: 5
       recovery: 8
       mp_recovery: 8
     stat_growth_per_level:
-      hp: 11
+      hp: 12
       mp: 2
       attack: 3
       defense: 2
@@ -242,21 +259,23 @@ recruitable_adventurers:
     skills: [armor_piercing_shot]
     level_skill_unlocks:
       - level: 3
-        skills: [shrapnel_burst]
+        skills: [shrapnel_round]
       - level: 6
-        skills: [loading_drill]
+        skills: [siege_stance]
       - level: 9
         skills: [siege_cannon]
 
+  # ═══ 10. 瘟疫法师 — 前中期毒王 ═══
+  # 多层DoT叠加+虚弱debuff。前期毒伤即真伤碾压，后期脆皮被秒。
   - id: plague_mage
     name: 瘟疫法师
     recruit_gold: 50
     stats:
-      hp: 90
-      mp: 30
+      hp: 110
+      mp: 28
       attack: 13
       defense: 4
-      speed: 10
+      speed: 11
       recovery: 8
       mp_recovery: 8
     stat_growth_per_level:
@@ -265,9 +284,9 @@ recruitable_adventurers:
       attack: 3
       defense: 1
       speed: 2
-      recovery: 2
+      recovery: 1
       mp_recovery: 2
-    skills: [plague_curse]
+    skills: [plague_curse, shadow_form]
     level_skill_unlocks:
       - level: 3
         skills: [withering_touch]

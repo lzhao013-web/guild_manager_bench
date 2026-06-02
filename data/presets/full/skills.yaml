@@ -1,78 +1,36 @@
 skills:
-  # ===== Adventurer Skills =====
-  - id: arcane_bolt
-    name: 魔弹
+  # ===== Adventurer Initial Skills =====
+
+  # --- 魔弹法师 ---
+  - id: arcane_missile
+    name: 奥术飞弹
     kind: active
     condition:
       type: always
     effects:
-      - type: damage_bonus
-        value: 8
-    mp_cost: 6
+      - type: true_damage
+        value: 15
+      - type: atk_ratio_damage
+        value: 0.3
+    mp_cost: 8
     priority: 10
 
+  # --- 神官 ---
   - id: minor_heal
-    name: 小治疗术
+    name: 治愈术
     kind: active
     condition:
       type: self_hp_pct_lte
-      value: 0.7
+      value: 0.75
     effects:
       - type: heal
-        value: 24
+        value: 30
         target: self
-    mp_cost: 9
+    mp_cost: 8
     priority: 20
     free: true
 
-  - id: opening_trick
-    name: 开场戏法
-    kind: active
-    condition:
-      type: action_index_lte
-      value: 1
-    effects:
-      - type: apply_status
-        target: self
-        status:
-          id: trick_rhythm
-          name: 戏法节奏
-          duration: 3
-          polarity: positive
-          effects:
-            - type: stat_bonus
-              stat: speed
-              value: 5
-              target: self
-            - type: stat_bonus
-              stat: attack
-              value: 4
-              target: self
-    mp_cost: 6
-    priority: 30
-    once_per_battle: true
-    free: true
-
-  - id: enduring_focus
-    name: 苦行专注
-    kind: passive
-    condition:
-      type: action_index_gte
-      value: 8
-    effects:
-      - type: stat_bonus
-        stat: attack
-        value: 6
-        target: self
-      - type: stat_bonus
-        stat: defense
-        value: 4
-        target: self
-      - type: stat_bonus
-        stat: recovery
-        value: 4
-        target: self
-
+  # --- 吸血魔 ---
   - id: blood_drain
     name: 血噬
     kind: active
@@ -80,28 +38,45 @@ skills:
       type: always
     effects:
       - type: self_damage
-        value: 6
-      - type: damage_bonus
         value: 10
+      - type: damage_multiplier
+        value: 1.2
       - type: heal
-        value: 14
+        value: 8
         target: self
-    mp_cost: 7
+    mp_cost: 9
     priority: 10
 
+  # --- 炮手 ---
   - id: armor_piercing_shot
     name: 破甲炮击
     kind: active
     condition:
-      type: action_index_lte
-      value: 5
+      type: always
     effects:
       - type: true_damage
-        value: 10
+        value: 20
       - type: atk_ratio_damage
-        value: 0.8
+        value: 0.5
     mp_cost: 6
-    priority: 15
+    priority: 10
+
+  # --- 瘟疫法师 ---
+  - id: shadow_form
+    name: 暗影形态
+    kind: passive
+    condition:
+      type: action_index_lte
+      value: 8
+    effects:
+      - type: stat_multiplier
+        stat: defense
+        value: 3.0
+        target: self
+      - type: stat_multiplier
+        stat: recovery
+        value: 1.8
+        target: self
 
   - id: plague_curse
     name: 瘟疫诅咒
@@ -119,10 +94,10 @@ skills:
           stack_mode: add_duration
           effects:
             - type: true_damage
-              value: 6
+              value: 10
             - type: stat_multiplier
               stat: speed
-              value: 0.8
+              value: 0.75
               target: self
       - type: atk_ratio_damage
         value: 0.3
@@ -132,21 +107,22 @@ skills:
 
   # ===== Adventurer Level Unlock Skills =====
 
+  # ───────────────────────────────────────
   # --- 佣兵战士 ---
+  # ───────────────────────────────────────
   - id: power_strike
     name: 强力打击
     kind: active
     condition:
-      type: target_hp_pct_gte
-      value: 0.4
+      type: always
     effects:
       - type: damage_multiplier
         value: 1.5
     priority: 15
     once_per_battle: true
 
-  - id: battle_fury
-    name: 战斗狂热
+  - id: battle_hardening
+    name: 战意高昂
     kind: passive
     condition:
       type: self_hp_pct_gte
@@ -154,65 +130,55 @@ skills:
     effects:
       - type: stat_multiplier
         stat: attack
-        value: 1.12
-        target: self
-      - type: stat_multiplier
-        stat: speed
-        value: 1.1
+        value: 1.15
         target: self
 
-  - id: crushing_blow
-    name: 粉碎打击
+  - id: execution
+    name: 处决
     kind: active
     condition:
       type: target_hp_pct_lte
-      value: 0.4
+      value: 0.3
     effects:
       - type: damage_multiplier
-        value: 1.6
+        value: 2.0
       - type: true_damage
         value: 8
     priority: 18
     once_per_battle: true
 
+  # ───────────────────────────────────────
   # --- 步行骑士 ---
-  - id: shield_stance
-    name: 守势
+  # ───────────────────────────────────────
+  - id: iron_wall
+    name: 铁壁
     kind: passive
     condition:
       type: self_hp_pct_lte
-      value: 0.5
+      value: 0.6
     effects:
       - type: stat_multiplier
         stat: defense
-        value: 1.2
+        value: 1.4
+        target: self
+      - type: stat_multiplier
+        stat: recovery
+        value: 1.3
         target: self
 
-  - id: iron_bastion
-    name: 铁壁姿态
+  - id: shield_bash
+    name: 盾击
     kind: active
     condition:
-      type: self_hp_pct_lte
-      value: 0.75
+      type: always
     effects:
-      - type: apply_status
-        target: self
-        status:
-          id: iron_wall
-          name: 铁壁
-          duration: 2
-          polarity: positive
-          effects:
-            - type: stat_bonus
-              stat: defense
-              value: 7
-              target: self
-    priority: 15
-    once_per_battle: true
+      - type: true_damage
+        value: 20
+    priority: 10
     free: true
 
-  - id: last_stand
-    name: 最后抵抗
+  - id: unyielding
+    name: 不屈意志
     kind: passive
     condition:
       type: self_hp_pct_lte
@@ -220,20 +186,22 @@ skills:
     effects:
       - type: stat_multiplier
         stat: defense
-        value: 1.3
+        value: 1.5
         target: self
       - type: stat_multiplier
         stat: recovery
-        value: 1.3
+        value: 1.5
         target: self
 
+  # ───────────────────────────────────────
   # --- 林地射手 ---
-  - id: opening_shot
-    name: 先手射击
+  # ───────────────────────────────────────
+  - id: first_volley
+    name: 先发制人
     kind: active
     condition:
       type: action_index_lte
-      value: 2
+      value: 3
     effects:
       - type: damage_multiplier
         value: 1.6
@@ -241,7 +209,7 @@ skills:
     once_per_battle: true
 
   - id: hunter_instinct
-    name: 猎手本能
+    name: 猎手直觉
     kind: passive
     condition:
       type: target_hp_pct_gte
@@ -249,170 +217,171 @@ skills:
     effects:
       - type: stat_multiplier
         stat: attack
-        value: 1.12
+        value: 1.15
         target: self
       - type: stat_multiplier
         stat: speed
         value: 1.1
         target: self
 
-  - id: precision_shot
-    name: 精准射击
+  - id: kill_shot
+    name: 致命射击
     kind: active
     condition:
-      type: action_index_gte
-      value: 5
+      type: target_hp_pct_lte
+      value: 0.25
     effects:
-      - type: true_damage
-        value: 18
-    priority: 15
+      - type: damage_multiplier
+        value: 2.5
+    priority: 18
     once_per_battle: true
 
+  # ───────────────────────────────────────
   # --- 魔弹法师 ---
-  - id: arcane_focus
-    name: 奥术专注
+  # ───────────────────────────────────────
+  - id: mana_surge
+    name: 魔力涌动
     kind: passive
     condition:
-      type: self_hp_pct_gte
-      value: 0.7
+      type: self_mp_pct_gte
+      value: 0.5
     effects:
       - type: stat_multiplier
         stat: attack
-        value: 1.2
+        value: 1.25
         target: self
-
-  - id: mana_burst
-    name: 魔力爆发
-    kind: active
-    condition:
-      type: action_index_lte
-      value: 3
-    effects:
-      - type: damage_multiplier
-        value: 1.8
-    mp_cost: 8
-    priority: 20
-    once_per_battle: true
 
   - id: arcane_barrage
     name: 奥术弹幕
     kind: active
     condition:
-      type: self_mp_pct_gte
-      value: 0.4
+      type: action_index_lte
+      value: 4
     effects:
       - type: damage_multiplier
-        value: 1.3
+        value: 1.5
+      - type: true_damage
+        value: 10
     mp_cost: 10
-    priority: 15
+    priority: 20
+    once_per_battle: true
 
+  - id: mana_dump
+    name: 魔力倾泻
+    kind: active
+    condition:
+      type: self_mp_pct_gte
+      value: 0.3
+    effects:
+      - type: damage_multiplier
+        value: 2.0
+      - type: true_damage
+        value: 20
+    mp_cost: 15
+    priority: 18
+
+  # ───────────────────────────────────────
   # --- 神官 ---
+  # ───────────────────────────────────────
   - id: soothing_light
-    name: 抚慰之光
+    name: 净化之光
     kind: active
     condition:
       type: self_hp_pct_lte
       value: 0.85
     effects:
       - type: heal_percent
-        value: 0.15
+        value: 0.20
         target: self
       - type: mp_restore
-        value: 3
+        value: 4
         target: self
-    mp_cost: 8
+    mp_cost: 7
     priority: 15
     free: true
 
-  - id: holy_smite
-    name: 圣光打击
+  - id: holy_strike
+    name: 神圣打击
     kind: active
     condition:
       type: always
     effects:
       - type: damage_multiplier
-        value: 1.2
+        value: 1.5
+      - type: true_damage
+        value: 18
+      - type: atk_ratio_damage
+        value: 0.6
     mp_cost: 6
     priority: 10
 
-  - id: divine_protection
+  - id: divine_guard
     name: 神圣守护
-    kind: active
+    kind: passive
     condition:
       type: self_hp_pct_lte
       value: 0.5
     effects:
-      - type: apply_status
+      - type: stat_multiplier
+        stat: defense
+        value: 1.5
         target: self
-        status:
-          id: divine_guard
-          name: 神圣守护
-          duration: 2
-          polarity: positive
-          effects:
-            - type: stat_multiplier
-              stat: defense
-              value: 1.25
-              target: self
-            - type: heal_percent
-              value: 0.12
-              target: self
-    mp_cost: 10
-    priority: 18
-    once_per_battle: true
-    free: true
+      - type: stat_multiplier
+        stat: recovery
+        value: 1.5
+        target: self
+      - type: stat_multiplier
+        stat: attack
+        value: 1.2
+        target: self
 
-  # --- 小丑 ---
-  - id: trick_escape
-    name: 戏法脱身
+  # ───────────────────────────────────────
+  # --- 连击师(原小丑) ---
+  # ───────────────────────────────────────
+  - id: combo_strike
+    name: 连击一式
     kind: active
     condition:
-      type: self_hp_pct_lte
-      value: 0.5
-    effects:
-      - type: apply_status
-        target: self
-        status:
-          id: escape_speed
-          name: 脱身
-          duration: 2
-          polarity: positive
-          effects:
-            - type: stat_multiplier
-              stat: speed
-              value: 1.4
-              target: self
-    mp_cost: 5
-    priority: 25
-    once_per_battle: true
-    free: true
-
-  - id: chaotic_strike
-    name: 混乱打击
-    kind: active
-    condition:
-      type: action_index_lte
-      value: 5
+      type: action_index_gte
+      value: 3
     effects:
       - type: damage_multiplier
-        value: 1.3
-    mp_cost: 4
+        value: 1.4
     priority: 12
 
-  - id: grand_finale
-    name: 压轴戏
+  - id: combo_momentum
+    name: 连击蓄力
+    kind: passive
+    condition:
+      type: action_index_gte
+      value: 5
+    effects:
+      - type: stat_multiplier
+        stat: attack
+        value: 1.2
+        target: self
+      - type: stat_multiplier
+        stat: speed
+        value: 1.15
+        target: self
+
+  - id: combo_finisher
+    name: 连击终式
     kind: active
     condition:
       type: action_index_gte
       value: 8
     effects:
       - type: damage_multiplier
-        value: 2.0
-    mp_cost: 8
+        value: 1.8
+      - type: true_damage
+        value: 8
     priority: 20
     once_per_battle: true
 
+  # ───────────────────────────────────────
   # --- 苦行僧 ---
+  # ───────────────────────────────────────
   - id: steady_breath
     name: 调息
     kind: passive
@@ -422,115 +391,122 @@ skills:
     effects:
       - type: stat_multiplier
         stat: defense
-        value: 1.12
+        value: 1.15
         target: self
-      - type: stat_bonus
+      - type: stat_multiplier
         stat: recovery
-        value: 3
+        value: 1.2
         target: self
 
-  - id: iron_body
-    name: 铁布衫
+  - id: inner_power
+    name: 内功
+    kind: passive
+    condition:
+      type: action_index_gte
+      value: 7
+    effects:
+      - type: stat_multiplier
+        stat: attack
+        value: 1.25
+        target: self
+
+  - id: enlightenment
+    name: 开悟
+    kind: passive
+    condition:
+      type: action_index_gte
+      value: 10
+    effects:
+      - type: stat_multiplier
+        stat: attack
+        value: 1.3
+        target: self
+      - type: stat_multiplier
+        stat: defense
+        value: 1.3
+        target: self
+      - type: stat_multiplier
+        stat: speed
+        value: 1.2
+        target: self
+
+  # ───────────────────────────────────────
+  # --- 吸血魔 ---
+  # ───────────────────────────────────────
+  - id: blood_pact
+    name: 血契
     kind: passive
     condition:
       type: self_hp_pct_lte
       value: 0.6
     effects:
       - type: stat_multiplier
-        stat: defense
-        value: 1.2
+        stat: attack
+        value: 1.15
         target: self
       - type: stat_multiplier
-        stat: attack
-        value: 1.12
+        stat: speed
+        value: 1.1
         target: self
 
-  - id: inner_force
-    name: 内力爆发
-    kind: active
-    condition:
-      type: action_index_gte
-      value: 8
-    effects:
-      - type: damage_multiplier
-        value: 1.8
-    priority: 15
-    once_per_battle: true
-
-  # --- 吸血魔 ---
-  - id: crimson_pact
-    name: 血契
-    kind: passive
-    condition:
-      type: self_hp_pct_gte
-      value: 0.6
-    effects:
-      - type: stat_multiplier
-        stat: attack
-        value: 1.12
-        target: self
-
-  - id: blood_frenzy
-    name: 嗜血狂乱
+  - id: crimson_frenzy
+    name: 猩红狂乱
     kind: active
     condition:
       type: self_hp_pct_lte
       value: 0.5
     effects:
       - type: damage_multiplier
-        value: 1.6
+        value: 1.8
       - type: heal_percent
-        value: 0.15
+        value: 0.18
         target: self
-    mp_cost: 8
+    mp_cost: 10
     priority: 20
     once_per_battle: true
 
-  - id: life_tap
-    name: 生命汲取
+  - id: vampiric_embrace
+    name: 吸血鬼拥抱
     kind: active
     condition:
-      type: self_mp_pct_gte
+      type: self_hp_pct_lte
       value: 0.3
     effects:
-      - type: damage_bonus
-        value: 5
-      - type: heal
-        value: 10
+      - type: damage_multiplier
+        value: 1.5
+      - type: heal_percent
+        value: 0.35
         target: self
-    mp_cost: 5
-    priority: 5
+    mp_cost: 12
+    priority: 25
+    once_per_battle: true
 
+  # ───────────────────────────────────────
   # --- 炮手 ---
-  - id: shrapnel_burst
+  # ───────────────────────────────────────
+  - id: shrapnel_round
     name: 破片弹
     kind: active
     condition:
       type: action_index_lte
-      value: 4
+      value: 5
     effects:
       - type: true_damage
-        value: 5
-      - type: atk_ratio_damage
-        value: 0.3
+        value: 10
     mp_cost: 5
     priority: 12
     once_per_battle: true
 
-  - id: loading_drill
-    name: 装填演练
+  - id: siege_stance
+    name: 攻城模式
     kind: passive
     condition:
-      type: action_index_lte
-      value: 6
+      type: target_hp_pct_gte
+      value: 0.4
     effects:
       - type: stat_multiplier
         stat: attack
-        value: 1.1
-        target: self
-      - type: stat_multiplier
-        stat: speed
-        value: 1.1
+        value: 1.2
         target: self
 
   - id: siege_cannon
@@ -540,14 +516,16 @@ skills:
       type: always
     effects:
       - type: true_damage
-        value: 15
+        value: 30
       - type: atk_ratio_damage
-        value: 1.0
-    mp_cost: 8
+        value: 1.8
+    mp_cost: 10
     priority: 18
     once_per_battle: true
 
+  # ───────────────────────────────────────
   # --- 瘟疫法师 ---
+  # ───────────────────────────────────────
   - id: withering_touch
     name: 枯萎之触
     kind: active
@@ -559,16 +537,20 @@ skills:
         status:
           id: wither
           name: 虚弱
-          duration: 3
+          duration: 4
           polarity: negative
           effects:
             - type: stat_multiplier
               stat: attack
-              value: 0.75
+              value: 0.5
               target: self
             - type: stat_multiplier
               stat: defense
-              value: 0.8
+              value: 0.65
+              target: self
+            - type: stat_multiplier
+              stat: speed
+              value: 0.65
               target: self
     mp_cost: 5
     priority: 12
@@ -587,14 +569,14 @@ skills:
         target: target
         status:
           id: epidemic_poison
-          name: 疫毒
+          name: 剧毒
           duration: 3
           polarity: negative
           stack_mode: add_duration
           effects:
             - type: true_damage
-              value: 5
-    mp_cost: 7
+              value: 18
+    mp_cost: 8
     priority: 18
     once_per_battle: true
     free: true
@@ -606,10 +588,10 @@ skills:
       type: target_hp_pct_lte
       value: 0.5
     effects:
-      - type: atk_ratio_damage
-        value: 1.5
+      - type: damage_multiplier
+        value: 1.8
       - type: true_damage
-        value: 8
+        value: 15
     mp_cost: 10
     priority: 12
 
