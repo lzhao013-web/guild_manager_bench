@@ -283,7 +283,7 @@ def _parse_game_rules(
         seed=_int(data.get("seed", 0), "rules.seed"),
         monster_spawn=MonsterSpawnRules(
             count_curve=_parse_float_curve(_mapping(_required(spawn, "count_curve"), "rules.monster_spawn.count_curve")),
-            stat_growth_curve=_parse_int_curve(
+            stat_growth_curve=_parse_float_curve(
                 _mapping(spawn.get("stat_growth_curve", {}), "rules.monster_spawn.stat_growth_curve")
             ),
             reward_growth_curve=_parse_float_curve(

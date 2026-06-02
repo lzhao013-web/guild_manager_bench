@@ -39,9 +39,8 @@ equipment:
     slot: boots
     stats:
       speed: 4
-      recovery: 2
-      mp_recovery: 2
-
+      recovery: 4
+      mp_recovery: 4
   - id: focus_charm
     name: 专注护符
     slot: accessory
@@ -79,6 +78,6 @@ equipment:
     stats:
       mp: 14
       attack: 5
-      recovery: 3
-      mp_recovery: 3
+      recovery: 6
+      mp_recovery: 6
     skills: [renewal_flow]

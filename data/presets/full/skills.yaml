@@ -621,9 +621,22 @@ skills:
       type: always
     effects:
       - type: true_damage
-        value: 10
+        value: 36
     mp_cost: 6
     priority: 10
+
+  - id: ogre_regen
+    name: 再生
+    kind: active
+    condition:
+      type: always
+    effects:
+      - type: heal
+        value: 5
+        target: self
+    mp_cost: 0
+    priority: 5
+    free: true
 
   # ===== Mid Monster Skills =====
   - id: war_cry
@@ -656,8 +669,23 @@ skills:
     condition:
       type: always
     effects:
-      - type: damage_bonus
-        value: 10
+      - type: atk_ratio_damage
+        value: 0.3
+      - type: apply_status
+        target: target
+        status:
+          id: shadow_curse
+          name: 暗影侵蚀
+          duration: 3
+          polarity: negative
+          stack_mode: add_duration
+          effects:
+            - type: true_damage
+              value: 6
+            - type: stat_multiplier
+              stat: defense
+              value: 0.9
+              target: self
     mp_cost: 8
     priority: 10
 
@@ -677,9 +705,10 @@ skills:
           stack_mode: add_duration
           effects:
             - type: true_damage
-              value: 5
+              value: 6
     mp_cost: 0
     priority: 15
+    free: true
 
   - id: bone_armor
     name: 骨甲
@@ -693,16 +722,59 @@ skills:
         value: 6
         target: self
 
+  - id: life_siphon
+    name: 生命虹吸
+    kind: active
+    condition:
+      type: always
+    effects:
+      - type: damage_bonus
+        value: 5
+      - type: heal
+        value: 10
+        target: self
+    mp_cost: 5
+    priority: 10
+
+  - id: frenzy_howl
+    name: 狂怒嚎叫
+    kind: active
+    condition:
+      type: self_hp_pct_lte
+      value: 0.5
+    effects:
+      - type: apply_status
+        target: self
+        status:
+          id: frenzy_buff
+          name: 狂怒
+          duration: 3
+          polarity: positive
+          effects:
+            - type: stat_multiplier
+              stat: attack
+              value: 1.2
+              target: self
+            - type: stat_bonus
+              stat: speed
+              value: 3
+              target: self
+    mp_cost: 0
+    priority: 20
+    once_per_battle: true
+    free: true
+
   # ===== Late Monster Skills =====
   - id: stone_hide
     name: 石肤
     kind: passive
     condition:
-      type: always
+      type: action_index_lte
+      value: 4
     effects:
       - type: stat_bonus
         stat: defense
-        value: 8
+        value: 15
         target: self
 
   - id: dragon_breath
@@ -712,25 +784,63 @@ skills:
       type: always
     effects:
       - type: damage_multiplier
-        value: 1.5
-      - type: true_damage
-        value: 8
+        value: 1.3
+      - type: apply_status
+        target: target
+        status:
+          id: burn
+          name: 灼烧
+          duration: 2
+          polarity: negative
+          stack_mode: add_duration
+          effects:
+            - type: true_damage
+              value: 8
     mp_cost: 0
     priority: 12
 
-  - id: soul_drain
-    name: 灵魂汲取
+  - id: curse_touch
+    name: 死亡诅咒
     kind: active
     condition:
-      type: always
+      type: target_hp_pct_gte
+      value: 0.5
     effects:
-      - type: damage_bonus
-        value: 8
-      - type: heal
-        value: 15
-        target: self
-    mp_cost: 10
-    priority: 10
+      - type: apply_status
+        target: target
+        status:
+          id: lich_curse
+          name: 死亡诅咒
+          duration: 3
+          polarity: negative
+          effects:
+            - type: stat_multiplier
+              stat: attack
+              value: 0.74
+              target: self
+            - type: stat_multiplier
+              stat: defense
+              value: 0.87
+              target: self
+            - type: true_damage
+              value: 8
+    mp_cost: 8
+    priority: 15
+    free: true
+
+  - id: soul_reap
+    name: 灵魂收割
+    kind: active
+    condition:
+      type: target_hp_pct_lte
+      value: 0.45
+    effects:
+      - type: damage_multiplier
+        value: 2.15
+      - type: true_damage
+        value: 20
+    mp_cost: 8
+    priority: 20
 
   - id: demon_slam
     name: 恶魔重击
@@ -739,9 +849,77 @@ skills:
       type: always
     effects:
       - type: damage_multiplier
-        value: 1.5
+        value: 1.35
     mp_cost: 0
     priority: 10
+
+  - id: dragon_fury
+    name: 龙之怒焰
+    kind: active
+    condition:
+      type: always
+    effects:
+      - type: damage_multiplier
+        value: 1.2
+      - type: apply_status
+        target: target
+        status:
+          id: dragon_fire
+          name: 龙焰灼烧
+          duration: 2
+          polarity: negative
+          stack_mode: add_duration
+          effects:
+            - type: true_damage
+              value: 6
+    mp_cost: 10
+    priority: 12
+
+  - id: dragon_scales
+    name: 龙鳞
+    kind: passive
+    condition:
+      type: self_hp_pct_gte
+      value: 0.5
+    effects:
+      - type: stat_bonus
+        stat: defense
+        value: 7
+        target: self
+
+  - id: death_strike
+    name: 死亡打击
+    kind: active
+    condition:
+      type: always
+    effects:
+      - type: damage_multiplier
+        value: 1.25
+      - type: heal_percent
+        value: 0.045
+        target: self
+    mp_cost: 5
+    priority: 10
+
+  - id: unholy_aura
+    name: 不洁光环
+    kind: passive
+    condition:
+      type: self_hp_pct_lte
+      value: 0.5
+    effects:
+      - type: stat_multiplier
+        stat: attack
+        value: 1.15
+        target: self
+      - type: stat_multiplier
+        stat: defense
+        value: 1.1
+        target: self
+      - type: stat_bonus
+        stat: speed
+        value: 3
+        target: self
 
   # ===== Tier Bonus Skills =====
   - id: venom_spit

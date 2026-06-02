@@ -70,8 +70,8 @@ equipment:
     name: 草药护符
     slot: accessory
     stats:
-      recovery: 3
-      mp_recovery: 3
+      recovery: 6
+      mp_recovery: 6
       mp: 5
 
   # ===== T1 Specials =====
@@ -87,8 +87,8 @@ equipment:
     name: 疗愈符印
     slot: accessory
     stats:
-      recovery: 6
-      mp_recovery: 6
+      recovery: 12
+      mp_recovery: 12
       defense: 2
       mp: 3
     skills: [healing_pulse]
@@ -230,9 +230,8 @@ equipment:
     stats:
       defense: 12
       hp: 35
-      recovery: 3
-      mp_recovery: 3
-
+      recovery: 6
+      mp_recovery: 6
   - id: t3_heavy_armor
     name: 龙鳞甲
     slot: armor
@@ -247,9 +246,8 @@ equipment:
     stats:
       defense: 7
       hp: 20
-      recovery: 2
-      mp_recovery: 2
-
+      recovery: 4
+      mp_recovery: 4
   - id: t3_heavy_boots
     name: 龙鳞靴
     slot: boots
@@ -297,9 +295,8 @@ equipment:
     stats:
       attack: 6
       hp: 15
-      recovery: 4
-      mp_recovery: 4
-
+      recovery: 8
+      mp_recovery: 8
   # ===== T3 Specials =====
   - id: t3_dragon_greatsword
     name: 龙牙巨剑
@@ -316,8 +313,8 @@ equipment:
     stats:
       attack: 5
       mp: 35
-      recovery: 5
-      mp_recovery: 5
+      recovery: 10
+      mp_recovery: 10
     skills: [plague_touch]
     allowed_classes: [spellshot_mage, plague_mage]
 
@@ -336,7 +333,7 @@ equipment:
     stats:
       defense: 20
       hp: 70
-      recovery: 4
-      mp_recovery: 4
+      recovery: 8
+      mp_recovery: 8
     skills: [fortify]
     allowed_classes: [foot_knight, ascetic_monk]

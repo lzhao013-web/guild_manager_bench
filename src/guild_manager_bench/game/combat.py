@@ -809,10 +809,8 @@ def _finish_result(
     time_elapsed: int,
 ) -> CombatResult:
     if winner_side == "left":
-        _apply_recovery(left_runtime)
         outcome: CombatOutcome = "left_win"
     elif winner_side == "right":
-        _apply_recovery(right_runtime)
         outcome = "right_win"
     else:
         outcome = "draw"
@@ -826,15 +824,4 @@ def _finish_result(
         events=tuple(events),
         actions_taken=sum(1 for event in events if event.action_type != "status"),
         time_elapsed=time_elapsed,
-    )
-
-
-def _apply_recovery(combatant: _RuntimeCombatant) -> None:
-    combatant.resources.current_hp = min(
-        combatant.stats.hp,
-        combatant.resources.current_hp + combatant.stats.recovery,
-    )
-    combatant.resources.current_mp = min(
-        combatant.stats.mp,
-        combatant.resources.current_mp + combatant.stats.mp_recovery,
     )

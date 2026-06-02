@@ -59,9 +59,8 @@ experience:
     attack: 3
     defense: 2
     speed: 1
-    recovery: 1
-    mp_recovery: 1
-
+    recovery: 2
+    mp_recovery: 2
 llm:
   expose_battle_preview: false
 

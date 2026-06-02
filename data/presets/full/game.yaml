@@ -8,7 +8,7 @@ rules:
       maximum: 10.0
     stat_growth_curve:
       base: 0
-      per_turn: 2
+      per_turn: 1.2
     reward_growth_curve:
       base: 0.0
       per_turn: 0.15

@@ -668,7 +668,7 @@ def _spawn_monster(
     archetype: MonsterArchetype,
     turn: int,
     index: int,
-    stat_factor: int,
+    stat_factor: float,
     reward_factor: float,
     tier: str = "normal",
     tc: MonsterTierConfig | None = None,

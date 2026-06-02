@@ -126,6 +126,12 @@ recipes:
     name: 锁子甲配方
     output: t2_heavy_armor
     gold: 72
+    materials:
+      mithril_shard: 3
+      iron_ore: 2
+      beast_hide: 1
+
+  - id: recipe_t2_heavy_helmet
     name: 战盔配方
     output: t2_heavy_helmet
     gold: 42
@@ -163,6 +169,7 @@ recipes:
     output: t2_light_helmet
     gold: 34
     materials:
+      spider_silk: 1
       arcane_dust: 1
       beast_hide: 2
 
@@ -171,6 +178,7 @@ recipes:
     output: t2_light_boots
     gold: 42
     materials:
+      spider_silk: 1
       arcane_dust: 2
       herb: 1
 
@@ -179,6 +187,7 @@ recipes:
     output: t2_light_charm
     gold: 30
     materials:
+      spider_silk: 1
       arcane_dust: 2
       herb: 1
 
@@ -266,6 +275,7 @@ recipes:
     output: t3_light_bow
     gold: 100
     materials:
+      dragon_scale: 1
       soul_shard: 2
       spider_silk: 2
 
@@ -274,6 +284,7 @@ recipes:
     output: t3_light_armor
     gold: 82
     materials:
+      dragon_scale: 1
       soul_shard: 2
       spider_silk: 1
 
@@ -282,6 +293,7 @@ recipes:
     output: t3_light_helmet
     gold: 65
     materials:
+      dragon_scale: 1
       soul_shard: 1
       arcane_dust: 2
       spider_silk: 1
@@ -291,6 +303,7 @@ recipes:
     output: t3_light_boots
     gold: 74
     materials:
+      dragon_scale: 1
       soul_shard: 2
       arcane_dust: 1
       spider_silk: 1
@@ -320,6 +333,7 @@ recipes:
     output: t3_wisdom_crown
     gold: 130
     materials:
+      dragon_blood: 1
       soul_shard: 2
       arcane_dust: 2
       spider_silk: 1

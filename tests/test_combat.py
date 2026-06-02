@@ -34,7 +34,7 @@ def test_faster_combatant_acts_first() -> None:
     assert result.events[0].actor_id == "left"
 
 
-def test_winner_recovers_without_exceeding_max_hp() -> None:
+def test_winner_does_not_recover_after_battle() -> None:
     left = Combatant(
         combatant_id="left",
         stats=CombatStats(hp=30, mp=0, attack=10, defense=0, speed=10, recovery=20),
@@ -48,7 +48,7 @@ def test_winner_recovers_without_exceeding_max_hp() -> None:
     result = run_auto_battle(left, right)
 
     assert result.outcome == "left_win"
-    assert result.left_resources.current_hp == 30
+    assert result.left_resources.current_hp == 18
 
 
 def test_run_auto_battle_does_not_mutate_input_resources() -> None:

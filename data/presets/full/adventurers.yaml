@@ -8,16 +8,16 @@ recruitable_adventurers:
       attack: 18
       defense: 8
       speed: 10
-      recovery: 5
-      mp_recovery: 5
+      recovery: 10
+      mp_recovery: 10
     stat_growth_per_level:
       hp: 14
       mp: 0
       attack: 3
       defense: 2
       speed: 1
-      recovery: 1
-      mp_recovery: 1
+      recovery: 2
+      mp_recovery: 2
     level_skill_unlocks:
       - level: 3
         skills: [power_strike]
@@ -35,16 +35,16 @@ recruitable_adventurers:
       attack: 14
       defense: 12
       speed: 7
-      recovery: 6
-      mp_recovery: 6
+      recovery: 12
+      mp_recovery: 12
     stat_growth_per_level:
       hp: 18
       mp: 0
       attack: 2
       defense: 3
       speed: 1
-      recovery: 1
-      mp_recovery: 1
+      recovery: 2
+      mp_recovery: 2
     level_skill_unlocks:
       - level: 3
         skills: [shield_stance]
@@ -62,16 +62,16 @@ recruitable_adventurers:
       attack: 19
       defense: 5
       speed: 15
-      recovery: 4
-      mp_recovery: 4
+      recovery: 8
+      mp_recovery: 8
     stat_growth_per_level:
       hp: 10
       mp: 0
       attack: 3
       defense: 1
       speed: 3
-      recovery: 1
-      mp_recovery: 1
+      recovery: 2
+      mp_recovery: 2
     level_skill_unlocks:
       - level: 3
         skills: [opening_shot]
@@ -89,16 +89,16 @@ recruitable_adventurers:
       attack: 15
       defense: 4
       speed: 10
-      recovery: 4
-      mp_recovery: 4
+      recovery: 8
+      mp_recovery: 8
     stat_growth_per_level:
       hp: 8
       mp: 4
       attack: 4
       defense: 1
       speed: 1
-      recovery: 1
-      mp_recovery: 1
+      recovery: 2
+      mp_recovery: 2
     skills: [arcane_bolt]
     level_skill_unlocks:
       - level: 3
@@ -117,16 +117,16 @@ recruitable_adventurers:
       attack: 13
       defense: 8
       speed: 8
-      recovery: 8
-      mp_recovery: 8
+      recovery: 16
+      mp_recovery: 16
     stat_growth_per_level:
       hp: 12
       mp: 5
       attack: 2
       defense: 2
       speed: 1
-      recovery: 2
-      mp_recovery: 2
+      recovery: 4
+      mp_recovery: 4
     skills: [minor_heal]
     level_skill_unlocks:
       - level: 3
@@ -145,16 +145,16 @@ recruitable_adventurers:
       attack: 16
       defense: 5
       speed: 14
-      recovery: 4
-      mp_recovery: 4
+      recovery: 8
+      mp_recovery: 8
     stat_growth_per_level:
       hp: 9
       mp: 2
       attack: 3
       defense: 1
       speed: 3
-      recovery: 1
-      mp_recovery: 1
+      recovery: 2
+      mp_recovery: 2
     skills: [opening_trick]
     level_skill_unlocks:
       - level: 3
@@ -173,16 +173,16 @@ recruitable_adventurers:
       attack: 13
       defense: 9
       speed: 8
-      recovery: 7
-      mp_recovery: 7
+      recovery: 14
+      mp_recovery: 14
     stat_growth_per_level:
       hp: 15
       mp: 0
       attack: 3
       defense: 2
       speed: 1
-      recovery: 2
-      mp_recovery: 2
+      recovery: 4
+      mp_recovery: 4
     skills: [enduring_focus]
     level_skill_unlocks:
       - level: 3
@@ -201,16 +201,16 @@ recruitable_adventurers:
       attack: 17
       defense: 5
       speed: 11
-      recovery: 3
-      mp_recovery: 3
+      recovery: 6
+      mp_recovery: 6
     stat_growth_per_level:
       hp: 12
       mp: 3
       attack: 4
       defense: 1
       speed: 2
-      recovery: 1
-      mp_recovery: 1
+      recovery: 2
+      mp_recovery: 2
     skills: [blood_drain]
     level_skill_unlocks:
       - level: 3
@@ -229,16 +229,16 @@ recruitable_adventurers:
       attack: 13
       defense: 6
       speed: 7
-      recovery: 4
-      mp_recovery: 4
+      recovery: 8
+      mp_recovery: 8
     stat_growth_per_level:
       hp: 11
       mp: 2
       attack: 3
       defense: 2
       speed: 1
-      recovery: 1
-      mp_recovery: 1
+      recovery: 2
+      mp_recovery: 2
     skills: [armor_piercing_shot]
     level_skill_unlocks:
       - level: 3
@@ -257,16 +257,16 @@ recruitable_adventurers:
       attack: 13
       defense: 4
       speed: 10
-      recovery: 4
-      mp_recovery: 4
+      recovery: 8
+      mp_recovery: 8
     stat_growth_per_level:
       hp: 8
       mp: 5
       attack: 3
       defense: 1
       speed: 2
-      recovery: 1
-      mp_recovery: 1
+      recovery: 2
+      mp_recovery: 2
     skills: [plague_curse]
     level_skill_unlocks:
       - level: 3

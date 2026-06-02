@@ -168,7 +168,7 @@ class MonsterSpawnRules:
     """每回合怪物刷新规则。"""
 
     count_curve: FloatCurve
-    stat_growth_curve: IntCurve = field(default_factory=lambda: IntCurve(base=0, per_turn=1))
+    stat_growth_curve: FloatCurve = field(default_factory=lambda: FloatCurve(base=0.0, per_turn=1.0))
     reward_growth_curve: FloatCurve = field(default_factory=lambda: FloatCurve(base=0.0, per_turn=1.0))
     elite: MonsterTierConfig = field(default_factory=MonsterTierConfig)
     boss: MonsterTierConfig = field(default_factory=MonsterTierConfig)
@@ -177,8 +177,8 @@ class MonsterSpawnRules:
     def __post_init__(self) -> None:
         if not isinstance(self.count_curve, FloatCurve):
             raise TypeError("count_curve must be FloatCurve")
-        if not isinstance(self.stat_growth_curve, IntCurve):
-            raise TypeError("stat_growth_curve must be IntCurve")
+        if not isinstance(self.stat_growth_curve, FloatCurve):
+            raise TypeError("stat_growth_curve must be FloatCurve")
         if not isinstance(self.reward_growth_curve, FloatCurve):
             raise TypeError("reward_growth_curve must be FloatCurve")
         if not isinstance(self.elite, MonsterTierConfig):
