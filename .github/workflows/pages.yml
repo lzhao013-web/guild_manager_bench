@@ -1,33 +1,33 @@
- name: Deploy Leaderboard
+name: Deploy Leaderboard
 
-  on:
-    push:
-      branches: ["main"]
-      paths:
-        - "web/leaderboard/**"
-        - ".github/workflows/pages.yml"
-    workflow_dispatch:
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "web/leaderboard/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
 
-  permissions:
-    contents: read
-    pages: write
-    id-token: write
+permissions:
+  contents: read
+  pages: write
+  id-token: write
 
-  concurrency:
-    group: pages
-    cancel-in-progress: false
+concurrency:
+  group: pages
+  cancel-in-progress: false
 
-  jobs:
-    deploy:
-      environment:
-        name: github-pages
-        url: ${{ steps.deployment.outputs.page_url }}
-      runs-on: ubuntu-latest
-      steps:
-        - uses: actions/checkout@v4
-        - uses: actions/configure-pages@v5
-        - uses: actions/upload-pages-artifact@v4
-          with:
-            path: web/leaderboard
-        - id: deployment
-          uses: actions/deploy-pages@v4
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: web/leaderboard
+      - id: deployment
+        uses: actions/deploy-pages@v4
