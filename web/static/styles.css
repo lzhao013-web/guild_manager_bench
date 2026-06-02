@@ -637,6 +637,11 @@ details[open] > .adv-summary::before { transform: rotate(90deg); }
   font-size: 12px;
 }
 
+.preview-reward {
+  color: var(--warning);
+  font-size: 12px;
+}
+
 .stat-inline {
   margin-top: 4px;
   font-size: 12px;

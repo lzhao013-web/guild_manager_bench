@@ -33,6 +33,16 @@ class SessionStore:
             self._sessions[session.session_id] = session
             return session
 
+    def restore(self, data: dict) -> GameSession:
+        """从导出数据恢复会话。"""
+
+        with self._lock:
+            session = GameSession.from_export(self.definition, data)
+            if session.session_id in self._sessions:
+                session.session_id = uuid4().hex
+            self._sessions[session.session_id] = session
+            return session
+
     def get(self, session_id: str) -> GameSession:
         """按 id 读取会话。"""
 

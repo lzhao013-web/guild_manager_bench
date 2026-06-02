@@ -34,6 +34,8 @@ const $ = (id) => document.getElementById(id);
 
 window.addEventListener("load", () => {
   $("newSessionButton").addEventListener("click", () => createSession());
+  $("exportButton").addEventListener("click", () => exportSession());
+  $("importFile").addEventListener("change", (event) => importSession(event));
   $("llmStartButton").addEventListener("click", () => startLlmDebug());
   $("llmStopButton").addEventListener("click", () => stopLlmDebug());
   $("llmReplayRefreshButton").addEventListener("click", () => refreshLlmReplayRuns());
@@ -149,6 +151,7 @@ function setSession(data) {
   state.sessionId = data.session_id;
   state.observation = data.observation;
   state.events = data.events || [];
+  state.watchOnly = false;
   state.selectedHunts.clear();
   state.openDetails.clear();
   state.actionPending = false;
@@ -231,6 +234,7 @@ function render() {
   }
   $("sessionMeta").textContent = `会话 ${obs.session_id || state.sessionId || "未知"} · 回合 ${turnText(obs)}`;
   $("newSessionButton").disabled = state.watchOnly || state.actionPending;
+  $("exportButton").disabled = !state.sessionId;
   updateLlmSeedPlaceholders(obs);
   renderOverview(obs);
   renderAdventurers(obs);
@@ -407,7 +411,7 @@ function renderCrafting(obs) {
         <strong>${escapeHtml(recipe.name)}</strong>
         <span class="${recipe.can_craft ? "ok" : "danger"} small">${recipe.can_craft ? "可合成" : "资源不足"}</span>
       </div>
-      <div class="small muted">${escapeHtml(recipe.output_name)} · ${slotName(recipe.output_slot)}</div>
+      <div class="small muted">${escapeHtml(recipe.output_name)} · ${slotName(recipe.output_slot)}${recipe.output_allowed_class_names?.length ? ` · 限制: ${recipe.output_allowed_class_names.join("、")}` : ""}</div>
       <div class="small">产物：${statModifierText(recipe.output_stats)}</div>
       ${skillList(recipe.output_skills)}
       <div class="small">消耗：金币 ${recipe.gold_cost} · ${materialsText(recipe.material_costs)}</div>
@@ -424,13 +428,16 @@ function renderEquipment(obs) {
     const equippedInfo = item.equipped_by
       ? resolveName(item.equipped_by)
       : "未装备";
+    const classInfo = item.allowed_class_names?.length
+      ? ` · 限制: ${item.allowed_class_names.join("、")}`
+      : "";
     return `
       <div class="row">
         <div class="row-title">
           <strong>${escapeHtml(item.name)}</strong>
           <span class="small ${item.equipped_by ? "ok" : "muted"}">${equippedInfo}</span>
         </div>
-        <div class="small">${slotName(item.slot)} · ${statModifierText(item.stats)}</div>
+        <div class="small">${slotName(item.slot)} · ${statModifierText(item.stats)}${classInfo}</div>
       </div>
     `;
   }));
@@ -507,26 +514,14 @@ function renderModalHunts() {
   body.innerHTML = obs.monsters.map((monster) => {
     const selectedAdv = state.selectedHunts.get(monster.monster_id);
     const adventurer = selectedAdv ? obs.adventurers.find((a) => a.adventurer_id === selectedAdv) : null;
-    let preview = "";
-    if (adventurer) {
-      const sim = simulateCombat(adventurer, monster);
-      const hpPct = Math.round((sim.hpLeft / sim.hpMax) * 100);
-      const cls = sim.won ? "ok" : sim.draw ? "warning" : "danger";
-      const label = sim.won ? "胜利" : sim.draw ? "平局" : "失败";
-      const hpColor = hpPct > 60 ? "" : hpPct > 30 ? "hp-warn-text" : "danger";
-      preview = `
-        <div class="hunt-preview">
-          <span class="preview-result ${cls}">${label}</span>
-          <span class="preview-hp ${hpColor}">${escapeHtml(adventurer.name)} 剩余 ${sim.hpLeft}/${sim.hpMax} HP</span>
-          <span class="preview-detail">${sim.actions} 次行动</span>
-        </div>
-      `;
-    }
+    const previewPlaceholder = adventurer
+      ? `<div class="hunt-preview" id="preview-${monster.monster_id}"><span class="muted">计算中…</span></div>`
+      : "";
     return `
       <div class="hunt-entry">
         <div class="hunt-info">
           <strong>${escapeHtml(monster.name)}</strong>
-          <div class="stat-inline">攻 ${monster.stats.attack} · 防 ${monster.stats.defense} · 速 ${monster.stats.speed}</div>
+          <div class="stat-inline">HP ${monster.stats.hp} · MP ${monster.stats.mp} · 攻 ${monster.stats.attack} · 防 ${monster.stats.defense} · 速 ${monster.stats.speed}</div>
           <div class="small muted">奖励：${rewardText(monster.reward)}</div>
           ${skillList(monster.skills)}
         </div>
@@ -539,7 +534,7 @@ function renderModalHunts() {
           `).join("")}
         </select>
       </div>
-      ${preview}
+      ${previewPlaceholder}
     `;
   }).join("");
 
@@ -547,6 +542,64 @@ function renderModalHunts() {
   if (endBtn) {
     endBtn.disabled = state.watchOnly || obs.finished;
   }
+
+  // Fetch accurate previews from backend
+  fetchBattlePreviews();
+}
+
+async function fetchBattlePreviews() {
+  const sessionId = state.sessionId;
+  if (!sessionId) return;
+  const obs = state.observation;
+  if (!obs) return;
+
+  const tasks = [];
+  for (const [monsterId, adventurerId] of state.selectedHunts.entries()) {
+    const el = $(`preview-${monsterId}`);
+    if (!el) continue;
+    const adventurer = obs.adventurers.find((a) => a.adventurer_id === adventurerId);
+    if (!adventurer) continue;
+    tasks.push(
+      (async () => {
+        try {
+          const resp = await fetch(`/api/sessions/${sessionId}/preview-battle`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ adventurer_id: adventurerId, monster_id: monsterId }),
+          });
+          if (!resp.ok) {
+            el.innerHTML = `<span class="muted">预览不可用</span>`;
+            return;
+          }
+          const sim = await resp.json();
+          const afterHp = sim.adventurer_after_resources.current_hp;
+          const afterMp = sim.adventurer_after_resources.current_mp;
+          const maxHp = adventurer.effective_stats.hp;
+          const maxMp = adventurer.effective_stats.mp;
+          const hpPct = Math.round((afterHp / maxHp) * 100);
+          const won = sim.won;
+          const cls = won ? "ok" : "danger";
+          const label = won ? "胜利" : "失败";
+          const hpColor = hpPct > 60 ? "" : hpPct > 30 ? "hp-warn-text" : "danger";
+          const monster = obs.monsters.find((m) => m.monster_id === monsterId);
+          const monMaxHp = monster ? monster.stats.hp : "?";
+          const monHpAfter = won ? 0 : "存活";
+          const dmgTaken = adventurer.resources.current_hp - afterHp;
+          const mpUsed = adventurer.resources.current_mp - afterMp;
+          const reward = won && monster ? rewardText(monster.reward) : "";
+          el.innerHTML = `
+            <span class="preview-result ${cls}">${label}</span>
+            <span class="preview-hp ${hpColor}">${escapeHtml(adventurer.name)} HP ${afterHp}/${maxHp}${dmgTaken > 0 ? ` (-${dmgTaken})` : ""}${mpUsed > 0 ? ` · MP ${afterMp}/${maxMp} (-${mpUsed})` : ""}</span>
+            <span class="preview-detail">怪物 HP ${monMaxHp} → ${monHpAfter} · ${sim.combat.actions_taken} 次行动 · ${sim.combat.time_elapsed} 时序</span>
+            ${reward ? `<span class="preview-reward">奖励: ${reward}</span>` : ""}
+          `;
+        } catch {
+          el.innerHTML = `<span class="muted">预览失败</span>`;
+        }
+      })()
+    );
+  }
+  await Promise.all(tasks);
 }
 
 /* ========== Equip Popup ========== */
@@ -791,6 +844,111 @@ function endTurn() {
   submitAction({ type: "end_turn", hunts });
 }
 
+async function exportSession() {
+  if (!state.sessionId) return;
+  const btn = $("exportButton");
+  btn.disabled = true;
+  btn.textContent = "⏳ 保存中…";
+  try {
+    const resp = await fetch(`/api/sessions/${state.sessionId}/export`);
+    if (!resp.ok) throw new Error("导出失败");
+    const data = await resp.json();
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `manual-${data.session_id || state.sessionId}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    btn.textContent = "✅ 已保存";
+    setTimeout(() => { btn.textContent = "💾 保存"; }, 2000);
+  } catch (e) {
+    console.error(e);
+    btn.textContent = "❌ 失败";
+    setTimeout(() => { btn.textContent = "💾 保存"; }, 2000);
+  } finally {
+    btn.disabled = !state.sessionId;
+  }
+}
+
+function importSession(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  event.target.value = "";
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try {
+      const data = JSON.parse(reader.result);
+      if (!data.final_observation && !data.observation && !data._state) {
+        showError("无效的存档文件：缺少游戏状态");
+        return;
+      }
+
+      // Try server-side restore for full playability
+      try {
+        const resp = await fetch("/api/sessions/restore", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: reader.result,
+        });
+        if (resp.ok) {
+          const result = await resp.json();
+          setSession(result);
+          const url = new URL(window.location.href);
+          url.searchParams.set("session", state.sessionId);
+          url.searchParams.delete("watch");
+          window.history.replaceState(null, "", url);
+          showToast("已恢复存档，可继续操作");
+          return;
+        }
+        const errText = `(HTTP ${resp.status})`;
+        showToast("服务端恢复失败" + errText + "，尝试只读加载");
+      } catch {
+        showToast("无法连接服务端，尝试只读加载");
+      }
+
+      // Fallback: client-side read-only
+      const obs = data.final_observation || data.observation;
+      state.sessionId = data.session_id || null;
+      state.observation = obs;
+      state.events = data.events || [];
+      state.watchOnly = true;
+      state.selectedHunts.clear();
+      $("sessionMeta").textContent = `📂 存档 ${state.sessionId || "?"} · 回合 ${turnText(obs)}${obs.finished ? " · 已结束" : ""}`;
+      $("newSessionButton").disabled = false;
+      $("exportButton").disabled = true;
+      renderOverview(obs);
+      renderAdventurers(obs);
+      renderRecruitment(obs);
+      renderCrafting(obs);
+      renderEquipment(obs);
+      renderUpgrades(obs);
+      renderActionTimeline();
+      renderBattleLog();
+      renderEvents();
+      const score = data.score;
+      const stats = data.stats?.game_actions;
+      const parts = [];
+      if (score?.rank_score != null) parts.push(`段位分: ${Math.round(score.rank_score)}`);
+      if (stats) {
+        if (stats.battles_total) parts.push(`战斗: ${stats.battles_won}胜/${stats.battles_total}场`);
+        if (stats.total_gold_earned) parts.push(`收入: 💰${stats.total_gold_earned}`);
+      }
+      if (parts.length) {
+        $("sessionMeta").textContent += ` · ${parts.join(" · ")}`;
+      }
+      setMode("manual", false);
+      showToast("已加载存档（只读，无服务端状态数据）");
+    } catch (e) {
+      showError("读取存档失败: " + (e.message || e));
+    }
+  };
+  reader.readAsText(file);
+}
+
 /* ========== HP / MP Bars ========== */
 
 function hpBar(current, max) {
@@ -884,11 +1042,13 @@ function levelSkillUnlocksBlock(adventurer) {
 
 function levelUnlockText(unlock) {
   const stateText = unlock.unlocked ? "已解锁" : "未解锁";
-  return `Lv.${unlock.level} ${stateText} ${names(unlock.skills || [])}`;
+  const skillDetails = (unlock.skills || []).map((s) => skillTag(s)).join(" ");
+  return `Lv.${unlock.level} ${stateText} ${skillDetails}`;
 }
 
 function levelPreviewUnlockText(unlock) {
-  return `Lv.${unlock.level} ${names(unlock.skills || [])}`;
+  const skillDetails = (unlock.skills || []).map((s) => skillTag(s)).join(" ");
+  return `Lv.${unlock.level} ${skillDetails}`;
 }
 
 function equipmentSlotCell(adventurer, slot) {
@@ -1001,6 +1161,7 @@ function skillDescText(skill) {
   const parts = [];
   parts.push(skill.kind === "active" ? "主动" : "被动");
   if (skill.mp_cost > 0) parts.push(`消耗 ${skill.mp_cost} MP`);
+  if (skill.free) parts.push("即时（附赠普攻）");
   if (skill.once_per_battle) parts.push("每场限一次");
 
   const condText = skillConditionText(skill.condition);
@@ -1014,7 +1175,21 @@ function skillDescText(skill) {
     if (eff.type === "damage_bonus") parts.push(`伤害 +${eff.value}`);
     if (eff.type === "true_damage") parts.push(`真实伤害 ${eff.value}`);
     if (eff.type === "self_damage") parts.push(`自身受伤 ${eff.value}`);
-    if (eff.type === "apply_status" && eff.status) parts.push(`施加${eff.status.polarity === "positive" ? "正面" : eff.status.polarity === "negative" ? "负面" : ""}状态 ${eff.status.name}`);
+    if (eff.type === "apply_status" && eff.status) {
+      const polarity = eff.status.polarity === "positive" ? "正面" : eff.status.polarity === "negative" ? "负面" : "";
+      const dur = eff.status.duration ? ` ${eff.status.duration}回合` : "";
+      const statusEffects = (eff.status.effects || []).map((se) => {
+        if (se.type === "true_damage") return `每回合${se.value}伤害`;
+        if (se.type === "heal") return `每回合恢复${se.value}HP`;
+        if (se.type === "heal_percent") return `每回合恢复${Math.round(se.value * 100)}%HP`;
+        if (se.type === "mp_restore") return `每回合恢复${se.value}MP`;
+        if (se.type === "stat_bonus") return `${statName(se.stat)}+${se.value}`;
+        if (se.type === "stat_multiplier") return `${statName(se.stat)}×${se.value}`;
+        return null;
+      }).filter(Boolean).join("，");
+      const detail = statusEffects ? `（${statusEffects}）` : "";
+      parts.push(`施加${polarity}状态 ${eff.status.name}${dur}${detail}`);
+    }
     if (eff.type === "stat_bonus") parts.push(`${statName(eff.stat)} +${eff.value}`);
     if (eff.type === "stat_multiplier") parts.push(`${statName(eff.stat)} ×${eff.value}`);
   }
@@ -2687,207 +2862,6 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
-}
-
-/* ========== Combat Simulator ========== */
-
-function simulateCombat(adventurer, monster) {
-  const left = buildRuntime("left", adventurer.adventurer_id, adventurer.effective_stats, {
-    current_hp: adventurer.resources.current_hp,
-    current_mp: adventurer.resources.current_mp,
-  }, adventurer.skills);
-
-  const right = buildRuntime("right", monster.monster_id, monster.stats, {
-    current_hp: monster.stats.hp,
-    current_mp: monster.stats.mp,
-  }, monster.skills);
-
-  const immediate = resolveImmediate(left, right);
-  if (immediate) {
-    return finishSim(left, right, immediate.winner, immediate.reason, 0, 0);
-  }
-
-  let actions = 0;
-  let time = 0;
-  for (let i = 0; i < 1000; i++) {
-    const ready = advanceUntilReady(left, right);
-    if (!ready) return finishSim(left, right, null, "no_combatant_can_act", actions, time);
-
-    const [actor, target, elapsed] = ready;
-    time += elapsed;
-    actor.gauge -= 100;
-    actions++;
-
-    performAction(actor, target, left, right);
-
-    if (target.hp <= 0) {
-      return finishSim(left, right, actor.side, "target_defeated", actions, time);
-    }
-  }
-
-  return finishSim(left, right, null, "max_actions_reached", actions, time);
-}
-
-function buildRuntime(side, id, stats, resources, skills) {
-  const active = skills
-    .filter((s) => s.kind === "active")
-    .sort((a, b) => b.priority - a.priority || a.skill_id.localeCompare(b.skill_id));
-  const passive = skills.filter((s) => s.kind === "passive");
-  return {
-    side, id, stats,
-    hp: resources.current_hp,
-    mp: resources.current_mp,
-    maxHp: stats.hp,
-    maxMp: stats.mp,
-    active, passive,
-    usedOnce: new Set(),
-    gauge: 0,
-  };
-}
-
-function resolveImmediate(left, right) {
-  const leftAlive = left.hp > 0;
-  const rightAlive = right.hp > 0;
-  if (leftAlive && rightAlive) return null;
-  if (leftAlive) return { winner: "left", reason: "right_already_defeated" };
-  if (rightAlive) return { winner: "right", reason: "left_already_defeated" };
-  return { winner: null, reason: "both_already_defeated" };
-}
-
-function advanceUntilReady(left, right) {
-  const leftSpd = effectiveSpeed(left, right);
-  const rightSpd = effectiveSpeed(right, left);
-
-  const candidates = [];
-  if (leftSpd > 0) candidates.push({ c: left, spd: leftSpd });
-  if (rightSpd > 0) candidates.push({ c: right, spd: rightSpd });
-  if (!candidates.length) return null;
-
-  const ticks = candidates.map(({ c, spd }) => c.gauge >= 100 ? 0 : Math.ceil((100 - c.gauge) / spd));
-  const elapsed = Math.min(...ticks);
-
-  for (const { c, spd } of candidates) {
-    c.gauge += spd * elapsed;
-  }
-
-  const ready = [left, right].filter((c) => c.gauge >= 100);
-  if (!ready.length) return null;
-
-  const actor = ready.sort((a, b) => {
-    const pA = [a.gauge, effectiveSpeed(a, a.side === "left" ? right : left), a.side === "left" ? 1 : 0];
-    const pB = [b.gauge, effectiveSpeed(b, b.side === "left" ? right : left), b.side === "left" ? 1 : 0];
-    for (let i = 0; i < 3; i++) {
-      if (pA[i] !== pB[i]) return pB[i] - pA[i];
-    }
-    return 0;
-  })[0];
-
-  const target = actor.side === "left" ? right : left;
-  return [actor, target, elapsed];
-}
-
-function performAction(actor, target, left, right) {
-  const skill = selectActiveSkill(actor, target, left, right);
-  if (!skill) {
-    const dmg = basicDmg(effectiveAtk(actor, target, left, right), effectiveDef(target, actor, left, right));
-    target.hp = Math.max(0, target.hp - dmg);
-    return;
-  }
-
-  actor.mp -= skill.mp_cost;
-  if (skill.once_per_battle) actor.usedOnce.add(skill.skill_id);
-
-  const baseDmg = basicDmg(effectiveAtk(actor, target, left, right), effectiveDef(target, actor, left, right));
-
-  for (const eff of skill.effects) {
-    if (eff.type === "damage_multiplier") {
-      const dmg = Math.max(1, Math.floor(baseDmg * eff.value));
-      target.hp = Math.max(0, target.hp - dmg);
-    }
-    if (eff.type === "heal") {
-      const recipient = eff.target === "self" ? actor : target;
-      recipient.hp = Math.min(recipient.maxHp, recipient.hp + Math.floor(eff.value));
-    }
-  }
-}
-
-function selectActiveSkill(actor, target, left, right) {
-  for (const skill of actor.active) {
-    if (actor.mp < skill.mp_cost) continue;
-    if (skill.once_per_battle && actor.usedOnce.has(skill.skill_id)) continue;
-    if (isConditionMet(skill.condition, actor, target, left, right)) return skill;
-  }
-  return null;
-}
-
-function basicDmg(atk, def) {
-  return Math.max(1, atk - def);
-}
-
-function effectiveAtk(combatant, target, left, right) {
-  return effectiveStat(combatant, target, left, right, "attack");
-}
-
-function effectiveDef(combatant, target, left, right) {
-  return effectiveStat(combatant, target, left, right, "defense");
-}
-
-function effectiveSpeed(combatant, opponent) {
-  return effectiveStatSimple(combatant, opponent, "speed");
-}
-
-function effectiveStatSimple(combatant, opponent, stat) {
-  let bonus = 0;
-  let mult = 1.0;
-  for (const skill of combatant.passive) {
-    if (!isConditionMetSimple(skill.condition, combatant, opponent)) continue;
-    for (const eff of skill.effects) {
-      if (eff.stat === stat) {
-        if (eff.type === "stat_bonus") bonus += eff.value;
-        else if (eff.type === "stat_multiplier") mult *= eff.value;
-      }
-    }
-  }
-  return Math.max(0, Math.floor((combatant.stats[stat] + bonus) * mult));
-}
-
-function effectiveStat(combatant, target, left, right, stat) {
-  const opponent = combatant.side === "left" ? right : left;
-  return effectiveStatSimple(combatant, opponent, stat);
-}
-
-function isConditionMet(cond, actor, target, left, right) {
-  if (!cond) return true;
-  const actorOpp = actor.side === "left" ? right : left;
-  const targetOpp = target.side === "left" ? right : left;
-  return isConditionMetSimple(cond, actor, target);
-}
-
-function isConditionMetSimple(cond, actor, target) {
-  if (!cond || cond.type === "always") return true;
-  if (cond.type === "self_hp_pct_lte") return actor.hp / actor.stats.hp <= cond.value;
-  if (cond.type === "self_hp_pct_gte") return actor.hp / actor.stats.hp >= cond.value;
-  if (cond.type === "target_hp_pct_lte") return target.hp / target.stats.hp <= cond.value;
-  if (cond.type === "target_hp_pct_gte") return target.hp / target.stats.hp >= cond.value;
-  if (cond.type === "all") return (cond.conditions || []).every((c) => isConditionMetSimple(c, actor, target));
-  if (cond.type === "any") return (cond.conditions || []).some((c) => isConditionMetSimple(c, actor, target));
-  return true;
-}
-
-function finishSim(left, right, winner, reason, actions, time) {
-  if (winner === "left") {
-    left.hp = Math.min(left.maxHp, left.hp + left.stats.recovery);
-  } else if (winner === "right") {
-    right.hp = Math.min(right.maxHp, right.hp + right.stats.recovery);
-  }
-  return {
-    won: winner === "left",
-    draw: winner === null,
-    reason,
-    hpLeft: left.hp,
-    hpMax: left.maxHp,
-    actions,
-  };
 }
 
 /* ========== Global Exports ========== */

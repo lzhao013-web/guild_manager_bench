@@ -18,6 +18,11 @@
           <button class="mode-button active" type="button" data-mode="llm">LLM 调试</button>
         </div>
         <button id="newSessionButton" type="button">新会话</button>
+        <button id="exportButton" type="button" disabled>💾 保存</button>
+        <label class="file-button" title="读取已保存的存档">
+          📂 读取
+          <input id="importFile" type="file" accept="application/json,.json" />
+        </label>
         <a href="/replay/" class="replay-link" title="回放查看器">🎥 回放</a>
       </div>
     </header>

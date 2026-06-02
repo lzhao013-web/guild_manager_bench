@@ -38,7 +38,8 @@ def main() -> None:
 
     # ── run ──
     run_parser = subparsers.add_parser("run", help="运行 LLM agent benchmark")
-    run_parser.add_argument("--model", default=None, help="模型名称 (也可通过 OPENAI_MODEL 环境变量设置)")
+    run_parser.add_argument("--provider", default="openai", choices=["openai", "anthropic"], help="LLM provider (默认: openai)")
+    run_parser.add_argument("--model", default=None, help="模型名称 (也可通过 OPENAI_MODEL / ANTHROPIC_MODEL 环境变量设置)")
     run_parser.add_argument("--api-key", default=None, help="API Key (也可通过 OPENAI_API_KEY 环境变量设置)")
     run_parser.add_argument("--base-url", default=None, help="API Base URL (也可通过 OPENAI_BASE_URL 环境变量设置)")
     run_parser.add_argument("--data-dir", default="data", help="数据根目录或直接游戏数据目录 (默认: data)")
@@ -89,13 +90,23 @@ def _run(args: argparse.Namespace) -> None:
     from guild_manager_bench.game.presets import resolve_data_source
 
     # ── 构造 agent ──
-    agent = OpenAIChatCompletionsAgent.from_env(
-        model=args.model,
-        api_key=args.api_key,
-        base_url=args.base_url,
-        reasoning_effort=args.reasoning_effort,
-        timeout=args.timeout,
-    )
+    if args.provider == "anthropic":
+        from guild_manager_bench.bench.llm import AnthropicMessagesAgent
+
+        agent = AnthropicMessagesAgent.from_env(
+            model=args.model,
+            api_key=args.api_key,
+            base_url=args.base_url,
+            timeout=args.timeout,
+        )
+    else:
+        agent = OpenAIChatCompletionsAgent.from_env(
+            model=args.model,
+            api_key=args.api_key,
+            base_url=args.base_url,
+            reasoning_effort=args.reasoning_effort,
+            timeout=args.timeout,
+        )
 
     # 禁用流式：移除 respond_stream 使 runner 回退到 respond
     if args.no_stream and hasattr(agent, "respond_stream"):

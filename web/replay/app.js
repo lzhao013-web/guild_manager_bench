@@ -520,12 +520,10 @@ function enrichBattles(battles, step) {
 
     // Monster HP: get max HP from observation_before monster stats
     let monMaxHp = 100, monHpBefore = 100;
-    console.log('[Battle] looking for monster:', b.monster, 'in', Object.entries(monsBefore).map(([id,m])=>m.name));
     for (const [id, mon] of Object.entries(monsBefore)) {
       if (mon.name === b.monster && mon.stats) {
         monMaxHp = mon.stats.hp || 100;
         monHpBefore = monMaxHp; // Monster starts at full HP
-        console.log('[Battle] matched monster HP:', monMaxHp);
         break;
       }
     }
@@ -548,14 +546,12 @@ function enrichBattles(battles, step) {
 }
 
 function showBattleOverlay(step) {
-  console.log('[Battle] showBattleOverlay called');
   DOM.battleOverlay.classList.remove('active');
   S.battleVisible = true;
 
   const content = step.content || '';
   const summary = content.split('\n')[0].replace('OK end_turn: ','').replace('OK end_turn','');
   const battles = enrichBattles(parseBattles(content), step);
-  console.log('[Battle] parsed battles:', battles.length, battles);
 
   // Show backdrop immediately
   DOM.battleOverlay.classList.add('active');
@@ -658,7 +654,7 @@ function _showMultiBattle(battles, summary) {
       <div class="battle-result-badge" id="bbadge${i}" style="opacity:0;transform:scale(0.5);transition:opacity 400ms ease,transform 400ms ease">${b.won?'胜':'负'}</div>
       <div class="battle-combatant mini" data-side="right">
         <span class="battle-avatar-sm">👹</span>
-        <div><div class="battle-name-sm">${esc(b.monster)}</div><div class="battle-hp-text">HP ?</div></div>
+        <div><div class="battle-name-sm">${esc(b.monster)}</div><div class="battle-hp-text">HP <span id="bhpMonNum${i}">${fmt(b.monHpBefore)}</span> → <span id="bhpMonAfter${i}">${fmt(b.monHpAfter)}</span></div></div>
       </div>
     </div>`).join('');
 
@@ -864,11 +860,10 @@ function hideRankChart() {
 function parseBattles(content) {
   const battles = [];
   const lines = content.split('\n');
-  console.log('[Battle] parsing content, lines:', lines.length);
   let inBattle = false;
 
   for (const line of lines) {
-    if (/^战斗[:：]/.test(line.trim())) { inBattle = true; console.log('[Battle] found battle section'); continue; }
+    if (/^战斗[:：]/.test(line.trim())) { inBattle = true; continue; }
     if (!inBattle) continue;
     if (!line.trim().startsWith('-')) {
       if (line.trim() && !/^(变化|预算|新装备|已购买|新冒险者|总奖励)/.test(line.trim())) inBattle = false;
@@ -878,10 +873,7 @@ function parseBattles(content) {
     // Format: "- N AdventurerName vs N MonsterName: 胜/负; 奖励 {...}"
     // Names may be single-word (Chinese) or multi-word (English)
     let m = line.match(/^\s*-\s+(\d+)\s+(.+?)\s+vs\s+(\d+)\s+(.+?)[:：]\s*(胜|负)/);
-    if (!m) {
-      console.log('[Battle] unmatched line:', line);
-      continue;
-    }
+    if (!m) continue;
 
     const won = m[5] === '胜';
     let rewardText = '';
@@ -902,7 +894,6 @@ function parseBattles(content) {
       monster: m[4], monsterRef: m[3], monsterTier: null,
       won, rewardText,
     });
-    console.log('[Battle] parsed:', m[2], 'vs', m[4], won ? '胜' : '负');
   }
 
   return battles;
@@ -1169,7 +1160,8 @@ function upgradePrereqText(upgrades, ids) { if (!ids || !ids.length) return ''; 
 function fmtRankScore(v) { return v == null ? '—' : Number(v).toLocaleString(undefined, { maximumFractionDigits: 1 }); }
 function fmtPct(v) { return v == null ? '—' : `${(Number(v) * 100).toFixed(1)}%`; }
 function slotIcon(s) { const m={main_hand:'⚔️',off_hand:'🛡️',two_hand:'🗡️',helmet:'⛑️',armor:'🛡️',boots:'👢',accessory:'💍'}; return m[s]||'?'; }
-function fmtMap(o) { if(!o||!Object.keys(o).length)return'—'; return Object.entries(o).map(([k,v])=>`${statLabel(k)}:${fmt(v)}`).join(' '); }
+function fmtMap(o) { if(!o||!Object.keys(o).length)return'—'; return Object.entries(o).map(([k,v])=>`${displayLabel(k)}:${fmt(v)}`).join(' '); }
+function displayLabel(k) { const s=statLabel(k); return s!==k?s:matLabel(k); }
 function skillTip(s) { const p=[]; if(s.kind)p.push(`类型:${s.kind}`); if(s.mp_cost!=null)p.push(`MP:${s.mp_cost}`); if(s.condition)p.push(`条件:${s.condition}`); if(s.effects){p.push('效果:'+(Array.isArray(s.effects)?s.effects:[s.effects]).map(e=>`${e.type||'?'}:${e.value!=null?(e.value>0?'+':'')+e.value:'?'}`).join(', '));} return p.join('\n'); }
 function refId(refs,c,id) { return (refs&&refs[c]&&id)?(refs[c][id]??null):null; }
 function toolLabel(name) {

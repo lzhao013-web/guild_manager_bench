@@ -8,6 +8,11 @@ from guild_manager_bench.bench.llm.archive import (
     write_llm_run_archive,
 )
 from guild_manager_bench.bench.llm.harness import MemoStore, ToolBudget, TurnToolHarness
+from guild_manager_bench.bench.llm.anthropic_compat import (
+    AnthropicMessagesAgent,
+    AnthropicMessagesConfig,
+    AnthropicMessagesError,
+)
 from guild_manager_bench.bench.llm.openai_compat import (
     OpenAIChatCompletionsAgent,
     OpenAIChatCompletionsConfig,
@@ -33,6 +38,9 @@ from guild_manager_bench.bench.llm.tools import (
 
 __all__ = [
     "DEFAULT_OBJECTIVE",
+    "AnthropicMessagesAgent",
+    "AnthropicMessagesConfig",
+    "AnthropicMessagesError",
     "GuildManagerTools",
     "LlmAgentResponse",
     "LlmRunArchive",

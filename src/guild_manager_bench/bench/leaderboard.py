@@ -40,7 +40,12 @@ _CACHE_VERSION = 5
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def _extract_run_info(replay: dict, *, source_path: Path | None = None) -> dict | None:
     """Extract leaderboard-relevant fields from a replay dict."""
-    if replay.get("kind") != "llm_replay":
+    kind = replay.get("kind")
+
+    if kind == "manual_replay":
+        return _extract_manual_run_info(replay, source_path=source_path)
+
+    if kind != "llm_replay":
         return None
     if replay.get("status") != "completed":
         return None
@@ -140,6 +145,103 @@ def _extract_run_info(replay: dict, *, source_path: Path | None = None) -> dict 
         "tool_calls": tool_calls,
         "game_actions": _compute_game_actions(turns_list, final_observation, stats),
     }
+
+
+def _extract_manual_run_info(replay: dict, *, source_path: Path | None = None) -> dict | None:
+    """Extract leaderboard fields from a manual_replay export."""
+    if replay.get("status") not in ("finished", "completed"):
+        return None
+
+    score_data = replay.get("score")
+    if not score_data or score_data.get("rank_score") is None:
+        return None
+
+    final_observation = replay.get("final_observation")
+    final_observation = final_observation if isinstance(final_observation, dict) else {}
+    manual_stats = replay.get("stats")
+    manual_stats = manual_stats if isinstance(manual_stats, dict) else {}
+    game_actions = manual_stats.get("game_actions")
+    game_actions = game_actions if isinstance(game_actions, dict) else {}
+
+    per_adv = _rank_score_per_adventurer(score_data)
+
+    # Build economy curve from turns battles
+    turns_list = replay.get("turns") or []
+    economy_curve = _manual_economy_curve(turns_list)
+
+    return {
+        "run_id": source_path.stem if source_path is not None else replay.get("session_id", ""),
+        "session_id": replay.get("session_id"),
+        "model": "✋ 手动操作",
+        "score": None,
+        "rank_score": score_data.get("rank_score"),
+        "rank_score_source": score_data.get("rank_score_source", "final_observation"),
+        "win_rate": None,
+        "score_mode": None,
+        "score_seed": None,
+        "score_waves": None,
+        "score_wave_size": None,
+        "created_at": replay.get("created_at", ""),
+        "updated_at": replay.get("created_at", ""),
+        "turns": final_observation.get("max_turns"),
+        "preset": "manual",
+        "data_hash": None,
+        "game_seed": final_observation.get("seed"),
+        "scoring_seed": None,
+        "final_turn": final_observation.get("turn"),
+        "max_turns": final_observation.get("max_turns"),
+        "final_gold": final_observation.get("gold"),
+        "final_experience_pool": final_observation.get("experience_pool"),
+        "party_size": final_observation.get("party_size"),
+        "party_size_limit": final_observation.get("party_size_limit"),
+        "best_adventurer": _best_adventurer(score_data),
+        "rank_score_per_adventurer": per_adv,
+        "rank_score_curve": None,
+        "token_usage": None,
+        "timing": None,
+        "tool_calls": None,
+        "game_actions": {
+            "battles_won": game_actions.get("battles_won", 0),
+            "battles_total": game_actions.get("battles_total", 0),
+            "total_gold_earned": game_actions.get("total_gold_earned", 0),
+            "total_experience_earned": game_actions.get("total_experience_earned", 0),
+            "economy_curve": economy_curve,
+            "strongest_defeated_enemy": game_actions.get("strongest_defeated_enemy"),
+        },
+    }
+
+
+def _manual_economy_curve(turns_list: list) -> list[dict] | None:
+    """Build economy curve from manual replay turns (each has battles)."""
+    curve: list[dict] = []
+    cum_gold = 0
+    cum_exp = 0
+    for turn in turns_list:
+        if not isinstance(turn, dict):
+            continue
+        turn_gold = 0
+        turn_exp = 0
+        for battle in turn.get("battles") or []:
+            if not isinstance(battle, dict):
+                continue
+            reward = battle.get("reward")
+            if isinstance(reward, dict):
+                g = reward.get("gold")
+                e = reward.get("experience")
+                if isinstance(g, (int, float)):
+                    turn_gold += int(g)
+                if isinstance(e, (int, float)):
+                    turn_exp += int(e)
+        cum_gold += turn_gold
+        cum_exp += turn_exp
+        curve.append({
+            "turn": turn.get("turn", len(curve) + 1),
+            "gold_earned": turn_gold,
+            "experience_earned": turn_exp,
+            "cumulative_gold_earned": cum_gold,
+            "cumulative_experience_earned": cum_exp,
+        })
+    return curve or None
 
 
 def _extract_token_usage(stats: dict) -> dict | None:

@@ -12,6 +12,12 @@ from guild_manager_bench.runtime.action_codec import (
     decode_preparation_action,
 )
 from guild_manager_bench.runtime.events import event_to_dict
+from pydantic import BaseModel
+
+
+class PreviewBattleRequest(BaseModel):
+    adventurer_id: str
+    monster_id: str
 
 
 def actions_router(store: SessionStore, hub: SessionHub) -> APIRouter:
@@ -56,6 +62,25 @@ def actions_router(store: SessionStore, hub: SessionHub) -> APIRouter:
 
         await hub.broadcast(session_id, response)
         return response
+
+    @router.post("/{session_id}/preview-battle")
+    async def preview_battle(session_id: str, req: PreviewBattleRequest):
+        try:
+            session = store.get(session_id)
+        except SessionNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="session not found") from exc
+        try:
+            return session.preview_battle(req.adventurer_id, req.monster_id)
+        except (GameError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @router.get("/{session_id}/export")
+    async def export_session(session_id: str):
+        try:
+            session = store.get(session_id)
+        except SessionNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="session not found") from exc
+        return session.export_replay()
 
     return router
 

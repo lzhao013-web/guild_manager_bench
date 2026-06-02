@@ -32,7 +32,7 @@ class SessionHub:
         for websocket in list(self._connections.get(session_id, ())):
             try:
                 await websocket.send_json(message)
-            except RuntimeError:
+            except (RuntimeError, WebSocketDisconnect):
                 stale_connections.append(websocket)
         for websocket in stale_connections:
             self.disconnect(session_id, websocket)
@@ -52,8 +52,8 @@ def websocket_router(store: SessionStore, hub: SessionHub) -> APIRouter:
             return
 
         await hub.connect(session_id, websocket)
-        await websocket.send_json({"type": "snapshot", "observation": session.observation()})
         try:
+            await websocket.send_json({"type": "snapshot", "observation": session.observation()})
             while True:
                 await websocket.receive_text()
         except WebSocketDisconnect:

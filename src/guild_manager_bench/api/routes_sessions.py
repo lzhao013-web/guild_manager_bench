@@ -37,6 +37,19 @@ def sessions_router(store: SessionStore) -> APIRouter:
             ]
         }
 
+    @router.post("/restore")
+    async def restore_session(data: dict):
+        """从导出文件恢复一个会话。"""
+        try:
+            session = store.restore(data)
+        except (ValueError, TypeError, KeyError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {
+            "session_id": session.session_id,
+            "observation": session.observation(),
+            "events": [event_to_dict(event) for event in session.events],
+        }
+
     @router.get("/{session_id}")
     async def get_session(session_id: str):
         try:
