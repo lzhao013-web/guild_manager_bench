@@ -36,11 +36,9 @@ Thumbs.db
 
 # Claude
 CLAUDE.MD
-model_notes.json
 
 # Leaderboard data (users drop replay.json here)
 web/leaderboard/data/
-web/leaderboard/leaderboard_data.json
 web/leaderboard/.build_cache.json
 
 # Simulation scripts
