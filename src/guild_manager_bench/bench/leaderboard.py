@@ -23,7 +23,9 @@ from __future__ import annotations
 import hashlib
 import json
 import sys
+from dataclasses import dataclass
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 from statistics import mean, median
 from typing import Any
@@ -32,13 +34,28 @@ from guild_manager_bench.bench.replay_scoring import (
     with_rank_score_curve,
     with_rank_score_from_final_observation,
 )
+from guild_manager_bench.game.combat import Combatant, run_auto_battle
+from guild_manager_bench.game.loader import load_game_definition
+from guild_manager_bench.game.models import (
+    CombatResources,
+    CombatStats,
+    apply_stat_modifier,
+    scale_combat_stats,
+    scale_stat_modifier,
+)
+from guild_manager_bench.game.state import GameDefinition
 
 # Incremental build cache version — bump when _extract_run_info schema changes.
 _CACHE_VERSION = 5
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-def _extract_run_info(replay: dict, *, source_path: Path | None = None) -> dict | None:
+def _extract_run_info(
+    replay: dict,
+    *,
+    source_path: Path | None = None,
+    executor: Any = None,
+) -> dict | None:
     """Extract leaderboard-relevant fields from a replay dict."""
     kind = replay.get("kind")
 
@@ -143,7 +160,11 @@ def _extract_run_info(replay: dict, *, source_path: Path | None = None) -> dict 
         "token_usage": _extract_token_usage(stats) or fallback_tokens,
         "timing": _extract_timing(stats) or fallback_timing,
         "tool_calls": tool_calls,
-        "game_actions": _compute_game_actions(turns_list, final_observation, stats),
+        "game_actions": _compute_game_actions(
+            turns_list, final_observation, stats,
+            data_dir=data.get("data_dir") if isinstance(data, dict) else None,
+            executor=executor,
+        ),
     }
 
 
@@ -376,6 +397,9 @@ def _compute_game_actions(
     turns_list: list,
     final_observation: dict,
     stats: dict,
+    *,
+    data_dir: str | None = None,
+    executor: Any = None,
 ) -> dict | None:
     """Compute game actions using the most reliable data source.
 
@@ -469,7 +493,9 @@ def _compute_game_actions(
         else None
     )
     if not strongest:
-        strongest = _compute_strongest_defeated_enemy(turns_list)
+        strongest = _compute_strongest_defeated_enemy(
+            turns_list, data_dir=data_dir, executor=executor,
+        )
     if strongest:
         result["strongest_defeated_enemy"] = strongest
 
@@ -620,7 +646,12 @@ def _reward_stats_from_text(content: Any) -> dict[str, int]:
     return {"gold_earned": gold, "experience_earned": exp}
 
 
-def _compute_strongest_defeated_enemy(turns_list: list) -> dict[str, Any] | None:
+def _compute_strongest_defeated_enemy(
+    turns_list: list,
+    *,
+    data_dir: str | None = None,
+    executor: Any = None,
+) -> dict[str, Any] | None:
     best: dict[str, Any] | None = None
     for turn in turns_list:
         if not isinstance(turn, dict):
@@ -637,9 +668,13 @@ def _compute_strongest_defeated_enemy(turns_list: list) -> dict[str, Any] | None
                 and step.get("name") == "end_turn"
             ):
                 continue
-            candidate = _strongest_enemy_from_step_result(step, observation, turn_number)
+            candidate = _strongest_enemy_from_step_result(
+                step, observation, turn_number, data_dir=data_dir, executor=executor,
+            )
             if candidate is None:
-                candidate = _strongest_enemy_from_step_text(step, observation, turn_number)
+                candidate = _strongest_enemy_from_step_text(
+                    step, observation, turn_number, data_dir=data_dir, executor=executor,
+                )
             best = _stronger_enemy(best, candidate)
     return best
 
@@ -648,6 +683,9 @@ def _strongest_enemy_from_step_result(
     step: dict,
     observation: dict | None,
     turn_number: int,
+    *,
+    data_dir: str | None = None,
+    executor: Any = None,
 ) -> dict[str, Any] | None:
     result = step.get("result")
     if not isinstance(result, dict):
@@ -664,7 +702,10 @@ def _strongest_enemy_from_step_result(
             continue
         best = _stronger_enemy(
             best,
-            _defeated_enemy_from_battle_dict(battle, observation, turn_number),
+            _defeated_enemy_from_battle_dict(
+                battle, observation, turn_number,
+                data_dir=data_dir, executor=executor,
+            ),
         )
     return best
 
@@ -673,6 +714,9 @@ def _strongest_enemy_from_step_text(
     step: dict,
     observation: dict | None,
     turn_number: int,
+    *,
+    data_dir: str | None = None,
+    executor: Any = None,
 ) -> dict[str, Any] | None:
     import re
 
@@ -715,7 +759,10 @@ def _strongest_enemy_from_step_text(
             battle["monster_id"] = monster_id
         best = _stronger_enemy(
             best,
-            _defeated_enemy_from_battle_dict(battle, observation, turn_number),
+            _defeated_enemy_from_battle_dict(
+                battle, observation, turn_number,
+                data_dir=data_dir, executor=executor,
+            ),
         )
     return best
 
@@ -756,6 +803,9 @@ def _defeated_enemy_from_battle_dict(
     battle: dict,
     observation: dict | None,
     turn_number: int,
+    *,
+    data_dir: str | None = None,
+    executor: Any = None,
 ) -> dict[str, Any] | None:
     monster = _monster_from_observation_dict(battle, observation)
     stats_source = monster.get("stats") if isinstance(monster, dict) else None
@@ -782,13 +832,42 @@ def _defeated_enemy_from_battle_dict(
         or battle.get("monster")
         or monster_id
     )
+    archetype_id = (
+        monster.get("archetype_id")
+        if isinstance(monster, dict)
+        else battle.get("archetype_id")
+    )
+    # Skills from the observation monster (already includes archetype +
+    # tier bonus skills).  We keep them so the difficulty-scan power can
+    # feed them into ``run_auto_battle`` later.
+    skills: list[Any] = []
+    if isinstance(monster, dict):
+        raw_skills = monster.get("skills")
+        if isinstance(raw_skills, (list, tuple)):
+            for skill in raw_skills:
+                if isinstance(skill, dict):
+                    skills.append(skill)
+                else:
+                    skills.append(skill)
+    legacy_power = _monster_power(stats)
+    scan_power = _monster_power_v2(
+        stats, archetype_id, data_dir, executor=executor,
+    )
     result: dict[str, Any] = {
         "turn": turn_number,
         "monster_id": None if monster_id is None else str(monster_id),
         "name": None if name is None else str(name),
-        "power": _monster_power(stats),
+        # Primary power uses the difficulty scan; fall back to legacy sum
+        # if the data dir was unavailable so the leaderboard never goes blank.
+        "power": _round_scan_power(scan_power) if scan_power is not None else legacy_power,
+        "power_legacy": legacy_power,
+        "power_v2_source": "difficulty_scan" if scan_power is not None else "legacy_sum",
         "stats": stats,
     }
+    if scan_power is not None:
+        result["power_v2"] = _round_scan_power(scan_power)
+    if skills:
+        result["skills"] = skills
     if reward:
         result["reward"] = reward
     if isinstance(monster, dict):
@@ -796,7 +875,14 @@ def _defeated_enemy_from_battle_dict(
             value = monster.get(key)
             if value is not None:
                 result[key] = value
+    if archetype_id is not None and "archetype_id" not in result:
+        result["archetype_id"] = str(archetype_id)
     return result
+
+
+def _round_scan_power(value: float) -> float:
+    """Round scan power to 2 decimals to keep JSON compact."""
+    return float(f"{value:.2f}")
 
 
 def _monster_from_observation_dict(
@@ -839,6 +925,221 @@ def _monster_power(stats: dict[str, int]) -> int:
         + int(stats.get("speed", 0)) * 5
         + int(stats.get("recovery", 0)) * 5
         + int(stats.get("mp_recovery", 0)) * 5
+    )
+
+
+# ── Difficulty-scan monster power ─────────────────────────────────────────────
+# 旧版 _monster_power 把所有属性当成线性正贡献，但实际伤害公式是
+# ``max(1, attack - defense)``，且速度通过行动条是乘法关系。这版对齐
+# rank_score 的设计：扫描预设中所有 archetype × turn 生成的"标准对手池"，
+# 把"能赢多少"换算成综合 power。同一份 preset 下跨 runs 数值可比。
+
+_MONSTER_POWER_DIFF_SCAN: tuple[int, ...] = tuple(range(1, 301, 5))  # 对齐 rank_score
+_MONSTER_POWER_SEEDS: tuple[int, ...] = (0xC0FFEE, 0xBADF00D, 0xDEADC0DE, 0xFEEDBEEF, 0xBEEF1234)
+
+
+@dataclass(frozen=True, slots=True)
+class _ReferenceOpponent:
+    """A standard reference monster built from archetype × turn.
+
+    Mirrors ``_arena_monster`` in ``metrics.py`` so the difficulty scaling
+    matches what rank_score uses.  ``difficulty_weight`` is the strength
+    tier (== turn number) used as the per-opponent weighting in the score
+    sum, matching rank_score's ``Σ performance(d) × d`` shape.
+    """
+
+    stats: CombatStats
+    skills: tuple[Any, ...]
+    difficulty_weight: int
+    archetype_id: str
+
+
+def _build_reference_pool(definition: GameDefinition) -> tuple[_ReferenceOpponent, ...]:
+    """Build the standard reference monster pool for the given preset.
+
+    One opponent per (archetype, turn) pair from ``_MONSTER_POWER_DIFF_SCAN``.
+    Tier (elite/boss) scaling is intentionally skipped to keep the pool
+    focused on the *base* archetype curve; elite/boss comparisons are
+    captured on the M side of the scan via the existing power callers.
+    """
+    pool: list[_ReferenceOpponent] = []
+    for archetype in definition.content.monster_archetypes:
+        for turn in _MONSTER_POWER_DIFF_SCAN:
+            if turn < archetype.min_turn:
+                continue
+            stats = apply_stat_modifier(
+                archetype.base_stats,
+                scale_stat_modifier(archetype.stat_growth, turn),
+            )
+            pool.append(
+                _ReferenceOpponent(
+                    stats=stats,
+                    skills=archetype.skills,
+                    difficulty_weight=turn,
+                    archetype_id=archetype.archetype_id,
+                )
+            )
+    return tuple(pool)
+
+
+@lru_cache(maxsize=16)
+def _get_reference_pool(data_dir: str) -> tuple[_ReferenceOpponent, ...] | None:
+    """Load and cache the reference pool for a given preset data dir.
+
+    Returns ``None`` if the data dir doesn't exist or fails to load — the
+    caller should fall back to the cheap weighted-sum formula.
+    """
+    try:
+        path = Path(data_dir)
+        if not path.exists():
+            return None
+        definition = load_game_definition(path)
+    except Exception:
+        return None
+    return _build_reference_pool(definition)
+
+
+def _simulate_battle(
+    left_stats: CombatStats,
+    left_skills: tuple[Any, ...],
+    right_stats: CombatStats,
+    right_skills: tuple[Any, ...],
+    *,
+    seed: int,
+) -> tuple[bool, float]:
+    """Run a single 1v1 auto-battle.
+
+    Returns ``(left_won, left_hp_ratio)``.  ``seed`` is currently unused
+    (combat RNG is deterministic given the same input), but kept for
+    future stochastic extension and to mirror the rank_score API.
+    """
+    del seed  # see docstring
+    result = run_auto_battle(
+        Combatant(
+            combatant_id="left",
+            stats=left_stats,
+            resources=CombatResources(current_hp=left_stats.hp, current_mp=left_stats.mp),
+            skills=tuple(left_skills),
+        ),
+        Combatant(
+            combatant_id="right",
+            stats=right_stats,
+            resources=CombatResources(current_hp=right_stats.hp, current_mp=right_stats.mp),
+            skills=tuple(right_skills),
+        ),
+    )
+    if not result.left_resources.is_alive:
+        return False, 0.0
+    hp_ratio = result.left_resources.current_hp / max(1, left_stats.hp)
+    return True, hp_ratio
+
+
+# ── Parallel scan helpers ─────────────────────────────────────────────────────
+# Top-level (module-level) so they can be pickled by ProcessPoolExecutor.
+# Each task does (5 seeds × 1 battle) against a single reference opponent
+# and returns ``(wins, hp_sum)`` for the caller to aggregate.
+
+def _scan_opponent_task(
+    args: tuple[CombatStats, tuple[Any, ...], CombatStats, tuple[Any, ...], int],
+) -> tuple[int, float, int]:
+    """Run 5 battles of (M) vs (opponent) and return (wins, hp_sum, weight)."""
+    m_stats, m_skills, r_stats, r_skills, weight = args
+    wins = 0
+    hp_sum = 0.0
+    for seed in _MONSTER_POWER_SEEDS:
+        won, hp_ratio = _simulate_battle(
+            m_stats, m_skills, r_stats, r_skills, seed=seed
+        )
+        if won:
+            wins += 1
+            hp_sum += hp_ratio
+    return wins, hp_sum, weight
+
+
+def _aggregate_scan_results(results: list[tuple[int, float, int]]) -> float:
+    """Sum ``wins * avg_hp * weight`` across all opponent results."""
+    total = 0.0
+    for wins, hp_sum, weight in results:
+        if wins == 0:
+            continue
+        avg_hp = hp_sum / wins
+        total += wins * avg_hp * weight
+    return total
+
+
+def _monster_power_difficulty_scan(
+    stats: CombatStats,
+    skills: tuple[Any, ...],
+    reference_pool: tuple[_ReferenceOpponent, ...],
+    *,
+    executor: Any = None,
+    chunk_size: int = 16,
+) -> float:
+    """Compute monster power by scanning the reference pool.
+
+    For each reference opponent, run ``len(_MONSTER_POWER_SEEDS)`` battles
+    and average the win/hp-ratio outcome.  Then sum across opponents
+    weighted by ``difficulty_weight`` (the turn number that produced that
+    opponent), matching rank_score's ``Σ performance(d) × d`` shape.
+
+    Only wins contribute; a loss yields 0 for that opponent.  This
+    emphasises *how often* M wins against strong opponents, with the
+    remaining HP ratio as a tie-breaker.
+
+    When *executor* is a ``ProcessPoolExecutor``, the per-opponent scans
+    are dispatched across worker processes in chunks of *chunk_size* to
+    amortise IPC overhead.  Without an executor, scans run sequentially
+    in the current process (useful for tests and single-shot calls).
+    """
+    if not reference_pool:
+        return 0.0
+
+    args_iter = [
+        (stats, tuple(skills), opp.stats, tuple(opp.skills), opp.difficulty_weight)
+        for opp in reference_pool
+    ]
+
+    if executor is None:
+        results = [_scan_opponent_task(a) for a in args_iter]
+    else:
+        results = list(executor.map(_scan_opponent_task, args_iter, chunksize=chunk_size))
+
+    return _aggregate_scan_results(results)
+
+
+def _monster_power_v2(
+    stats: dict[str, int],
+    archetype_id: str | None,
+    data_dir: str | None,
+    *,
+    executor: Any = None,
+) -> float | None:
+    """New monster power: difficulty-scan against the preset's reference pool.
+
+    Falls back to ``None`` when the data dir is missing/unloadable; the
+    caller should then fall back to the legacy ``_monster_power`` sum.
+
+    When *executor* is provided, the per-opponent scans are dispatched
+    across worker processes for a major speedup (default preset has
+    ~1000 opponents × 5 battles each).
+    """
+    if not data_dir:
+        return None
+    pool = _get_reference_pool(data_dir)
+    if not pool:
+        return None
+    # Build a CombatStats from the dict (only the seven canonical fields).
+    combat_stats = CombatStats(
+        hp=int(stats.get("hp", 1)),
+        mp=int(stats.get("mp", 0)),
+        attack=int(stats.get("attack", 0)),
+        defense=int(stats.get("defense", 0)),
+        speed=int(stats.get("speed", 0)),
+        recovery=int(stats.get("recovery", 0)),
+        mp_recovery=int(stats.get("mp_recovery", 0)),
+    )
+    return _monster_power_difficulty_scan(
+        combat_stats, (), pool, executor=executor,
     )
 
 
@@ -1267,7 +1568,14 @@ def build_leaderboard(data_dir: Path, output: Path, *, incremental: bool = True)
     * The previous ``leaderboard_data.json`` is read; only models whose replays
       have changed (added / modified / deleted) are re-aggregated.  Models with
       no changes are carried forward verbatim.
+
+    A ``ProcessPoolExecutor`` is created for the duration of the build to
+    parallelise per-monster power scans across CPU cores.  Replays that
+    hit the cache skip the power computation entirely; only newly
+    changed runs dispatch work to the pool.
     """
+    from concurrent.futures import ProcessPoolExecutor
+
     json_files = sorted(data_dir.glob("*.json"))
     if not json_files:
         print(f"No JSON files found in {data_dir}")
@@ -1305,42 +1613,46 @@ def build_leaderboard(data_dir: Path, output: Path, *, incremental: bool = True)
     reused = 0
     parsed = 0
 
-    for path in json_files:
-        fp = _file_fingerprint(path)
-        cached = cache.get(path.name)
-        is_hit = incremental and cached and cached.get("fingerprint") == fp
+    # ProcessPoolExecutor reuses worker processes across all replays.
+    # The LRU cache on _get_reference_pool keeps the GameDefinition
+    # load cheap per preset.
+    with ProcessPoolExecutor() as executor:
+        for path in json_files:
+            fp = _file_fingerprint(path)
+            cached = cache.get(path.name)
+            is_hit = incremental and cached and cached.get("fingerprint") == fp
 
-        if is_hit:
-            info = cached.get("info")
-            if info is not None:
-                model_runs.setdefault(info["model"], []).append(info)
-                new_cache[path.name] = cached
-                reused += 1
-                # If this model is already affected, we'll re-aggregate anyway
-                if info["model"] in affected_models:
+            if is_hit:
+                info = cached.get("info")
+                if info is not None:
+                    model_runs.setdefault(info["model"], []).append(info)
+                    new_cache[path.name] = cached
+                    reused += 1
+                    # If this model is already affected, we'll re-aggregate anyway
+                    if info["model"] in affected_models:
+                        continue
+                    # Otherwise this model is clean — no need to re-aggregate
                     continue
-                # Otherwise this model is clean — no need to re-aggregate
+
+            # Parse the file (cache miss or non-incremental)
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, UnicodeDecodeError) as e:
+                print(f"  ! Skipping {path.name}: {e}")
+                skipped += 1
                 continue
 
-        # Parse the file (cache miss or non-incremental)
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, UnicodeDecodeError) as e:
-            print(f"  ! Skipping {path.name}: {e}")
-            skipped += 1
-            continue
+            data = with_rank_score_from_final_observation(data)
+            data = with_rank_score_curve(data)
+            info = _extract_run_info(data, source_path=path, executor=executor)
+            if info is None:
+                skipped += 1
+                continue
 
-        data = with_rank_score_from_final_observation(data)
-        data = with_rank_score_curve(data)
-        info = _extract_run_info(data, source_path=path)
-        if info is None:
-            skipped += 1
-            continue
-
-        affected_models.add(info["model"])
-        model_runs.setdefault(info["model"], []).append(info)
-        new_cache[path.name] = {"fingerprint": fp, "info": info}
-        parsed += 1
+            affected_models.add(info["model"])
+            model_runs.setdefault(info["model"], []).append(info)
+            new_cache[path.name] = {"fingerprint": fp, "info": info}
+            parsed += 1
 
     if not model_runs and not prev_models:
         print("No valid completed replays found.")
