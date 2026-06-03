@@ -32,6 +32,77 @@ const state = {
 
 const $ = (id) => document.getElementById(id);
 
+/* ========== Class / Monster Visuals ========== */
+
+// 职业视觉元数据：颜色 + 中文名 + 图标路径
+// 颜色取自每个职业在游戏中的主题色；fallback 用于未知 template_id
+const CLASS_META = {
+  mercenary_warrior: { name: "佣兵战士", color: "#e07b3a", role: "近战" },
+  foot_knight:       { name: "步行骑士", color: "#7daaf5", role: "坦克" },
+  woodland_archer:   { name: "林地射手", color: "#4ade80", role: "远程" },
+  spellshot_mage:    { name: "魔弹法师", color: "#a78bfa", role: "法师" },
+  cleric:            { name: "神官",     color: "#fbbf24", role: "治疗" },
+  jester:            { name: "连击师",   color: "#f472b6", role: "敏捷" },
+  ascetic_monk:      { name: "苦行僧",   color: "#fb923c", role: "气功" },
+  bloodfiend:        { name: "吸血魔",   color: "#dc2626", role: "暗影" },
+  cannoneer:         { name: "炮手",     color: "#a16207", role: "炮击" },
+  plague_mage:       { name: "瘟疫法师", color: "#84cc16", role: "毒系" },
+};
+const DEFAULT_CLASS_META = { name: "未知职业", color: "#636d8c", role: "?" };
+
+// 怪物视觉元数据：颜色按 tier 区分
+const MONSTER_TIER_META = {
+  normal: { name: "普通", color: "#a8b2cc" },
+  elite:  { name: "精英", color: "#fbbf24" },
+  boss:   { name: "首领", color: "#ef5b5b" },
+};
+const DEFAULT_TIER_META = { name: "普通", color: "#a8b2cc" };
+
+// 装备槽位图标
+const SLOT_ICON = {
+  main_hand: "⚔️",
+  off_hand: "🛡️",
+  two_hand: "⚔️",
+  hand: "🗡️",
+  boots: "👢",
+  helmet: "🪖",
+  armor: "🥋",
+  accessory: "💍",
+};
+
+function classMeta(templateId) {
+  return CLASS_META[templateId] || { ...DEFAULT_CLASS_META, name: templateId || DEFAULT_CLASS_META.name };
+}
+
+function tierMeta(tier) {
+  return MONSTER_TIER_META[tier] || DEFAULT_TIER_META;
+}
+
+function classPortraitHtml(templateId, name) {
+  const meta = classMeta(templateId);
+  const initial = escapeHtml((name || meta.name || "?").slice(0, 1));
+  const url = templateId ? `/assets/icons/classes/${encodeURIComponent(templateId)}.png` : "";
+  if (!url) {
+    return `<div class="avatar avatar-placeholder" style="--class-color:${meta.color}">${initial}</div>`;
+  }
+  return `<img class="avatar avatar-img" src="${escapeHtml(url)}" alt="${escapeHtml(meta.name)}" loading="lazy" style="--class-color:${meta.color}" onerror="this.outerHTML='<div class=&quot;avatar avatar-placeholder&quot; style=&quot;--class-color:${meta.color}&quot;>${initial}</div>'" />`;
+}
+
+function monsterPortraitHtml(monster) {
+  const meta = tierMeta(monster?.tier);
+  const aid = monster?.archetype_id || "";
+  const initial = escapeHtml((monster?.name || "?").slice(0, 1));
+  if (!aid) {
+    return `<div class="avatar avatar-placeholder avatar-monster" style="--tier-color:${meta.color}">${initial}</div>`;
+  }
+  const url = `/assets/icons/monsters/${encodeURIComponent(aid)}.png`;
+  return `<img class="avatar avatar-img avatar-monster" src="${escapeHtml(url)}" alt="${escapeHtml(monster.name || "")}" loading="lazy" style="--tier-color:${meta.color}" onerror="this.outerHTML='<div class=&quot;avatar avatar-placeholder avatar-monster&quot; style=&quot;--tier-color:${meta.color}&quot;>${initial}</div>'" />`;
+}
+
+function slotIcon(slot) {
+  return SLOT_ICON[slot] || "📦";
+}
+
 window.addEventListener("load", () => {
   $("newSessionButton").addEventListener("click", () => createSession());
   $("exportButton").addEventListener("click", () => exportSession());
@@ -269,20 +340,27 @@ function renderOverview(obs) {
       ${metric("金币", obs.gold, "gold")}
       ${metric("经验池", obs.experience_pool, "exp")}
       ${metric("队伍", `${obs.party_size ?? obs.adventurers.length}/${obs.party_size_limit ?? obs.adventurers.length}`, "party")}
-      ${metric("材料", materialsText(obs.materials), "mat")}
+      ${metric("材料", materialsSummary(obs.materials), "mat", materialsText(obs.materials))}
       ${metric("状态", obs.finished ? "已结束" : "进行中", obs.finished ? "status finished" : "status")}
       <button class="combat-trigger" ${obs.finished || state.watchOnly ? "disabled" : ""} onclick="openCombatModal()">交战${countBadge}</button>
     </div>
   `;
 }
 
-function metric(label, value, type) {
+function metric(label, value, type, title) {
   return `
-    <div class="metric-card metric-${type}">
+    <div class="metric-card metric-${type}"${title ? ` title="${escapeHtml(title)}"` : ""}>
       <span class="metric-label">${label}</span>
       <span class="metric-value">${escapeHtml(String(value))}</span>
     </div>
   `;
+}
+
+function materialsSummary(materials) {
+  const entries = Object.entries(materials || {});
+  if (!entries.length) return "无";
+  const total = entries.reduce((sum, [, value]) => sum + Number(value || 0), 0);
+  return `${entries.length} 种 · ${total}`;
 }
 
 function seedText(obs) {
@@ -316,19 +394,38 @@ function updateLlmSeedPlaceholders(obs) {
 /* ========== Adventurers ========== */
 
 function renderAdventurers(obs) {
+  if (!obs.adventurers.length) {
+    $("adventurers").innerHTML = `
+      <div class="empty-hint">
+        <div class="empty-hint-icon">⚔️</div>
+        <div class="empty-hint-title">队伍还是空的</div>
+        <div class="empty-hint-text">从右侧 <strong>招募</strong> 面板里选一个冒险者开始</div>
+      </div>
+    `;
+    return;
+  }
   $("adventurers").innerHTML = list(obs.adventurers.map((adventurer, index) => {
     const isDead = adventurer.resources.current_hp <= 0;
     const isOpen = state.openDetails.has(adventurer.adventurer_id) || (state.openDetails.size === 0 && index === 0);
+    const meta = classMeta(adventurer.template_id);
     return `
-      <div class="adv-card ${isDead ? "adv-dead" : ""}">
+      <div class="adv-card ${isDead ? "adv-dead" : ""}" style="--class-color:${meta.color}">
         <div class="adv-header">
-          <div style="display:flex;align-items:center;gap:8px;">
-            <strong class="adv-name">${escapeHtml(adventurer.name)}</strong>
-            <span class="badge">Lv.${adventurer.level}</span>
-            ${isDead ? '<span class="badge badge-danger">阵亡</span>' : ""}
+          <div class="adv-identity">
+            ${classPortraitHtml(adventurer.template_id, adventurer.name)}
+            <div class="adv-titles">
+              <div class="adv-title-row">
+                <strong class="adv-name">${escapeHtml(adventurer.name)}</strong>
+                <span class="badge">Lv.${adventurer.level}</span>
+                ${isDead ? '<span class="badge badge-danger">阵亡</span>' : ""}
+              </div>
+              <div class="adv-class-line">
+                <span class="class-chip" title="${escapeHtml(meta.role)}">${escapeHtml(meta.name)}</span>
+                <span class="small muted">${escapeHtml(levelText(adventurer))}</span>
+              </div>
+            </div>
           </div>
           <div class="inline compact">
-            <span class="small muted">${levelText(adventurer)}</span>
             <button type="button" class="btn-danger compact" ${disabled()} onclick="dismissAdventurer('${adventurer.adventurer_id}')">解散</button>
           </div>
         </div>
@@ -339,13 +436,25 @@ function renderAdventurers(obs) {
         <details ${isOpen ? "open" : ""} data-adv="${adventurer.adventurer_id}">
           <summary class="adv-summary">属性 · 技能 · 装备 · 升级</summary>
           <div class="adv-body">
-            ${statGrid(adventurer.base_stats, adventurer.effective_stats)}
-            ${skillList(adventurer.skills)}
-            ${levelSkillUnlocksBlock(adventurer)}
-            <div class="slot-grid">
-              ${adventurer.equipment_slots.map((slot) => equipmentSlotCell(adventurer, slot)).join("")}
+            <div class="adv-section">
+              <div class="adv-section-label">属性</div>
+              ${statGrid(adventurer.base_stats, adventurer.effective_stats)}
             </div>
-            ${experienceBlock(obs, adventurer)}
+            <div class="adv-section">
+              <div class="adv-section-label">技能</div>
+              ${adventurer.skills?.length ? skillList(adventurer.skills, "") : '<div class="small muted">无</div>'}
+              ${levelSkillUnlocksBlock(adventurer)}
+            </div>
+            <div class="adv-section">
+              <div class="adv-section-label">装备</div>
+              <div class="slot-grid">
+                ${adventurer.equipment_slots.map((slot) => equipmentSlotCell(adventurer, slot)).join("")}
+              </div>
+            </div>
+            <div class="adv-section">
+              <div class="adv-section-label">升级</div>
+              ${experienceBlock(obs, adventurer)}
+            </div>
           </div>
         </details>
       </div>
@@ -367,29 +476,66 @@ function renderAdventurers(obs) {
 function renderRecruitment(obs) {
   const candidates = obs.recruit_candidates || [];
   $("recruitmentLimit").textContent = `队伍 ${obs.party_size ?? obs.adventurers.length}/${obs.party_size_limit ?? obs.adventurers.length}`;
-  $("recruitment").innerHTML = list(candidates.map((candidate) => `
-    <div class="row recruit-row">
-      <div class="row-title">
-        <strong>${escapeHtml(candidate.name)}</strong>
-        <span class="${candidate.can_recruit ? "ok" : "danger"} small">
-          ${candidate.can_recruit ? "可招募" : "暂不可招募"}
-        </span>
+  if (!candidates.length) {
+    $("recruitment").innerHTML = `
+      <div class="empty-hint">
+        <div class="empty-hint-text">本回合没有可招募的冒险者</div>
       </div>
-      <div class="small muted">费用 ${candidate.recruit_gold} 金币 · ${escapeHtml(candidate.template_id)}</div>
+    `;
+    return;
+  }
+  $("recruitment").innerHTML = list(candidates.map((candidate) => {
+    const meta = classMeta(candidate.template_id);
+    return `
+    <div class="row recruit-row" style="--class-color:${meta.color}">
+      <div class="row-title recruit-head">
+        ${classPortraitHtml(candidate.template_id, candidate.name)}
+        <div class="recruit-titles">
+          <div class="recruit-title-row">
+            <strong>${escapeHtml(candidate.name)}</strong>
+            <span class="class-chip" title="${escapeHtml(meta.role)}">${escapeHtml(meta.name)}</span>
+          </div>
+          <div class="small recruit-meta">
+            <span class="recruit-cost">💰 ${candidate.recruit_gold}</span>
+            <span class="${candidate.can_recruit ? "ok" : "danger"}">
+              ${candidate.can_recruit ? "可招募" : "暂不可招募"}
+            </span>
+          </div>
+        </div>
+      </div>
       ${candidateStats(candidate.base_stats)}
-      <div class="small">每级属性成长：${statModifierText(candidate.stat_growth_per_level)}</div>
-      ${skillList(candidate.skills)}
+      <div class="recruit-section">
+        <div class="recruit-section-label">属性成长</div>
+        <div class="small muted">${statModifierText(candidate.stat_growth_per_level)}</div>
+      </div>
+      ${candidate.skills?.length ? `
+        <div class="recruit-section">
+          <div class="recruit-section-label">初始技能</div>
+          <div class="skill-list inline-list">${candidate.skills.map((s) => skillTag(s)).join("")}</div>
+        </div>
+      ` : ""}
       ${candidateLevelUnlocks(candidate)}
-      ${candidate.can_recruit ? "" : `<div class="small danger">缺少：${missingText(candidate.missing)}</div>`}
-      <button type="button" ${disabled(!candidate.can_recruit)} onclick="recruit('${candidate.candidate_id}')">招募</button>
+      ${candidate.can_recruit ? "" : `<div class="small danger recruit-missing">缺少：${missingText(candidate.missing)}</div>`}
+      <div class="recruit-action">
+        <button type="button" class="btn-primary" ${disabled(!candidate.can_recruit)} onclick="recruit('${candidate.candidate_id}')">招募</button>
+      </div>
     </div>
-  `));
+  `;
+  }));
 }
 
 function candidateStats(stats) {
   return `
-    <div class="stat-inline">
-      HP ${stats.hp} · MP ${stats.mp} · 攻击 ${stats.attack} · 防御 ${stats.defense} · 速度 ${stats.speed} · 回血 ${stats.recovery} · 回魔 ${stats.mp_recovery ?? 0}
+    <div class="stat-tiles stat-tiles-vitals">
+      <div class="stat-tile stat-tile-hp"><span class="stat-tile-label">HP</span><span class="stat-tile-val">${stats.hp}</span></div>
+      <div class="stat-tile stat-tile-mp"><span class="stat-tile-label">MP</span><span class="stat-tile-val">${stats.mp}</span></div>
+    </div>
+    <div class="stat-tiles stat-tiles-combat">
+      <div class="stat-tile stat-tile-atk"><span class="stat-tile-label">攻</span><span class="stat-tile-val">${stats.attack}</span></div>
+      <div class="stat-tile stat-tile-def"><span class="stat-tile-label">防</span><span class="stat-tile-val">${stats.defense}</span></div>
+      <div class="stat-tile stat-tile-spd"><span class="stat-tile-label">速</span><span class="stat-tile-val">${stats.speed}</span></div>
+      <div class="stat-tile stat-tile-rec"><span class="stat-tile-label">回血</span><span class="stat-tile-val">${stats.recovery}</span></div>
+      <div class="stat-tile stat-tile-mrec"><span class="stat-tile-label">回魔</span><span class="stat-tile-val">${stats.mp_recovery ?? 0}</span></div>
     </div>
   `;
 }
@@ -399,67 +545,228 @@ function candidateLevelUnlocks(candidate) {
   if (!unlocks.length) {
     return "";
   }
-  return `<div class="small muted">升级可学会技能：${unlocks.map((unlock) => levelPreviewUnlockText(unlock)).join(" · ")}</div>`;
+  return `
+    <div class="skill-unlocks">
+      <span class="skill-unlocks-label">升级解锁</span>
+      ${unlocks.map((unlock) => {
+        const skillTags = (unlock.skills || []).map((s) => skillTag(s)).join(" ");
+        return `<span class="skill-unlock">Lv.${unlock.level}${skillTags}</span>`;
+      }).join("")}
+    </div>
+  `;
 }
 
 /* ========== Crafting ========== */
 
 function renderCrafting(obs) {
-  $("crafting").innerHTML = list(obs.crafting_recipes.map((recipe) => `
-    <div class="row">
+  const recipes = obs.crafting_recipes || [];
+  if (!recipes.length) {
+    $("crafting").innerHTML = `<div class="empty-hint"><div class="empty-hint-text">暂无可合成配方</div></div>`;
+    return;
+  }
+  // 按产物槽位分组
+  const groups = new Map();
+  for (const recipe of recipes) {
+    const key = recipe.output_slot || "other";
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(recipe);
+  }
+  // 槽位显示顺序
+  const order = ["main_hand", "two_hand", "off_hand", "armor", "helmet", "boots", "accessory", "other"];
+  const sortedKeys = [...groups.keys()].sort((a, b) => {
+    const ai = order.indexOf(a); const bi = order.indexOf(b);
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+  });
+  const html = sortedKeys.map((key) => {
+    const items = groups.get(key);
+    const label = `${slotIcon(key)} ${slotName(key)}`;
+    return renderGroupSection({
+      id: `craft-${key}`,
+      title: label,
+      count: items.length,
+      summary: craftingGroupSummary(items),
+      defaultOpen: sortedKeys[0] === key,
+      items: items.map((recipe) => craftRowHtml(recipe)),
+    });
+  }).join("");
+  $("crafting").innerHTML = html;
+}
+
+function craftingGroupSummary(items) {
+  const ready = items.filter((r) => r.can_craft).length;
+  if (!ready) return `<span class="group-bad">资源不足 ${items.length}</span>`;
+  if (ready === items.length) return `<span class="group-ok">可合成 ${ready}</span>`;
+  return `<span class="group-mix">可合成 ${ready} / ${items.length}</span>`;
+}
+
+function craftRowHtml(recipe) {
+  return `
+    <div class="row craft-row">
       <div class="row-title">
+        <span class="slot-icon">${slotIcon(recipe.output_slot)}</span>
         <strong>${escapeHtml(recipe.name)}</strong>
         <span class="${recipe.can_craft ? "ok" : "danger"} small">${recipe.can_craft ? "可合成" : "资源不足"}</span>
       </div>
-      <div class="small muted">${escapeHtml(recipe.output_name)} · ${slotName(recipe.output_slot)}${recipe.output_allowed_class_names?.length ? ` · 限制: ${recipe.output_allowed_class_names.join("、")}` : ""}</div>
+      <div class="small muted">${escapeHtml(recipe.output_name)}${recipe.output_allowed_class_names?.length ? ` · 限制: ${recipe.output_allowed_class_names.join("、")}` : ""}</div>
       <div class="small">产物：${statModifierText(recipe.output_stats)}</div>
-      ${skillList(recipe.output_skills)}
+      ${recipe.output_skills?.length ? skillList(recipe.output_skills, "") : ""}
       <div class="small">消耗：金币 ${recipe.gold_cost} · ${materialsText(recipe.material_costs)}</div>
       ${recipe.can_craft ? "" : `<div class="small danger">缺少：${missingText(recipe.missing)}</div>`}
-      <button type="button" ${disabled(!recipe.can_craft)} onclick="craft('${recipe.recipe_id}')">合成</button>
+      <div class="craft-action">
+        <button type="button" class="btn-primary" ${disabled(!recipe.can_craft)} onclick="craft('${recipe.recipe_id}')">合成</button>
+      </div>
     </div>
-  `));
+  `;
 }
 
 /* ========== Equipment (read-only in workshop) ========== */
 
 function renderEquipment(obs) {
-  $("equipment").innerHTML = list(obs.equipment_inventory.map((item) => {
-    const equippedInfo = item.equipped_by
-      ? resolveName(item.equipped_by)
-      : "未装备";
-    const classInfo = item.allowed_class_names?.length
-      ? ` · 限制: ${item.allowed_class_names.join("、")}`
-      : "";
-    return `
-      <div class="row">
-        <div class="row-title">
-          <strong>${escapeHtml(item.name)}</strong>
-          <span class="small ${item.equipped_by ? "ok" : "muted"}">${equippedInfo}</span>
-        </div>
-        <div class="small">${slotName(item.slot)} · ${statModifierText(item.stats)}${classInfo}</div>
+  const inventory = obs.equipment_inventory || [];
+  if (!inventory.length) {
+    $("equipment").innerHTML = `<div class="empty-hint"><div class="empty-hint-text">暂未持有装备</div></div>`;
+    return;
+  }
+  // 按槽位分组
+  const groups = new Map();
+  for (const item of inventory) {
+    const key = item.slot || "other";
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(item);
+  }
+  const order = ["main_hand", "two_hand", "off_hand", "armor", "helmet", "boots", "accessory", "other"];
+  const sortedKeys = [...groups.keys()].sort((a, b) => {
+    const ai = order.indexOf(a); const bi = order.indexOf(b);
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+  });
+  const html = sortedKeys.map((key) => {
+    const items = groups.get(key);
+    const equippedCount = items.filter((i) => i.equipped_by).length;
+    const summary = equippedCount > 0
+      ? `<span class="group-mix">装备中 ${equippedCount} / ${items.length}</span>`
+      : `<span class="group-state-muted">闲置 ${items.length}</span>`;
+    return renderGroupSection({
+      id: `equip-${key}`,
+      title: `${slotIcon(key)} ${slotName(key)}`,
+      count: items.length,
+      summary,
+      defaultOpen: sortedKeys[0] === key,
+      items: items.map(equipRowHtml),
+    });
+  }).join("");
+  $("equipment").innerHTML = html;
+}
+
+function equipRowHtml(item) {
+  const equippedInfo = item.equipped_by
+    ? resolveName(item.equipped_by)
+    : "未装备";
+  const classInfo = item.allowed_class_names?.length
+    ? ` · 限制: ${item.allowed_class_names.join("、")}`
+    : "";
+  return `
+    <div class="row equip-row">
+      <div class="row-title">
+        <span class="slot-icon">${slotIcon(item.slot)}</span>
+        <strong>${escapeHtml(item.name)}</strong>
+        <span class="small ${item.equipped_by ? "equip-equipped" : "muted"}">${equippedInfo}</span>
       </div>
-    `;
-  }));
+      <div class="small muted">${statModifierText(item.stats)}${classInfo}</div>
+    </div>
+  `;
 }
 
 /* ========== Upgrades ========== */
 
 function renderUpgrades(obs) {
-  $("upgrades").innerHTML = list(obs.global_upgrades.map((upgrade) => `
-    <div class="row">
+  const upgrades = obs.global_upgrades || [];
+  if (!upgrades.length) {
+    $("upgrades").innerHTML = `<div class="empty-hint"><div class="empty-hint-text">暂无全局加成</div></div>`;
+    return;
+  }
+  // 按主要功能分组：队伍 > 恢复 > 战斗
+  const groups = new Map();
+  for (const upgrade of upgrades) {
+    const key = upgradeGroupKey(upgrade);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(upgrade);
+  }
+  const order = ["party", "recovery", "combat", "other"];
+  const sortedKeys = [...groups.keys()].sort((a, b) => {
+    const ai = order.indexOf(a); const bi = order.indexOf(b);
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+  });
+  const labels = {
+    party:   { icon: "👥", text: "队伍扩张" },
+    recovery: { icon: "💚", text: "恢复支援" },
+    combat:  { icon: "⚔️", text: "战斗强化" },
+    other:   { icon: "✨", text: "其他" },
+  };
+  const html = sortedKeys.map((key) => {
+    const items = groups.get(key);
+    const meta = labels[key] || labels.other;
+    return renderGroupSection({
+      id: `upgrade-${key}`,
+      title: `${meta.icon} ${meta.text}`,
+      count: items.length,
+      summary: upgradeGroupSummary(items),
+      defaultOpen: sortedKeys[0] === key,
+      items: items.map((upgrade) => upgradeRowHtml(obs, upgrade)),
+    });
+  }).join("");
+  $("upgrades").innerHTML = html;
+}
+
+function upgradeGroupKey(upgrade) {
+  if ((upgrade.party_size_bonus || 0) > 0) return "party";
+  const s = upgrade.stats || {};
+  if ((s.recovery || 0) > 0 || (s.mp_recovery || 0) > 0 || (s.mp || 0) > 0) return "recovery";
+  if ((s.attack || 0) > 0 || (s.defense || 0) > 0 || (s.speed || 0) > 0 || (s.hp || 0) > 0) return "combat";
+  return "other";
+}
+
+function upgradeGroupSummary(items) {
+  const unlocked = items.filter((u) => u.unlocked).length;
+  const purchasable = items.filter((u) => !u.unlocked && u.can_purchase).length;
+  if (unlocked === items.length) return `<span class="group-ok">已全部解锁</span>`;
+  if (purchasable > 0) return `<span class="group-mix">可购买 ${purchasable} / ${items.length}</span>`;
+  return `<span class="group-bad">${items.length} 项待解锁</span>`;
+}
+
+function upgradeRowHtml(obs, upgrade) {
+  const state = upgrade.unlocked ? "已解锁" : upgrade.can_purchase ? "可购买" : "不可购买";
+  const stateClass = upgrade.unlocked || upgrade.can_purchase ? "ok" : "danger";
+  return `
+    <div class="row upgrade-row">
       <div class="row-title">
         <strong>${escapeHtml(upgrade.name)}</strong>
-        <span class="${upgrade.unlocked ? "ok" : upgrade.can_purchase ? "ok" : "danger"} small">
-          ${upgrade.unlocked ? "已解锁" : upgrade.can_purchase ? "可购买" : "不可购买"}
-        </span>
+        <span class="${stateClass} small">${state}</span>
       </div>
       <div class="small">金币 ${upgrade.gold_cost} · ${statModifierText(upgrade.stats)}${upgrade.party_size_bonus ? ` · 队伍上限 +${upgrade.party_size_bonus}` : ""}</div>
       <div class="small muted">前置：${upgradePrereqText(obs, upgrade.required_upgrade_ids)}</div>
-      ${!upgrade.unlocked && !upgrade.can_purchase ? `<div class="small danger">缺少：${missingText(upgrade.missing)}</div>` : ""}
-      ${upgrade.unlocked ? "" : `<button type="button" ${disabled(!upgrade.can_purchase)} onclick="purchaseUpgrade('${upgrade.upgrade_id}')">购买</button>`}
+      ${!upgrade.unlocked && !upgrade.can_purchase ? `<div class="small danger upgrade-missing">缺少：${missingText(upgrade.missing)}</div>` : ""}
+      ${upgrade.unlocked ? "" : `<div class="upgrade-action"><button type="button" class="btn-primary" ${disabled(!upgrade.can_purchase)} onclick="purchaseUpgrade('${upgrade.upgrade_id}')">购买</button></div>`}
     </div>
-  `));
+  `;
+}
+
+function renderGroupSection({ id, title, count, summary, items, defaultOpen = false }) {
+  // title 形如 "⚔ 右手" 或 "👥 队伍扩张"，把第一个 token 当图标
+  const m = String(title).match(/^(\S+)\s+(.+)$/);
+  const titleHtml = m
+    ? `<span class="group-title"><span class="group-title-icon">${m[1]}</span>${escapeHtml(m[2])}</span>`
+    : `<span class="group-title">${escapeHtml(title)}</span>`;
+  return `
+    <details class="group-section" id="${escapeHtml(id)}" ${defaultOpen ? "open" : ""}>
+      <summary class="group-summary">
+        <span class="group-toggle">▶</span>
+        ${titleHtml}
+        <span class="group-count">${count}</span>
+        <span class="group-state">${summary || ""}</span>
+      </summary>
+      <div class="group-body">${items.join("")}</div>
+    </details>
+  `;
 }
 
 /* ========== Combat Modal ========== */
@@ -517,11 +824,22 @@ function renderModalHunts() {
     const previewPlaceholder = adventurer
       ? `<div class="hunt-preview" id="preview-${monster.monster_id}"><span class="muted">计算中…</span></div>`
       : "";
+    const tier = tierMeta(monster.tier);
     return `
-      <div class="hunt-entry">
+      <div class="hunt-entry" style="--tier-color:${tier.color}">
+        ${monsterPortraitHtml(monster)}
         <div class="hunt-info">
-          <strong>${escapeHtml(monster.name)}</strong>
-          <div class="stat-inline">HP ${monster.stats.hp} · MP ${monster.stats.mp} · 攻 ${monster.stats.attack} · 防 ${monster.stats.defense} · 速 ${monster.stats.speed}</div>
+          <div class="hunt-title-row">
+            <strong>${escapeHtml(monster.name)}</strong>
+            <span class="tier-chip">${escapeHtml(tier.name)}</span>
+          </div>
+          <div class="stat-tiles hunt-stats">
+            <div class="stat-tile"><span class="stat-tile-label">HP</span><span class="stat-tile-val">${monster.stats.hp}</span></div>
+            <div class="stat-tile"><span class="stat-tile-label">MP</span><span class="stat-tile-val">${monster.stats.mp}</span></div>
+            <div class="stat-tile stat-tile-atk"><span class="stat-tile-label">⚔ 攻</span><span class="stat-tile-val">${monster.stats.attack}</span></div>
+            <div class="stat-tile stat-tile-def"><span class="stat-tile-label">🛡 防</span><span class="stat-tile-val">${monster.stats.defense}</span></div>
+            <div class="stat-tile stat-tile-spd"><span class="stat-tile-label">⚡ 速</span><span class="stat-tile-val">${monster.stats.speed}</span></div>
+          </div>
           <div class="small muted">奖励：${rewardText(monster.reward)}</div>
           ${skillList(monster.skills)}
         </div>
@@ -1034,8 +1352,13 @@ function levelSkillUnlocksBlock(adventurer) {
     return "";
   }
   return `
-    <div class="small muted">升级可学会技能：
-      ${unlocks.map((unlock) => `<span class="skill-unlock ${unlock.unlocked ? "ok" : "muted"}">${levelUnlockText(unlock)}</span>`).join(" ")}
+    <div class="skill-unlocks">
+      <span class="skill-unlocks-label">升级解锁</span>
+      ${unlocks.map((unlock) => {
+        const stateClass = unlock.unlocked ? "ok" : "locked";
+        const skillTags = (unlock.skills || []).map((s) => skillTag(s)).join(" ");
+        return `<span class="skill-unlock ${stateClass}">Lv.${unlock.level}${skillTags}</span>`;
+      }).join("")}
     </div>
   `;
 }
@@ -1055,7 +1378,8 @@ function equipmentSlotCell(adventurer, slot) {
   if (slot.item) {
     return `
       <div class="slot-cell filled">
-        <div class="inline">
+        <div class="inline slot-head">
+          <span class="slot-icon">${slotIcon(slot.slot)}</span>
           <strong>${slotName(slot.slot)}</strong>
           <button type="button" ${disabled()} onclick="unequip('${adventurer.adventurer_id}', '${slot.slot}')">卸下</button>
         </div>
@@ -1067,14 +1391,20 @@ function equipmentSlotCell(adventurer, slot) {
   if (slot.blocked_by) {
     return `
       <div class="slot-cell slot-blocked">
-        <strong>${slotName(slot.slot)}</strong>
+        <div class="inline slot-head">
+          <span class="slot-icon">${slotIcon(slot.slot)}</span>
+          <strong>${slotName(slot.slot)}</strong>
+        </div>
         <div class="small muted">被${slotName(slot.blocked_by)}占用</div>
       </div>
     `;
   }
   return `
     <div class="slot-cell slot-empty" onclick="openEquipPopup('${adventurer.adventurer_id}', '${slot.slot}', this)">
-      <strong>${slotName(slot.slot)}</strong>
+      <div class="inline slot-head">
+        <span class="slot-icon">${slotIcon(slot.slot)}</span>
+        <strong>${slotName(slot.slot)}</strong>
+      </div>
       <div class="small muted">空 · 点击装备</div>
     </div>
   `;
