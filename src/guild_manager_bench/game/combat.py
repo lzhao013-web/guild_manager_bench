@@ -382,6 +382,11 @@ def _record_healing(
 
 
 def _apply_status(combatant: _RuntimeCombatant, status: StatusDefinition) -> None:
+    if status.stack_mode == "stack":
+        combatant.statuses.append(
+            _RuntimeStatus(definition=status, remaining_actions=status.duration)
+        )
+        return
     for runtime_status in combatant.statuses:
         if runtime_status.definition.status_id != status.status_id:
             continue

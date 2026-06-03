@@ -1018,7 +1018,7 @@ function adventurerCard(a, refs) {
     </div>` : '';
   return `<div class="entity-card adventurer-card" data-id="${esc(a.adventurer_id)}">
     <div class="card-header">
-      <div class="avatar-slot"><div class="avatar-placeholder">${esc((a.name||'?')[0])}</div></div>
+      <div class="avatar-slot adventurer">${adventurerIconHtml(a)}</div>
       <div class="card-info"><div class="card-name">${esc(a.name||'?')}</div><div class="card-subtitle">Lv.${fmt(a.level)} · ${esc(a.template_id||'')}${rid?' · ID '+rid:''}</div></div>
     </div>
     <div class="resource-bars">
@@ -1040,10 +1040,27 @@ function equipSlot(sl, refs) {
 }
 
 function renderMonsters(ms, refs) { DOM.monsterCards.innerHTML = ms.length ? ms.map(m=>monsterCard(m,refs)).join('') : '<div class="empty-state"><span class="muted">无怪物</span></div>'; }
+function monsterIconHtml(m) {
+  if (!m) return `<div class="avatar-placeholder">?</div>`;
+  const aid = m.archetype_id || m.monster_id || '';
+  if (!aid) return `<div class="avatar-placeholder">?</div>`;
+  const fallback = esc(((m.name||'?')[0]));
+  const url = `/replay/icons/monsters/${aid}.png`;
+  return `<img class="avatar-img" src="${esc(url)}" alt="" loading="lazy" onerror="this.outerHTML='<div class=&quot;avatar-placeholder&quot;>${fallback}</div>'" />`;
+}
+
+function adventurerIconHtml(a) {
+  if (!a) return `<div class="avatar-placeholder">?</div>`;
+  const tid = a.template_id || '';
+  if (!tid) return `<div class="avatar-placeholder">${esc(((a.name||'?')[0]))}</div>`;
+  const fallback = esc(((a.name||'?')[0]));
+  const url = `/replay/icons/classes/${tid}.png`;
+  return `<img class="avatar-img" src="${esc(url)}" alt="" loading="lazy" onerror="this.outerHTML='<div class=&quot;avatar-placeholder&quot;>${fallback}</div>'" />`;
+}
 function monsterCard(m, refs) {
   const rid=refId(refs,'monster',m.monster_id); const s=m.stats||{}; const rw=m.reward||{}; const sk=m.skills||[];
   return `<div class="entity-card" data-id="${esc(m.monster_id)}">
-    <div class="card-header"><div class="avatar-slot monster"><div class="avatar-placeholder">${esc((m.name||'?')[0])}</div></div><div class="card-info"><div class="card-name">${esc(m.name||'?')}</div><div class="card-subtitle">Tier ${fmt(m.tier)} · ${esc(m.archetype_id||'')}${rid?' · ID '+rid:''}</div></div></div>
+    <div class="card-header"><div class="avatar-slot monster" data-tier="${esc(m.tier||'normal')}">${monsterIconHtml(m)}</div><div class="card-info"><div class="card-name">${esc(m.name||'?')}</div><div class="card-subtitle">Tier ${fmt(m.tier)} · ${esc(m.archetype_id||'')}${rid?' · ID '+rid:''}</div></div></div>
     <div class="card-stats">${statCell('HP',s.hp)}${statCell('MP',s.mp)}${statCell('攻击',s.attack)}${statCell('防御',s.defense)}${statCell('速度',s.speed)}</div>
     ${sk.length?`<div class="skill-chips">${sk.map(sk=>`<span class="skill-chip ${sk.kind==='active'?'active':''}" title="${esc(skillTip(sk))}">${esc(sk.name||sk.skill_id)}</span>`).join('')}</div>`:''}
     <div class="card-subtitle" style="margin-top:4px;">奖励: 💰${fmt(rw.gold)} ⭐${fmt(rw.experience)} ${Object.entries(rw.materials||{}).map(([k,v])=>`${matLabel(k)}:${fmt(v)}`).join(' ')}</div>

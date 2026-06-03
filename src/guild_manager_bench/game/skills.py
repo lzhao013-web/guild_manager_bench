@@ -90,7 +90,7 @@ class StatusDefinition:
         _require_at_least("duration", self.duration, 1)
         if self.polarity not in {"positive", "negative", "neutral"}:
             raise ValueError(f"unknown status polarity: {self.polarity}")
-        if self.stack_mode not in {"refresh", "replace", "add_duration"}:
+        if self.stack_mode not in {"refresh", "replace", "add_duration", "stack"}:
             raise ValueError(f"unknown status stack_mode: {self.stack_mode}")
         object.__setattr__(self, "effects", tuple(self.effects))
         if not self.effects:

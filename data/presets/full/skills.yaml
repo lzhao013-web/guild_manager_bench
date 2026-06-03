@@ -795,21 +795,31 @@ skills:
       - type: apply_status
         target: target
         status:
-          id: lich_curse
-          name: 死亡诅咒
-          duration: 3
+          id: lich_doom
+          name: 死亡宣告
+          duration: 4
           polarity: negative
+          stack_mode: stack
+          effects:
+            - type: true_damage
+              value: 10
+      - type: apply_status
+        target: target
+        status:
+          id: lich_weakness
+          name: 虚弱诅咒
+          duration: 4
+          polarity: negative
+          stack_mode: refresh
           effects:
             - type: stat_multiplier
               stat: attack
-              value: 0.74
+              value: 0.80
               target: self
             - type: stat_multiplier
               stat: defense
-              value: 0.87
+              value: 0.88
               target: self
-            - type: true_damage
-              value: 8
     mp_cost: 8
     priority: 15
     free: true
