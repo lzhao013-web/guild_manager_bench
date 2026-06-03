@@ -30,6 +30,10 @@ def create_app(data_dir: str | Path = "data", *, preset: str | None = None) -> F
     app.include_router(llm_archive_router())
     app.include_router(llm_debug_router(data_preset.data_dir, data_source=data_preset.to_dict()))
 
+    assets_dir = _assets_dir()
+    if assets_dir.exists():
+        app.mount("/assets", StaticFiles(directory=assets_dir, html=False), name="assets")
+
     replay_dir = _replay_dir()
     if replay_dir.exists():
         app.mount("/replay", StaticFiles(directory=replay_dir, html=True), name="replay")
@@ -55,6 +59,10 @@ def _replay_dir() -> Path:
 
 def _leaderboard_dir() -> Path:
     return Path(__file__).resolve().parents[3] / "web" / "leaderboard"
+
+
+def _assets_dir() -> Path:
+    return Path(__file__).resolve().parents[3] / "web" / "assets"
 
 
 app = create_app()

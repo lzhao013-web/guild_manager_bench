@@ -1045,7 +1045,7 @@ function monsterIconHtml(m) {
   const aid = m.archetype_id || m.monster_id || '';
   if (!aid) return `<div class="avatar-placeholder">?</div>`;
   const fallback = esc(((m.name||'?')[0]));
-  const url = `/replay/icons/monsters/${aid}.png`;
+  const url = `/assets/icons/monsters/${aid}.png`;
   return `<img class="avatar-img" src="${esc(url)}" alt="" loading="lazy" onerror="this.outerHTML='<div class=&quot;avatar-placeholder&quot;>${fallback}</div>'" />`;
 }
 
@@ -1054,7 +1054,7 @@ function adventurerIconHtml(a) {
   const tid = a.template_id || '';
   if (!tid) return `<div class="avatar-placeholder">${esc(((a.name||'?')[0]))}</div>`;
   const fallback = esc(((a.name||'?')[0]));
-  const url = `/replay/icons/classes/${tid}.png`;
+  const url = `/assets/icons/classes/${tid}.png`;
   return `<img class="avatar-img" src="${esc(url)}" alt="" loading="lazy" onerror="this.outerHTML='<div class=&quot;avatar-placeholder&quot;>${fallback}</div>'" />`;
 }
 function monsterCard(m, refs) {
