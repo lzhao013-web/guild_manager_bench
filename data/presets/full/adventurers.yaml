@@ -38,15 +38,15 @@ recruitable_adventurers:
       hp: 170
       mp: 0
       attack: 10
-      defense: 14
+      defense: 12
       speed: 6
-      recovery: 16
+      recovery: 14
       mp_recovery: 0
     stat_growth_per_level:
       hp: 20
       mp: 0
       attack: 1
-      defense: 4
+      defense: 5
       speed: 0
       recovery: 4
       mp_recovery: 0
@@ -185,15 +185,15 @@ recruitable_adventurers:
       hp: 130
       mp: 0
       attack: 11
-      defense: 10
+      defense: 8
       speed: 7
-      recovery: 12
+      recovery: 10
       mp_recovery: 14
     stat_growth_per_level:
-      hp: 16
+      hp: 18
       mp: 0
       attack: 3
-      defense: 2
+      defense: 3
       speed: 1
       recovery: 4
       mp_recovery: 4

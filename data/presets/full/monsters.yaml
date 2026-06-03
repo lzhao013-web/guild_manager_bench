@@ -7,7 +7,7 @@ monsters:
     base_stats:
       hp: 65
       mp: 0
-      attack: 18
+      attack: 20
       defense: 4
       speed: 9
       recovery: 0
@@ -35,7 +35,7 @@ monsters:
     base_stats:
       hp: 85
       mp: 0
-      attack: 13
+      attack: 15
       defense: 9
       speed: 5
       recovery: 0
@@ -92,7 +92,7 @@ monsters:
     base_stats:
       hp: 84
       mp: 0
-      attack: 20
+      attack: 23
       defense: 6
       speed: 10
       recovery: 0
@@ -120,7 +120,7 @@ monsters:
     base_stats:
       hp: 66
       mp: 0
-      attack: 22
+      attack: 25
       defense: 3
       speed: 12
       recovery: 0
