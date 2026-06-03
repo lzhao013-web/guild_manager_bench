@@ -2,13 +2,13 @@ upgrades:
   # === Roster Expansion (existing, kept as-is) ===
   - id: roster_expansion_1
     name: 扩编 I
-    gold: 400
+    gold: 350
     description: 解锁中级全局加成的前置科技。
     party_size_bonus: 1
 
   - id: roster_expansion_2
     name: 扩编 II
-    gold: 700
+    gold: 600
     description: 解锁高级全局加成的前置科技。
     required: 
       - roster_expansion_1
