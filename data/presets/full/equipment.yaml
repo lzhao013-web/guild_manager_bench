@@ -197,12 +197,37 @@ equipment:
     skills: [arcane_surge]
     allowed_classes: [spellshot_mage, plague_mage]
 
+  - id: t2_arcane_robe
+    name: 奥术法袍
+    slot: armor
+    stats:
+      hp: 36
+      mp: 12
+      defense: 7
+      recovery: 7
+      mp_recovery: 5
+    skills: [arcane_barrier]
+    allowed_classes: [spellshot_mage]
+
+  - id: t2_sacred_robe
+    name: 圣佑法袍
+    slot: armor
+    stats:
+      hp: 40
+      mp: 12
+      defense: 8
+      recovery: 9
+      mp_recovery: 8
+    skills: [sacred_veil]
+    allowed_classes: [cleric]
+
   - id: t2_cannon_kit
     name: 炮手弹药箱
-    slot: off_hand
+    slot: accessory
     stats:
-      attack: 4
+      attack: 2
       mp: 12
+      mp_recovery: 6
     skills: [rapid_reload]
     allowed_classes: [cannoneer]
 

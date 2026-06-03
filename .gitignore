@@ -26,6 +26,7 @@ env/
 logs/
 runs/
 results/
+analysis/
 *.log
 
 # Editor and OS files
@@ -36,6 +37,9 @@ Thumbs.db
 
 # Claude
 CLAUDE.MD
+
+# Local agent configuration
+.codex/
 
 # Leaderboard data (users drop replay.json here)
 web/leaderboard/data/

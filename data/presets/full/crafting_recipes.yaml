@@ -208,6 +208,24 @@ recipes:
       arcane_dust: 3
       spider_silk: 1
 
+  - id: recipe_t2_arcane_robe
+    name: 奥术法袍配方
+    output: t2_arcane_robe
+    gold: 58
+    materials:
+      spider_silk: 2
+      arcane_dust: 2
+      herb: 1
+
+  - id: recipe_t2_sacred_robe
+    name: 圣佑法袍配方
+    output: t2_sacred_robe
+    gold: 62
+    materials:
+      spider_silk: 2
+      herb: 2
+      arcane_dust: 1
+
   - id: recipe_t2_cannon_kit
     name: 炮手弹药箱配方
     output: t2_cannon_kit

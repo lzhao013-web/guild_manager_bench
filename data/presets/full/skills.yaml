@@ -67,15 +67,15 @@ skills:
     kind: passive
     condition:
       type: action_index_lte
-      value: 8
+      value: 12
     effects:
       - type: stat_multiplier
         stat: defense
-        value: 3.0
+        value: 3.2
         target: self
       - type: stat_multiplier
         stat: recovery
-        value: 1.8
+        value: 2.0
         target: self
 
   - id: plague_curse
@@ -274,11 +274,11 @@ skills:
       value: 0.3
     effects:
       - type: damage_multiplier
-        value: 2.0
+        value: 2.4
       - type: true_damage
-        value: 20
+        value: 34
     mp_cost: 15
-    priority: 18
+    priority: 20
 
   # ───────────────────────────────────────
   # --- 神官 ---
@@ -320,18 +320,22 @@ skills:
     kind: passive
     condition:
       type: self_hp_pct_lte
-      value: 0.5
+      value: 0.8
     effects:
       - type: stat_multiplier
         stat: defense
-        value: 1.5
+        value: 2.2
         target: self
       - type: stat_multiplier
         stat: recovery
-        value: 1.5
+        value: 2.2
         target: self
       - type: stat_multiplier
         stat: attack
+        value: 1.9
+        target: self
+      - type: stat_multiplier
+        stat: speed
         value: 1.2
         target: self
 
@@ -506,7 +510,7 @@ skills:
     effects:
       - type: stat_multiplier
         stat: attack
-        value: 1.2
+        value: 1.35
         target: self
 
   - id: siege_cannon
@@ -516,11 +520,11 @@ skills:
       type: always
     effects:
       - type: true_damage
-        value: 30
+        value: 60
       - type: atk_ratio_damage
         value: 1.8
     mp_cost: 10
-    priority: 18
+    priority: 20
     once_per_battle: true
 
   # ───────────────────────────────────────
@@ -542,15 +546,15 @@ skills:
           effects:
             - type: stat_multiplier
               stat: attack
-              value: 0.5
+              value: 0.65
               target: self
             - type: stat_multiplier
               stat: defense
-              value: 0.65
+              value: 0.75
               target: self
             - type: stat_multiplier
               stat: speed
-              value: 0.65
+              value: 0.75
               target: self
     mp_cost: 5
     priority: 12
@@ -564,20 +568,20 @@ skills:
       value: 5
     effects:
       - type: atk_ratio_damage
-        value: 0.5
+        value: 0.8
       - type: apply_status
         target: target
         status:
           id: epidemic_poison
           name: 剧毒
-          duration: 3
+          duration: 5
           polarity: negative
           stack_mode: add_duration
           effects:
             - type: true_damage
-              value: 18
+              value: 28
     mp_cost: 8
-    priority: 18
+    priority: 22
     once_per_battle: true
     free: true
 
@@ -1206,6 +1210,81 @@ skills:
         value: 1.12
         target: self
 
+  - id: arcane_barrier
+    name: 奥术护幕
+    kind: active
+    condition:
+      type: self_hp_pct_lte
+      value: 0.8
+    effects:
+      - type: heal_percent
+        value: 0.18
+        target: self
+      - type: mp_restore
+        value: 4
+        target: self
+      - type: apply_status
+        value: 0
+        target: self
+        status:
+          id: arcane_barrier
+          name: 奥术护幕
+          duration: 4
+          polarity: positive
+          stack_mode: refresh
+          effects:
+            - type: stat_multiplier
+              stat: defense
+              value: 1.7
+              target: self
+            - type: stat_multiplier
+              stat: recovery
+              value: 1.4
+              target: self
+    mp_cost: 6
+    priority: 24
+    once_per_battle: true
+    free: true
+
+  - id: sacred_veil
+    name: 圣佑法幕
+    kind: active
+    condition:
+      type: self_hp_pct_lte
+      value: 0.85
+    effects:
+      - type: heal_percent
+        value: 0.30
+        target: self
+      - type: mp_restore
+        value: 10
+        target: self
+      - type: apply_status
+        value: 0
+        target: self
+        status:
+          id: sacred_veil
+          name: 圣佑法幕
+          duration: 6
+          polarity: positive
+          stack_mode: refresh
+          effects:
+            - type: heal_percent
+              value: 0.08
+              target: self
+            - type: stat_multiplier
+              stat: defense
+              value: 1.7
+              target: self
+            - type: stat_multiplier
+              stat: recovery
+              value: 1.8
+              target: self
+    mp_cost: 6
+    priority: 24
+    once_per_battle: true
+    free: true
+
   - id: rapid_reload
     name: 快速装填
     kind: active
@@ -1214,7 +1293,7 @@ skills:
       value: 3
     effects:
       - type: mp_restore
-        value: 8
+        value: 10
         target: self
       - type: apply_status
         value: 0
@@ -1227,7 +1306,7 @@ skills:
           effects:
             - type: stat_bonus
               stat: speed
-              value: 4
+              value: 2
               target: self
     mp_cost: 3
     priority: 25

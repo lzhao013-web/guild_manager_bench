@@ -236,7 +236,7 @@ recruitable_adventurers:
         skills: [vampiric_embrace]
 
   # ═══ 9. 炮手 — 后期攻城锤 ═══
-  # 最慢职业（SPD成长0），每次攻击附带大量真伤。专打高DEF怪物。
+  # 最慢职业（SPD成长1），每次攻击附带大量真伤。专打高DEF怪物。
   - id: cannoneer
     name: 炮手
     recruit_gold: 50
@@ -265,32 +265,32 @@ recruitable_adventurers:
       - level: 9
         skills: [siege_cannon]
 
-  # ═══ 10. 瘟疫法师 — 前中期毒王 ═══
-  # 多层DoT叠加+虚弱debuff。前期毒伤即真伤碾压，后期脆皮被秒。
+  # ═══ 10. 瘟疫法师 — 后期疫病术士 ═══
+  # 前期只有弱收割，后期获得疫病爆发和暗影防御后才成型。
   - id: plague_mage
     name: 瘟疫法师
     recruit_gold: 50
     stats:
-      hp: 110
-      mp: 28
-      attack: 13
-      defense: 4
-      speed: 11
-      recovery: 8
-      mp_recovery: 8
+      hp: 90
+      mp: 24
+      attack: 10
+      defense: 3
+      speed: 9
+      recovery: 7
+      mp_recovery: 7
     stat_growth_per_level:
-      hp: 8
-      mp: 5
+      hp: 11
+      mp: 6
       attack: 3
       defense: 1
       speed: 2
       recovery: 1
       mp_recovery: 2
-    skills: [plague_curse, shadow_form]
+    skills: [necrotic_blast]
     level_skill_unlocks:
       - level: 3
-        skills: [withering_touch]
+        skills: [plague_curse]
       - level: 6
-        skills: [epidemic]
+        skills: [withering_touch]
       - level: 9
-        skills: [necrotic_blast]
+        skills: [epidemic, shadow_form]
