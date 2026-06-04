@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-06-02T10:31:09",
-  "total_runs": 17,
+  "generated_at": "2026-06-04T10:13:08",
+  "total_runs": 19,
   "models": [
     {
       "runs": 1,
@@ -86,33 +86,33 @@
             {
               "adventurer_id": "recruit_0001",
               "name": "林地射手·坚壁",
-              "rank_score": 345.4578,
-              "rank_score_contribution": 345.4578,
-              "rank_score_share": 0.201,
+              "rank_score": 667.3305,
+              "rank_score_contribution": 667.3305,
+              "rank_score_share": 0.2164,
               "assignments": 3000
             },
             {
               "adventurer_id": "recruit_0002",
               "name": "小丑",
-              "rank_score": 381.2505,
-              "rank_score_contribution": 381.2505,
-              "rank_score_share": 0.2218,
+              "rank_score": 919.6971,
+              "rank_score_contribution": 919.6971,
+              "rank_score_share": 0.2982,
               "assignments": 3000
             },
             {
               "adventurer_id": "recruit_0003",
               "name": "佣兵战士·枯竭",
-              "rank_score": 482.2557,
-              "rank_score_contribution": 482.2557,
-              "rank_score_share": 0.2806,
+              "rank_score": 716.0627,
+              "rank_score_contribution": 716.0627,
+              "rank_score_share": 0.2322,
               "assignments": 3000
             },
             {
               "adventurer_id": "recruit_0004",
               "name": "吸血魔",
-              "rank_score": 509.6823,
-              "rank_score_contribution": 509.6823,
-              "rank_score_share": 0.2966,
+              "rank_score": 781.3199,
+              "rank_score_contribution": 781.3199,
+              "rank_score_share": 0.2533,
               "assignments": 3000
             }
           ],
@@ -1242,33 +1242,33 @@
             {
               "adventurer_id": "recruit_0001",
               "name": "林地射手·坚壁",
-              "rank_score": 513.662,
-              "rank_score_contribution": 513.662,
-              "rank_score_share": 0.346,
+              "rank_score": 807.55,
+              "rank_score_contribution": 807.55,
+              "rank_score_share": 0.2736,
               "assignments": 3000
             },
             {
               "adventurer_id": "recruit_0002",
               "name": "魔弹法师·锐利",
-              "rank_score": 339.2414,
-              "rank_score_contribution": 339.2414,
-              "rank_score_share": 0.2285,
+              "rank_score": 717.0685,
+              "rank_score_contribution": 717.0685,
+              "rank_score_share": 0.243,
               "assignments": 3000
             },
             {
               "adventurer_id": "recruit_0003",
               "name": "吸血魔·破绽",
-              "rank_score": 271.7068,
-              "rank_score_contribution": 271.7068,
-              "rank_score_share": 0.183,
+              "rank_score": 662.058,
+              "rank_score_contribution": 662.058,
+              "rank_score_share": 0.2243,
               "assignments": 3000
             },
             {
               "adventurer_id": "recruit_0004",
               "name": "林地射手·破绽",
-              "rank_score": 359.8242,
-              "rank_score_contribution": 359.8242,
-              "rank_score_share": 0.2424,
+              "rank_score": 764.3945,
+              "rank_score_contribution": 764.3945,
+              "rank_score_share": 0.259,
               "assignments": 3000
             }
           ],
@@ -3271,33 +3271,33 @@
             {
               "adventurer_id": "recruit_0001",
               "name": "林地射手·坚壁",
-              "rank_score": 259.3238,
-              "rank_score_contribution": 259.3238,
-              "rank_score_share": 0.2096,
+              "rank_score": 654.9779,
+              "rank_score_contribution": 654.9779,
+              "rank_score_share": 0.2501,
               "assignments": 3000
             },
             {
               "adventurer_id": "recruit_0002",
               "name": "魔弹法师·锐利",
-              "rank_score": 402.9802,
-              "rank_score_contribution": 402.9802,
-              "rank_score_share": 0.3257,
+              "rank_score": 604.7757,
+              "rank_score_contribution": 604.7757,
+              "rank_score_share": 0.231,
               "assignments": 3000
             },
             {
               "adventurer_id": "recruit_0003",
               "name": "吸血魔·破绽",
-              "rank_score": 323.555,
-              "rank_score_contribution": 323.555,
-              "rank_score_share": 0.2615,
+              "rank_score": 728.4346,
+              "rank_score_contribution": 728.4346,
+              "rank_score_share": 0.2782,
               "assignments": 3000
             },
             {
               "adventurer_id": "recruit_0004",
               "name": "苦行僧",
-              "rank_score": 251.2852,
-              "rank_score_contribution": 251.2852,
-              "rank_score_share": 0.2031,
+              "rank_score": 630.2468,
+              "rank_score_contribution": 630.2468,
+              "rank_score_share": 0.2407,
               "assignments": 3000
             }
           ],
@@ -4967,6 +4967,581 @@
     {
       "runs": 1,
       "score": {
+        "best": 56.7491,
+        "mean": 56.75,
+        "median": 56.75
+      },
+      "rank_score": {
+        "best": 1062.2483,
+        "mean": 1062.25,
+        "median": 1062.25
+      },
+      "win_rate": {
+        "best": 0.852,
+        "mean": 0.852
+      },
+      "efficiency": {
+        "input_tokens": {
+          "mean": 3007061,
+          "total": 3007061
+        },
+        "output_tokens": {
+          "mean": 1031147,
+          "total": 1031147
+        },
+        "duration_seconds": {
+          "mean": 25641.1,
+          "total": 25641.1
+        },
+        "tool_calls": {
+          "mean": 242,
+          "total": 242
+        }
+      },
+      "game_quality": {
+        "gold_earned": {
+          "mean": 2723,
+          "best": 2723
+        },
+        "exp_earned": {
+          "mean": 6115,
+          "best": 6115
+        },
+        "battle_win_rate": 0.9121,
+        "battles_total": 91,
+        "battles_won": 83
+      },
+      "last_run": "20260603-091610-322666",
+      "run_details": [
+        {
+          "run_id": "minimax-m3",
+          "session_id": "54d14fd1be484b6ca03a1046fbb4e74b",
+          "created_at": "20260603-091610-322666",
+          "updated_at": "20260604-100329-340741",
+          "score": 56.7491,
+          "rank_score": 1062.2483,
+          "rank_score_source": null,
+          "win_rate": 0.852,
+          "turns": 30,
+          "preset": "full",
+          "data_hash": "d198975d73466ff49be87ab0abdd83af53eb39e5aee5d5a1516cd370b83d5ee8",
+          "game_seed": 42,
+          "scoring_seed": 20260529,
+          "score_mode": "endgame_arena",
+          "score_seed": 20260529,
+          "score_waves": 1000,
+          "score_wave_size": 6,
+          "final_turn": 31,
+          "max_turns": 30,
+          "final_gold": 160,
+          "final_experience_pool": 332,
+          "party_size": 4,
+          "party_size_limit": 4,
+          "best_adventurer": {
+            "name": "魔弹法师·锐利",
+            "average_score": 90.7481,
+            "win_rate": 0.91,
+            "assignments": 1000
+          },
+          "rank_score_per_adventurer": [
+            {
+              "adventurer_id": "recruit_0001",
+              "name": "佣兵战士·枯竭",
+              "rank_score": 176.2717,
+              "rank_score_contribution": 176.2717,
+              "rank_score_share": 0.1659,
+              "assignments": 3000
+            },
+            {
+              "adventurer_id": "recruit_0002",
+              "name": "魔弹法师·锐利",
+              "rank_score": 555.8477,
+              "rank_score_contribution": 555.8477,
+              "rank_score_share": 0.5233,
+              "assignments": 3000
+            },
+            {
+              "adventurer_id": "recruit_0003",
+              "name": "林地射手·坚壁",
+              "rank_score": 254.3854,
+              "rank_score_contribution": 254.3854,
+              "rank_score_share": 0.2395,
+              "assignments": 3000
+            },
+            {
+              "adventurer_id": "recruit_0004",
+              "name": "瘟疫法师·枯竭",
+              "rank_score": 75.7434,
+              "rank_score_contribution": 75.7434,
+              "rank_score_share": 0.0713,
+              "assignments": 3000
+            }
+          ],
+          "rank_score_curve": [
+            {
+              "turn": 1,
+              "rank_score": 18.4422
+            },
+            {
+              "turn": 2,
+              "rank_score": 30.178
+            },
+            {
+              "turn": 3,
+              "rank_score": 40.268
+            },
+            {
+              "turn": 4,
+              "rank_score": 59.8256
+            },
+            {
+              "turn": 5,
+              "rank_score": 60.7288
+            },
+            {
+              "turn": 6,
+              "rank_score": 100.7408
+            },
+            {
+              "turn": 7,
+              "rank_score": 108.3871
+            },
+            {
+              "turn": 8,
+              "rank_score": 134.9207
+            },
+            {
+              "turn": 9,
+              "rank_score": 159.9349
+            },
+            {
+              "turn": 10,
+              "rank_score": 192.5639
+            },
+            {
+              "turn": 11,
+              "rank_score": 224.8329
+            },
+            {
+              "turn": 12,
+              "rank_score": 237.1249
+            },
+            {
+              "turn": 13,
+              "rank_score": 279.0429
+            },
+            {
+              "turn": 14,
+              "rank_score": 304.3582
+            },
+            {
+              "turn": 15,
+              "rank_score": 309.0966
+            },
+            {
+              "turn": 16,
+              "rank_score": 325.1249
+            },
+            {
+              "turn": 17,
+              "rank_score": 349.9933
+            },
+            {
+              "turn": 18,
+              "rank_score": 378.2928
+            },
+            {
+              "turn": 19,
+              "rank_score": 504.4895
+            },
+            {
+              "turn": 20,
+              "rank_score": 521.0258
+            },
+            {
+              "turn": 21,
+              "rank_score": 560.0898
+            },
+            {
+              "turn": 22,
+              "rank_score": 560.0898
+            },
+            {
+              "turn": 23,
+              "rank_score": 563.1393
+            },
+            {
+              "turn": 24,
+              "rank_score": 659.5382
+            },
+            {
+              "turn": 25,
+              "rank_score": 682.3502
+            },
+            {
+              "turn": 26,
+              "rank_score": 758.8517
+            },
+            {
+              "turn": 27,
+              "rank_score": 758.8517
+            },
+            {
+              "turn": 28,
+              "rank_score": 903.0527
+            },
+            {
+              "turn": 29,
+              "rank_score": 903.0527
+            },
+            {
+              "turn": 30,
+              "rank_score": 1062.2483
+            }
+          ],
+          "token_usage": {
+            "input_tokens": 3007061,
+            "output_tokens": 1031147
+          },
+          "timing": {
+            "total_seconds": 25641.1
+          },
+          "tool_calls": {
+            "total": 242,
+            "successful": 235,
+            "failed": 7,
+            "by_name": {
+              "get_recruitment": 12,
+              "get_crafting": 23,
+              "get_upgrades": 13,
+              "recruit_adventurer": 4,
+              "craft_equipment": 23,
+              "equip_item": 24,
+              "write_memo": 19,
+              "end_turn": 31,
+              "allocate_experience": 39,
+              "purchase_upgrade": 10,
+              "preview_battle": 27,
+              "get_inventory": 17
+            },
+            "by_name_detail": {
+              "get_recruitment": {
+                "total": 12,
+                "successful": 12,
+                "failed": 0
+              },
+              "get_crafting": {
+                "total": 23,
+                "successful": 23,
+                "failed": 0
+              },
+              "get_upgrades": {
+                "total": 13,
+                "successful": 13,
+                "failed": 0
+              },
+              "recruit_adventurer": {
+                "total": 4,
+                "successful": 4,
+                "failed": 0
+              },
+              "craft_equipment": {
+                "total": 23,
+                "successful": 23,
+                "failed": 0
+              },
+              "equip_item": {
+                "total": 24,
+                "successful": 24,
+                "failed": 0
+              },
+              "write_memo": {
+                "total": 19,
+                "successful": 18,
+                "failed": 1
+              },
+              "end_turn": {
+                "total": 31,
+                "successful": 30,
+                "failed": 1
+              },
+              "allocate_experience": {
+                "total": 39,
+                "successful": 34,
+                "failed": 5
+              },
+              "purchase_upgrade": {
+                "total": 10,
+                "successful": 10,
+                "failed": 0
+              },
+              "preview_battle": {
+                "total": 27,
+                "successful": 27,
+                "failed": 0
+              },
+              "get_inventory": {
+                "total": 17,
+                "successful": 17,
+                "failed": 0
+              }
+            }
+          },
+          "game_actions": {
+            "battles_total": 91,
+            "battles_won": 83,
+            "battles_lost": 8,
+            "total_gold_earned": 2723,
+            "total_experience_earned": 6115,
+            "total_equipment_crafted": 23,
+            "total_upgrades_purchased": 10,
+            "total_recruits": 4,
+            "total_dismissals": 0,
+            "total_experience_allocated": 34,
+            "total_equips": 24,
+            "total_unequips": 0,
+            "economy_curve": [
+              {
+                "turn": 1,
+                "gold_earned": 76,
+                "experience_earned": 173,
+                "cumulative_gold_earned": 76,
+                "cumulative_experience_earned": 173
+              },
+              {
+                "turn": 2,
+                "gold_earned": 72,
+                "experience_earned": 164,
+                "cumulative_gold_earned": 148,
+                "cumulative_experience_earned": 337
+              },
+              {
+                "turn": 3,
+                "gold_earned": 68,
+                "experience_earned": 154,
+                "cumulative_gold_earned": 216,
+                "cumulative_experience_earned": 491
+              },
+              {
+                "turn": 4,
+                "gold_earned": 62,
+                "experience_earned": 141,
+                "cumulative_gold_earned": 278,
+                "cumulative_experience_earned": 632
+              },
+              {
+                "turn": 5,
+                "gold_earned": 122,
+                "experience_earned": 282,
+                "cumulative_gold_earned": 400,
+                "cumulative_experience_earned": 914
+              },
+              {
+                "turn": 6,
+                "gold_earned": 84,
+                "experience_earned": 195,
+                "cumulative_gold_earned": 484,
+                "cumulative_experience_earned": 1109
+              },
+              {
+                "turn": 7,
+                "gold_earned": 106,
+                "experience_earned": 245,
+                "cumulative_gold_earned": 590,
+                "cumulative_experience_earned": 1354
+              },
+              {
+                "turn": 8,
+                "gold_earned": 115,
+                "experience_earned": 261,
+                "cumulative_gold_earned": 705,
+                "cumulative_experience_earned": 1615
+              },
+              {
+                "turn": 9,
+                "gold_earned": 69,
+                "experience_earned": 157,
+                "cumulative_gold_earned": 774,
+                "cumulative_experience_earned": 1772
+              },
+              {
+                "turn": 10,
+                "gold_earned": 83,
+                "experience_earned": 189,
+                "cumulative_gold_earned": 857,
+                "cumulative_experience_earned": 1961
+              },
+              {
+                "turn": 11,
+                "gold_earned": 147,
+                "experience_earned": 334,
+                "cumulative_gold_earned": 1004,
+                "cumulative_experience_earned": 2295
+              },
+              {
+                "turn": 12,
+                "gold_earned": 95,
+                "experience_earned": 211,
+                "cumulative_gold_earned": 1099,
+                "cumulative_experience_earned": 2506
+              },
+              {
+                "turn": 13,
+                "gold_earned": 99,
+                "experience_earned": 222,
+                "cumulative_gold_earned": 1198,
+                "cumulative_experience_earned": 2728
+              },
+              {
+                "turn": 14,
+                "gold_earned": 116,
+                "experience_earned": 259,
+                "cumulative_gold_earned": 1314,
+                "cumulative_experience_earned": 2987
+              },
+              {
+                "turn": 15,
+                "gold_earned": 38,
+                "experience_earned": 82,
+                "cumulative_gold_earned": 1352,
+                "cumulative_experience_earned": 3069
+              },
+              {
+                "turn": 16,
+                "gold_earned": 104,
+                "experience_earned": 230,
+                "cumulative_gold_earned": 1456,
+                "cumulative_experience_earned": 3299
+              },
+              {
+                "turn": 17,
+                "gold_earned": 60,
+                "experience_earned": 134,
+                "cumulative_gold_earned": 1516,
+                "cumulative_experience_earned": 3433
+              },
+              {
+                "turn": 18,
+                "gold_earned": 117,
+                "experience_earned": 263,
+                "cumulative_gold_earned": 1633,
+                "cumulative_experience_earned": 3696
+              },
+              {
+                "turn": 19,
+                "gold_earned": 94,
+                "experience_earned": 214,
+                "cumulative_gold_earned": 1727,
+                "cumulative_experience_earned": 3910
+              },
+              {
+                "turn": 20,
+                "gold_earned": 47,
+                "experience_earned": 108,
+                "cumulative_gold_earned": 1774,
+                "cumulative_experience_earned": 4018
+              },
+              {
+                "turn": 21,
+                "gold_earned": 66,
+                "experience_earned": 145,
+                "cumulative_gold_earned": 1840,
+                "cumulative_experience_earned": 4163
+              },
+              {
+                "turn": 22,
+                "gold_earned": 71,
+                "experience_earned": 157,
+                "cumulative_gold_earned": 1911,
+                "cumulative_experience_earned": 4320
+              },
+              {
+                "turn": 23,
+                "gold_earned": 89,
+                "experience_earned": 197,
+                "cumulative_gold_earned": 2000,
+                "cumulative_experience_earned": 4517
+              },
+              {
+                "turn": 24,
+                "gold_earned": 63,
+                "experience_earned": 137,
+                "cumulative_gold_earned": 2063,
+                "cumulative_experience_earned": 4654
+              },
+              {
+                "turn": 25,
+                "gold_earned": 107,
+                "experience_earned": 230,
+                "cumulative_gold_earned": 2170,
+                "cumulative_experience_earned": 4884
+              },
+              {
+                "turn": 26,
+                "gold_earned": 40,
+                "experience_earned": 87,
+                "cumulative_gold_earned": 2210,
+                "cumulative_experience_earned": 4971
+              },
+              {
+                "turn": 27,
+                "gold_earned": 99,
+                "experience_earned": 230,
+                "cumulative_gold_earned": 2309,
+                "cumulative_experience_earned": 5201
+              },
+              {
+                "turn": 28,
+                "gold_earned": 144,
+                "experience_earned": 318,
+                "cumulative_gold_earned": 2453,
+                "cumulative_experience_earned": 5519
+              },
+              {
+                "turn": 29,
+                "gold_earned": 120,
+                "experience_earned": 264,
+                "cumulative_gold_earned": 2573,
+                "cumulative_experience_earned": 5783
+              },
+              {
+                "turn": 30,
+                "gold_earned": 150,
+                "experience_earned": 332,
+                "cumulative_gold_earned": 2723,
+                "cumulative_experience_earned": 6115
+              }
+            ],
+            "strongest_defeated_enemy": {
+              "turn": 29,
+              "monster_id": "turn_29_monster_7",
+              "name": "暗黑法师",
+              "power": 1831,
+              "tier": "normal",
+              "archetype_id": "dark_mage",
+              "stats": {
+                "hp": 344,
+                "mp": 30,
+                "attack": 138,
+                "defense": 36,
+                "speed": 13,
+                "recovery": 0,
+                "mp_recovery": 0
+              },
+              "reward": {
+                "gold": 44,
+                "experience": 92
+              }
+            }
+          }
+        }
+      ],
+      "model": "MiniMax-M3",
+      "rank": 9
+    },
+    {
+      "runs": 1,
+      "score": {
         "best": 61.5348,
         "mean": 61.53,
         "median": 61.53
@@ -5047,33 +5622,33 @@
             {
               "adventurer_id": "recruit_0001",
               "name": "林地射手·坚壁",
-              "rank_score": 254.7849,
-              "rank_score_contribution": 254.7849,
-              "rank_score_share": 0.2521,
+              "rank_score": 580.4958,
+              "rank_score_contribution": 580.4958,
+              "rank_score_share": 0.2316,
               "assignments": 3000
             },
             {
               "adventurer_id": "recruit_0002",
               "name": "小丑",
-              "rank_score": 260.992,
-              "rank_score_contribution": 260.992,
-              "rank_score_share": 0.2583,
+              "rank_score": 727.1159,
+              "rank_score_contribution": 727.1159,
+              "rank_score_share": 0.29,
               "assignments": 3000
             },
             {
               "adventurer_id": "recruit_0003",
               "name": "佣兵战士·枯竭",
-              "rank_score": 257.9224,
-              "rank_score_contribution": 257.9224,
-              "rank_score_share": 0.2552,
+              "rank_score": 625.0425,
+              "rank_score_contribution": 625.0425,
+              "rank_score_share": 0.2493,
               "assignments": 3000
             },
             {
               "adventurer_id": "recruit_0004",
               "name": "林地射手·锐利",
-              "rank_score": 236.784,
-              "rank_score_contribution": 236.784,
-              "rank_score_share": 0.2343,
+              "rank_score": 574.3017,
+              "rank_score_contribution": 574.3017,
+              "rank_score_share": 0.2291,
               "assignments": 3000
             }
           ],
@@ -5542,7 +6117,7 @@
         }
       ],
       "model": "deepseek-v4-flash",
-      "rank": 9
+      "rank": 10
     },
     {
       "runs": 1,
@@ -6124,7 +6699,588 @@
         }
       ],
       "model": "qwen3.7-max",
-      "rank": 10
+      "rank": 11
+    },
+    {
+      "runs": 1,
+      "score": {
+        "best": 52.8688,
+        "mean": 52.87,
+        "median": 52.87
+      },
+      "rank_score": {
+        "best": 663.2225,
+        "mean": 663.22,
+        "median": 663.22
+      },
+      "win_rate": {
+        "best": 0.784,
+        "mean": 0.784
+      },
+      "efficiency": {
+        "input_tokens": {
+          "mean": 2225349,
+          "total": 2225349
+        },
+        "output_tokens": {
+          "mean": 587089,
+          "total": 587089
+        },
+        "duration_seconds": {
+          "mean": 11651.1,
+          "total": 11651.1
+        },
+        "tool_calls": {
+          "mean": 319,
+          "total": 319
+        }
+      },
+      "game_quality": {
+        "gold_earned": {
+          "mean": 2409,
+          "best": 2409
+        },
+        "exp_earned": {
+          "mean": 5411,
+          "best": 5411
+        },
+        "battle_win_rate": 0.8211,
+        "battles_total": 95,
+        "battles_won": 78
+      },
+      "last_run": "20260602-195410-070408",
+      "run_details": [
+        {
+          "run_id": "qwen3.6-plus",
+          "session_id": "6f1aad0e670347dc83ee81a665f4db72",
+          "created_at": "20260602-195410-070408",
+          "updated_at": "20260603-003628-398742",
+          "score": 52.8688,
+          "rank_score": 663.2225,
+          "rank_score_source": null,
+          "win_rate": 0.784,
+          "turns": 30,
+          "preset": "full",
+          "data_hash": "d198975d73466ff49be87ab0abdd83af53eb39e5aee5d5a1516cd370b83d5ee8",
+          "game_seed": 42,
+          "scoring_seed": 20260529,
+          "score_mode": "endgame_arena",
+          "score_seed": 20260529,
+          "score_waves": 1000,
+          "score_wave_size": 6,
+          "final_turn": 31,
+          "max_turns": 30,
+          "final_gold": 340,
+          "final_experience_pool": 221,
+          "party_size": 4,
+          "party_size_limit": 4,
+          "best_adventurer": {
+            "name": "佣兵战士·枯竭",
+            "average_score": 87.7397,
+            "win_rate": 0.886,
+            "assignments": 1000
+          },
+          "rank_score_per_adventurer": [
+            {
+              "adventurer_id": "recruit_0001",
+              "name": "林地射手·坚壁",
+              "rank_score": 140.038,
+              "rank_score_contribution": 140.038,
+              "rank_score_share": 0.2111,
+              "assignments": 3000
+            },
+            {
+              "adventurer_id": "recruit_0002",
+              "name": "佣兵战士·枯竭",
+              "rank_score": 111.1851,
+              "rank_score_contribution": 111.1851,
+              "rank_score_share": 0.1676,
+              "assignments": 3000
+            },
+            {
+              "adventurer_id": "recruit_0003",
+              "name": "小丑",
+              "rank_score": 227.4096,
+              "rank_score_contribution": 227.4096,
+              "rank_score_share": 0.3429,
+              "assignments": 3000
+            },
+            {
+              "adventurer_id": "recruit_0004",
+              "name": "林地射手·锐利",
+              "rank_score": 184.5898,
+              "rank_score_contribution": 184.5898,
+              "rank_score_share": 0.2783,
+              "assignments": 3000
+            }
+          ],
+          "rank_score_curve": [
+            {
+              "turn": 1,
+              "rank_score": 11.0644
+            },
+            {
+              "turn": 2,
+              "rank_score": 22.6568
+            },
+            {
+              "turn": 3,
+              "rank_score": 36.0904
+            },
+            {
+              "turn": 4,
+              "rank_score": 37.8023
+            },
+            {
+              "turn": 5,
+              "rank_score": 54.6948
+            },
+            {
+              "turn": 6,
+              "rank_score": 81.8238
+            },
+            {
+              "turn": 7,
+              "rank_score": 85.87
+            },
+            {
+              "turn": 8,
+              "rank_score": 91.7913
+            },
+            {
+              "turn": 9,
+              "rank_score": 132.1908
+            },
+            {
+              "turn": 10,
+              "rank_score": 168.587
+            },
+            {
+              "turn": 11,
+              "rank_score": 194.748
+            },
+            {
+              "turn": 12,
+              "rank_score": 197.8297
+            },
+            {
+              "turn": 13,
+              "rank_score": 206.3431
+            },
+            {
+              "turn": 14,
+              "rank_score": 222.982
+            },
+            {
+              "turn": 15,
+              "rank_score": 229.2317
+            },
+            {
+              "turn": 16,
+              "rank_score": 233.9726
+            },
+            {
+              "turn": 17,
+              "rank_score": 258.984
+            },
+            {
+              "turn": 18,
+              "rank_score": 291.7373
+            },
+            {
+              "turn": 19,
+              "rank_score": 297.1841
+            },
+            {
+              "turn": 20,
+              "rank_score": 365.9901
+            },
+            {
+              "turn": 21,
+              "rank_score": 381.5919
+            },
+            {
+              "turn": 22,
+              "rank_score": 430.9712
+            },
+            {
+              "turn": 23,
+              "rank_score": 427.3361
+            },
+            {
+              "turn": 24,
+              "rank_score": 437.2865
+            },
+            {
+              "turn": 25,
+              "rank_score": 471.1126
+            },
+            {
+              "turn": 26,
+              "rank_score": 511.8665
+            },
+            {
+              "turn": 27,
+              "rank_score": 526.6094
+            },
+            {
+              "turn": 28,
+              "rank_score": 568.4192
+            },
+            {
+              "turn": 29,
+              "rank_score": 637.0746
+            },
+            {
+              "turn": 30,
+              "rank_score": 663.2225
+            }
+          ],
+          "token_usage": {
+            "input_tokens": 2225349,
+            "output_tokens": 587089
+          },
+          "timing": {
+            "total_seconds": 11651.1
+          },
+          "tool_calls": {
+            "total": 319,
+            "successful": 310,
+            "failed": 9,
+            "by_name": {
+              "get_recruitment": 13,
+              "get_crafting": 29,
+              "get_upgrades": 19,
+              "preview_battle": 88,
+              "recruit_adventurer": 4,
+              "craft_equipment": 27,
+              "equip_item": 31,
+              "write_memo": 3,
+              "end_turn": 30,
+              "allocate_experience": 43,
+              "get_inventory": 20,
+              "purchase_upgrade": 9,
+              "unequip_item": 3
+            },
+            "by_name_detail": {
+              "get_recruitment": {
+                "total": 13,
+                "successful": 13,
+                "failed": 0
+              },
+              "get_crafting": {
+                "total": 29,
+                "successful": 29,
+                "failed": 0
+              },
+              "get_upgrades": {
+                "total": 19,
+                "successful": 19,
+                "failed": 0
+              },
+              "preview_battle": {
+                "total": 88,
+                "successful": 81,
+                "failed": 7
+              },
+              "recruit_adventurer": {
+                "total": 4,
+                "successful": 4,
+                "failed": 0
+              },
+              "craft_equipment": {
+                "total": 27,
+                "successful": 27,
+                "failed": 0
+              },
+              "equip_item": {
+                "total": 31,
+                "successful": 31,
+                "failed": 0
+              },
+              "write_memo": {
+                "total": 3,
+                "successful": 3,
+                "failed": 0
+              },
+              "end_turn": {
+                "total": 30,
+                "successful": 30,
+                "failed": 0
+              },
+              "allocate_experience": {
+                "total": 43,
+                "successful": 42,
+                "failed": 1
+              },
+              "get_inventory": {
+                "total": 20,
+                "successful": 20,
+                "failed": 0
+              },
+              "purchase_upgrade": {
+                "total": 9,
+                "successful": 8,
+                "failed": 1
+              },
+              "unequip_item": {
+                "total": 3,
+                "successful": 3,
+                "failed": 0
+              }
+            }
+          },
+          "game_actions": {
+            "battles_total": 95,
+            "battles_won": 78,
+            "battles_lost": 17,
+            "total_gold_earned": 2409,
+            "total_experience_earned": 5411,
+            "total_equipment_crafted": 27,
+            "total_upgrades_purchased": 8,
+            "total_recruits": 4,
+            "total_dismissals": 0,
+            "total_experience_allocated": 42,
+            "total_equips": 31,
+            "total_unequips": 3,
+            "economy_curve": [
+              {
+                "turn": 1,
+                "gold_earned": 56,
+                "experience_earned": 128,
+                "cumulative_gold_earned": 56,
+                "cumulative_experience_earned": 128
+              },
+              {
+                "turn": 2,
+                "gold_earned": 52,
+                "experience_earned": 119,
+                "cumulative_gold_earned": 108,
+                "cumulative_experience_earned": 247
+              },
+              {
+                "turn": 3,
+                "gold_earned": 30,
+                "experience_earned": 68,
+                "cumulative_gold_earned": 138,
+                "cumulative_experience_earned": 315
+              },
+              {
+                "turn": 4,
+                "gold_earned": 48,
+                "experience_earned": 109,
+                "cumulative_gold_earned": 186,
+                "cumulative_experience_earned": 424
+              },
+              {
+                "turn": 5,
+                "gold_earned": 83,
+                "experience_earned": 193,
+                "cumulative_gold_earned": 269,
+                "cumulative_experience_earned": 617
+              },
+              {
+                "turn": 6,
+                "gold_earned": 77,
+                "experience_earned": 178,
+                "cumulative_gold_earned": 346,
+                "cumulative_experience_earned": 795
+              },
+              {
+                "turn": 7,
+                "gold_earned": 88,
+                "experience_earned": 203,
+                "cumulative_gold_earned": 434,
+                "cumulative_experience_earned": 998
+              },
+              {
+                "turn": 8,
+                "gold_earned": 58,
+                "experience_earned": 132,
+                "cumulative_gold_earned": 492,
+                "cumulative_experience_earned": 1130
+              },
+              {
+                "turn": 9,
+                "gold_earned": 90,
+                "experience_earned": 203,
+                "cumulative_gold_earned": 582,
+                "cumulative_experience_earned": 1333
+              },
+              {
+                "turn": 10,
+                "gold_earned": 83,
+                "experience_earned": 189,
+                "cumulative_gold_earned": 665,
+                "cumulative_experience_earned": 1522
+              },
+              {
+                "turn": 11,
+                "gold_earned": 117,
+                "experience_earned": 272,
+                "cumulative_gold_earned": 782,
+                "cumulative_experience_earned": 1794
+              },
+              {
+                "turn": 12,
+                "gold_earned": 48,
+                "experience_earned": 109,
+                "cumulative_gold_earned": 830,
+                "cumulative_experience_earned": 1903
+              },
+              {
+                "turn": 13,
+                "gold_earned": 79,
+                "experience_earned": 183,
+                "cumulative_gold_earned": 909,
+                "cumulative_experience_earned": 2086
+              },
+              {
+                "turn": 14,
+                "gold_earned": 77,
+                "experience_earned": 174,
+                "cumulative_gold_earned": 986,
+                "cumulative_experience_earned": 2260
+              },
+              {
+                "turn": 15,
+                "gold_earned": 108,
+                "experience_earned": 236,
+                "cumulative_gold_earned": 1094,
+                "cumulative_experience_earned": 2496
+              },
+              {
+                "turn": 16,
+                "gold_earned": 64,
+                "experience_earned": 142,
+                "cumulative_gold_earned": 1158,
+                "cumulative_experience_earned": 2638
+              },
+              {
+                "turn": 17,
+                "gold_earned": 111,
+                "experience_earned": 253,
+                "cumulative_gold_earned": 1269,
+                "cumulative_experience_earned": 2891
+              },
+              {
+                "turn": 18,
+                "gold_earned": 149,
+                "experience_earned": 335,
+                "cumulative_gold_earned": 1418,
+                "cumulative_experience_earned": 3226
+              },
+              {
+                "turn": 19,
+                "gold_earned": 66,
+                "experience_earned": 151,
+                "cumulative_gold_earned": 1484,
+                "cumulative_experience_earned": 3377
+              },
+              {
+                "turn": 20,
+                "gold_earned": 117,
+                "experience_earned": 267,
+                "cumulative_gold_earned": 1601,
+                "cumulative_experience_earned": 3644
+              },
+              {
+                "turn": 21,
+                "gold_earned": 29,
+                "experience_earned": 64,
+                "cumulative_gold_earned": 1630,
+                "cumulative_experience_earned": 3708
+              },
+              {
+                "turn": 22,
+                "gold_earned": 23,
+                "experience_earned": 51,
+                "cumulative_gold_earned": 1653,
+                "cumulative_experience_earned": 3759
+              },
+              {
+                "turn": 23,
+                "gold_earned": 69,
+                "experience_earned": 149,
+                "cumulative_gold_earned": 1722,
+                "cumulative_experience_earned": 3908
+              },
+              {
+                "turn": 24,
+                "gold_earned": 63,
+                "experience_earned": 137,
+                "cumulative_gold_earned": 1785,
+                "cumulative_experience_earned": 4045
+              },
+              {
+                "turn": 25,
+                "gold_earned": 107,
+                "experience_earned": 228,
+                "cumulative_gold_earned": 1892,
+                "cumulative_experience_earned": 4273
+              },
+              {
+                "turn": 26,
+                "gold_earned": 90,
+                "experience_earned": 202,
+                "cumulative_gold_earned": 1982,
+                "cumulative_experience_earned": 4475
+              },
+              {
+                "turn": 27,
+                "gold_earned": 89,
+                "experience_earned": 204,
+                "cumulative_gold_earned": 2071,
+                "cumulative_experience_earned": 4679
+              },
+              {
+                "turn": 28,
+                "gold_earned": 123,
+                "experience_earned": 268,
+                "cumulative_gold_earned": 2194,
+                "cumulative_experience_earned": 4947
+              },
+              {
+                "turn": 29,
+                "gold_earned": 120,
+                "experience_earned": 264,
+                "cumulative_gold_earned": 2314,
+                "cumulative_experience_earned": 5211
+              },
+              {
+                "turn": 30,
+                "gold_earned": 95,
+                "experience_earned": 200,
+                "cumulative_gold_earned": 2409,
+                "cumulative_experience_earned": 5411
+              }
+            ],
+            "strongest_defeated_enemy": {
+              "turn": 28,
+              "monster_id": "turn_28_monster_4",
+              "name": "精英·巨蛛",
+              "power": 2309,
+              "tier": "elite",
+              "archetype_id": "giant_spider",
+              "stats": {
+                "hp": 449,
+                "mp": 0,
+                "attack": 176,
+                "defense": 44,
+                "speed": 20,
+                "recovery": 0,
+                "mp_recovery": 0
+              },
+              "reward": {
+                "gold": 71,
+                "experience": 152
+              }
+            }
+          }
+        }
+      ],
+      "model": "qwen3.6-plus",
+      "rank": 12
     },
     {
       "runs": 1,
@@ -6209,25 +7365,25 @@
             {
               "adventurer_id": "recruit_0001",
               "name": "林地射手·坚壁",
-              "rank_score": 149.4941,
-              "rank_score_contribution": 149.4941,
-              "rank_score_share": 0.2281,
+              "rank_score": 546.2919,
+              "rank_score_contribution": 546.2919,
+              "rank_score_share": 0.2862,
               "assignments": 3000
             },
             {
               "adventurer_id": "recruit_0002",
               "name": "小丑",
-              "rank_score": 195.6401,
-              "rank_score_contribution": 195.6401,
-              "rank_score_share": 0.2985,
+              "rank_score": 591.3259,
+              "rank_score_contribution": 591.3259,
+              "rank_score_share": 0.3098,
               "assignments": 3000
             },
             {
               "adventurer_id": "recruit_0004",
               "name": "林地射手·疾风",
-              "rank_score": 310.2628,
-              "rank_score_contribution": 310.2628,
-              "rank_score_share": 0.4734,
+              "rank_score": 771.2478,
+              "rank_score_contribution": 771.2478,
+              "rank_score_share": 0.404,
               "assignments": 3000
             }
           ],
@@ -6696,7 +7852,582 @@
         }
       ],
       "model": "step-3-7-flash-iq4-xs",
-      "rank": 11
+      "rank": 13
+    },
+    {
+      "runs": 1,
+      "score": {
+        "best": 47.1417,
+        "mean": 47.14,
+        "median": 47.14
+      },
+      "rank_score": {
+        "best": 544.6462,
+        "mean": 544.65,
+        "median": 544.65
+      },
+      "win_rate": {
+        "best": 0.6957,
+        "mean": 0.6957
+      },
+      "efficiency": {
+        "input_tokens": {
+          "mean": 4349077,
+          "total": 4349077
+        },
+        "output_tokens": {
+          "mean": 224913,
+          "total": 224913
+        },
+        "duration_seconds": {
+          "mean": 8365.5,
+          "total": 8365.5
+        },
+        "tool_calls": {
+          "mean": 341,
+          "total": 341
+        }
+      },
+      "game_quality": {
+        "gold_earned": {
+          "mean": 2086,
+          "best": 2086
+        },
+        "exp_earned": {
+          "mean": 4676,
+          "best": 4676
+        },
+        "battle_win_rate": 0.9146,
+        "battles_total": 82,
+        "battles_won": 75
+      },
+      "last_run": "20260603-093036-016275",
+      "run_details": [
+        {
+          "run_id": "gemma4-26b-a4b-q8-0",
+          "session_id": "cb5efa846f3c4e04b85a4a2c00c3d8c0",
+          "created_at": "20260603-093036-016275",
+          "updated_at": "20260603-115813-141024",
+          "score": 47.1417,
+          "rank_score": 544.6462,
+          "rank_score_source": null,
+          "win_rate": 0.6957,
+          "turns": 30,
+          "preset": "full",
+          "data_hash": "d198975d73466ff49be87ab0abdd83af53eb39e5aee5d5a1516cd370b83d5ee8",
+          "game_seed": 42,
+          "scoring_seed": 20260529,
+          "score_mode": "endgame_arena",
+          "score_seed": 20260529,
+          "score_waves": 1000,
+          "score_wave_size": 6,
+          "final_turn": 31,
+          "max_turns": 30,
+          "final_gold": 102,
+          "final_experience_pool": 191,
+          "party_size": 4,
+          "party_size_limit": 4,
+          "best_adventurer": {
+            "name": "佣兵战士·枯竭",
+            "average_score": 87.4158,
+            "win_rate": 0.881,
+            "assignments": 1000
+          },
+          "rank_score_per_adventurer": [
+            {
+              "adventurer_id": "recruit_0001",
+              "name": "林地射手·坚壁",
+              "rank_score": 178.6915,
+              "rank_score_contribution": 178.6915,
+              "rank_score_share": 0.3281,
+              "assignments": 3000
+            },
+            {
+              "adventurer_id": "recruit_0002",
+              "name": "佣兵战士·枯竭",
+              "rank_score": 126.57,
+              "rank_score_contribution": 126.57,
+              "rank_score_share": 0.2324,
+              "assignments": 3000
+            },
+            {
+              "adventurer_id": "recruit_0003",
+              "name": "吸血魔·破绽",
+              "rank_score": 162.7273,
+              "rank_score_contribution": 162.7273,
+              "rank_score_share": 0.2988,
+              "assignments": 3000
+            },
+            {
+              "adventurer_id": "recruit_0004",
+              "name": "魔弹法师·灵感",
+              "rank_score": 76.6574,
+              "rank_score_contribution": 76.6574,
+              "rank_score_share": 0.1407,
+              "assignments": 3000
+            }
+          ],
+          "rank_score_curve": [
+            {
+              "turn": 1,
+              "rank_score": 21.222
+            },
+            {
+              "turn": 2,
+              "rank_score": 30.2323
+            },
+            {
+              "turn": 3,
+              "rank_score": 38.3443
+            },
+            {
+              "turn": 4,
+              "rank_score": 40.1357
+            },
+            {
+              "turn": 5,
+              "rank_score": 42.9157
+            },
+            {
+              "turn": 6,
+              "rank_score": 75.1256
+            },
+            {
+              "turn": 7,
+              "rank_score": 89.7343
+            },
+            {
+              "turn": 8,
+              "rank_score": 134.3106
+            },
+            {
+              "turn": 9,
+              "rank_score": 141.3361
+            },
+            {
+              "turn": 10,
+              "rank_score": 144.0084
+            },
+            {
+              "turn": 11,
+              "rank_score": 154.1092
+            },
+            {
+              "turn": 12,
+              "rank_score": 224.1791
+            },
+            {
+              "turn": 13,
+              "rank_score": 233.363
+            },
+            {
+              "turn": 14,
+              "rank_score": 245.7441
+            },
+            {
+              "turn": 15,
+              "rank_score": 269.0398
+            },
+            {
+              "turn": 16,
+              "rank_score": 324.3955
+            },
+            {
+              "turn": 17,
+              "rank_score": 324.3955
+            },
+            {
+              "turn": 18,
+              "rank_score": 324.3955
+            },
+            {
+              "turn": 19,
+              "rank_score": 324.3955
+            },
+            {
+              "turn": 20,
+              "rank_score": 321.0419
+            },
+            {
+              "turn": 21,
+              "rank_score": 369.3789
+            },
+            {
+              "turn": 22,
+              "rank_score": 369.3789
+            },
+            {
+              "turn": 23,
+              "rank_score": 387.1409
+            },
+            {
+              "turn": 24,
+              "rank_score": 412.6845
+            },
+            {
+              "turn": 25,
+              "rank_score": 414.0596
+            },
+            {
+              "turn": 26,
+              "rank_score": 417.2161
+            },
+            {
+              "turn": 27,
+              "rank_score": 417.2161
+            },
+            {
+              "turn": 28,
+              "rank_score": 424.6013
+            },
+            {
+              "turn": 29,
+              "rank_score": 424.6013
+            },
+            {
+              "turn": 30,
+              "rank_score": 544.6462
+            }
+          ],
+          "token_usage": {
+            "input_tokens": 4349077,
+            "output_tokens": 224913
+          },
+          "timing": {
+            "total_seconds": 8365.5
+          },
+          "tool_calls": {
+            "total": 341,
+            "successful": 324,
+            "failed": 17,
+            "by_name": {
+              "get_recruitment": 14,
+              "get_crafting": 30,
+              "get_upgrades": 13,
+              "recruit_adventurer": 4,
+              "craft_equipment": 33,
+              "equip_item": 33,
+              "preview_battle": 97,
+              "write_memo": 3,
+              "end_turn": 31,
+              "allocate_experience": 49,
+              "get_inventory": 27,
+              "purchase_upgrade": 7
+            },
+            "by_name_detail": {
+              "get_recruitment": {
+                "total": 14,
+                "successful": 14,
+                "failed": 0
+              },
+              "get_crafting": {
+                "total": 30,
+                "successful": 30,
+                "failed": 0
+              },
+              "get_upgrades": {
+                "total": 13,
+                "successful": 13,
+                "failed": 0
+              },
+              "recruit_adventurer": {
+                "total": 4,
+                "successful": 4,
+                "failed": 0
+              },
+              "craft_equipment": {
+                "total": 33,
+                "successful": 32,
+                "failed": 1
+              },
+              "equip_item": {
+                "total": 33,
+                "successful": 33,
+                "failed": 0
+              },
+              "preview_battle": {
+                "total": 97,
+                "successful": 82,
+                "failed": 15
+              },
+              "write_memo": {
+                "total": 3,
+                "successful": 3,
+                "failed": 0
+              },
+              "end_turn": {
+                "total": 31,
+                "successful": 30,
+                "failed": 1
+              },
+              "allocate_experience": {
+                "total": 49,
+                "successful": 49,
+                "failed": 0
+              },
+              "get_inventory": {
+                "total": 27,
+                "successful": 27,
+                "failed": 0
+              },
+              "purchase_upgrade": {
+                "total": 7,
+                "successful": 7,
+                "failed": 0
+              }
+            }
+          },
+          "game_actions": {
+            "battles_total": 82,
+            "battles_won": 75,
+            "battles_lost": 7,
+            "total_gold_earned": 2086,
+            "total_experience_earned": 4676,
+            "total_equipment_crafted": 32,
+            "total_upgrades_purchased": 7,
+            "total_recruits": 4,
+            "total_dismissals": 0,
+            "total_experience_allocated": 49,
+            "total_equips": 33,
+            "total_unequips": 0,
+            "economy_curve": [
+              {
+                "turn": 1,
+                "gold_earned": 63,
+                "experience_earned": 144,
+                "cumulative_gold_earned": 63,
+                "cumulative_experience_earned": 144
+              },
+              {
+                "turn": 2,
+                "gold_earned": 62,
+                "experience_earned": 141,
+                "cumulative_gold_earned": 125,
+                "cumulative_experience_earned": 285
+              },
+              {
+                "turn": 3,
+                "gold_earned": 55,
+                "experience_earned": 126,
+                "cumulative_gold_earned": 180,
+                "cumulative_experience_earned": 411
+              },
+              {
+                "turn": 4,
+                "gold_earned": 62,
+                "experience_earned": 141,
+                "cumulative_gold_earned": 242,
+                "cumulative_experience_earned": 552
+              },
+              {
+                "turn": 5,
+                "gold_earned": 54,
+                "experience_earned": 124,
+                "cumulative_gold_earned": 296,
+                "cumulative_experience_earned": 676
+              },
+              {
+                "turn": 6,
+                "gold_earned": 85,
+                "experience_earned": 197,
+                "cumulative_gold_earned": 381,
+                "cumulative_experience_earned": 873
+              },
+              {
+                "turn": 7,
+                "gold_earned": 79,
+                "experience_earned": 184,
+                "cumulative_gold_earned": 460,
+                "cumulative_experience_earned": 1057
+              },
+              {
+                "turn": 8,
+                "gold_earned": 79,
+                "experience_earned": 179,
+                "cumulative_gold_earned": 539,
+                "cumulative_experience_earned": 1236
+              },
+              {
+                "turn": 9,
+                "gold_earned": 69,
+                "experience_earned": 157,
+                "cumulative_gold_earned": 608,
+                "cumulative_experience_earned": 1393
+              },
+              {
+                "turn": 10,
+                "gold_earned": 83,
+                "experience_earned": 189,
+                "cumulative_gold_earned": 691,
+                "cumulative_experience_earned": 1582
+              },
+              {
+                "turn": 11,
+                "gold_earned": 113,
+                "experience_earned": 246,
+                "cumulative_gold_earned": 804,
+                "cumulative_experience_earned": 1828
+              },
+              {
+                "turn": 12,
+                "gold_earned": 87,
+                "experience_earned": 195,
+                "cumulative_gold_earned": 891,
+                "cumulative_experience_earned": 2023
+              },
+              {
+                "turn": 13,
+                "gold_earned": 79,
+                "experience_earned": 183,
+                "cumulative_gold_earned": 970,
+                "cumulative_experience_earned": 2206
+              },
+              {
+                "turn": 14,
+                "gold_earned": 77,
+                "experience_earned": 174,
+                "cumulative_gold_earned": 1047,
+                "cumulative_experience_earned": 2380
+              },
+              {
+                "turn": 15,
+                "gold_earned": 108,
+                "experience_earned": 236,
+                "cumulative_gold_earned": 1155,
+                "cumulative_experience_earned": 2616
+              },
+              {
+                "turn": 16,
+                "gold_earned": 42,
+                "experience_earned": 93,
+                "cumulative_gold_earned": 1197,
+                "cumulative_experience_earned": 2709
+              },
+              {
+                "turn": 17,
+                "gold_earned": 92,
+                "experience_earned": 204,
+                "cumulative_gold_earned": 1289,
+                "cumulative_experience_earned": 2913
+              },
+              {
+                "turn": 18,
+                "gold_earned": 38,
+                "experience_earned": 87,
+                "cumulative_gold_earned": 1327,
+                "cumulative_experience_earned": 3000
+              },
+              {
+                "turn": 19,
+                "gold_earned": 28,
+                "experience_earned": 63,
+                "cumulative_gold_earned": 1355,
+                "cumulative_experience_earned": 3063
+              },
+              {
+                "turn": 20,
+                "gold_earned": 79,
+                "experience_earned": 178,
+                "cumulative_gold_earned": 1434,
+                "cumulative_experience_earned": 3241
+              },
+              {
+                "turn": 21,
+                "gold_earned": 29,
+                "experience_earned": 64,
+                "cumulative_gold_earned": 1463,
+                "cumulative_experience_earned": 3305
+              },
+              {
+                "turn": 22,
+                "gold_earned": 100,
+                "experience_earned": 221,
+                "cumulative_gold_earned": 1563,
+                "cumulative_experience_earned": 3526
+              },
+              {
+                "turn": 23,
+                "gold_earned": 69,
+                "experience_earned": 149,
+                "cumulative_gold_earned": 1632,
+                "cumulative_experience_earned": 3675
+              },
+              {
+                "turn": 24,
+                "gold_earned": 63,
+                "experience_earned": 137,
+                "cumulative_gold_earned": 1695,
+                "cumulative_experience_earned": 3812
+              },
+              {
+                "turn": 25,
+                "gold_earned": 82,
+                "experience_earned": 174,
+                "cumulative_gold_earned": 1777,
+                "cumulative_experience_earned": 3986
+              },
+              {
+                "turn": 26,
+                "gold_earned": 23,
+                "experience_earned": 52,
+                "cumulative_gold_earned": 1800,
+                "cumulative_experience_earned": 4038
+              },
+              {
+                "turn": 27,
+                "gold_earned": 68,
+                "experience_earned": 159,
+                "cumulative_gold_earned": 1868,
+                "cumulative_experience_earned": 4197
+              },
+              {
+                "turn": 28,
+                "gold_earned": 52,
+                "experience_earned": 116,
+                "cumulative_gold_earned": 1920,
+                "cumulative_experience_earned": 4313
+              },
+              {
+                "turn": 29,
+                "gold_earned": 76,
+                "experience_earned": 172,
+                "cumulative_gold_earned": 1996,
+                "cumulative_experience_earned": 4485
+              },
+              {
+                "turn": 30,
+                "gold_earned": 90,
+                "experience_earned": 191,
+                "cumulative_gold_earned": 2086,
+                "cumulative_experience_earned": 4676
+              }
+            ],
+            "strongest_defeated_enemy": {
+              "turn": 30,
+              "monster_id": "turn_30_monster_2",
+              "name": "巨蛛",
+              "power": 1882,
+              "tier": "normal",
+              "archetype_id": "giant_spider",
+              "stats": {
+                "hp": 362,
+                "mp": 0,
+                "attack": 144,
+                "defense": 36,
+                "speed": 16,
+                "recovery": 0,
+                "mp_recovery": 0
+              },
+              "reward": {
+                "gold": 42,
+                "experience": 89
+              }
+            }
+          }
+        }
+      ],
+      "model": "gemma-4-26b-a4b-it-q8-0",
+      "rank": 14
     },
     {
       "runs": 1,
@@ -7263,10 +8994,10 @@
         }
       ],
       "model": "qwen-3-6-35b-a3b-ud-q8-k-xl:preserve_thinking",
-      "rank": 12
+      "rank": 15
     },
     {
-      "runs": 2,
+      "runs": 1,
       "score": {
         "best": 33.5733,
         "mean": 33.57,
@@ -7284,19 +9015,19 @@
       "efficiency": {
         "input_tokens": {
           "mean": 2298188,
-          "total": 4596376
+          "total": 2298188
         },
         "output_tokens": {
           "mean": 271166,
-          "total": 542332
+          "total": 271166
         },
         "duration_seconds": {
           "mean": 7690.3,
-          "total": 15380.6
+          "total": 7690.3
         },
         "tool_calls": {
           "mean": 277,
-          "total": 554
+          "total": 277
         }
       },
       "game_quality": {
@@ -7309,8 +9040,8 @@
           "best": 3211
         },
         "battle_win_rate": 0.7273,
-        "battles_total": 154,
-        "battles_won": 112
+        "battles_total": 77,
+        "battles_won": 56
       },
       "last_run": "20260601-161919-098398",
       "run_details": [
@@ -7841,538 +9572,10 @@
               "archetype_id": "giant_spider"
             }
           }
-        },
-        {
-          "run_id": "qwen-3-6-35b-a3b-ud-q8",
-          "session_id": "30966db899c74fada94e4073b8749606",
-          "created_at": "20260601-161919-098398",
-          "updated_at": "20260601-183159-923469",
-          "score": 33.5733,
-          "rank_score": 290.4485,
-          "rank_score_source": null,
-          "win_rate": 0.4928,
-          "turns": 30,
-          "preset": "full",
-          "data_hash": "d198975d73466ff49be87ab0abdd83af53eb39e5aee5d5a1516cd370b83d5ee8",
-          "game_seed": 42,
-          "scoring_seed": 20260529,
-          "score_mode": "endgame_arena",
-          "score_seed": 20260529,
-          "score_waves": 1000,
-          "score_wave_size": 6,
-          "final_turn": 31,
-          "max_turns": 30,
-          "final_gold": 138,
-          "final_experience_pool": 0,
-          "party_size": 4,
-          "party_size_limit": 4,
-          "best_adventurer": {
-            "name": "佣兵战士·枯竭",
-            "average_score": 58.3428,
-            "win_rate": 0.566,
-            "assignments": 1000
-          },
-          "rank_score_per_adventurer": [
-            {
-              "adventurer_id": "recruit_0001",
-              "name": "佣兵战士·枯竭",
-              "rank_score": 68.155,
-              "rank_score_contribution": 68.155,
-              "rank_score_share": 0.2347,
-              "assignments": 3000
-            },
-            {
-              "adventurer_id": "recruit_0002",
-              "name": "步行骑士·萎靡",
-              "rank_score": 44.9189,
-              "rank_score_contribution": 44.9189,
-              "rank_score_share": 0.1547,
-              "assignments": 3000
-            },
-            {
-              "adventurer_id": "recruit_0003",
-              "name": "魔弹法师·疾风",
-              "rank_score": 125.585,
-              "rank_score_contribution": 125.585,
-              "rank_score_share": 0.4324,
-              "assignments": 3000
-            },
-            {
-              "adventurer_id": "recruit_0004",
-              "name": "林地射手·迟钝",
-              "rank_score": 51.7896,
-              "rank_score_contribution": 51.7896,
-              "rank_score_share": 0.1783,
-              "assignments": 3000
-            }
-          ],
-          "rank_score_curve": [
-            {
-              "turn": 1,
-              "rank_score": 8.3344
-            },
-            {
-              "turn": 2,
-              "rank_score": 9.5071
-            },
-            {
-              "turn": 3,
-              "rank_score": 20.4448
-            },
-            {
-              "turn": 4,
-              "rank_score": 32.7804
-            },
-            {
-              "turn": 5,
-              "rank_score": 38.4474
-            },
-            {
-              "turn": 6,
-              "rank_score": 53.2003
-            },
-            {
-              "turn": 7,
-              "rank_score": 55.1021
-            },
-            {
-              "turn": 8,
-              "rank_score": 66.3407
-            },
-            {
-              "turn": 9,
-              "rank_score": 83.8762
-            },
-            {
-              "turn": 10,
-              "rank_score": 107.2321
-            },
-            {
-              "turn": 11,
-              "rank_score": 130.9896
-            },
-            {
-              "turn": 12,
-              "rank_score": 150.2742
-            },
-            {
-              "turn": 13,
-              "rank_score": 150.2742
-            },
-            {
-              "turn": 14,
-              "rank_score": 150.2742
-            },
-            {
-              "turn": 15,
-              "rank_score": 197.9765
-            },
-            {
-              "turn": 16,
-              "rank_score": 197.9765
-            },
-            {
-              "turn": 17,
-              "rank_score": 205.4397
-            },
-            {
-              "turn": 18,
-              "rank_score": 212.8148
-            },
-            {
-              "turn": 19,
-              "rank_score": 215.1989
-            },
-            {
-              "turn": 20,
-              "rank_score": 225.9797
-            },
-            {
-              "turn": 21,
-              "rank_score": 234.197
-            },
-            {
-              "turn": 22,
-              "rank_score": 235.3072
-            },
-            {
-              "turn": 23,
-              "rank_score": 235.3072
-            },
-            {
-              "turn": 24,
-              "rank_score": 241.4817
-            },
-            {
-              "turn": 25,
-              "rank_score": 262.5938
-            },
-            {
-              "turn": 26,
-              "rank_score": 262.5938
-            },
-            {
-              "turn": 27,
-              "rank_score": 271.3926
-            },
-            {
-              "turn": 28,
-              "rank_score": 296.0695
-            },
-            {
-              "turn": 29,
-              "rank_score": 280.4202
-            },
-            {
-              "turn": 30,
-              "rank_score": 290.4485
-            }
-          ],
-          "token_usage": {
-            "input_tokens": 2298188,
-            "output_tokens": 271166
-          },
-          "timing": {
-            "total_seconds": 7690.3
-          },
-          "tool_calls": {
-            "total": 277,
-            "successful": 267,
-            "failed": 10,
-            "by_name": {
-              "get_crafting": 24,
-              "get_upgrades": 18,
-              "get_recruitment": 7,
-              "recruit_adventurer": 4,
-              "craft_equipment": 20,
-              "equip_item": 30,
-              "preview_battle": 89,
-              "end_turn": 30,
-              "get_inventory": 22,
-              "allocate_experience": 23,
-              "purchase_upgrade": 6,
-              "write_memo": 3,
-              "unequip_item": 1
-            },
-            "by_name_detail": {
-              "get_crafting": {
-                "total": 24,
-                "successful": 24,
-                "failed": 0
-              },
-              "get_upgrades": {
-                "total": 18,
-                "successful": 18,
-                "failed": 0
-              },
-              "get_recruitment": {
-                "total": 7,
-                "successful": 7,
-                "failed": 0
-              },
-              "recruit_adventurer": {
-                "total": 4,
-                "successful": 4,
-                "failed": 0
-              },
-              "craft_equipment": {
-                "total": 20,
-                "successful": 20,
-                "failed": 0
-              },
-              "equip_item": {
-                "total": 30,
-                "successful": 30,
-                "failed": 0
-              },
-              "preview_battle": {
-                "total": 89,
-                "successful": 79,
-                "failed": 10
-              },
-              "end_turn": {
-                "total": 30,
-                "successful": 30,
-                "failed": 0
-              },
-              "get_inventory": {
-                "total": 22,
-                "successful": 22,
-                "failed": 0
-              },
-              "allocate_experience": {
-                "total": 23,
-                "successful": 23,
-                "failed": 0
-              },
-              "purchase_upgrade": {
-                "total": 6,
-                "successful": 6,
-                "failed": 0
-              },
-              "write_memo": {
-                "total": 3,
-                "successful": 3,
-                "failed": 0
-              },
-              "unequip_item": {
-                "total": 1,
-                "successful": 1,
-                "failed": 0
-              }
-            }
-          },
-          "game_actions": {
-            "battles_total": 77,
-            "battles_won": 56,
-            "battles_lost": 21,
-            "total_gold_earned": 1425,
-            "total_experience_earned": 3211,
-            "total_equipment_crafted": 20,
-            "total_upgrades_purchased": 6,
-            "total_recruits": 4,
-            "total_dismissals": 0,
-            "total_experience_allocated": 23,
-            "total_equips": 30,
-            "total_unequips": 1,
-            "economy_curve": [
-              {
-                "turn": 1,
-                "gold_earned": 34,
-                "experience_earned": 77,
-                "cumulative_gold_earned": 34,
-                "cumulative_experience_earned": 77
-              },
-              {
-                "turn": 2,
-                "gold_earned": 52,
-                "experience_earned": 119,
-                "cumulative_gold_earned": 86,
-                "cumulative_experience_earned": 196
-              },
-              {
-                "turn": 3,
-                "gold_earned": 62,
-                "experience_earned": 141,
-                "cumulative_gold_earned": 148,
-                "cumulative_experience_earned": 337
-              },
-              {
-                "turn": 4,
-                "gold_earned": 56,
-                "experience_earned": 128,
-                "cumulative_gold_earned": 204,
-                "cumulative_experience_earned": 465
-              },
-              {
-                "turn": 5,
-                "gold_earned": 52,
-                "experience_earned": 121,
-                "cumulative_gold_earned": 256,
-                "cumulative_experience_earned": 586
-              },
-              {
-                "turn": 6,
-                "gold_earned": 48,
-                "experience_earned": 111,
-                "cumulative_gold_earned": 304,
-                "cumulative_experience_earned": 697
-              },
-              {
-                "turn": 7,
-                "gold_earned": 75,
-                "experience_earned": 172,
-                "cumulative_gold_earned": 379,
-                "cumulative_experience_earned": 869
-              },
-              {
-                "turn": 8,
-                "gold_earned": 79,
-                "experience_earned": 179,
-                "cumulative_gold_earned": 458,
-                "cumulative_experience_earned": 1048
-              },
-              {
-                "turn": 9,
-                "gold_earned": 69,
-                "experience_earned": 157,
-                "cumulative_gold_earned": 527,
-                "cumulative_experience_earned": 1205
-              },
-              {
-                "turn": 10,
-                "gold_earned": 71,
-                "experience_earned": 160,
-                "cumulative_gold_earned": 598,
-                "cumulative_experience_earned": 1365
-              },
-              {
-                "turn": 11,
-                "gold_earned": 85,
-                "experience_earned": 191,
-                "cumulative_gold_earned": 683,
-                "cumulative_experience_earned": 1556
-              },
-              {
-                "turn": 12,
-                "gold_earned": 73,
-                "experience_earned": 167,
-                "cumulative_gold_earned": 756,
-                "cumulative_experience_earned": 1723
-              },
-              {
-                "turn": 13,
-                "gold_earned": 79,
-                "experience_earned": 183,
-                "cumulative_gold_earned": 835,
-                "cumulative_experience_earned": 1906
-              },
-              {
-                "turn": 14,
-                "gold_earned": 77,
-                "experience_earned": 174,
-                "cumulative_gold_earned": 912,
-                "cumulative_experience_earned": 2080
-              },
-              {
-                "turn": 15,
-                "gold_earned": 68,
-                "experience_earned": 150,
-                "cumulative_gold_earned": 980,
-                "cumulative_experience_earned": 2230
-              },
-              {
-                "turn": 16,
-                "gold_earned": 38,
-                "experience_earned": 83,
-                "cumulative_gold_earned": 1018,
-                "cumulative_experience_earned": 2313
-              },
-              {
-                "turn": 17,
-                "gold_earned": 38,
-                "experience_earned": 85,
-                "cumulative_gold_earned": 1056,
-                "cumulative_experience_earned": 2398
-              },
-              {
-                "turn": 18,
-                "gold_earned": 39,
-                "experience_earned": 85,
-                "cumulative_gold_earned": 1095,
-                "cumulative_experience_earned": 2483
-              },
-              {
-                "turn": 19,
-                "gold_earned": 56,
-                "experience_earned": 126,
-                "cumulative_gold_earned": 1151,
-                "cumulative_experience_earned": 2609
-              },
-              {
-                "turn": 20,
-                "gold_earned": 22,
-                "experience_earned": 50,
-                "cumulative_gold_earned": 1173,
-                "cumulative_experience_earned": 2659
-              },
-              {
-                "turn": 21,
-                "gold_earned": 0,
-                "experience_earned": 0,
-                "cumulative_gold_earned": 1173,
-                "cumulative_experience_earned": 2659
-              },
-              {
-                "turn": 22,
-                "gold_earned": 40,
-                "experience_earned": 86,
-                "cumulative_gold_earned": 1213,
-                "cumulative_experience_earned": 2745
-              },
-              {
-                "turn": 23,
-                "gold_earned": 29,
-                "experience_earned": 64,
-                "cumulative_gold_earned": 1242,
-                "cumulative_experience_earned": 2809
-              },
-              {
-                "turn": 24,
-                "gold_earned": 40,
-                "experience_earned": 86,
-                "cumulative_gold_earned": 1282,
-                "cumulative_experience_earned": 2895
-              },
-              {
-                "turn": 25,
-                "gold_earned": 64,
-                "experience_earned": 138,
-                "cumulative_gold_earned": 1346,
-                "cumulative_experience_earned": 3033
-              },
-              {
-                "turn": 26,
-                "gold_earned": 0,
-                "experience_earned": 0,
-                "cumulative_gold_earned": 1346,
-                "cumulative_experience_earned": 3033
-              },
-              {
-                "turn": 27,
-                "gold_earned": 27,
-                "experience_earned": 62,
-                "cumulative_gold_earned": 1373,
-                "cumulative_experience_earned": 3095
-              },
-              {
-                "turn": 28,
-                "gold_earned": 52,
-                "experience_earned": 116,
-                "cumulative_gold_earned": 1425,
-                "cumulative_experience_earned": 3211
-              },
-              {
-                "turn": 29,
-                "gold_earned": 0,
-                "experience_earned": 0,
-                "cumulative_gold_earned": 1425,
-                "cumulative_experience_earned": 3211
-              },
-              {
-                "turn": 30,
-                "gold_earned": 0,
-                "experience_earned": 0,
-                "cumulative_gold_earned": 1425,
-                "cumulative_experience_earned": 3211
-              }
-            ],
-            "strongest_defeated_enemy": {
-              "turn": 25,
-              "monster_id": "turn_25_monster_2",
-              "name": "巨蛛",
-              "power": 1642,
-              "stats": {
-                "hp": 322,
-                "mp": 0,
-                "attack": 124,
-                "defense": 31,
-                "speed": 16,
-                "recovery": 0,
-                "mp_recovery": 0
-              },
-              "reward": {
-                "gold": 41,
-                "experience": 86
-              },
-              "tier": "normal",
-              "archetype_id": "giant_spider"
-            }
-          }
         }
       ],
       "model": "qwen-3-6-35b-a3b-ud-q8-k-xl:think",
-      "rank": 13
+      "rank": 16
     },
     {
       "runs": 1,
@@ -8963,7 +10166,7 @@
         }
       ],
       "model": "minimax-m2.7",
-      "rank": 14
+      "rank": 17
     },
     {
       "runs": 1,
@@ -9541,7 +10744,7 @@
         }
       ],
       "model": "minimax-m2.7-highspeed",
-      "rank": 15
+      "rank": 18
     }
   ]
 }

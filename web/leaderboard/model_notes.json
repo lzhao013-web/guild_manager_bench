@@ -9,9 +9,12 @@
   "gpt-5.5-xhigh": "推理强度xhigh，第三方反代",
   "deepseek-v4-flash": "官方api",
   "qwen3.7-max": "OpenCode GO 套餐",
+  "qwen3.6-plus": "OpenCode GO 套餐",
   "step-3-7-flash-iq4-xs": "本地部署",
   "qwen-3-6-35b-a3b-ud-q8-k-xl:preserve_thinking": "本地部署",
   "qwen-3-6-35b-a3b-ud-q8-k-xl:think": "本地部署",
+  "gemma4-26b-a4b-q8-0": "本地部署",
   "minimax-m2.7": "OpenCode GO 套餐",
-  "minimax-m2.7-highspeed": "官方token plan"
+  "minimax-m2.7-highspeed": "官方token plan",
+  "minimax-m3": "官方token plan"
 }

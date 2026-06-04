@@ -46,7 +46,7 @@ recruitable_adventurers:
       hp: 20
       mp: 0
       attack: 1
-      defense: 5
+      defense: 4
       speed: 0
       recovery: 4
       mp_recovery: 0
