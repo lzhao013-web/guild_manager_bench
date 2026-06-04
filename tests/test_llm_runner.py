@@ -11,6 +11,7 @@ from guild_manager_bench.bench.llm import (
     LlmRunConfig,
     LlmToolCall,
     TurnToolHarness,
+    build_endgame_system_prompt,
     build_system_prompt,
     build_turn_prompt,
     run_llm_game,
@@ -405,6 +406,76 @@ def test_system_prompt_includes_static_rules() -> None:
     assert "本回合概览" not in prompt
     assert "备忘录" not in prompt
     assert "上一回合" not in prompt
+    assert "现在是终局阶段" not in prompt
+    assert "终局阶段规则" not in prompt
+
+
+def test_endgame_system_prompt_is_dynamic_text() -> None:
+    prompt = build_endgame_system_prompt(turn=3, max_turns=8)
+
+    assert "现在是终局阶段：当前回合 3/8" in prompt
+    assert "preview_team_power" in prompt
+
+
+def test_run_llm_turn_adds_endgame_system_prompt_only_after_start_turn() -> None:
+    tools = GuildManagerTools.from_data_dir(_data_dir())
+    tools.definition = replace(
+        tools.definition,
+        llm_tools=replace(tools.definition.llm_tools, endgame_start_turn=2),
+    )
+    session_id = tools.start_session("endgame-system-message")["session_id"]
+    config = LlmRunConfig(max_tool_calls_per_turn=2, archive_dir=None)
+    agent = StaticAgent(
+        LlmAgentResponse(tool_calls=(LlmToolCall("end_turn", {"hunts": []}),))
+    )
+
+    early_trace = run_llm_turn(
+        agent,
+        tools,
+        session_id,
+        config=config,
+        system_prompt="基础系统提示",
+    )
+    early_system_messages = [
+        message["content"]
+        for message in early_trace.messages
+        if message.get("role") == "system"
+    ]
+
+    assert early_system_messages == ["基础系统提示"]
+
+    endgame_trace = run_llm_turn(
+        agent,
+        tools,
+        session_id,
+        config=config,
+        system_prompt="基础系统提示",
+    )
+    endgame_system_messages = [
+        message["content"]
+        for message in endgame_trace.messages
+        if message.get("role") == "system"
+    ]
+
+    assert endgame_system_messages[0] == "基础系统提示"
+    assert "现在是终局阶段：当前回合 2/" in endgame_system_messages[1]
+    assert "preview_team_power" in endgame_system_messages[1]
+
+
+def test_turn_prompt_only_shows_endgame_warning_after_start_turn() -> None:
+    tools = GuildManagerTools.from_data_dir(_data_dir())
+    observation = tools.start_session("endgame-warning")["observation"]
+
+    early_prompt = build_turn_prompt(observation, endgame_start_turn=3)
+
+    assert "终局阶段：" not in early_prompt
+
+    endgame_observation = dict(observation)
+    endgame_observation["turn"] = 3
+    endgame_prompt = build_turn_prompt(endgame_observation, endgame_start_turn=3)
+
+    assert f"现在是终局阶段：当前回合 3/{observation['max_turns']}" in endgame_prompt
+    assert "preview_team_power" in endgame_prompt
 
 
 def test_turn_prompt_shows_equipped_numeric_refs() -> None:

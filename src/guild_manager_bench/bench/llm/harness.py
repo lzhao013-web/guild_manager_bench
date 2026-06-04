@@ -116,6 +116,7 @@ class TurnToolHarness:
         *,
         max_tool_calls: int,
         max_battle_preview_per_turn: int = 3,
+        endgame_start_turn: int | None = None,
         memo_store: MemoStore | None = None,
     ) -> None:
         self.tools = tools
@@ -123,12 +124,13 @@ class TurnToolHarness:
         self.memo_store = memo_store or MemoStore()
         self.budget = ToolBudget(max_tool_calls=max_tool_calls)
         self.max_battle_preview_per_turn = max_battle_preview_per_turn
+        self.endgame_start_turn = endgame_start_turn
         self._battle_preview_count = 0
         self.ended = False
         # 固化本回合的数字 ID 映射，避免并行动作导致列表变化后序号偏移
-        self._turn_refs = build_numeric_refs(
-            tools.get_observation(session_id)["observation"]
-        )
+        observation = tools.get_observation(session_id)["observation"]
+        self._turn = int(observation["turn"])
+        self._turn_refs = build_numeric_refs(observation)
         self._agent_tool_names = tuple(
             schema["name"]
             for schema in self.tool_schemas()
@@ -137,7 +139,12 @@ class TurnToolHarness:
     def tool_schemas(self) -> list[dict[str, Any]]:
         """返回当前回合可注册给 LLM 的工具 schema。"""
 
-        return self.tools.list_tool_schemas() + [deepcopy(_WRITE_MEMO_SCHEMA)]
+        schemas = self.tools.list_tool_schemas()
+        if self.endgame_start_turn is not None and self._turn >= self.endgame_start_turn:
+            from guild_manager_bench.bench.llm.tools import _TEAM_POWER_PREVIEW_SCHEMA
+            schemas.append(deepcopy(_TEAM_POWER_PREVIEW_SCHEMA))
+        schemas.append(deepcopy(_WRITE_MEMO_SCHEMA))
+        return schemas
 
     def call_tool(
         self,
@@ -157,6 +164,16 @@ class TurnToolHarness:
                 f"preview_battle 次数已达上限（每回合 {self.max_battle_preview_per_turn} 次）；"
                 "请仅在关键对战时使用 preview_battle"
             )
+
+        if name == "preview_team_power":
+            if self.endgame_start_turn is None:
+                return self._error("preview_team_power 未启用")
+            if self._turn < self.endgame_start_turn:
+                remaining = self.endgame_start_turn - self._turn
+                return self._error(
+                    f"preview_team_power 仅在终局阶段（回合 {self.endgame_start_turn}+）可用，"
+                    f"当前回合 {self._turn}，还需 {remaining} 回合"
+                )
 
         if name != "end_turn":
             self.budget.consume()

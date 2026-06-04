@@ -1,5 +1,5 @@
 rules:
-  max_turns: 30
+  max_turns: 35
   seed: 42
   monster_spawn:
     count_curve:
@@ -70,3 +70,4 @@ scoring:
 
 llm:
   expose_battle_preview: true
+  endgame_start_turn: 31

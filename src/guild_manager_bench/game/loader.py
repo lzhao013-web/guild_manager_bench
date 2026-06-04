@@ -366,6 +366,7 @@ def _parse_turn_recovery(data: Mapping[str, Any]) -> TurnRecoveryRules:
 
 
 def _parse_llm_tool_rules(data: Mapping[str, Any]) -> LlmToolRules:
+    raw_endgame = data.get("endgame_start_turn")
     return LlmToolRules(
         expose_battle_preview=_bool(
             data.get("expose_battle_preview", False),
@@ -374,6 +375,10 @@ def _parse_llm_tool_rules(data: Mapping[str, Any]) -> LlmToolRules:
         max_battle_preview_per_turn=_int(
             data.get("max_battle_preview_per_turn", 3),
             "llm.max_battle_preview_per_turn",
+        ),
+        endgame_start_turn=(
+            None if raw_endgame is None
+            else _int(raw_endgame, "llm.endgame_start_turn")
         ),
     )
 

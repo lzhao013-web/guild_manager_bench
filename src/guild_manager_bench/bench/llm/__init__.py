@@ -19,7 +19,12 @@ from guild_manager_bench.bench.llm.openai_compat import (
     OpenAICompatibleError,
     load_dotenv_values,
 )
-from guild_manager_bench.bench.llm.prompts import DEFAULT_OBJECTIVE, build_system_prompt, build_turn_prompt
+from guild_manager_bench.bench.llm.prompts import (
+    DEFAULT_OBJECTIVE,
+    build_endgame_system_prompt,
+    build_system_prompt,
+    build_turn_prompt,
+)
 from guild_manager_bench.bench.llm.runner import (
     LlmAgentResponse,
     LlmRunConfig,
@@ -56,6 +61,7 @@ __all__ = [
     "ToolCallError",
     "TurnToolHarness",
     "build_system_prompt",
+    "build_endgame_system_prompt",
     "build_turn_prompt",
     "create_toolbox",
     "load_dotenv_values",

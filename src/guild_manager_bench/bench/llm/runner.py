@@ -21,7 +21,12 @@ from guild_manager_bench.bench.llm.harness import (
     TurnToolHarness,
     memo_entries_from_tool_steps,
 )
-from guild_manager_bench.bench.llm.prompts import DEFAULT_OBJECTIVE, build_system_prompt, build_turn_prompt
+from guild_manager_bench.bench.llm.prompts import (
+    DEFAULT_OBJECTIVE,
+    build_endgame_system_prompt,
+    build_system_prompt,
+    build_turn_prompt,
+)
 from guild_manager_bench.bench.llm.refs import build_numeric_refs, display_ref
 from guild_manager_bench.bench.llm.tools import GuildManagerTools
 from guild_manager_bench.bench.llm.trace import (
@@ -347,10 +352,14 @@ def run_llm_turn(
         observation,
         previous_turn_event=previous_turn_event,
         memo_entries=memo_store.consume(),
+        endgame_start_turn=tools.definition.llm_tools.endgame_start_turn,
     )
     messages: list[dict[str, Any]] = []
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
+    endgame_system_prompt = _endgame_system_prompt_for_turn(tools, observation)
+    if endgame_system_prompt:
+        messages.append({"role": "system", "content": endgame_system_prompt})
     messages.append({"role": "user", "content": prompt})
     turn_trace = TurnTrace(
         turn=observation["turn"],
@@ -371,6 +380,7 @@ def run_llm_turn(
         session_id,
         max_tool_calls=config.max_tool_calls_per_turn,
         max_battle_preview_per_turn=tools.definition.llm_tools.max_battle_preview_per_turn,
+        endgame_start_turn=tools.definition.llm_tools.endgame_start_turn,
         memo_store=memo_store,
     )
 
@@ -562,7 +572,11 @@ def _restore_from_replay_archive(
         if turn.get("status") != "completed":
             continue
         # 每个 turn 复用同一个 harness，使增量 refs 更新在同一回合内累积
-        harness = TurnToolHarness(tools, session_id, max_tool_calls=1_000_000)
+        harness = TurnToolHarness(
+            tools, session_id,
+            max_tool_calls=1_000_000,
+            endgame_start_turn=tools.definition.llm_tools.endgame_start_turn,
+        )
         for step in _sequence(turn.get("steps")):
             if isinstance(step, Mapping):
                 _replay_confirmed_tool_result(harness, step)
@@ -819,6 +833,8 @@ def _format_tool_result_for_model(name: str, result: Mapping[str, Any]) -> str:
         _append_events_lines(lines, result["events"])
     elif name == "preview_battle" and isinstance(result.get("preview"), Mapping):
         _append_battle_preview_lines(lines, result["preview"], _result_refs(result))
+    elif name == "preview_team_power" and result.get("ok") is True:
+        _append_team_power_preview_lines(lines, result, _result_refs(result))
     elif name == "write_memo" and isinstance(result.get("memo"), Mapping):
         memo = result["memo"]
         lines[0] = (
@@ -921,6 +937,28 @@ def _append_battle_preview_lines(
         f"动作数 {preview.get('actions_taken')}; 耗时 {preview.get('time_elapsed')}"
     )
     lines.append(f"胜利奖励: {reward_text}")
+
+
+def _append_team_power_preview_lines(
+    lines: list[str],
+    result: Mapping[str, Any],
+    refs: Mapping[str, Mapping[str, int]],
+) -> None:
+    rank_score = result.get("rank_score", 0)
+    lines[0] = f"成功 preview_team_power：队伍终局战力评分 rank_score = {rank_score}"
+    per_adventurer = result.get("per_adventurer")
+    if isinstance(per_adventurer, list):
+        lines.append("冒险者贡献分解:")
+        for entry in per_adventurer:
+            if not isinstance(entry, Mapping):
+                continue
+            adv_id = entry.get("adventurer_id", "")
+            ref = display_ref(refs, "adventurer", adv_id)
+            score = entry.get("rank_score", 0)
+            share = entry.get("rank_score_share", 0)
+            lines.append(
+                f"  - {ref}: rank_score {score}, 贡献占比 {round(share * 100, 1)}%"
+            )
 
 
 def _append_observation_lines(lines: list[str], observation: Mapping[str, Any]) -> None:
@@ -1736,6 +1774,22 @@ def _should_archive_event(event: Mapping[str, Any]) -> bool:
         "model_reasoning_delta",
         "tool_call_delta",
     }
+
+
+def _endgame_system_prompt_for_turn(
+    tools: GuildManagerTools,
+    observation: Mapping[str, Any],
+) -> str | None:
+    endgame_start_turn = tools.definition.llm_tools.endgame_start_turn
+    if endgame_start_turn is None:
+        return None
+    turn = observation.get("turn")
+    max_turns = observation.get("max_turns")
+    if not isinstance(turn, int) or not isinstance(max_turns, int):
+        return None
+    if turn < endgame_start_turn:
+        return None
+    return build_endgame_system_prompt(turn, max_turns)
 
 
 def _agent_response(
@@ -2648,7 +2702,11 @@ def rebuild_replay_observations(
             if not _replay_tool_step_succeeded(step):
                 continue
             arguments = _replay_tool_arguments(step)
-            harness = TurnToolHarness(tools, session_id, max_tool_calls=1_000_000)
+            harness = TurnToolHarness(
+                tools, session_id,
+                max_tool_calls=1_000_000,
+                endgame_start_turn=tools.definition.llm_tools.endgame_start_turn,
+            )
             result = harness.call_tool(str(name), arguments)
             if result.get("ok") is not True:
                 raise ValueError(

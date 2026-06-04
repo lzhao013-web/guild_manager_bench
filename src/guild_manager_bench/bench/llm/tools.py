@@ -65,7 +65,7 @@ class GuildManagerTools:
         """返回当前工具层支持的工具 schema。"""
 
         return tool_schemas(
-            expose_battle_preview=self.definition.llm_tools.expose_battle_preview
+            expose_battle_preview=self.definition.llm_tools.expose_battle_preview,
         )
 
     def call_tool(
@@ -387,6 +387,38 @@ class GuildManagerTools:
                 ),
             }
 
+    def preview_team_power(self, session_id: str) -> dict[str, Any]:
+        """预览当前队伍的终局战力评分（rank_score），返回总分和每个冒险者的贡献分解。"""
+
+        with self._lock:
+            session = self._get_session(session_id)
+            assert session.state is not None
+            try:
+                from guild_manager_bench.bench.metrics import compute_rank_score_breakdown
+
+                rank_result = compute_rank_score_breakdown(
+                    session.definition,
+                    session.state,
+                )
+            except Exception as exc:
+                return {"ok": False, "error": str(exc)}
+            per_adventurer = [
+                {
+                    "adventurer_id": adv_id,
+                    "rank_score": round(score, 2),
+                    "rank_score_share": (
+                        round(score / rank_result.rank_score, 4)
+                        if rank_result.rank_score > 0 else 0.0
+                    ),
+                }
+                for adv_id, score in rank_result.per_adventurer_score.items()
+            ]
+            return {
+                "ok": True,
+                "rank_score": round(rank_result.rank_score, 2),
+                "per_adventurer": per_adventurer,
+            }
+
     def _submit_preparation(
         self,
         session_id: str,
@@ -424,6 +456,8 @@ class GuildManagerTools:
         names = dict(_BASE_HANDLER_NAMES)
         if self.definition.llm_tools.expose_battle_preview:
             names["preview_battle"] = "preview_battle"
+        if self.definition.llm_tools.endgame_start_turn is not None:
+            names["preview_team_power"] = "preview_team_power"
         return names
 
 
@@ -818,6 +852,19 @@ _BATTLE_PREVIEW_SCHEMA: dict[str, Any] = {
             "adventurer_id": _ADVENTURER_ID,
             "monster_id": _MONSTER_ID,
         },
+        "additionalProperties": False,
+    },
+}
+
+_TEAM_POWER_PREVIEW_SCHEMA: dict[str, Any] = {
+    "name": "preview_team_power",
+    "description": (
+        "预览当前队伍的终局战力评分（rank_score），返回总分和每个冒险者的贡献分解。"
+    ),
+    "parameters": {
+        "type": "object",
+        "required": ["session_id"],
+        "properties": {"session_id": _SESSION_ID},
         "additionalProperties": False,
     },
 }

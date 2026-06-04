@@ -513,6 +513,7 @@ class LlmToolRules:
 
     expose_battle_preview: bool = False
     max_battle_preview_per_turn: int = 3
+    endgame_start_turn: int | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.expose_battle_preview, bool):
@@ -523,6 +524,12 @@ class LlmToolRules:
             or self.max_battle_preview_per_turn < 0
         ):
             raise ValueError("max_battle_preview_per_turn must be >= 0")
+        if self.endgame_start_turn is not None and (
+            not isinstance(self.endgame_start_turn, int)
+            or isinstance(self.endgame_start_turn, bool)
+            or self.endgame_start_turn < 1
+        ):
+            raise ValueError("endgame_start_turn must be a positive int or None")
 
 
 @dataclass(frozen=True, slots=True)

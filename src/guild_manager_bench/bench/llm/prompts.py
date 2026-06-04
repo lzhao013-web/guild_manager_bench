@@ -58,19 +58,24 @@ def build_turn_prompt(
     *,
     previous_turn_event: Mapping[str, Any] | None = None,
     memo_entries: Sequence[str] = (),
+    endgame_start_turn: int | None = None,
 ) -> str:
     """构造单个游戏回合开始时给 LLM 的用户提示词（动态信息）。"""
 
-    return "\n".join(
-        [
-            _previous_turn_summary(previous_turn_event),
-            "",
-            _memo_summary(memo_entries),
-            "",
-            _state_summary(observation),
-            "",
-        ]
-    ).strip()
+    parts = [
+        _previous_turn_summary(previous_turn_event),
+        "",
+        _memo_summary(memo_entries),
+        "",
+        _state_summary(observation),
+    ]
+
+    if endgame_start_turn is not None and observation["turn"] >= endgame_start_turn:
+        turns_remaining = observation["max_turns"] - observation["turn"]
+        parts.append("")
+        parts.append(_endgame_warning(observation["turn"], turns_remaining, observation["max_turns"]))
+
+    return "\n".join(parts).strip()
 
 
 def _memo_summary(memo_entries: Sequence[str]) -> str:
@@ -84,6 +89,31 @@ def _memo_summary(memo_entries: Sequence[str]) -> str:
     lines = ["备忘录："]
     lines.extend(f"- {entry}" for entry in values)
     return "\n".join(lines)
+
+
+def _endgame_warning(turn: int, turns_remaining: int, max_turns: int) -> str:
+    return _endgame_notice(turn, max_turns, turns_remaining=turns_remaining)
+
+
+def _endgame_notice(
+    turn: int,
+    max_turns: int,
+    *,
+    turns_remaining: int | None = None,
+) -> str:
+    if turns_remaining is None:
+        turns_remaining = max_turns - turn
+    return (
+        f"现在是终局阶段：当前回合 {turn}/{max_turns}，剩余 {turns_remaining} 回合。"
+        "游戏即将结束，请在继续运营的同时优先最大化队伍终局战力评分 rank_score；"
+        "可使用 preview_team_power 预览当前队伍 rank_score 和每个冒险者的贡献占比。"
+    )
+
+
+def build_endgame_system_prompt(turn: int, max_turns: int) -> str:
+    """构建终局阶段专用 system 提示词。"""
+
+    return _endgame_notice(turn, max_turns)
 
 
 def _state_summary(observation: Mapping[str, Any]) -> str:
