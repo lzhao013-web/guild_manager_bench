@@ -117,6 +117,11 @@ window.addEventListener("load", () => {
     renderLlmDebug();
   });
   $("llmReplayFile").addEventListener("change", (event) => loadLlmReplayFile(event));
+  $("llmCopyPromptButton").addEventListener("click", () => copyLlmPromptToClipboard());
+  $("llmTranscriptClearButton").addEventListener("click", () => clearLlmTranscript());
+  $("llmEventClearButton").addEventListener("click", () => clearLlmEventLog());
+  $("llmPresetSelect").addEventListener("change", (event) => applyLlmPreset(event.target.value));
+  initLlmRuntimeTabs();
   $("combatModal").addEventListener("click", (e) => {
     if (e.target === e.currentTarget) closeCombatModal();
   });
@@ -172,6 +177,32 @@ function initTabs() {
       if (panel) panel.classList.add("active");
     });
   });
+}
+
+function initLlmRuntimeTabs() {
+  document.querySelectorAll(".llm-runtime-tab").forEach((tab) => {
+    tab.addEventListener("click", () => setLlmRuntimeTab(tab.dataset.runtime));
+  });
+}
+
+function setLlmRuntimeTab(name) {
+  if (!name) return;
+  document.querySelectorAll(".llm-runtime-tab").forEach((tab) => {
+    tab.classList.toggle("active", tab.dataset.runtime === name);
+  });
+  document.querySelectorAll(".llm-runtime-panel").forEach((panel) => {
+    panel.classList.toggle("active", panel.dataset.runtimePanel === name);
+  });
+}
+
+function updateLlmRuntimeCounts() {
+  const setCount = (key, value) => {
+    const node = document.querySelector(`[data-runtime-count="${key}"]`);
+    if (node) node.textContent = String(value);
+  };
+  setCount("transcript", state.llm.transcript.length);
+  setCount("tools", state.llm.toolTrace.length);
+  setCount("events", state.llm.events.length);
 }
 
 /* ========== Bootstrap / Session ========== */
@@ -1066,14 +1097,21 @@ function battleBlock(event, battle, index) {
 }
 
 function combatEventText(event) {
-  const action = event.action_type === "skill"
-    ? `使用 ${event.skill_name || event.skill_id}`
-    : "普通攻击";
+  let action, target;
+  if (event.action_type === "status") {
+    action = `受到 ${event.status_name || "状态"} 效果`;
+    target = resolveName(event.target_id);
+  } else if (event.action_type === "skill") {
+    action = `使用 ${event.skill_name || event.skill_id}`;
+    target = resolveName(event.target_id);
+  } else {
+    action = "普通攻击";
+    target = resolveName(event.target_id);
+  }
   const healing = event.healing > 0
     ? `，治疗 ${event.healing}，目标 HP ${event.healing_target_hp}`
     : "";
   const actor = resolveName(event.actor_id);
-  const target = resolveName(event.target_id);
   return `
     <div class="combat-line">
       <span>#${event.action_index} t=${event.time_elapsed}</span>
@@ -1312,8 +1350,16 @@ function statRow(label, base, effective, type) {
 
 /* ========== Helpers ========== */
 
-function list(items) {
-  return items.length ? `<div class="list">${items.join("")}</div>` : `<div class="muted">无</div>`;
+function list(items, emptyHint) {
+  if (items.length) return `<div class="list">${items.join("")}</div>`;
+  if (emptyHint) {
+    return `<div class="empty-hint compact">
+      <div class="empty-hint-icon">${escapeHtml(emptyHint.icon || "📭")}</div>
+      <div class="empty-hint-title">${escapeHtml(emptyHint.title || "暂无内容")}</div>
+      ${emptyHint.text ? `<div class="empty-hint-text">${escapeHtml(emptyHint.text)}</div>` : ""}
+    </div>`;
+  }
+  return `<div class="muted small">无</div>`;
 }
 
 function levelText(adventurer) {
@@ -1666,16 +1712,18 @@ function disabled(extra = false) {
 }
 
 function showError(message) {
+  showToast(message, "error");
+}
+
+function showToast(message, variant = "info") {
   const toast = $("toast");
+  if (!toast) return;
   toast.textContent = message;
+  toast.dataset.variant = variant;
   toast.hidden = false;
   window.setTimeout(() => {
     toast.hidden = true;
-  }, 3600);
-}
-
-function showToast(message) {
-  showError(message);
+  }, 3000);
 }
 
 /* ========== LLM Debug ========== */
@@ -1949,6 +1997,9 @@ function renderLlmDebug(options = {}) {
   $("llmStopButton").disabled = !state.llm.running;
   $("llmReplayResumeButton").disabled = state.llm.running || !state.llm.replay.selectedRunId;
   $("llmPrompt").textContent = state.llm.prompt || "尚未开始";
+  updateLlmStatusPulse();
+  updateLlmStatusStats();
+  updateLlmRuntimeCounts();
   if (streamOnly && state.llm.currentModelEntry) {
     streamUpdateModelEntry(state.llm.currentModelEntry);
   } else {
@@ -1966,9 +2017,196 @@ function renderLlmDebug(options = {}) {
   }
 }
 
+function updateLlmStatusPulse() {
+  const dot = document.querySelector(".llm-pulse-dot");
+  if (!dot) return;
+  const status = state.llm.status || "";
+  let stateName = "idle";
+  if (state.llm.running) {
+    stateName = "true";
+  } else if (/失败|错误|连接错误|已停止/.test(status)) {
+    stateName = "error";
+  } else if (/完成/.test(status)) {
+    stateName = "done";
+  }
+  dot.dataset.running = stateName === "idle" ? "false" : stateName;
+}
+
+function updateLlmStatusStats() {
+  const container = $("llmStatusStats");
+  if (!container) return;
+  const stats = computeLlmRunStats();
+  setStat(container, "turn", stats.turn ?? "—");
+  setStat(container, "calls", stats.modelCalls);
+  setStat(container, "tools", stats.toolCalls);
+  setStat(container, "input", stats.inputTokens);
+  setStat(container, "output", stats.outputTokens);
+  setStat(container, "duration", stats.durationMs != null ? formatDurationMs(stats.durationMs) : (state.llm.running ? "运行中" : "—"));
+}
+
+function setStat(container, key, value) {
+  const node = container.querySelector(`[data-stat="${key}"]`);
+  if (node) node.textContent = value;
+}
+
+function computeLlmRunStats() {
+  let turn = null;
+  let modelCalls = 0;
+  let toolCalls = 0;
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let totalDurationMs = 0;
+  let hasTokens = false;
+  let hasDuration = false;
+  for (const entry of state.llm.transcript) {
+    if (entry.kind === "turn" && typeof entry.title === "string") {
+      const match = entry.title.match(/第\s*(\d+)\s*回合/);
+      if (match) turn = match[1];
+    } else if (entry.kind === "model") {
+      modelCalls += 1;
+      if (entry.usage) {
+        const inp = entry.usage.input_tokens ?? entry.usage.prompt_tokens;
+        const out = entry.usage.output_tokens ?? entry.usage.completion_tokens;
+        if (inp != null) { inputTokens += Number(inp); hasTokens = true; }
+        if (out != null) { outputTokens += Number(out); hasTokens = true; }
+      }
+      if (entry.timing?.duration_ms != null) {
+        totalDurationMs += Number(entry.timing.duration_ms);
+        hasDuration = true;
+      }
+    }
+  }
+  for (const item of state.llm.toolTrace) {
+    if (item && item.name) toolCalls += 1;
+  }
+  return {
+    turn,
+    modelCalls,
+    toolCalls,
+    inputTokens: hasTokens ? inputTokens.toLocaleString() : "0",
+    outputTokens: hasTokens ? outputTokens.toLocaleString() : "0",
+    durationMs: hasDuration ? totalDurationMs : null,
+  };
+}
+
+function renderEmptyState(icon, title, text) {
+  return `
+    <div class="llm-empty-state">
+      <div class="llm-empty-state-icon">${escapeHtml(icon)}</div>
+      <div class="llm-empty-state-title">${escapeHtml(title)}</div>
+      <div class="llm-empty-state-text">${escapeHtml(text)}</div>
+    </div>
+  `;
+}
+
+function copyLlmPromptToClipboard() {
+  const text = state.llm.prompt || "";
+  if (!text) {
+    showToast("当前没有可复制的 prompt", "info");
+    return;
+  }
+  copyTextToClipboard(text)
+    .then(() => showToast("已复制 prompt 到剪贴板", "ok"))
+    .catch(() => showToast("复制失败，浏览器拒绝写入剪贴板", "error"));
+}
+
+function copyTextToClipboard(text) {
+  if (navigator.clipboard?.writeText) {
+    return navigator.clipboard.writeText(text);
+  }
+  return new Promise((resolve, reject) => {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    try {
+      const ok = document.execCommand("copy");
+      document.body.removeChild(textarea);
+      ok ? resolve() : reject(new Error("execCommand returned false"));
+    } catch (error) {
+      document.body.removeChild(textarea);
+      reject(error);
+    }
+  });
+}
+
+function clearLlmTranscript() {
+  if (state.llm.running) {
+    showToast("运行中无法清空模型行为", "info");
+    return;
+  }
+  state.llm.transcript = [];
+  state.llm.toolTrace = [];
+  state.llm.currentModelEntry = null;
+  state.llm.openThinking.clear();
+  state.llm.openToolTrace.clear();
+  state.llm.toolTraceSeq = 0;
+  state.llm.prompt = "";
+  renderLlmDebug();
+  showToast("已清空模型行为", "ok");
+}
+
+function clearLlmEventLog() {
+  state.llm.events = [];
+  renderLlmDebug();
+  showToast("已清空事件流", "ok");
+}
+
+const LLM_PRESETS = {
+  openai: {
+    base_url: "https://api.openai.com/v1",
+    model: "gpt-4o-mini",
+  },
+  deepseek: {
+    base_url: "https://api.deepseek.com/v1",
+    model: "deepseek-chat",
+  },
+  anthropic: {
+    base_url: "https://api.anthropic.com/v1",
+    model: "claude-3-5-sonnet-latest",
+  },
+};
+
+function applyLlmPreset(value) {
+  if (!value || value === "custom") {
+    $("llmPresetSelect").value = "";
+    return;
+  }
+  const preset = LLM_PRESETS[value];
+  if (!preset) return;
+  setInputIfEmpty("llmBaseUrl", preset.base_url);
+  setInputIfEmpty("llmModel", preset.model);
+  $("llmPresetSelect").value = "";
+}
+
+function setInputIfEmpty(id, value) {
+  const input = $(id);
+  if (!input) return;
+  if (input.value && input.value.trim()) {
+    showToast(`${labelOf(id)} 已存在，未覆盖`, "info");
+    return;
+  }
+  input.value = value;
+}
+
+function labelOf(id) {
+  const labels = {
+    llmBaseUrl: "Base URL",
+    llmModel: "模型名",
+    llmApiKey: "API Key",
+    llmGameSeed: "游戏 Seed",
+    llmScoringSeed: "评分 Seed",
+    llmTemperature: "Temperature",
+  };
+  return labels[id] || id;
+}
+
 function renderLlmTranscript() {
   if (!state.llm.transcript.length) {
-    return '<div class="muted">尚无模型行为</div>';
+    return renderEmptyState("💭", "等待第一次模型行为", "点击「开始运行」后，这里会按回合流式展示思考、回复和工具调用");
   }
   return state.llm.transcript.slice(-80).map((entry) => {
     if (entry.kind === "turn") {
@@ -2183,7 +2421,7 @@ function updateModelMeta(container, entry) {
 
 function renderLlmToolTrace() {
   if (!state.llm.toolTrace.length) {
-    return '<div class="muted">尚无工具调用</div>';
+    return renderEmptyState("🔧", "尚无工具调用", "模型每次调用工具的参数、结果和状态会在这里按时间倒序展示");
   }
   return state.llm.toolTrace.slice(-120).reverse().map((item) => {
     const ok = item.ok;
@@ -2192,15 +2430,14 @@ function renderLlmToolTrace() {
     const cls = ok === false ? "danger" : isSuccess ? "ok" : "muted";
     const label = ok === false ? "失败" : isSuccess ? "成功" : "等待结果";
     const toolId = toolTraceId(item);
-    const open = state.llm.openToolTrace.has(toolId) ? "open" : "";
+    const open = state.llm.openToolTrace.has(toolId) || ok === false ? "open" : "";
     const received = item.content || "";
     return `
       <details class="llm-tool-item" data-tool-id="${escapeHtml(toolId)}" ${open}>
         <summary>
-          <span>T${escapeHtml(item.turn)} · ${escapeHtml(item.name)}</span>
-          <strong class="${cls}">${label}</strong>
+          <span><strong>${escapeHtml(item.name || "tool")}</strong> <span class="muted small">· T${escapeHtml(item.turn ?? "—")}${item.callId ? ` · ${escapeHtml(item.callId.slice(-6))}` : ""}</span></span>
+          <span class="llm-tool-tag ${cls}">${label}</span>
         </summary>
-        <div class="small muted">call_id：${escapeHtml(item.callId || "n/a")}</div>
         <div class="llm-json-label">参数</div>
         <pre>${escapeHtml(JSON.stringify(item.arguments || {}, null, 2))}</pre>
         ${received ? `
@@ -2214,14 +2451,49 @@ function renderLlmToolTrace() {
 
 function renderLlmEventLog() {
   if (!state.llm.events.length) {
-    return '<div class="muted">尚无调试事件</div>';
+    return renderEmptyState("📡", "事件流空闲中", "启动运行后，最近 120 条服务端原始事件会追加到这里，折叠查看");
   }
-  return state.llm.events.slice(-120).reverse().map((event) => `
-    <details class="llm-event">
-      <summary>${escapeHtml(event.type)}</summary>
-      <pre>${escapeHtml(JSON.stringify(event, null, 2))}</pre>
-    </details>
-  `).join("");
+  return state.llm.events.slice(-120).reverse().map((event) => {
+    const type = event.type || "event";
+    const tagCls = eventTypeTagClass(type);
+    return `
+      <details class="llm-event">
+        <summary>
+          <span class="llm-event-type ${tagCls}">${escapeHtml(type)}</span>
+          <span class="muted small">${formatLlmEventSummary(event)}</span>
+        </summary>
+        <pre>${escapeHtml(JSON.stringify(event, null, 2))}</pre>
+      </details>
+    `;
+  }).join("");
+}
+
+function eventTypeTagClass(type) {
+  if (!type) return "";
+  if (/(error|fail|reject)/i.test(type)) return "error";
+  if (/(complete|finish|done|success)/i.test(type)) return "ok";
+  if (/(retry|warn|partial)/i.test(type)) return "warn";
+  return "";
+}
+
+function formatLlmEventSummary(event) {
+  if (!event || typeof event !== "object") return "";
+  if (typeof event.turn !== "undefined" && event.turn !== null) {
+    return `T${event.turn}${event.step != null ? ` · step ${event.step}` : ""}`;
+  }
+  if (event.archive?.directory) {
+    return escapeHtml(event.archive.directory);
+  }
+  if (event.name) {
+    return escapeHtml(event.name);
+  }
+  if (event.type === "model_delta" || event.type === "model_reasoning_delta") {
+    return event.text_preview || "stream chunk";
+  }
+  if (event.error) {
+    return escapeHtml(String(event.error).slice(0, 80));
+  }
+  return "";
 }
 
 function summarizeToolResult(result) {
@@ -2543,7 +2815,7 @@ function renderReplayRankContributors(score) {
 function renderLlmReplay() {
   const replay = state.llm.replay.data;
   if (!replay) {
-    return '<div class="muted">选择归档或打开 replay.json 后开始回放</div>';
+    return renderEmptyState("🎬", "尚未选择归档", "从顶部下拉选择一个 run，或点击「打开 replay.json」导入本地归档");
   }
   const gameSeed = replay.final_observation?.seed;
   const scoringSeed = replay.score?.seed ?? replay.final_observation?.scoring?.seed;

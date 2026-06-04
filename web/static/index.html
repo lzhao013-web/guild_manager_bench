@@ -15,7 +15,9 @@
       <div class="topbar-actions">
         <div class="mode-switch" aria-label="界面模式">
           <button class="mode-button" type="button" data-mode="manual">人工操作</button>
-          <button class="mode-button active" type="button" data-mode="llm">LLM 调试</button>
+          <button class="mode-button active" type="button" data-mode="llm">
+            <span class="mode-dot" aria-hidden="true"></span>LLM 操作
+          </button>
         </div>
         <button id="newSessionButton" type="button">新会话</button>
         <button id="exportButton" type="button" disabled>💾 保存</button>
@@ -40,12 +42,20 @@
         <div class="tab-panel active" data-panel="squad">
           <div class="grid two">
             <div class="panel">
-              <h2>冒险者</h2>
+              <div class="panel-head">
+                <div>
+                  <h2>冒险者</h2>
+                  <div class="panel-sub">当前队伍成员 · 详情 / 技能 / 装备 / 升级</div>
+                </div>
+              </div>
               <div id="adventurers"></div>
             </div>
             <div class="panel">
-              <div class="section-head">
-                <h2>招募</h2>
+              <div class="panel-head">
+                <div>
+                  <h2>招募</h2>
+                  <div class="panel-sub">可选冒险者 · 按需招入</div>
+                </div>
                 <span id="recruitmentLimit" class="small muted"></span>
               </div>
               <div id="recruitment"></div>
@@ -56,15 +66,30 @@
         <div class="tab-panel" data-panel="workshop">
           <div class="grid three">
             <div class="panel">
-              <h2>合成</h2>
+              <div class="panel-head">
+                <div>
+                  <h2>合成</h2>
+                  <div class="panel-sub">消耗材料合成装备</div>
+                </div>
+              </div>
               <div id="crafting"></div>
             </div>
             <div class="panel">
-              <h2>装备</h2>
+              <div class="panel-head">
+                <div>
+                  <h2>装备</h2>
+                  <div class="panel-sub">已持有 / 在用装备</div>
+                </div>
+              </div>
               <div id="equipment"></div>
             </div>
             <div class="panel">
-              <h2>全局加成</h2>
+              <div class="panel-head">
+                <div>
+                  <h2>全局加成</h2>
+                  <div class="panel-sub">永久升级 · 越买越强</div>
+                </div>
+              </div>
               <div id="upgrades"></div>
             </div>
           </div>
@@ -73,16 +98,31 @@
         <div class="tab-panel" data-panel="reports">
           <div class="grid two">
             <div class="panel">
-              <h2>战斗记录</h2>
+              <div class="panel-head">
+                <div>
+                  <h2>战斗记录</h2>
+                  <div class="panel-sub">最近 30 次交战结果</div>
+                </div>
+              </div>
               <div id="battleLog" class="battle-log"></div>
             </div>
             <div class="panel">
-              <h2>操作轨迹</h2>
+              <div class="panel-head">
+                <div>
+                  <h2>操作轨迹</h2>
+                  <div class="panel-sub">所有动作 · 成功 / 拒绝</div>
+                </div>
+              </div>
               <div id="actionTimeline" class="timeline"></div>
             </div>
           </div>
           <div class="panel">
-            <h2>事件</h2>
+            <div class="panel-head">
+              <div>
+                <h2>事件</h2>
+                <div class="panel-sub">会话级事件流</div>
+              </div>
+            </div>
             <div id="events" class="events"></div>
           </div>
         </div>
@@ -90,89 +130,177 @@
 
       <section class="mode-panel active" data-mode-panel="llm">
         <div class="llm-page">
-        <div class="llm-grid">
-          <div class="panel llm-config">
-            <h2>模型调试</h2>
-            <div class="llm-form">
-              <label>
-                <span>模型</span>
-                <input id="llmModel" type="text" placeholder="OPENAI_MODEL" autocomplete="off" />
-              </label>
-              <label>
-                <span>Base URL</span>
-                <input id="llmBaseUrl" type="text" placeholder="https://api.openai.com/v1" autocomplete="off" />
-              </label>
-              <label>
-                <span>API Key</span>
-                <input id="llmApiKey" type="password" placeholder="留空则使用服务端环境变量" autocomplete="off" />
-              </label>
-              <label>
-                <span>非 end_turn 预算</span>
-                <input id="llmMaxToolCalls" type="number" min="0" value="20" />
-              </label>
-              <label>
-                <span>游戏 Seed</span>
-                <input id="llmGameSeed" type="number" step="1" placeholder="默认 game.yaml" />
-              </label>
-              <label>
-                <span>评分 Seed</span>
-                <input id="llmScoringSeed" type="number" step="1" placeholder="默认 scoring.seed" />
-              </label>
-              <label>
-                <span>Temperature</span>
-                <input id="llmTemperature" type="number" min="0" max="2" step="0.1" placeholder="默认" />
-              </label>
-              <label class="llm-wide">
-                <span>目标</span>
-                <textarea id="llmObjective" rows="3">最大程度地获取资源、加强冒险者，以使你的队伍的每个队员在回合限制达到上限时，获得最高的终局战力。每个队员的终局战力评分之和，就是你的最终得分。</textarea>
-              </label>
-              <div class="llm-controls">
-                <button id="llmStartButton" type="button" class="btn-primary">开始真实模型调试</button>
-                <button id="llmStopButton" type="button" disabled>停止</button>
+          <section class="llm-status-bar" aria-label="运行状态">
+            <div class="llm-status-pulse">
+              <span class="llm-pulse-dot" data-running="false" aria-hidden="true"></span>
+              <div class="llm-status-text">
+                <div class="llm-status-label">运行状态</div>
+                <div id="llmStatus" class="llm-status-value muted">未启动</div>
               </div>
             </div>
-            <div id="llmStatus" class="llm-status muted">未启动</div>
-          </div>
-
-          <div class="panel llm-context">
-            <h2>当前上下文</h2>
-            <pre id="llmPrompt" class="llm-pre">尚未开始</pre>
-          </div>
-        </div>
-
-        <div class="llm-grid lower">
-          <div class="panel">
-            <h2>模型行为</h2>
-            <div id="llmTranscript" class="llm-transcript"></div>
-          </div>
-          <div class="panel">
-            <h2>工具调用</h2>
-            <div id="llmToolTrace" class="llm-tool-trace"></div>
-          </div>
-        </div>
-
-        <div class="panel">
-          <h2>调试事件</h2>
-          <div id="llmEventLog" class="llm-event-log"></div>
-        </div>
-
-        <div class="panel">
-          <div class="section-head">
-            <h2>Replay 回放</h2>
-            <div class="llm-controls compact">
-              <button id="llmReplayRefreshButton" type="button">刷新归档</button>
-              <select id="llmReplaySelect" aria-label="选择 LLM replay"></select>
-              <button id="llmReplayLoadButton" type="button">加载归档</button>
-              <button id="llmReplayResumeButton" type="button">继续运行</button>
-              <label class="file-button">
-                打开 replay.json
-                <input id="llmReplayFile" type="file" accept="application/json,.json" />
-              </label>
+            <div class="llm-status-stats" id="llmStatusStats">
+              <div class="llm-stat">
+                <div class="llm-stat-label">回合</div>
+                <div class="llm-stat-value" data-stat="turn">—</div>
+              </div>
+              <div class="llm-stat">
+                <div class="llm-stat-label">模型调用</div>
+                <div class="llm-stat-value" data-stat="calls">0</div>
+              </div>
+              <div class="llm-stat">
+                <div class="llm-stat-label">工具调用</div>
+                <div class="llm-stat-value" data-stat="tools">0</div>
+              </div>
+              <div class="llm-stat">
+                <div class="llm-stat-label">输入 tokens</div>
+                <div class="llm-stat-value" data-stat="input">0</div>
+              </div>
+              <div class="llm-stat">
+                <div class="llm-stat-label">输出 tokens</div>
+                <div class="llm-stat-value" data-stat="output">0</div>
+              </div>
+              <div class="llm-stat">
+                <div class="llm-stat-label">耗时</div>
+                <div class="llm-stat-value" data-stat="duration">—</div>
+              </div>
             </div>
-          </div>
-          <div id="llmReplayStatus" class="llm-status muted">尚未加载 replay</div>
-          <div id="llmReplayView" class="llm-replay"></div>
-        </div>
+          </section>
+
+          <section class="panel llm-config">
+            <div class="panel-head">
+              <div>
+                <h2>LLM 操作</h2>
+                <div class="panel-sub">配置模型并启动一次自动操作 run · 结果自动留档到 <code>runs/llm/</code></div>
+              </div>
+              <div class="llm-preset" aria-label="模型预设">
+                <label class="sr-only" for="llmPresetSelect">模型预设</label>
+                <select id="llmPresetSelect">
+                  <option value="">快速预设…</option>
+                  <option value="openai">OpenAI · gpt-4o-mini</option>
+                  <option value="deepseek">DeepSeek · deepseek-chat</option>
+                  <option value="anthropic">Anthropic · claude-3.5-sonnet</option>
+                  <option value="custom">自定义</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="llm-form-section">
+              <div class="llm-form-section-title">模型接入</div>
+              <div class="llm-form llm-form-wide">
+                <label>
+                  <span>模型名</span>
+                  <input id="llmModel" type="text" placeholder="OPENAI_MODEL" autocomplete="off" />
+                </label>
+                <label>
+                  <span>Base URL</span>
+                  <input id="llmBaseUrl" type="text" placeholder="https://api.openai.com/v1" autocomplete="off" />
+                </label>
+                <label class="llm-field-wide">
+                  <span>API Key · 留空使用服务端环境变量</span>
+                  <input id="llmApiKey" type="password" placeholder="sk-..." autocomplete="off" />
+                </label>
+              </div>
+            </div>
+
+            <div class="llm-form-section">
+              <div class="llm-form-section-title">运行参数</div>
+              <div class="llm-form llm-form-wide">
+                <label>
+                  <span>非 end_turn 预算</span>
+                  <input id="llmMaxToolCalls" type="number" min="0" value="20" />
+                </label>
+                <label>
+                  <span>Temperature</span>
+                  <input id="llmTemperature" type="number" min="0" max="2" step="0.1" placeholder="默认" />
+                </label>
+                <label>
+                  <span>游戏 Seed</span>
+                  <input id="llmGameSeed" type="number" step="1" placeholder="默认 game.yaml" />
+                </label>
+                <label>
+                  <span>评分 Seed</span>
+                  <input id="llmScoringSeed" type="number" step="1" placeholder="默认 scoring.seed" />
+                </label>
+                <label class="llm-field-wide">
+                  <span>目标（传给模型）</span>
+                  <textarea id="llmObjective" rows="2">最大程度地获取资源、加强冒险者，以使你的队伍的每个队员在回合限制达到上限时，获得最高的终局战力。每个队员的终局战力评分之和，就是你的最终得分。</textarea>
+                </label>
+              </div>
+            </div>
+
+            <div class="llm-actions">
+              <button id="llmStartButton" type="button" class="btn-primary llm-cta">
+                <span class="llm-cta-icon" aria-hidden="true">▶</span>
+                <span>开始运行</span>
+              </button>
+              <button id="llmStopButton" type="button" class="btn-danger" disabled>
+                <span aria-hidden="true">■</span>
+                <span>停止</span>
+              </button>
+            </div>
+          </section>
+
+          <section class="panel llm-runtime">
+            <nav class="llm-runtime-tabs" role="tablist" aria-label="运行态信息">
+              <button class="llm-runtime-tab active" type="button" role="tab" data-runtime="transcript">
+                <span class="llm-runtime-tab-icon" aria-hidden="true">💭</span>
+                <span>模型行为</span>
+                <span class="llm-runtime-tab-count" data-runtime-count="transcript">0</span>
+              </button>
+              <button class="llm-runtime-tab" type="button" role="tab" data-runtime="tools">
+                <span class="llm-runtime-tab-icon" aria-hidden="true">🔧</span>
+                <span>工具调用</span>
+                <span class="llm-runtime-tab-count" data-runtime-count="tools">0</span>
+              </button>
+              <button class="llm-runtime-tab" type="button" role="tab" data-runtime="prompt">
+                <span class="llm-runtime-tab-icon" aria-hidden="true">📜</span>
+                <span>当前上下文</span>
+              </button>
+              <button class="llm-runtime-tab" type="button" role="tab" data-runtime="events">
+                <span class="llm-runtime-tab-icon" aria-hidden="true">📡</span>
+                <span>事件流</span>
+                <span class="llm-runtime-tab-count" data-runtime-count="events">0</span>
+              </button>
+              <div class="llm-runtime-actions">
+                <button id="llmCopyPromptButton" type="button" class="llm-icon-button" title="复制 prompt 到剪贴板" aria-label="复制 prompt">📋 复制</button>
+                <button id="llmTranscriptClearButton" type="button" class="llm-icon-button" title="清空记录" aria-label="清空模型行为记录">✕ 清空</button>
+                <button id="llmEventClearButton" type="button" class="llm-icon-button" title="清空事件" aria-label="清空事件流">✕ 清空事件</button>
+              </div>
+            </nav>
+            <div class="llm-runtime-panel active" data-runtime-panel="transcript" role="tabpanel">
+              <div id="llmTranscript" class="llm-transcript"></div>
+            </div>
+            <div class="llm-runtime-panel" data-runtime-panel="tools" role="tabpanel">
+              <div id="llmToolTrace" class="llm-tool-trace"></div>
+            </div>
+            <div class="llm-runtime-panel" data-runtime-panel="prompt" role="tabpanel">
+              <pre id="llmPrompt" class="llm-pre">尚未开始</pre>
+            </div>
+            <div class="llm-runtime-panel" data-runtime-panel="events" role="tabpanel">
+              <div id="llmEventLog" class="llm-event-log"></div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <h2>历史回放</h2>
+                <div class="panel-sub">加载已留档的 run · 可继续运行</div>
+              </div>
+              <div class="llm-controls compact">
+                <button id="llmReplayRefreshButton" type="button">刷新归档</button>
+                <select id="llmReplaySelect" aria-label="选择历史归档"></select>
+                <button id="llmReplayLoadButton" type="button">加载归档</button>
+                <button id="llmReplayResumeButton" type="button">继续运行</button>
+                <label class="file-button">
+                  打开 replay.json
+                  <input id="llmReplayFile" type="file" accept="application/json,.json" />
+                </label>
+              </div>
+            </div>
+            <div id="llmReplayStatus" class="llm-status muted">尚未加载归档</div>
+            <div id="llmReplayView" class="llm-replay"></div>
+          </section>
         </div>
       </section>
     </main>
@@ -193,7 +321,7 @@
     <div id="modelPromptModal" class="modal-overlay" hidden>
       <div class="modal modal-wide">
         <div class="modal-head">
-          <h2>完整输入 prompt</h2>
+          <h2>本回合完整输入</h2>
           <button type="button" class="modal-close" onclick="closeModelPromptModal()">&times;</button>
         </div>
         <div class="modal-body">
@@ -205,6 +333,6 @@
 
     <div id="equipPopup" class="equip-popup" hidden></div>
     <div id="toast" class="toast" hidden></div>
-    <script src="/app.js?v=20260601-manual-fixes"></script>
+    <script src="/app.js?v=20260604-llm-operation"></script>
   </body>
 </html>
