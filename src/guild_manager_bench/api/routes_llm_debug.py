@@ -16,6 +16,8 @@ from guild_manager_bench.bench.llm.prompts import DEFAULT_OBJECTIVE
 
 
 LLM_ARCHIVE_DIR = Path("runs/llm")
+DEFAULT_LLM_DEBUG_TIMEOUT = 180.0
+LLM_DEBUG_EVENT_SEND_TIMEOUT = 180.0
 
 
 def llm_debug_router(
@@ -42,7 +44,7 @@ def llm_debug_router(
 
             def emit(event: dict[str, Any]) -> None:
                 future = asyncio.run_coroutine_threadsafe(websocket.send_json(event), loop)
-                future.result(timeout=10)
+                future.result(timeout=LLM_DEBUG_EVENT_SEND_TIMEOUT)
 
             def run() -> None:
                 payload = request.get("payload", {})
@@ -53,7 +55,7 @@ def llm_debug_router(
                         model=_optional_string(payload, "model"),
                         api_key=_optional_string(payload, "api_key"),
                         base_url=_optional_string(payload, "base_url"),
-                        timeout=_float_value(payload, "timeout", 60.0),
+                        timeout=_float_value(payload, "timeout", DEFAULT_LLM_DEBUG_TIMEOUT),
                         temperature=_optional_float(payload, "temperature"),
                         max_tokens=_optional_int(payload, "max_tokens"),
                     )

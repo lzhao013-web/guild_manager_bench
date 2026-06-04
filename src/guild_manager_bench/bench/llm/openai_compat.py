@@ -96,13 +96,17 @@ def _strip_unquoted_dotenv_comment(raw_value: str) -> str:
 
 
 def _first_config_value(
-    explicit_value: str | None,
+    explicit_value: str | int | float | None,
     dotenv_values: Mapping[str, str],
     *names: str,
     default: str | None = None,
 ) -> str | None:
     if explicit_value is not None:
-        return explicit_value.strip() or None
+        if isinstance(explicit_value, str):
+            return explicit_value.strip() or None
+        if isinstance(explicit_value, int | float) and not isinstance(explicit_value, bool):
+            return str(explicit_value)
+        return None
     for name in names:
         value = os.getenv(name)
         if value and value.strip():

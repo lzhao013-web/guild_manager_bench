@@ -63,6 +63,22 @@ def test_openai_config_explicit_values_override_dotenv(tmp_path, monkeypatch) ->
     assert config.base_url == "https://explicit.test/v1"
 
 
+def test_openai_config_accepts_numeric_timeout(tmp_path, monkeypatch) -> None:
+    monkeypatch.delenv("OPENAI_MODEL", raising=False)
+    monkeypatch.delenv("OPENAI_COMPAT_MODEL", raising=False)
+    env_file = tmp_path / ".env"
+    env_file.write_text("OPENAI_COMPAT_MODEL=dotenv-model\n", encoding="utf-8")
+
+    config = OpenAIChatCompletionsConfig.from_env(
+        model="explicit-model",
+        timeout=60.0,
+        env_file=env_file,
+    )
+
+    assert config.model == "explicit-model"
+    assert config.timeout == 60.0
+
+
 def test_openai_config_environment_values_override_dotenv(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("OPENAI_MODEL", "env-model")
     monkeypatch.setenv("OPENAI_API_KEY", "env-key")
