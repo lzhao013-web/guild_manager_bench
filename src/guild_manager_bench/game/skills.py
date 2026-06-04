@@ -19,7 +19,7 @@ def _require_ratio(name: str, value: float) -> None:
 
 
 SkillKind = Literal["passive", "active"]
-CombatStatName = Literal["attack", "defense", "speed", "recovery", "mp_recovery"]
+CombatStatName = Literal["attack", "defense", "speed"]
 SkillEffectType = Literal[
     "damage_multiplier",
     "heal",

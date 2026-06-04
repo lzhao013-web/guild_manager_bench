@@ -209,8 +209,8 @@ def _stat_text(value: Any) -> str:
         "attack": "攻击",
         "defense": "防御",
         "speed": "速度",
-        "recovery": "恢复",
-        "mp_recovery": "回魔",
+        "recovery": "战后回血",
+        "mp_recovery": "战后回魔",
     }
     return labels.get(value, str(value))
 

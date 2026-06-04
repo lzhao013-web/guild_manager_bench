@@ -920,3 +920,77 @@ def _int_field(data: Mapping[str, Any], key: str, *, default: int | None = None)
     if isinstance(value, bool) or not isinstance(value, int):
         raise ValueError(f"{key} must be an int")
     return value
+
+
+# ── Monster Combat Power ─────────────────────────────────────────────────────
+# 基于战斗模拟的怪物强度评分。镜像 rank_score 的 Arena 扫描，但以怪物为主体：
+# 被评估怪物（left）vs Arena 采样怪物（right），在不同难度下评分。
+
+def monster_combat_power(
+    definition: GameDefinition,
+    monster_stats: CombatStats,
+    monster_skills: tuple[Skill, ...],
+) -> float:
+    """通过 Arena 模拟计算怪物强度评分。
+
+    让怪物在不同难度的 Arena 波次中与采样怪物战斗，
+    以加权难度聚合的表现作为强度分。与 rank_score 共用扫描参数。
+    """
+    rules = definition.scoring
+    difficulties = list(range(rules.rank_min_diff, rules.rank_max_diff + 1, rules.rank_step))
+    if not difficulties:
+        return 0.0
+
+    rng = random.Random(rules.seed)
+    power = 0.0
+
+    for difficulty in difficulties:
+        tier_score = 0.0
+        for wave_index in range(rules.rank_waves):
+            arena_monster = _sample_arena_monster(
+                definition,
+                rng,
+                wave_index=wave_index + 1,
+                index=1,
+                difficulty=difficulty,
+            )
+            tier_score += _evaluate_monster_vs_arena(
+                monster_stats,
+                monster_skills,
+                arena_monster,
+            )
+        avg_score = tier_score / rules.rank_waves if rules.rank_waves else 0.0
+        power += (avg_score / 100.0) * difficulty
+
+    return _round_score(power)
+
+
+def _evaluate_monster_vs_arena(
+    monster_stats: CombatStats,
+    monster_skills: tuple[Skill, ...],
+    arena_monster: _ArenaMonster,
+) -> float:
+    """评估怪物 vs Arena 怪物的单场战斗得分。"""
+    result = run_auto_battle(
+        Combatant(
+            combatant_id="evaluated_monster",
+            stats=monster_stats,
+            resources=CombatResources.full(monster_stats),
+            skills=monster_skills,
+        ),
+        Combatant(
+            combatant_id=arena_monster.monster_id,
+            stats=arena_monster.stats,
+            resources=CombatResources.full(arena_monster.stats),
+            skills=arena_monster.skills,
+        ),
+    )
+    enemy_progress = 1 - result.right_resources.current_hp / arena_monster.stats.hp
+    survival_margin = result.left_resources.current_hp / monster_stats.hp
+    outcome_score = {
+        "left_win": 1.0,
+        "draw": 0.4,
+        "right_win": 0.0,
+    }[result.outcome]
+    score = 70 * outcome_score + 20 * enemy_progress + 10 * survival_margin
+    return _round_score(max(0.0, min(100.0, score)))

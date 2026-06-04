@@ -35,10 +35,12 @@ from guild_manager_bench.bench.llm.trace import (
     ToolCallRecord,
     TurnTrace,
 )
-from guild_manager_bench.bench.metrics import compute_rank_score, score_final_state
+from guild_manager_bench.bench.metrics import compute_rank_score, monster_combat_power, score_final_state
 from guild_manager_bench.game.loader import load_game_definition
+from guild_manager_bench.game.models import CombatStats
 from guild_manager_bench.game.presets import describe_data_source, verify_data_source
-from guild_manager_bench.game.state import MATERIAL_NAMES
+from guild_manager_bench.game.skills import Skill, SkillCondition, SkillEffect, StatusDefinition
+from guild_manager_bench.game.state import MATERIAL_NAMES, GameDefinition
 
 
 @dataclass(frozen=True, slots=True)
@@ -239,7 +241,7 @@ def run_llm_game(
                         traces=traces,
                         final_observation=observation,
                         score=score,
-                        stats=_compute_run_stats(run),
+                        stats=_compute_run_stats(run, definition),
                     )
                     _emit(emit, "run_completed", run=_run_summary(run))
                     return run
@@ -304,7 +306,7 @@ def run_llm_game(
                         traces=traces,
                         final_observation=final_observation,
                         failure_reason=turn_trace.failure_reason,
-                        stats=_compute_run_stats(run),
+                        stats=_compute_run_stats(run, definition),
                     )
                     _emit(emit, "run_failed", run=_run_summary(run))
                     return run
@@ -1208,7 +1210,7 @@ def _append_adventurer_lines(
             f"HP {resources.get('current_hp')}/{stats.get('hp')} "
             f"MP {resources.get('current_mp')}/{stats.get('mp')} "
             f"攻击 {stats.get('attack')} 防御 {stats.get('defense')} 速度 {stats.get('speed')} "
-            f"恢复 {stats.get('recovery')} 回魔 {stats.get('mp_recovery')} "
+            f"战后回血 {stats.get('recovery')} 战后回魔 {stats.get('mp_recovery')} "
             f"装备 {equipment_text}"
         )
         _append_skill_lines(lines, adventurer.get("skills"), indent="  ")
@@ -1244,7 +1246,7 @@ def _append_recruit_candidate_lines(
             f"费用 {candidate.get('recruit_gold')} "
             f"HP {stats.get('hp')} MP {stats.get('mp')} "
             f"攻击 {stats.get('attack')} 防御 {stats.get('defense')} "
-            f"速度 {stats.get('speed')} 恢复 {stats.get('recovery')} 回魔 {stats.get('mp_recovery')} "
+            f"速度 {stats.get('speed')} 战后回血 {stats.get('recovery')} 战后回魔 {stats.get('mp_recovery')} "
             f"每级属性成长 {_stat_modifier_inline(candidate.get('stat_growth_per_level'))} "
             f"{availability}{missing_text}"
         )
@@ -1279,7 +1281,7 @@ def _append_monster_lines(
             f"{monster.get('name')} "
             f"HP {stats.get('hp')} MP {stats.get('mp')} "
             f"攻击 {stats.get('attack')} 防御 {stats.get('defense')} "
-            f"速度 {stats.get('speed')} 恢复 {stats.get('recovery')} 回魔 {stats.get('mp_recovery')} "
+            f"速度 {stats.get('speed')} 战后回血 {stats.get('recovery')} 战后回魔 {stats.get('mp_recovery')} "
             f"奖励 {reward_text}"
         )
         _append_skill_lines(lines, monster.get("skills"), indent="  ")
@@ -1714,8 +1716,8 @@ def _mapping_key(value: Any) -> str:
         "attack": "攻击",
         "defense": "防御",
         "speed": "速度",
-        "recovery": "恢复",
-        "mp_recovery": "回魔",
+        "recovery": "战后回血",
+        "mp_recovery": "战后回魔",
         **MATERIAL_NAMES,
     }
     return labels.get(value, str(value))
@@ -1806,8 +1808,11 @@ def _agent_response(
 
 
 def _is_retryable(turn: TurnTrace) -> bool:
-    """回合是否可安全重试：没有工具调用意味着游戏状态无变化。"""
-    return not turn.tool_calls
+    """回合是否可安全重试：没有任何成功执行的改变游戏状态的工具调用。"""
+    return not any(
+        call.name in _STATE_MUTATING_TOOL_NAMES and call.ok is True
+        for call in turn.tool_calls
+    )
 
 
 def _retry_message_empty_response() -> dict[str, str]:
@@ -2035,7 +2040,10 @@ def _agent_metadata(agent: LlmTurnAgent) -> dict[str, Any]:
     return metadata
 
 
-def _compute_run_stats(run: LlmGameRun) -> dict[str, Any]:
+def _compute_run_stats(
+    run: LlmGameRun,
+    definition: GameDefinition | None = None,
+) -> dict[str, Any]:
     """从 LlmGameRun 轨迹中聚合全面的运行统计数据。"""
 
     # Timing accumulators
@@ -2174,12 +2182,14 @@ def _compute_run_stats(run: LlmGameRun) -> dict[str, Any]:
                         call.result,
                         turn.observation_before,
                         turn.turn,
+                        definition=definition,
                     )
                     if enemy is None:
                         enemy = _strongest_defeated_enemy_from_tool_content(
                             tool_content,
                             turn.observation_before,
                             turn.turn,
+                            definition=definition,
                         )
                     strongest_defeated_enemy = _stronger_enemy(
                         strongest_defeated_enemy,
@@ -2331,6 +2341,8 @@ def _strongest_defeated_enemy_from_tool_result(
     result: Mapping[str, Any],
     observation_before: Mapping[str, Any] | None,
     turn_number: int,
+    *,
+    definition: GameDefinition | None = None,
 ) -> dict[str, Any] | None:
     turn_result = result.get("turn_result")
     if not isinstance(turn_result, Mapping):
@@ -2349,6 +2361,7 @@ def _strongest_defeated_enemy_from_tool_result(
             battle,
             observation_before,
             turn_number,
+            definition=definition,
         )
         best = _stronger_enemy(best, candidate)
     return best
@@ -2358,6 +2371,8 @@ def _strongest_defeated_enemy_from_tool_content(
     content: str,
     observation_before: Mapping[str, Any] | None,
     turn_number: int,
+    *,
+    definition: GameDefinition | None = None,
 ) -> dict[str, Any] | None:
     if not content:
         return None
@@ -2401,6 +2416,7 @@ def _strongest_defeated_enemy_from_tool_content(
             battle,
             observation_before,
             turn_number,
+            definition=definition,
         )
         best = _stronger_enemy(best, candidate)
     return best
@@ -2428,10 +2444,107 @@ def _monster_id_from_observation_ref(
     return str(monster_id) if monster_id is not None else None
 
 
+def _combat_stats_from_numeric(stats: Mapping[str, int]) -> CombatStats | None:
+    """从数值字典构造 CombatStats，缺少必要字段时返回 None。"""
+    try:
+        return CombatStats(
+            hp=int(stats.get("hp", 0)),
+            mp=int(stats.get("mp", 0)),
+            attack=int(stats.get("attack", 0)),
+            defense=int(stats.get("defense", 0)),
+            speed=int(stats.get("speed", 0)),
+            recovery=int(stats.get("recovery", 0)),
+            mp_recovery=int(stats.get("mp_recovery", 0)),
+        )
+    except (ValueError, TypeError):
+        return None
+
+
+def _skills_from_observation(monster: Mapping[str, Any]) -> tuple[Skill, ...] | None:
+    """从 observation 中的怪物数据提取技能元组。"""
+    skills_data = monster.get("skills")
+    if not isinstance(skills_data, list):
+        return None
+    skills: list[Skill] = []
+    for item in skills_data:
+        if not isinstance(item, Mapping):
+            continue
+        try:
+            effects = item.get("effects", [])
+            if not isinstance(effects, list):
+                effects = []
+            skills.append(Skill(
+                skill_id=str(item.get("skill_id") or item.get("name") or "skill"),
+                name=str(item.get("name") or item.get("skill_id") or "skill"),
+                kind=item.get("kind", "active"),
+                condition=_skill_condition_from_mapping(item.get("condition")),
+                effects=tuple(
+                    _skill_effect_from_mapping(e)
+                    for e in effects
+                    if isinstance(e, Mapping)
+                ),
+                mp_cost=int(item.get("mp_cost", 0)),
+                priority=int(item.get("priority", 0)),
+                once_per_battle=bool(item.get("once_per_battle", False)),
+                free=bool(item.get("free", False)),
+            ))
+        except (ValueError, TypeError):
+            continue
+    return tuple(skills) if skills else None
+
+
+def _skill_condition_from_mapping(data: Any) -> SkillCondition:
+    if not isinstance(data, Mapping):
+        return SkillCondition(condition_type="always")
+    children = data.get("conditions", [])
+    if not isinstance(children, list):
+        children = []
+    return SkillCondition(
+        condition_type=data.get("type", "always"),
+        value=data.get("value"),
+        conditions=tuple(_skill_condition_from_mapping(item) for item in children),
+    )
+
+
+def _skill_effect_from_mapping(data: Mapping[str, Any]) -> SkillEffect:
+    status_data = data.get("status")
+    return SkillEffect(
+        effect_type=data.get("type", "damage_multiplier"),  # type: ignore[arg-type]
+        value=data.get("value", 0),
+        stat=data.get("stat"),
+        target=data.get("target") or "target",
+        status=(
+            _status_from_mapping(status_data)
+            if isinstance(status_data, Mapping)
+            else None
+        ),
+    )
+
+
+def _status_from_mapping(data: Mapping[str, Any]) -> StatusDefinition:
+    effects = data.get("effects", [])
+    if not isinstance(effects, list):
+        effects = []
+    return StatusDefinition(
+        status_id=str(data.get("status_id") or data.get("name") or "status"),
+        name=str(data.get("name") or data.get("status_id") or "status"),
+        duration=int(data.get("duration", 0)),
+        effects=tuple(
+            _skill_effect_from_mapping(e)
+            for e in effects
+            if isinstance(e, Mapping)
+        ),
+        polarity=data.get("polarity", "neutral"),
+        stack_mode=data.get("stack_mode", "refresh"),
+    )
+
+
 def _defeated_enemy_from_battle(
     battle: Mapping[str, Any],
     observation_before: Mapping[str, Any] | None,
     turn_number: int,
+    *,
+    definition: GameDefinition | None = None,
 ) -> dict[str, Any] | None:
     monster = _monster_from_observation(battle, observation_before)
     stats_source = None
@@ -2466,11 +2579,23 @@ def _defeated_enemy_from_battle(
         or battle.get("monster")
         or monster_id
     )
+
+    # 尝试基于战斗模拟计算怪物强度，fallback 到静态公式
+    power: float | int = _monster_power(stats)
+    if definition is not None and isinstance(monster, Mapping):
+        combat_stats = _combat_stats_from_numeric(stats)
+        monster_skills = _skills_from_observation(monster)
+        if combat_stats is not None and monster_skills is not None:
+            try:
+                power = monster_combat_power(definition, combat_stats, monster_skills)
+            except Exception:
+                pass  # fallback to static formula
+
     result: dict[str, Any] = {
         "turn": turn_number,
         "monster_id": None if monster_id is None else str(monster_id),
         "name": None if name is None else str(name),
-        "power": _monster_power(stats),
+        "power": power,
         "stats": stats,
     }
     if reward:

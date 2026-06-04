@@ -248,6 +248,9 @@ class ShadowState:
                 eff[key] = eff.get(key, 0) + upgrade_stats.get(key, 0)
             adv["effective_stats"] = eff
 
+    # 共用的属性字段列表
+    _STAT_KEYS = ("hp", "mp", "attack", "defense", "speed", "recovery", "mp_recovery")
+
     def apply_equip(
         self,
         adventurer_id: str,
@@ -259,25 +262,38 @@ class ShadowState:
         slot = item["slot"]
         adv_slots = self.equipped[adventurer_id]
 
+        # 收集被移除的装备实例 ID（冲突槽位 + 同槽位旧装备）
+        removed_instance_ids: set[str] = set()
+
         # 处理双手冲突：装备 two_hand 时先卸下 main_hand 和 off_hand
         if slot == "two_hand":
             for hand_slot in ("main_hand", "off_hand"):
                 if hand_slot in adv_slots:
+                    removed_instance_ids.add(adv_slots[hand_slot])
                     del adv_slots[hand_slot]
         # 处理单手冲突：装备 main_hand 或 off_hand 时先卸下 two_hand
         elif slot in ("main_hand", "off_hand"):
             if "two_hand" in adv_slots:
+                removed_instance_ids.add(adv_slots["two_hand"])
                 del adv_slots["two_hand"]
 
         # 替换同槽位
+        if slot in adv_slots:
+            removed_instance_ids.add(adv_slots[slot])
         adv_slots[slot] = instance_id
 
-        # 更新冒险者的 effective_stats（累加装备属性）
+        # 从 effective_stats 中减去被移除装备的属性，再加上新装备属性
         adv = self.adventurers.get(adventurer_id)
         if adv is not None:
             eff = dict(adv.get("effective_stats", adv.get("base_stats", {})))
+            for removed_id in removed_instance_ids:
+                removed_item = self.inventory.get(removed_id)
+                if removed_item:
+                    old_stats = removed_item.get("stats", {})
+                    for key in self._STAT_KEYS:
+                        eff[key] = eff.get(key, 0) - old_stats.get(key, 0)
             item_stats = item.get("stats", {})
-            for key in ("hp", "mp", "attack", "defense", "speed", "recovery", "mp_recovery"):
+            for key in self._STAT_KEYS:
                 eff[key] = eff.get(key, 0) + item_stats.get(key, 0)
             adv["effective_stats"] = eff
 
@@ -288,7 +304,18 @@ class ShadowState:
     ) -> None:
         """记录卸下装备的状态变化。"""
 
-        self.equipped[adventurer_id].pop(slot, None)
+        instance_id = self.equipped[adventurer_id].pop(slot, None)
+
+        # 从 effective_stats 减去被卸下装备的属性
+        if instance_id is not None:
+            adv = self.adventurers.get(adventurer_id)
+            if adv is not None:
+                item = self.inventory.get(instance_id)
+                if item:
+                    eff = dict(adv.get("effective_stats", adv.get("base_stats", {})))
+                    for key in self._STAT_KEYS:
+                        eff[key] = eff.get(key, 0) - item.get("stats", {}).get(key, 0)
+                    adv["effective_stats"] = eff
 
     def apply_xp_allocation(
         self,

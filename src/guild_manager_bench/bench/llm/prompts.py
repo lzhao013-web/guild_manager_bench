@@ -42,9 +42,9 @@ def build_system_prompt(
             "战斗提示：冒险者讨伐怪物的战斗是完全的1V1自动战斗，无法干预战斗过程，也没有团队协作，但可以通过调整冒险者的装备、技能来影响战斗结果。每位冒险者当回合只能讨伐一个怪物，请谨慎选择。",
             "战斗机制：SPD 决定出手频率，而非仅决定先后手。 例如，SPD 80 vs SPD 20 → 高SPD方每行动约4次，低SPD方才行动1次。普通攻击伤害 = max(1, ATK - DEF)",
             "技能相关：主动技能满足条件时会在角色行动时触发，通常会替代普通攻击；带有“即时”说明的技能触发后仍会进行普通攻击；被动技能会在满足条件时持续生效；技能效果可能包括伤害、治疗、状态等，具体信息请参考状态和冒险者信息中的技能描述。",
-            "回复机制：每回合战斗结束后全体冒险者回复HP和MP，额外回复等同于其恢复属性（recovery）值的HP，战斗中技能也可提供治疗、百分比治疗、MP恢复和持续回复状态。"
-            f"HP回复 = {hp_recovery} + 最大HP×{hp_percent} + 恢复属性；"
-            f"MP回复 = {mp_recovery} + 最大MP×{mp_percent} + 回魔属性。",
+            "回复机制：每回合战斗结束后全体冒险者回复HP和MP；战后回血和战后回魔属性会额外增加回复量。战斗中技能也可提供治疗、百分比治疗、MP恢复和持续回复状态。"
+            f"HP回复 = {hp_recovery} + 最大HP×{hp_percent} + 战后回血属性；"
+            f"MP回复 = {mp_recovery} + 最大MP×{mp_percent} + 战后回魔属性。",
             "刷新机制：回合结束后，当前的可讨伐的怪物和可招募的冒险者都会刷新成其他的。",
             f"每回合最多允许 {max_tool_calls} 次非 end_turn 工具调用{bp_limit_text}；每一次工具调用，包括查询、战斗预览、实际操作和失败的调用均会消耗使用次数，请考虑工具调用的预算，谨慎决定和规划要使用的工具。",
             "调用工具使用的所有对象 id 都使用列表左侧的数字 id。",
@@ -156,7 +156,7 @@ def _state_summary(observation: Mapping[str, Any]) -> str:
             f"HP {resources['current_hp']}/{stats['hp']} "
             f"MP {resources['current_mp']}/{stats['mp']} "
             f"攻击 {stats['attack']} 防御 {stats['defense']} 速度 {stats['speed']} "
-            f"恢复 {stats.get('recovery', 0)} 回魔 {stats.get('mp_recovery', 0)} "
+            f"战后回血 {stats.get('recovery', 0)} 战后回魔 {stats.get('mp_recovery', 0)} "
             f"装备 {equip_text}"
         )
         _append_skill_lines_zh(lines, adventurer.get("skills"))
@@ -345,8 +345,8 @@ def _stat_modifier_text(value: Any) -> str:
         ("attack", "攻击"),
         ("defense", "防御"),
         ("speed", "速度"),
-        ("recovery", "恢复"),
-        ("mp_recovery", "回魔"),
+        ("recovery", "战后回血"),
+        ("mp_recovery", "战后回魔"),
     ):
         amount = value.get(key, 0)
         if isinstance(amount, int | float) and amount:

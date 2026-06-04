@@ -471,8 +471,8 @@ def _apply_status_ticks(
         action_type="status",
         actor_side=actor.side,
         actor_id=actor.combatant_id,
-        target_side=target.side,
-        target_id=target.combatant_id,
+        target_side=actor.side,
+        target_id=actor.combatant_id,
         damage=total_damage,
         target_hp=actor.resources.current_hp,
         healing=total_healing,
@@ -572,15 +572,11 @@ def _effective_stats(
         "attack": 0,
         "defense": 0,
         "speed": 0,
-        "recovery": 0,
-        "mp_recovery": 0,
     }
     multipliers = {
         "attack": 1.0,
         "defense": 1.0,
         "speed": 1.0,
-        "recovery": 1.0,
-        "mp_recovery": 1.0,
     }
 
     for skill in combatant.passive_skills:
@@ -614,16 +610,8 @@ def _effective_stats(
             multipliers["defense"],
         ),
         speed=_effective_stat_value(combatant.stats.speed, bonuses["speed"], multipliers["speed"]),
-        recovery=_effective_stat_value(
-            combatant.stats.recovery,
-            bonuses["recovery"],
-            multipliers["recovery"],
-        ),
-        mp_recovery=_effective_stat_value(
-            combatant.stats.mp_recovery,
-            bonuses["mp_recovery"],
-            multipliers["mp_recovery"],
-        ),
+        recovery=combatant.stats.recovery,
+        mp_recovery=combatant.stats.mp_recovery,
     )
 
 

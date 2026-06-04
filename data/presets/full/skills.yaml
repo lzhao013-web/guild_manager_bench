@@ -73,10 +73,6 @@ skills:
         stat: defense
         value: 3.2
         target: self
-      - type: stat_multiplier
-        stat: recovery
-        value: 2.0
-        target: self
 
   - id: plague_curse
     name: 瘟疫诅咒
@@ -161,10 +157,6 @@ skills:
         stat: defense
         value: 1.4
         target: self
-      - type: stat_multiplier
-        stat: recovery
-        value: 1.3
-        target: self
 
   - id: shield_bash
     name: 盾击
@@ -186,10 +178,6 @@ skills:
     effects:
       - type: stat_multiplier
         stat: defense
-        value: 1.5
-        target: self
-      - type: stat_multiplier
-        stat: recovery
         value: 1.5
         target: self
 
@@ -327,10 +315,6 @@ skills:
         value: 2.2
         target: self
       - type: stat_multiplier
-        stat: recovery
-        value: 2.2
-        target: self
-      - type: stat_multiplier
         stat: attack
         value: 1.9
         target: self
@@ -396,10 +380,6 @@ skills:
       - type: stat_multiplier
         stat: defense
         value: 1.15
-        target: self
-      - type: stat_multiplier
-        stat: recovery
-        value: 1.2
         target: self
 
   - id: inner_power
@@ -1251,10 +1231,6 @@ skills:
               stat: defense
               value: 1.7
               target: self
-            - type: stat_multiplier
-              stat: recovery
-              value: 1.4
-              target: self
     mp_cost: 6
     priority: 24
     once_per_battle: true
@@ -1289,10 +1265,6 @@ skills:
             - type: stat_multiplier
               stat: defense
               value: 1.7
-              target: self
-            - type: stat_multiplier
-              stat: recovery
-              value: 1.8
               target: self
     mp_cost: 6
     priority: 24
@@ -1360,10 +1332,6 @@ skills:
       - type: stat_bonus
         stat: defense
         value: 6
-        target: self
-      - type: stat_bonus
-        stat: recovery
-        value: 3
         target: self
 
   - id: shadow_step

@@ -34,7 +34,7 @@ from guild_manager_bench.bench.replay_scoring import (
 )
 
 # Incremental build cache version — bump when _extract_run_info schema changes.
-_CACHE_VERSION = 5
+_CACHE_VERSION = 6
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
