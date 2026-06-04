@@ -152,9 +152,9 @@ equipment:
     name: 蛛丝甲
     slot: armor
     stats:
-      defense: 4
-      speed: 3
-      hp: 15
+      defense: 5
+      speed: 4
+      hp: 20
 
   - id: t2_light_helmet
     name: 游侠盔
@@ -177,7 +177,9 @@ equipment:
     slot: accessory
     stats:
       attack: 4
-      mp: 10
+      mp: 8
+      recovery: 3
+      mp_recovery: 3
 
   # ===== T2 Specials =====
   - id: t2_warhammer
@@ -277,9 +279,10 @@ equipment:
     name: 龙鳞靴
     slot: boots
     stats:
-      defense: 5
-      hp: 15
+      defense: 6
+      hp: 20
       speed: 2
+      recovery: 3
 
   # ===== T3 Light Set =====
   - id: t3_light_bow
@@ -293,9 +296,10 @@ equipment:
     name: 暗影外套
     slot: armor
     stats:
-      defense: 6
-      speed: 5
-      hp: 25
+      defense: 7
+      speed: 6
+      hp: 30
+    skills: [shadow_evasion]
 
   - id: t3_light_helmet
     name: 夜翼盔
@@ -336,10 +340,11 @@ equipment:
     name: 智慧之冠
     slot: helmet
     stats:
-      attack: 5
-      mp: 35
-      recovery: 10
-      mp_recovery: 10
+      attack: 7
+      mp: 20
+      speed: 3
+      recovery: 8
+      mp_recovery: 8
     skills: [plague_touch]
     allowed_classes: [spellshot_mage, plague_mage]
 
@@ -362,3 +367,38 @@ equipment:
       mp_recovery: 8
     skills: [fortify]
     allowed_classes: [foot_knight, ascetic_monk]
+
+  # ===== 新增装备 =====
+
+  - id: t2_elven_bow
+    name: 精灵长弓
+    slot: two_hand
+    stats:
+      attack: 14
+      speed: 5
+    allowed_classes: [woodland_archer]
+
+  - id: t3_windrunner_bow
+    name: 风行者之弓
+    slot: two_hand
+    stats:
+      attack: 22
+      speed: 6
+    allowed_classes: [woodland_archer]
+
+  - id: t2_shadow_blade
+    name: 影刃
+    slot: main_hand
+    stats:
+      attack: 10
+      speed: 4
+    allowed_classes: [jester, bloodfiend]
+
+  - id: t3_bombard_armor
+    name: 轰击胸甲
+    slot: armor
+    stats:
+      defense: 8
+      hp: 30
+      speed: 3
+    allowed_classes: [cannoneer]

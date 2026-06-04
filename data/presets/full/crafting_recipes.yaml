@@ -374,3 +374,41 @@ recipes:
       demon_core: 1
       soul_shard: 1
       mithril_shard: 2
+
+  # ===== 新增配方 =====
+
+  - id: recipe_t2_elven_bow
+    name: 精灵长弓配方
+    output: t2_elven_bow
+    gold: 75
+    materials:
+      spider_silk: 2
+      beast_hide: 2
+      sharp_claw: 1
+
+  - id: recipe_t3_windrunner_bow
+    name: 风行者之弓配方
+    output: t3_windrunner_bow
+    gold: 110
+    materials:
+      dragon_scale: 1
+      soul_shard: 2
+      spider_silk: 2
+
+  - id: recipe_t2_shadow_blade
+    name: 影刃配方
+    output: t2_shadow_blade
+    gold: 48
+    materials:
+      mithril_shard: 1
+      spider_silk: 2
+      sharp_claw: 1
+
+  - id: recipe_t3_bombard_armor
+    name: 轰击胸甲配方
+    output: t3_bombard_armor
+    gold: 95
+    materials:
+      dragon_scale: 2
+      mithril_shard: 2
+      arcane_dust: 1
