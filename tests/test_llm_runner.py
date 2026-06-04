@@ -524,6 +524,7 @@ def test_skill_summary_formats_extended_conditions_and_effects() -> None:
                     {"type": "mp_restore", "value": 3, "target": "self"},
                     {"type": "damage_bonus", "value": 4, "target": "target"},
                     {"type": "true_damage", "value": 5, "target": "target"},
+                    {"type": "atk_ratio_damage", "value": 0.5, "target": "target"},
                     {"type": "self_damage", "value": 2, "target": "self"},
                     {
                         "type": "apply_status",
@@ -544,14 +545,17 @@ def test_skill_summary_formats_extended_conditions_and_effects() -> None:
         ]
     )
 
-    assert "自身MP>=50%" in text
-    assert "行动序号<=1" in text
-    assert "治疗 25%最大HP" in text
-    assert "自身恢复MP 3" in text
-    assert "伤害+4" in text
-    assert "真实伤害 5" in text
-    assert "自身受伤 2" in text
-    assert "施加状态 灼伤 2行动 负面 真实伤害 3" in text
+    assert "触发条件：同时满足（自身MP不低于50%；行动序号不超过1）" in text
+    assert "触发后替代普通攻击" in text
+    assert "为自身恢复25%最大HP" in text
+    assert "为自身恢复3点MP" in text
+    assert "在普通攻击伤害上额外+4" in text
+    assert "造成5点无视防御伤害" in text
+    assert "造成攻击力的50%作为无视防御伤害" in text
+    assert "自身受到2点伤害" in text
+    assert "对目标施加状态：灼伤（负面状态，持续2次行动" in text
+    assert "状态持有者每次行动开始受到3点无视防御伤害" in text
+    assert "优先级" not in text
 
 
 def test_memo_tool_content_appears_in_next_turn_prompt() -> None:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Sequence
 
+from guild_manager_bench.bench.llm.formatting import skill_summary_lines
 from guild_manager_bench.bench.llm.refs import (
     build_numeric_refs,
     display_ref,
@@ -33,15 +34,14 @@ def build_system_prompt(
     hp_percent = _percent(rules.get("hp_percent"))
     mp_percent = _percent(rules.get("mp_percent"))
 
-    return "\n".join(
-        [
+    lines = [
             "你正在进行 Guild Manager Bench。",
             f"目标：{objective}",
             "",
             "回合流程：可调用查询工具读取信息，也可调用动作工具执行各种操作；保证只有当你觉得本回合要做的事情都做完了，才通过 end_turn 提交讨伐列表并结束回合。",
             "战斗提示：冒险者讨伐怪物的战斗是完全的1V1自动战斗，无法干预战斗过程，也没有团队协作，但可以通过调整冒险者的装备、技能来影响战斗结果。每位冒险者当回合只能讨伐一个怪物，请谨慎选择。",
             "战斗机制：SPD 决定出手频率，而非仅决定先后手。 例如，SPD 80 vs SPD 20 → 高SPD方每行动约4次，低SPD方才行动1次。普通攻击伤害 = max(1, ATK - DEF)",
-            "技能相关：主动技能满足条件时会在角色行动时按优先级触发，会覆盖普通攻击，带有”即时”tag的技能不会覆盖普通攻击；被动技能会在满足条件时持续生效；技能效果可能包括伤害、治疗、状态等，具体信息请参考状态和冒险者信息中的技能描述。",
+            "技能相关：主动技能满足条件时会在角色行动时触发，通常会替代普通攻击；带有“即时”说明的技能触发后仍会进行普通攻击；被动技能会在满足条件时持续生效；技能效果可能包括伤害、治疗、状态等，具体信息请参考状态和冒险者信息中的技能描述。",
             "回复机制：每回合战斗结束后全体冒险者回复HP和MP，额外回复等同于其恢复属性（recovery）值的HP，战斗中技能也可提供治疗、百分比治疗、MP恢复和持续回复状态。"
             f"HP回复 = {hp_recovery} + 最大HP×{hp_percent} + 恢复属性；"
             f"MP回复 = {mp_recovery} + 最大MP×{mp_percent} + 回魔属性。",
@@ -49,8 +49,14 @@ def build_system_prompt(
             f"每回合最多允许 {max_tool_calls} 次非 end_turn 工具调用{bp_limit_text}；每一次工具调用，包括查询、战斗预览、实际操作和失败的调用均会消耗使用次数，请考虑工具调用的预算，谨慎决定和规划要使用的工具。",
             "调用工具使用的所有对象 id 都使用列表左侧的数字 id。",
             "工具会返回 成功/失败、预算 和结果摘要。动作工具返回变更摘要；详细信息分散在各个查询工具中。",
-        ]
-    )
+    ]
+    return "\n".join(lines)
+
+
+def build_endgame_system_prompt(turn: int, max_turns: int) -> str:
+    """构建终局阶段专用 system 提示词。"""
+
+    return _endgame_notice(turn, max_turns)
 
 
 def build_turn_prompt(
@@ -108,12 +114,6 @@ def _endgame_notice(
         "游戏即将结束，请在继续运营的同时优先最大化队伍终局战力评分 rank_score；"
         "可使用 preview_team_power 预览当前队伍 rank_score 和每个冒险者的贡献占比。"
     )
-
-
-def build_endgame_system_prompt(turn: int, max_turns: int) -> str:
-    """构建终局阶段专用 system 提示词。"""
-
-    return _endgame_notice(turn, max_turns)
 
 
 def _state_summary(observation: Mapping[str, Any]) -> str:
@@ -313,193 +313,20 @@ def _battle_participant_name(battle: Mapping[str, Any], role: str) -> str:
 
 
 def _skill_summary_zh(skills: Any) -> str:
-    values = [
-        skill
-        for skill in _sequence(skills)
-        if isinstance(skill, Mapping)
-    ]
+    values = skill_summary_lines(skills)
     if not values:
         return "无"
-    return "；".join(_skill_text_zh(skill) for skill in values)
+    return "；".join(values)
 
 
 def _append_skill_lines_zh(lines: list[str], skills: Any) -> None:
-    values = [
-        skill
-        for skill in _sequence(skills)
-        if isinstance(skill, Mapping)
-    ]
+    values = skill_summary_lines(skills)
     if not values:
         lines.append("  技能: 无")
         return
     lines.append("  技能:")
-    for skill in values:
-        lines.append(f"    - {_skill_text_zh(skill)}")
-
-
-def _skill_text_zh(skill: Mapping[str, Any]) -> str:
-    parts = [
-        str(skill.get("name") or skill.get("skill_id") or "技能"),
-        _skill_kind_text(skill.get("kind")),
-    ]
-    if skill.get("free"):
-        parts.append("即时")
-    mp_cost = skill.get("mp_cost")
-    if isinstance(mp_cost, int | float) and mp_cost:
-        parts.append(f"MP消耗 {mp_cost}")
-    if skill.get("once_per_battle"):
-        parts.append("每场一次")
-    priority = skill.get("priority")
-    if isinstance(priority, int | float) and priority:
-        parts.append(f"优先级 {priority}")
-    condition = _condition_text_zh(skill.get("condition"))
-    if condition:
-        parts.append(f"条件 {condition}")
-    effects = [
-        _effect_text_zh(effect)
-        for effect in _sequence(skill.get("effects"))
-        if isinstance(effect, Mapping)
-    ]
-    effects = [effect for effect in effects if effect]
-    if effects:
-        parts.append("效果 " + "，".join(effects))
-    return " ".join(parts)
-
-
-def _skill_kind_text(value: Any) -> str:
-    labels = {
-        "active": "主动",
-        "passive": "被动",
-    }
-    return labels.get(value, str(value or "技能"))
-
-
-def _condition_text_zh(value: Any) -> str:
-    if not isinstance(value, Mapping):
-        return ""
-    condition_type = value.get("type")
-    if condition_type in (None, "always"):
-        return "总是"
-    if condition_type in {"all", "any"}:
-        joiner = "且" if condition_type == "all" else "或"
-        children = [
-            _condition_text_zh(child)
-            for child in _sequence(value.get("conditions"))
-            if isinstance(child, Mapping)
-        ]
-        children = [child for child in children if child and child != "总是"]
-        return joiner.join(children) if children else "总是"
-    if condition_type == "self_hp_pct_lte":
-        return f"自身HP<={_percent(value.get('value'))}"
-    if condition_type == "self_hp_pct_gte":
-        return f"自身HP>={_percent(value.get('value'))}"
-    if condition_type == "target_hp_pct_lte":
-        return f"目标HP<={_percent(value.get('value'))}"
-    if condition_type == "target_hp_pct_gte":
-        return f"目标HP>={_percent(value.get('value'))}"
-    if condition_type == "self_mp_pct_lte":
-        return f"自身MP<={_percent(value.get('value'))}"
-    if condition_type == "self_mp_pct_gte":
-        return f"自身MP>={_percent(value.get('value'))}"
-    if condition_type == "target_mp_pct_lte":
-        return f"目标MP<={_percent(value.get('value'))}"
-    if condition_type == "target_mp_pct_gte":
-        return f"目标MP>={_percent(value.get('value'))}"
-    if condition_type == "action_index_lte":
-        return f"行动序号<={_number(value.get('value'))}"
-    if condition_type == "action_index_gte":
-        return f"行动序号>={_number(value.get('value'))}"
-    condition_value = value.get("value")
-    raw = str(condition_type)
-    return raw if condition_value is None else f"{raw}:{condition_value}"
-
-
-def _effect_text_zh(effect: Mapping[str, Any]) -> str:
-    effect_type = effect.get("type")
-    value = effect.get("value")
-    stat = effect.get("stat")
-    target = effect.get("target")
-    target_text = _effect_target_text(target)
-    stat_text = _stat_text(stat)
-    if effect_type == "damage_multiplier":
-        return f"伤害倍率 {_number(value)}"
-    if effect_type == "heal":
-        return f"治疗 {_number(value)}"
-    if effect_type == "heal_percent":
-        return f"治疗 {_percent(value)}最大HP"
-    if effect_type == "mp_restore":
-        return f"{target_text}恢复MP {_number(value)}"
-    if effect_type == "damage_bonus":
-        return f"伤害+{_number(value)}"
-    if effect_type == "true_damage":
-        return f"真实伤害 {_number(value)}"
-    if effect_type == "self_damage":
-        return f"自身受伤 {_number(value)}"
-    if effect_type == "apply_status":
-        status = effect.get("status")
-        if isinstance(status, Mapping):
-            return f"施加状态 {_status_text_zh(status)}"
-        return "施加状态"
-    if effect_type == "stat_bonus":
-        return f"{target_text}{stat_text}+{_number(value)}"
-    if effect_type == "stat_multiplier":
-        return f"{target_text}{stat_text}倍率 {_number(value)}"
-    if stat is not None:
-        return f"{effect_type}:{stat_text}:{_number(value)}"
-    return f"{effect_type}:{_number(value)}"
-
-
-def _status_text_zh(status: Mapping[str, Any]) -> str:
-    name = str(status.get("name") or status.get("status_id") or "状态")
-    duration = status.get("duration")
-    polarity = _status_polarity_text(status.get("polarity"))
-    effects = [
-        _effect_text_zh(effect)
-        for effect in _sequence(status.get("effects"))
-        if isinstance(effect, Mapping)
-    ]
-    effect_text = "，".join(effect for effect in effects if effect)
-    parts = [name]
-    if isinstance(duration, int | float):
-        parts.append(f"{_number(duration)}行动")
-    if polarity:
-        parts.append(polarity)
-    if effect_text:
-        parts.append(effect_text)
-    return " ".join(parts)
-
-
-def _status_polarity_text(value: Any) -> str:
-    labels = {
-        "positive": "正面",
-        "negative": "负面",
-        "neutral": "",
-    }
-    return labels.get(value, str(value or ""))
-
-
-def _effect_target_text(value: Any) -> str:
-    labels = {
-        None: "",
-        "target": "",
-        "self": "自身",
-    }
-    if value in labels:
-        return labels[value]
-    return f"{value}."
-
-
-def _stat_text(value: Any) -> str:
-    labels = {
-        "hp": "HP",
-        "mp": "MP",
-        "attack": "攻击",
-        "defense": "防御",
-        "speed": "速度",
-        "recovery": "恢复",
-        "mp_recovery": "回魔",
-    }
-    return labels.get(value, str(value))
+    for value in values:
+        lines.append(f"    - {value}")
 
 
 def _mapping_text(value: Any) -> str:
