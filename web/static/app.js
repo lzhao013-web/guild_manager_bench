@@ -2489,11 +2489,12 @@ function renderTurnOverview(modelEntries, tools) {
     for (const tc of s.toolCalls) {
       const t = toolsByCallId.get(tc.id) || {};
       const toolName = tc.name || t.name || "?";
+      const label = toolLabel(toolName);
       const result = renderToolResultInline(t, toolName);
       actionItems.push(
         `<span class="llm-ov-item">` +
           `<span class="llm-ov-num">${stepNum++}</span>` +
-          `<span class="llm-ov-tool">${escapeHtml(toolName)}</span>` +
+          `<span class="llm-ov-tool">${escapeHtml(label)}</span>` +
           `<span class="llm-ov-arrow">→</span>` +
           result +
         `</span>`
@@ -2521,7 +2522,7 @@ function renderTurnOverview(modelEntries, tools) {
 // 单个工具调用的内联结果（无截断、保留完整首行）
 function renderToolResultInline(tool, toolName) {
   if (!tool || !tool.hasResult) {
-    return `<span class="llm-ov-res pending">…</span>`;
+    return `<span class="llm-ov-res pending">执行中<span class="llm-ov-pending-dots" aria-hidden="true"><i></i><i></i><i></i></span></span>`;
   }
   if (tool.ok === false) {
     return `<span class="llm-ov-res fail">失败 · ${escapeHtml(tool.error || toolName)}</span>`;
@@ -3505,6 +3506,7 @@ function toolLabel(name) {
     get_recruitment: "查看招募",
     get_events: "查看事件",
     preview_battle: "预览战斗",
+    preview_team_power: "预览战力",
     craft_equipment: "制作装备",
     purchase_upgrade: "购买升级",
     allocate_experience: "分配经验",
@@ -3513,6 +3515,7 @@ function toolLabel(name) {
     equip_item: "装备物品",
     unequip_item: "卸下装备",
     end_turn: "结束回合",
+    write_memo: "写备忘",
   };
   return labels[name] || name || "未知工具";
 }

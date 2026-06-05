@@ -2773,6 +2773,101 @@ textarea {
   font-style: italic;
 }
 
+/* ============ 状态动画 ============ */
+
+/* 成功 pill 出现：滑入 + 缩放 */
+@keyframes llmOvSlideIn {
+  0%   { opacity: 0; transform: translateX(-6px) scale(0.9); }
+  60%  { transform: translateX(1px) scale(1.02); }
+  100% { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+.llm-ov-res.ok,
+.llm-ov-res.fail {
+  animation: llmOvSlideIn 0.28s ease-out;
+}
+
+/* 失败 pill：滑入后短暂抖动 */
+@keyframes llmOvShake {
+  0%, 100% { transform: translateX(0); }
+  20%      { transform: translateX(-2px); }
+  40%      { transform: translateX(2px); }
+  60%      { transform: translateX(-1px); }
+  80%      { transform: translateX(1px); }
+}
+
+.llm-ov-res.fail {
+  animation: llmOvSlideIn 0.28s ease-out, llmOvShake 0.35s ease-in-out 0.28s;
+}
+
+/* pending 圆点循环：三个点错相位 */
+@keyframes llmOvDot {
+  0%, 80%, 100% { opacity: 0.25; transform: translateY(0); }
+  40%           { opacity: 1;    transform: translateY(-1px); }
+}
+
+.llm-ov-pending-dots {
+  display: inline-flex;
+  gap: 1px;
+  margin-left: 3px;
+  align-items: center;
+}
+
+.llm-ov-pending-dots i {
+  display: inline-block;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+  margin: 0 1px;
+  animation: llmOvDot 1.2s ease-in-out infinite;
+}
+
+.llm-ov-pending-dots i:nth-child(1) { animation-delay: 0s; }
+.llm-ov-pending-dots i:nth-child(2) { animation-delay: 0.2s; }
+.llm-ov-pending-dots i:nth-child(3) { animation-delay: 0.4s; }
+
+/* 工具名 chip：hover 高亮 + transition */
+.llm-ov-tool {
+  transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.12s;
+  cursor: default;
+}
+
+.llm-ov-tool:hover {
+  background: rgba(91, 141, 239, 0.18);
+  border-color: rgba(91, 141, 239, 0.45);
+  color: #a5c0ff;
+  transform: translateY(-1px);
+}
+
+/* 序号圆圈：进入时小弹 */
+@keyframes llmOvNumPop {
+  0%   { opacity: 0; transform: scale(0.4); }
+  60%  { transform: scale(1.15); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+.llm-ov-num {
+  animation: llmOvNumPop 0.35s ease-out backwards;
+}
+
+.llm-ov-item:nth-child(1) .llm-ov-num { animation-delay: 0s; }
+.llm-ov-item:nth-child(2) .llm-ov-num { animation-delay: 0.05s; }
+.llm-ov-item:nth-child(3) .llm-ov-num { animation-delay: 0.1s; }
+.llm-ov-item:nth-child(4) .llm-ov-num { animation-delay: 0.15s; }
+.llm-ov-item:nth-child(5) .llm-ov-num { animation-delay: 0.2s; }
+.llm-ov-item:nth-child(6) .llm-ov-num { animation-delay: 0.25s; }
+
+/* 行动行 bullet "→" 进入：轻微缩放 */
+@keyframes llmOvArrowIn {
+  0%   { opacity: 0; transform: scale(0.5); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+.llm-ov-step-action .llm-ov-bullet {
+  animation: llmOvArrowIn 0.25s ease-out backwards;
+}
+
 .llm-turn-handle {
   display: inline-block;
   width: 14px;
