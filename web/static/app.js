@@ -19,7 +19,10 @@ const state = {
     renderQueued: false,
     openThinking: new Set(),
     openToolTrace: new Set(),
+    openTurns: new Set(),
     toolTraceSeq: 0,
+    autoScroll: true,
+    userScrolledUp: false,
     replay: {
       runs: [],
       selectedRunId: "",
@@ -120,8 +123,12 @@ window.addEventListener("load", () => {
   $("llmCopyPromptButton").addEventListener("click", () => copyLlmPromptToClipboard());
   $("llmTranscriptClearButton").addEventListener("click", () => clearLlmTranscript());
   $("llmEventClearButton").addEventListener("click", () => clearLlmEventLog());
+  $("llmAutoScrollButton").addEventListener("click", () => toggleLlmAutoScroll());
+  $("llmScrollBottomButton")?.addEventListener("click", () => scrollLlmPanelToBottom({ force: true, smooth: true }));
   $("llmPresetSelect").addEventListener("change", (event) => applyLlmPreset(event.target.value));
   initLlmRuntimeTabs();
+  initLlmAutoScrollWatchers();
+  syncLlmAutoScrollButton();
   $("combatModal").addEventListener("click", (e) => {
     if (e.target === e.currentTarget) closeCombatModal();
   });
@@ -193,6 +200,80 @@ function setLlmRuntimeTab(name) {
   document.querySelectorAll(".llm-runtime-panel").forEach((panel) => {
     panel.classList.toggle("active", panel.dataset.runtimePanel === name);
   });
+  // 切换 tab 时如果自动滚动开启，滚到底部
+  if (state.llm.autoScroll) {
+    requestAnimationFrame(() => scrollLlmPanelToBottom({ force: true }));
+  }
+}
+
+/* ========== Auto Scroll ========== */
+
+function initLlmAutoScrollWatchers() {
+  // transcript 不再内嵌滚动，监听 window 滚
+  window.addEventListener("scroll", handleWindowScroll, { passive: true });
+}
+
+function handleWindowScroll() {
+  // 计算 window 距离页面底部的距离
+  const doc = document.documentElement;
+  const distanceFromBottom = doc.scrollHeight - window.scrollY - window.innerHeight;
+  const atBottom = distanceFromBottom <= 24;
+  if (atBottom) {
+    if (state.llm.userScrolledUp) {
+      state.llm.userScrolledUp = false;
+      if (state.llm.autoScroll) syncLlmAutoScrollButton();
+    }
+    toggleScrollBottomButton(false);
+  } else {
+    if (state.llm.autoScroll) {
+      // 自动滚动期间用户向上滚了 → 关闭自动滚动
+      state.llm.autoScroll = false;
+      state.llm.userScrolledUp = true;
+      syncLlmAutoScrollButton();
+    }
+    toggleScrollBottomButton(true);
+  }
+}
+
+function toggleLlmAutoScroll() {
+  state.llm.autoScroll = !state.llm.autoScroll;
+  state.llm.userScrolledUp = false;
+  syncLlmAutoScrollButton();
+  if (state.llm.autoScroll) {
+    // 重新打开时立即滚到底部
+    scrollLlmPanelToBottom({ force: true });
+  }
+}
+
+function syncLlmAutoScrollButton() {
+  const btn = $("llmAutoScrollButton");
+  if (!btn) return;
+  const on = state.llm.autoScroll && !state.llm.userScrolledUp;
+  btn.dataset.active = on ? "true" : "false";
+  btn.setAttribute("aria-pressed", on ? "true" : "false");
+  btn.classList.toggle("on", on);
+  btn.classList.toggle("off", !on);
+  btn.textContent = on ? "📍 自动滚动" : "⏸ 已暂停";
+  btn.title = on
+    ? "自动滚动到最新（手动向上滚会暂停）"
+    : "点击恢复自动滚动到最新";
+}
+
+function scrollLlmPanelToBottom(options = {}) {
+  // transcript 自由高度，滚到 transcript 末尾（=滚 window 到 transcript 底部）
+  const transcript = $("llmTranscript");
+  if (!transcript) return;
+  if (options.force || state.llm.autoScroll) {
+    const rect = transcript.getBoundingClientRect();
+    const absoluteBottom = rect.top + window.scrollY + rect.height;
+    window.scrollTo({ top: absoluteBottom, behavior: options.smooth ? "smooth" : "auto" });
+  }
+  toggleScrollBottomButton(false);
+}
+
+function toggleScrollBottomButton(show) {
+  const btn = $("llmScrollBottomButton");
+  if (btn) btn.hidden = !show;
 }
 
 function updateLlmRuntimeCounts() {
@@ -200,7 +281,8 @@ function updateLlmRuntimeCounts() {
     const node = document.querySelector(`[data-runtime-count="${key}"]`);
     if (node) node.textContent = String(value);
   };
-  setCount("transcript", state.llm.transcript.length);
+  // 回合流程 tab：合并 transcript + toolTrace
+  setCount("transcript", state.llm.transcript.length + state.llm.toolTrace.length);
   setCount("tools", state.llm.toolTrace.length);
   setCount("events", state.llm.events.length);
 }
@@ -1028,6 +1110,17 @@ function onDocumentToggle(e) {
       state.llm.openToolTrace.delete(toolId);
     }
   }
+
+  if (e.target.classList?.contains("llm-turn-block")) {
+    const turnAttr = e.target.dataset.turn;
+    const turn = turnAttr != null ? Number(turnAttr) : null;
+    if (turn == null || Number.isNaN(turn)) return;
+    if (e.target.open) {
+      state.llm.openTurns.add(turn);
+    } else {
+      state.llm.openTurns.delete(turn);
+    }
+  }
 }
 
 function setThinkingOpen(details, open) {
@@ -1739,7 +1832,11 @@ function startLlmDebug(options = {}) {
   state.llm.currentModelEntry = null;
   state.llm.openThinking.clear();
   state.llm.openToolTrace.clear();
+  state.llm.openTurns.clear();
   state.llm.toolTraceSeq = 0;
+  state.llm.autoScroll = true;
+  state.llm.userScrolledUp = false;
+  syncLlmAutoScrollButton();
   renderLlmDebug();
 
   const protocol = window.location.protocol === "https:" ? "wss" : "ws";
@@ -1817,6 +1914,9 @@ function handleLlmEvent(event) {
     state.llm.status = `第 ${event.turn} 回合`;
     state.llm.currentModelEntry = null;
     state.llm.transcript.push({ kind: "turn", title: `第 ${event.turn} 回合开始` });
+    if (event.turn != null) {
+      state.llm.openTurns.add(event.turn);
+    }
   } else if (event.type === "model_request") {
     const entry = createModelEntry(event.turn, event.step);
     entry.request = event.request || null;
@@ -1853,10 +1953,12 @@ function handleLlmEvent(event) {
       item.ok = event.result?.ok ?? null;
       item.error = event.result?.error || "";
       item.content = event.content || item.content || "";
+      item.hasResult = true;
     } else {
       item = createToolTraceItem(event);
       item.ok = event.result?.ok ?? null;
       item.error = event.result?.error || "";
+      item.hasResult = true;
       state.llm.toolTrace.push(item);
     }
     const toolId = toolTraceId(item);
@@ -1950,6 +2052,7 @@ function createToolTraceItem(event) {
     arguments: event.arguments || {},
     content: event.content || "",
     ok: null,
+    hasResult: false,
     error: "",
   };
 }
@@ -2006,6 +2109,10 @@ function renderLlmDebug(options = {}) {
     $("llmTranscript").innerHTML = renderLlmTranscript();
   }
   if (streamOnly) {
+    // 流式更新也要滚到底部
+    if (state.llm.autoScroll) {
+      requestAnimationFrame(() => scrollLlmPanelToBottom({ force: true }));
+    }
     return;
   }
   $("llmToolTrace").innerHTML = renderLlmToolTrace();
@@ -2014,6 +2121,10 @@ function renderLlmDebug(options = {}) {
     renderLlmReplayControls();
     $("llmReplayStatus").textContent = state.llm.replay.status;
     $("llmReplayView").innerHTML = renderLlmReplay();
+  }
+  // 完整重渲染后，autoScroll 开启则滚到底部
+  if (state.llm.autoScroll) {
+    requestAnimationFrame(() => scrollLlmPanelToBottom({ force: true }));
   }
 }
 
@@ -2143,6 +2254,7 @@ function clearLlmTranscript() {
   state.llm.currentModelEntry = null;
   state.llm.openThinking.clear();
   state.llm.openToolTrace.clear();
+  state.llm.openTurns.clear();
   state.llm.toolTraceSeq = 0;
   state.llm.prompt = "";
   renderLlmDebug();
@@ -2208,43 +2320,297 @@ function renderLlmTranscript() {
   if (!state.llm.transcript.length) {
     return renderEmptyState("💭", "等待第一次模型行为", "点击「开始运行」后，这里会按回合流式展示思考、回复和工具调用");
   }
-  return state.llm.transcript.slice(-80).map((entry) => {
-    if (entry.kind === "turn") {
-      const meta = renderTurnTimingUsage(entry.timingUsage);
-      return `<div class="llm-turn-marker">${escapeHtml(entry.title)}${meta}</div>`;
+  return renderTurnFlow();
+}
+
+function renderTurnFlow() {
+  const entries = state.llm.transcript.slice(-80);
+  // toolTrace 按 turn 聚合
+  const toolsByTurn = new Map();
+  for (const tool of state.llm.toolTrace) {
+    if (tool.turn == null) continue;
+    if (!toolsByTurn.has(tool.turn)) toolsByTurn.set(tool.turn, []);
+    toolsByTurn.get(tool.turn).push(tool);
+  }
+  // 拆分 entries 为 turn 块。turn_started / turn_completed 共享同一个 turn 块
+  const blocks = [];
+  let current = null;
+  for (const entry of entries) {
+    const matched = entry.kind === "turn" && typeof entry.title === "string"
+      ? entry.title.match(/第\s*(\d+)\s*回合/)
+      : null;
+    if (matched) {
+      const turnNum = Number(matched[1]);
+      const isCompletion = /完成|失败/.test(entry.title);
+      if (current && current.turn === turnNum) {
+        // 同一个 turn 内的开始/完成标记合并
+        if (isCompletion) {
+          current.isComplete = true;
+          current.completionTitle = entry.title;
+          current.completionTiming = entry.timingUsage;
+        } else {
+          current.title = entry.title;
+        }
+      } else {
+        if (current) blocks.push(current);
+        current = {
+          turn: turnNum,
+          title: entry.title,
+          timing: entry.timingUsage,
+          isComplete: isCompletion,
+          items: [],
+        };
+      }
+      continue;
     }
-    if (entry.kind === "summary") {
-      return renderRunSummary(entry);
+    if (current) {
+      current.items.push(entry);
+    } else {
+      if (!blocks.length || blocks[0].kind !== "intro") {
+        blocks.unshift({ kind: "intro", items: [] });
+      }
+      blocks[0].items.push(entry);
     }
-    if (entry.kind === "retry") {
-      return `<div class="llm-retry">重试提示：${escapeHtml(entry.text)}</div>`;
+  }
+  if (current) blocks.push(current);
+
+  const lastIncomplete = [...blocks].reverse().find((b) => b.turn != null && !b.isComplete);
+  const activeTurn = lastIncomplete?.turn ?? null;
+
+  return blocks.map((block) => {
+    if (block.kind === "intro") {
+      return block.items.map((entry) => renderIntroEntry(entry)).join("");
     }
-    const entryId = entry.id || `model-${entry.turn || "na"}-${entry.step || "na"}`;
-    const meta = renderModelMeta(entry.timing, entry.usage);
-    const promptButton = entry.request ? `
-      <button type="button" class="model-prompt-button" data-model-id="${escapeHtml(entryId)}">查看输入</button>
-    ` : "";
-    return `
-      <div class="llm-model-message" data-model-id="${escapeHtml(entryId)}">
-        <div class="row-title">
-          <strong>模型行为</strong>
-          <span class="small muted">T${escapeHtml(entry.turn)} · step ${escapeHtml(entry.step)}</span>
-          ${promptButton}
-        </div>
-        ${meta}
-        <div class="llm-model-body">
-          ${renderModelBodyContent(entry, entryId)}
-        </div>
-      </div>
-    `;
+    return renderTurnBlock(block, toolsByTurn.get(block.turn) || [], activeTurn);
   }).join("");
 }
 
+function renderIntroEntry(entry) {
+  if (entry.kind === "turn") {
+    const meta = renderTurnTimingUsage(entry.timingUsage);
+    return `<div class="llm-turn-marker">${escapeHtml(entry.title)}${meta}</div>`;
+  }
+  if (entry.kind === "summary") return renderRunSummary(entry);
+  if (entry.kind === "retry") return `<div class="llm-retry">重试提示：${escapeHtml(entry.text)}</div>`;
+  return "";
+}
+
+function renderTurnBlock(block, tools, activeTurn) {
+  const isActive = block.turn === activeTurn;
+  const wasOpened = state.llm.openTurns.has(block.turn);
+  const open = isActive || wasOpened;
+  const turnNumber = escapeHtml(String(block.turn));
+  // timing 来源优先级：turn_started/turn_completion 自带 > 本回合 model entry 汇总
+  const timing = renderTurnTimingUsage(block.timing || block.completionTiming || aggregateTurnTiming(block.items));
+  const turnStatus = block.isComplete
+    ? `<span class="llm-turn-pill ok">已完成</span>`
+    : (isActive ? `<span class="llm-turn-pill live">进行中</span>` : `<span class="llm-turn-pill">未开始</span>`);
+  const modelCount = block.items.filter((e) => e.kind === "model").length;
+  const toolCount = tools.length;
+  const counts = `<span class="llm-turn-counts small muted">💭 ${modelCount} · 🔧 ${toolCount}</span>`;
+  const overview = renderTurnOverview(block.items, tools);
+  const body = [
+    ...block.items.map((entry) => renderTurnEntry(entry)),
+    tools.length ? renderTurnToolsSection(tools) : "",
+  ].filter(Boolean).join("");
+  const metaText = extractTimingText(timing);
+  return `
+    <details class="llm-turn-block" data-turn="${turnNumber}" ${open ? "open" : ""}>
+      <summary>
+        <span class="llm-turn-handle" aria-hidden="true">▾</span>
+        <span class="llm-turn-title"><strong>第 ${turnNumber} 回合</strong></span>
+        ${turnStatus}
+        ${counts}
+        ${metaText ? `<span class="llm-turn-meta">${metaText}</span>` : ""}
+        ${overview}
+      </summary>
+      <div class="llm-turn-block-body">${body}</div>
+    </details>
+  `;
+}
+
+function extractTimingText(timingHtml) {
+  // timingHtml 是 `<span class="llm-turn-meta">1.20 s · in 1000 · out 30</span>`
+  const m = /<span class="llm-turn-meta">([^<]*)<\/span>/.exec(timingHtml || "");
+  return m ? m[1].trim() : "";
+}
+
+// 汇总本回合 model entry 的 timing/usage
+function aggregateTurnTiming(modelEntries) {
+  let totalMs = 0, totalIn = 0, totalOut = 0, hasData = false;
+  for (const e of modelEntries) {
+    if (!e || e.kind !== "model") continue;
+    if (e.timing?.duration_ms != null) { totalMs += Number(e.timing.duration_ms); hasData = true; }
+    if (e.usage) {
+      const inp = e.usage.input_tokens ?? e.usage.prompt_tokens;
+      const out = e.usage.output_tokens ?? e.usage.completion_tokens;
+      if (inp != null) { totalIn += Number(inp); hasData = true; }
+      if (out != null) { totalOut += Number(out); hasData = true; }
+    }
+  }
+  if (!hasData) return null;
+  return { duration_ms: Math.round(totalMs), input_tokens: totalIn, output_tokens: totalOut };
+}
+
+// 回合概览：按时间线展示"思考 → 调用 → 结果"决策链
+function renderTurnOverview(modelEntries, tools) {
+  // 提取所有 model entry 的 text + toolCalls（保留 step 顺序）
+  const steps = modelEntries
+    .filter((e) => e.kind === "model")
+    .map((e) => ({
+      text: (e.text || "").trim(),
+      toolCalls: e.toolCalls || [],
+    }))
+    .filter((s) => s.text || s.toolCalls.length);
+
+  if (!steps.length) return "";
+
+  // 按 callId 索引 toolTrace，便于查结果
+  const toolsByCallId = new Map();
+  for (const t of tools) {
+    if (t.callId) toolsByCallId.set(t.callId, t);
+  }
+
+  const items = [];
+  let stepNum = 1;
+
+  for (const s of steps) {
+    if (s.text) {
+      items.push(
+        `<li class="llm-ov-step llm-ov-step-think">` +
+          `<span class="llm-ov-bullet">${stepNum++}</span>` +
+          `<div class="llm-ov-body">` +
+            `<div class="llm-ov-tag"><span class="llm-ov-tag-label">思考</span></div>` +
+            `<div class="llm-ov-text">${escapeHtml(s.text)}</div>` +
+          `</div>` +
+        `</li>`
+      );
+    }
+    for (const tc of s.toolCalls) {
+      const t = toolsByCallId.get(tc.id) || {};
+      const toolName = tc.name || t.name || "?";
+      const result = renderToolResultInline(t, toolName);
+      items.push(
+        `<li class="llm-ov-step llm-ov-step-action">` +
+          `<span class="llm-ov-bullet">${stepNum++}</span>` +
+          `<div class="llm-ov-body">` +
+            `<div class="llm-ov-tag">` +
+              `<span class="llm-ov-tag-label">调用</span>` +
+              `<span class="llm-ov-tool">${escapeHtml(toolName)}</span>` +
+              `<span class="llm-ov-arrow">─→</span>` +
+              result +
+            `</div>` +
+          `</div>` +
+        `</li>`
+      );
+    }
+  }
+
+  if (!items.length) return "";
+  return `<div class="llm-turn-overview"><ol class="llm-ov-flow">${items.join("")}</ol></div>`;
+}
+
+// 单个工具调用的内联结果（无截断、保留完整首行）
+function renderToolResultInline(tool, toolName) {
+  if (!tool || !tool.hasResult) {
+    return `<span class="llm-ov-res pending">…</span>`;
+  }
+  if (tool.ok === false) {
+    return `<span class="llm-ov-res fail">失败 · ${escapeHtml(tool.error || toolName)}</span>`;
+  }
+  if (!isMutatingTool(toolName)) {
+    return `<span class="llm-ov-res ok">成功</span>`;
+  }
+  // 写操作：取首行 "成功 xxx..." 作为结果简述
+  const content = (tool.content || "").split("\n")[0];
+  if (content.startsWith("成功")) {
+    return `<span class="llm-ov-res ok">${escapeHtml(content)}</span>`;
+  }
+  return `<span class="llm-ov-res ok">${escapeHtml(content || "成功")}</span>`;
+}
+
+const MUTATING_TOOL_NAMES = new Set([
+  "craft_equipment", "purchase_upgrade", "allocate_experience",
+  "recruit_adventurer", "dismiss_adventurer", "equip_item",
+  "unequip_item", "end_turn", "write_memo",
+]);
+
+function isMutatingTool(name) {
+  return MUTATING_TOOL_NAMES.has(name);
+}
+
+function renderTurnEntry(entry) {
+  if (entry.kind === "summary") return renderRunSummary(entry);
+  if (entry.kind === "retry") return `<div class="llm-retry">重试提示：${escapeHtml(entry.text)}</div>`;
+  if (entry.kind !== "model") return "";
+  const entryId = entry.id || `model-${entry.turn || "na"}-${entry.step || "na"}`;
+  const meta = renderModelMeta(entry.timing, entry.usage);
+  const promptButton = entry.request ? `
+    <button type="button" class="model-prompt-button" data-model-id="${escapeHtml(entryId)}">查看输入</button>
+  ` : "";
+  return `
+    <div class="llm-model-message" data-model-id="${escapeHtml(entryId)}">
+      <div class="row-title">
+        <strong>模型行为</strong>
+        <span class="small muted">T${escapeHtml(entry.turn)} · step ${escapeHtml(entry.step)}</span>
+        ${promptButton}
+      </div>
+      ${meta}
+      <div class="llm-model-body">
+        ${renderModelBodyContent(entry, entryId)}
+      </div>
+    </div>
+  `;
+}
+
+function renderTurnToolsSection(tools) {
+  return `
+    <div class="llm-turn-tools">
+      <div class="llm-section-label">本回合工具调用</div>
+      ${tools.map((item) => renderTurnToolItem(item)).join("")}
+    </div>
+  `;
+}
+
+function renderTurnToolItem(item) {
+  const toolId = toolTraceId(item);
+  const ok = item.ok;
+  const hasResult = item.hasResult === true;
+  let cls = "muted";
+  let label = "等待结果";
+  if (ok === false) {
+    cls = "danger";
+    label = "失败";
+  } else if (hasResult) {
+    // 收到 tool_result 事件后，只要不是 ok===false，就视为成功
+    cls = "ok";
+    label = "成功";
+  }
+  const open = state.llm.openToolTrace.has(toolId) || ok === false ? "open" : "";
+  const callId = item.callId ? escapeHtml(item.callId.slice(-6)) : "";
+  const args = escapeHtml(JSON.stringify(item.arguments || {}, null, 2));
+  const received = item.content || "";
+  return `
+    <details class="llm-tool-item" data-tool-id="${escapeHtml(toolId)}" ${open}>
+      <summary>
+        <span><strong>${escapeHtml(item.name || "tool")}</strong> <span class="muted small">${callId ? `· #${callId}` : ""}</span></span>
+        <span class="llm-tool-tag ${cls}">${label}</span>
+      </summary>
+      <div class="llm-json-label">参数</div>
+      <pre>${args}</pre>
+      ${received ? `
+        <div class="llm-json-label">模型收到</div>
+        <pre>${escapeHtml(received)}</pre>
+      ` : ""}
+    </details>
+  `;
+}
+
 function renderModelBodyContent(entry, entryId) {
+  // 工具调用在回合块下方的"本回合工具调用"区域统一展示，这里不再嵌入
   return [
     renderModelThinking(entry, entryId),
     renderModelReply(entry.text),
-    renderModelToolCalls(entry.toolCalls),
   ].filter(Boolean).join("");
 }
 
@@ -2425,10 +2791,16 @@ function renderLlmToolTrace() {
   }
   return state.llm.toolTrace.slice(-120).reverse().map((item) => {
     const ok = item.ok;
-    const contentOk = typeof item.content === "string" && item.content.startsWith("OK");
-    const isSuccess = ok === true || (ok === null && contentOk);
-    const cls = ok === false ? "danger" : isSuccess ? "ok" : "muted";
-    const label = ok === false ? "失败" : isSuccess ? "成功" : "等待结果";
+    const hasResult = item.hasResult === true;
+    let cls = "muted";
+    let label = "等待结果";
+    if (ok === false) {
+      cls = "danger";
+      label = "失败";
+    } else if (hasResult) {
+      cls = "ok";
+      label = "成功";
+    }
     const toolId = toolTraceId(item);
     const open = state.llm.openToolTrace.has(toolId) || ok === false ? "open" : "";
     const received = item.content || "";
@@ -2944,9 +3316,9 @@ function formatUsage(usage) {
   const completion = usage.completion_tokens ?? usage.output_tokens;
   const total = usage.total_tokens;
   const parts = [];
-  if (prompt !== undefined) parts.push(`in ${prompt}`);
-  if (completion !== undefined) parts.push(`out ${completion}`);
-  if (total !== undefined) parts.push(`total ${total}`);
+  if (prompt != null) parts.push(`in ${prompt}`);
+  if (completion != null) parts.push(`out ${completion}`);
+  if (total != null) parts.push(`total ${total}`);
   return parts.length ? `tokens ${parts.join(" · ")}` : "";
 }
 
@@ -2954,10 +3326,16 @@ function renderTurnTimingUsage(tu) {
   if (!tu) return "";
   const parts = [];
   const ms = Number(tu.duration_ms);
-  if (Number.isFinite(ms) && ms > 0) parts.push(formatDurationMs(ms));
-  if (tu.input_tokens) parts.push(`in ${tu.input_tokens}`);
-  if (tu.output_tokens) parts.push(`out ${tu.output_tokens}`);
-  return parts.length ? `<span class="llm-turn-meta">${escapeHtml(parts.join(" · "))}</span>` : "";
+  if (Number.isFinite(ms) && ms > 0) {
+    parts.push(formatDurationMs(ms));
+  } else {
+    parts.push("—");
+  }
+  const inTok = tu.input_tokens ?? tu.prompt_tokens;
+  const outTok = tu.output_tokens ?? tu.completion_tokens;
+  parts.push(inTok != null ? `in ${inTok}` : "in —");
+  parts.push(outTok != null ? `out ${outTok}` : "out —");
+  return `<span class="llm-turn-meta">${escapeHtml(parts.join(" · "))}</span>`;
 }
 
 function formatScore(score) {

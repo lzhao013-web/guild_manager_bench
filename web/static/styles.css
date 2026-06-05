@@ -1592,8 +1592,13 @@ textarea {
   display: none;
   padding: 14px 16px;
   min-height: 360px;
-  max-height: 620px;
-  overflow: auto;
+  position: relative;
+}
+
+.llm-runtime-panel .llm-transcript,
+.llm-runtime-panel .llm-tool-trace,
+.llm-runtime-panel .llm-event-log {
+  /* transcript 自由高度，整个 window 滚；summary 标签始终可见 */
 }
 
 .llm-runtime-panel.active {
@@ -2492,7 +2497,6 @@ textarea {
   .llm-field-full { grid-column: 1 / -1; }
   .llm-actions-hint { margin-left: 0; width: 100%; }
   .llm-runtime-actions { width: 100%; padding: 4px 0; flex-wrap: wrap; }
-  .llm-runtime-panel { max-height: 520px; }
 }
 
 @media (max-width: 640px) {
@@ -2504,3 +2508,337 @@ textarea {
   .llm-status-stats { grid-template-columns: repeat(2, 1fr); }
   .llm-stat-value { font-size: 14px; }
 }
+
+/* ========== Turn Flow (合并视图) ========== */
+
+.llm-turn-flow-wrap {
+  position: relative;
+}
+
+.llm-turn-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.llm-turn-block {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(167, 139, 250, 0.04) 0%, transparent 100%);
+  transition: border-color 0.15s;
+}
+
+.llm-turn-block:hover { border-color: var(--line-strong); }
+
+.llm-turn-block > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--text);
+  user-select: none;
+}
+
+.llm-turn-block > summary::-webkit-details-marker { display: none; }
+
+.llm-turn-title {
+  display: inline-flex;
+  align-items: center;
+}
+
+.llm-turn-overview {
+  flex-basis: 100%; /* 强制换行到 summary 第二行 */
+  margin-top: 8px;
+  margin-left: 22px; /* 缩进到 handle 之后 */
+  font-size: 11px;
+  line-height: 1.55;
+  min-width: 0;
+  color: var(--text);
+}
+
+/* 时间线流程：圆形序号 + 垂直连接线 + 行动/结果 */
+.llm-ov-flow {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  position: relative;
+}
+
+.llm-ov-step {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 0 0 10px 0;
+  min-width: 0;
+}
+
+.llm-ov-step:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 11px;
+  top: 22px;
+  bottom: 0;
+  width: 2px;
+  background: var(--line);
+  border-radius: 1px;
+}
+
+.llm-ov-step:last-child {
+  padding-bottom: 0;
+}
+
+.llm-ov-bullet {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(91, 141, 239, 0.4);
+  position: relative;
+  z-index: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.llm-ov-step-think .llm-ov-bullet {
+  background: rgba(120, 120, 140, 0.15);
+  color: var(--text-secondary);
+  border-color: rgba(120, 120, 140, 0.35);
+}
+
+.llm-ov-body {
+  flex: 1;
+  min-width: 0;
+  padding-top: 1px;
+}
+
+.llm-ov-tag {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 3px;
+}
+
+.llm-ov-tag-label {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  user-select: none;
+}
+
+.llm-ov-text {
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.55;
+}
+
+.llm-ov-tool {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border: 1px solid rgba(91, 141, 239, 0.3);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+}
+
+.llm-ov-arrow {
+  color: var(--muted);
+  font-size: 12px;
+  user-select: none;
+  font-weight: 500;
+}
+
+.llm-ov-res {
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.llm-ov-res.ok {
+  color: var(--ok);
+}
+
+.llm-ov-res.fail {
+  color: var(--danger);
+}
+
+.llm-ov-res.pending {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.llm-turn-handle {
+  display: inline-block;
+  width: 14px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 10px;
+  transition: transform 0.15s;
+}
+
+.llm-turn-block[open] > summary .llm-turn-handle {
+  transform: rotate(0deg);
+}
+
+.llm-turn-block:not([open]) > summary .llm-turn-handle {
+  transform: rotate(-90deg);
+}
+
+.llm-turn-block > summary strong {
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.llm-turn-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.llm-turn-pill.ok {
+  color: var(--ok);
+  background: var(--ok-dim);
+  border-color: rgba(74, 222, 128, 0.30);
+}
+
+.llm-turn-pill.live {
+  color: var(--accent);
+  background: var(--accent-dim);
+  border-color: rgba(91, 141, 239, 0.30);
+  animation: llmTurnLivePulse 1.4s ease-in-out infinite;
+}
+
+@keyframes llmTurnLivePulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+.llm-turn-counts {
+  font-variant-numeric: tabular-nums;
+}
+
+.llm-turn-block-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 12px 12px;
+  border-top: 1px solid var(--line);
+}
+
+.llm-section-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.llm-turn-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.08);
+}
+
+/* 内嵌的 .llm-tool-item 去掉自己的外边距，块已经处理了间距 */
+.llm-turn-tools .llm-tool-item { margin-top: 0; }
+.llm-turn-tools .llm-tool-item + .llm-tool-item { margin-top: 4px; }
+
+/* ========== Auto Scroll Toggle & Bottom Button ========== */
+
+.llm-toggle {
+  position: relative;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.llm-toggle.on {
+  color: var(--ok);
+  background: var(--ok-dim);
+  border-color: rgba(74, 222, 128, 0.30);
+}
+
+.llm-toggle.off {
+  color: var(--muted);
+  background: rgba(0, 0, 0, 0.18);
+  border-color: var(--line);
+}
+
+.llm-toggle.on::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ok);
+  box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.45);
+  animation: llmAutoScrollDot 1.6s ease-in-out infinite;
+}
+
+@keyframes llmAutoScrollDot {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.45); }
+  50% { box-shadow: 0 0 0 4px rgba(74, 222, 128, 0); }
+}
+
+.llm-scroll-bottom {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--line-strong);
+  background: var(--accent);
+  color: #0c1426;
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(91, 141, 239, 0.35);
+  transition: transform 0.15s, background 0.15s;
+  z-index: 50;
+}
+
+.llm-scroll-bottom:hover {
+  transform: translateY(-1px);
+  background: var(--accent-strong, #5b8def);
+}
+
+.llm-scroll-bottom[hidden] { display: none; }
+

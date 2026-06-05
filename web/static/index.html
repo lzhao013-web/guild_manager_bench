@@ -241,10 +241,11 @@
           </section>
 
           <section class="panel llm-runtime">
+            <button id="llmScrollBottomButton" type="button" class="llm-scroll-bottom" hidden title="滚到底部" aria-label="滚到底部">↓</button>
             <nav class="llm-runtime-tabs" role="tablist" aria-label="运行态信息">
               <button class="llm-runtime-tab active" type="button" role="tab" data-runtime="transcript">
                 <span class="llm-runtime-tab-icon" aria-hidden="true">💭</span>
-                <span>模型行为</span>
+                <span>回合流程</span>
                 <span class="llm-runtime-tab-count" data-runtime-count="transcript">0</span>
               </button>
               <button class="llm-runtime-tab" type="button" role="tab" data-runtime="tools">
@@ -262,16 +263,21 @@
                 <span class="llm-runtime-tab-count" data-runtime-count="events">0</span>
               </button>
               <div class="llm-runtime-actions">
+                <button id="llmAutoScrollButton" type="button" class="llm-icon-button llm-toggle on" aria-pressed="true" title="自动滚动到最新（手动向上滚会暂停）" data-active="true">📍 自动滚动</button>
                 <button id="llmCopyPromptButton" type="button" class="llm-icon-button" title="复制 prompt 到剪贴板" aria-label="复制 prompt">📋 复制</button>
                 <button id="llmTranscriptClearButton" type="button" class="llm-icon-button" title="清空记录" aria-label="清空模型行为记录">✕ 清空</button>
                 <button id="llmEventClearButton" type="button" class="llm-icon-button" title="清空事件" aria-label="清空事件流">✕ 清空事件</button>
               </div>
             </nav>
             <div class="llm-runtime-panel active" data-runtime-panel="transcript" role="tabpanel">
-              <div id="llmTranscript" class="llm-transcript"></div>
+              <div class="llm-turn-flow-wrap">
+                <div id="llmTranscript" class="llm-transcript llm-turn-flow"></div>
+              </div>
             </div>
             <div class="llm-runtime-panel" data-runtime-panel="tools" role="tabpanel">
-              <div id="llmToolTrace" class="llm-tool-trace"></div>
+              <div class="llm-turn-flow-wrap">
+                <div id="llmToolTrace" class="llm-tool-trace"></div>
+              </div>
             </div>
             <div class="llm-runtime-panel" data-runtime-panel="prompt" role="tabpanel">
               <pre id="llmPrompt" class="llm-pre">尚未开始</pre>
