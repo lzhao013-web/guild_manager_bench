@@ -2424,8 +2424,8 @@ function renderTurnBlock(block, tools, activeTurn) {
     ? `<span class="llm-turn-pill ok">已完成</span>`
     : (isActive
         ? (state.llm.thinkingTurns.has(block.turn)
-            ? `<span class="llm-turn-pill live">思考中<span class="llm-ov-pending-dots" aria-hidden="true"><i></i><i></i><i></i></span></span>`
-            : `<span class="llm-turn-pill live">执行中<span class="llm-ov-pending-dots" aria-hidden="true"><i></i><i></i><i></i></span></span>`)
+            ? `<span class="llm-turn-pill live"><span class="llm-pill-spinner" aria-hidden="true"></span>思考中</span>`
+            : `<span class="llm-turn-pill live"><span class="llm-pill-spinner" aria-hidden="true"></span>执行中</span>`)
         : `<span class="llm-turn-pill">未开始</span>`);
   const modelCount = block.items.filter((e) => e.kind === "model").length;
   const toolCount = tools.length;
