@@ -2471,12 +2471,13 @@ function renderTurnOverview(modelEntries, tools) {
     if (t.callId) toolsByCallId.set(t.callId, t);
   }
 
-  const items = [];
+  const thinkItems = [];
+  const actionItems = [];
   let stepNum = 1;
 
   for (const s of steps) {
     if (s.text) {
-      items.push(
+      thinkItems.push(
         `<li class="llm-ov-step llm-ov-step-think">` +
           `<span class="llm-ov-bullet">${stepNum++}</span>` +
           `<div class="llm-ov-body">` +
@@ -2489,20 +2490,28 @@ function renderTurnOverview(modelEntries, tools) {
       const t = toolsByCallId.get(tc.id) || {};
       const toolName = tc.name || t.name || "?";
       const result = renderToolResultInline(t, toolName);
-      items.push(
-        `<li class="llm-ov-step llm-ov-step-action">` +
-          `<span class="llm-ov-bullet">${stepNum++}</span>` +
-          `<div class="llm-ov-body">` +
-            `<div class="llm-ov-tag">` +
-              `<span class="llm-ov-tag-label">调用</span>` +
-              `<span class="llm-ov-tool">${escapeHtml(toolName)}</span>` +
-              `<span class="llm-ov-arrow">─→</span>` +
-              result +
-            `</div>` +
-          `</div>` +
-        `</li>`
+      actionItems.push(
+        `<span class="llm-ov-item">` +
+          `<span class="llm-ov-num">${stepNum++}</span>` +
+          `<span class="llm-ov-tool">${escapeHtml(toolName)}</span>` +
+          `<span class="llm-ov-arrow">─→</span>` +
+          result +
+        `</span>`
       );
     }
+  }
+
+  const items = [...thinkItems];
+  if (actionItems.length) {
+    const sep = `<span class="llm-ov-sep">·</span>`;
+    items.push(
+      `<li class="llm-ov-step llm-ov-step-action">` +
+        `<span class="llm-ov-bullet">→</span>` +
+        `<div class="llm-ov-body">` +
+          `<div class="llm-ov-chain">${actionItems.join(sep)}</div>` +
+        `</div>` +
+      `</li>`
+    );
   }
 
   if (!items.length) return "";

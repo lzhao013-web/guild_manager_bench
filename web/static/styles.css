@@ -2624,6 +2624,56 @@ textarea {
   line-height: 1.45;
 }
 
+/* 行动行：所有工具 inline 在一行，wrap 自然 */
+.llm-ov-step-action::before {
+  content: none; /* 不画连接线 */
+}
+
+.llm-ov-step-action .llm-ov-bullet {
+  background: rgba(74, 222, 128, 0.10);
+  color: var(--ok);
+  border: 1px solid rgba(74, 222, 128, 0.3);
+  font-size: 12px;
+}
+
+.llm-ov-chain {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  line-height: 1.5;
+  min-width: 0;
+}
+
+.llm-ov-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.llm-ov-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-size: 9px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  border: 1px solid rgba(91, 141, 239, 0.4);
+  flex-shrink: 0;
+}
+
+.llm-ov-sep {
+  color: var(--line);
+  margin: 0 2px;
+  user-select: none;
+}
+
 .llm-ov-bullet {
   flex-shrink: 0;
   width: 22px;
