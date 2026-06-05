@@ -2414,9 +2414,9 @@ function renderIntroEntry(entry) {
 function renderTurnBlock(block, tools, activeTurn) {
   const isActive = block.turn === activeTurn;
   const wasOpened = state.llm.openTurns.has(block.turn);
-  // 用户主动收起的 turn 保持收起，即使后续 re-render
+  // 用户主动收起的 turn 保持收起（即使仍是 active turn）
   const userCollapsed = state.llm.userCollapsedTurns.has(block.turn);
-  const open = isActive || (wasOpened && !userCollapsed);
+  const open = !userCollapsed && (isActive || wasOpened);
   const turnNumber = escapeHtml(String(block.turn));
   // timing 来源优先级：turn_started/turn_completion 自带 > 本回合 model entry 汇总
   const timing = renderTurnTimingUsage(block.timing || block.completionTiming || aggregateTurnTiming(block.items));
