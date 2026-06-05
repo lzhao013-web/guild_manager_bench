@@ -2919,6 +2919,17 @@ textarea {
   animation: llmTurnLivePulse 1.4s ease-in-out infinite;
 }
 
+.llm-turn-pill.live .llm-ov-pending-dots {
+  margin-left: 4px;
+  gap: 0;
+}
+
+.llm-turn-pill.live .llm-ov-pending-dots i {
+  width: 4px;
+  height: 4px;
+  margin: 0 1px;
+}
+
 @keyframes llmTurnLivePulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.55; }

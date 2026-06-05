@@ -20,6 +20,8 @@ const state = {
     openThinking: new Set(),
     openToolTrace: new Set(),
     openTurns: new Set(),
+    userCollapsedTurns: new Set(),
+    thinkingTurns: new Set(),
     toolTraceSeq: 0,
     autoScroll: true,
     userScrolledUp: false,
@@ -1117,8 +1119,10 @@ function onDocumentToggle(e) {
     if (turn == null || Number.isNaN(turn)) return;
     if (e.target.open) {
       state.llm.openTurns.add(turn);
+      state.llm.userCollapsedTurns.delete(turn);
     } else {
       state.llm.openTurns.delete(turn);
+      state.llm.userCollapsedTurns.add(turn);
     }
   }
 }
@@ -1922,6 +1926,9 @@ function handleLlmEvent(event) {
     entry.request = event.request || null;
     state.llm.currentModelEntry = entry;
     state.llm.transcript.push(entry);
+    if (event.turn != null) {
+      state.llm.thinkingTurns.add(event.turn);
+    }
   } else if (event.type === "model_reasoning_delta") {
     ensureModelEntry().reasoningText += event.text || "";
   } else if (event.type === "model_delta") {
@@ -1938,6 +1945,9 @@ function handleLlmEvent(event) {
     entry.toolCalls = event.tool_calls || [];
     entry.timing = event.timing || null;
     entry.usage = event.usage || null;
+    if (event.turn != null) {
+      state.llm.thinkingTurns.delete(event.turn);
+    }
   } else if (event.type === "model_stream_completed") {
     const entry = ensureModelEntry();
     if (!entry.text && event.text) {
@@ -1973,9 +1983,15 @@ function handleLlmEvent(event) {
     const timingUsage = aggregateTranscriptTiming();
     state.llm.status = `第 ${event.trace?.turn || ""} 回合完成`;
     state.llm.transcript.push({ kind: "turn", title: `第 ${event.trace?.turn || ""} 回合完成`, timingUsage });
+    if (event.trace?.turn != null) {
+      state.llm.thinkingTurns.delete(event.trace.turn);
+    }
   } else if (event.type === "turn_failed") {
     state.llm.running = false;
     state.llm.status = `回合失败：${event.trace?.failure_reason || "unknown"}`;
+    if (event.trace?.turn != null) {
+      state.llm.thinkingTurns.delete(event.trace.turn);
+    }
   } else if (event.type === "run_archived") {
     state.llm.transcript.push({
       kind: "turn",
@@ -2398,13 +2414,19 @@ function renderIntroEntry(entry) {
 function renderTurnBlock(block, tools, activeTurn) {
   const isActive = block.turn === activeTurn;
   const wasOpened = state.llm.openTurns.has(block.turn);
-  const open = isActive || wasOpened;
+  // 用户主动收起的 turn 保持收起，即使后续 re-render
+  const userCollapsed = state.llm.userCollapsedTurns.has(block.turn);
+  const open = isActive || (wasOpened && !userCollapsed);
   const turnNumber = escapeHtml(String(block.turn));
   // timing 来源优先级：turn_started/turn_completion 自带 > 本回合 model entry 汇总
   const timing = renderTurnTimingUsage(block.timing || block.completionTiming || aggregateTurnTiming(block.items));
   const turnStatus = block.isComplete
     ? `<span class="llm-turn-pill ok">已完成</span>`
-    : (isActive ? `<span class="llm-turn-pill live">进行中</span>` : `<span class="llm-turn-pill">未开始</span>`);
+    : (isActive
+        ? (state.llm.thinkingTurns.has(block.turn)
+            ? `<span class="llm-turn-pill live">思考中<span class="llm-ov-pending-dots" aria-hidden="true"><i></i><i></i><i></i></span></span>`
+            : `<span class="llm-turn-pill live">执行中<span class="llm-ov-pending-dots" aria-hidden="true"><i></i><i></i><i></i></span></span>`)
+        : `<span class="llm-turn-pill">未开始</span>`);
   const modelCount = block.items.filter((e) => e.kind === "model").length;
   const toolCount = tools.length;
   const counts = `<span class="llm-turn-counts small muted">💭 ${modelCount} · 🔧 ${toolCount}</span>`;
@@ -2530,12 +2552,18 @@ function renderToolResultInline(tool, toolName) {
   if (!isMutatingTool(toolName)) {
     return `<span class="llm-ov-res ok">成功</span>`;
   }
-  // 写操作：取首行 "成功 xxx..." 作为结果简述
-  const content = (tool.content || "").split("\n")[0];
-  if (content.startsWith("成功")) {
-    return `<span class="llm-ov-res ok">${escapeHtml(content)}</span>`;
+  // 写操作：取首行，把工具名替换为中文
+  const raw = (tool.content || "").split("\n")[0];
+  // 模式 1："成功 <tool>: <rest>" → 只显示 <rest>（chip 已标工具，pill 简洁）
+  const escapedName = toolName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const colonRe = new RegExp(`^成功\\s+${escapedName}\\s*[:：]\\s*(.+)$`, "i");
+  const colonMatch = raw.match(colonRe);
+  if (colonMatch) {
+    return `<span class="llm-ov-res ok">${escapeHtml(colonMatch[1])}</span>`;
   }
-  return `<span class="llm-ov-res ok">${escapeHtml(content || "成功")}</span>`;
+  // 模式 2：把内容中的工具名替换为中文
+  const labeled = raw.replace(new RegExp(`\\b${escapedName}\\b`, "g"), toolLabel(toolName));
+  return `<span class="llm-ov-res ok">${escapeHtml(labeled || "成功")}</span>`;
 }
 
 const MUTATING_TOOL_NAMES = new Set([
