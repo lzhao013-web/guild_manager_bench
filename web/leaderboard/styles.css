@@ -1,40 +1,57 @@
 /* ========== Variables ========== */
 :root {
   color-scheme: dark;
-  --bg: #06080f;
-  --bg-subtle: #0a0e1a;
-  --surface: #0d1120;
-  --surface-raised: #131a2e;
-  --surface-hover: #182040;
+
+  /* ── Surfaces（深黑 + 中性灰，符合 Linear / Vercel Geist 调性） ── */
+  --bg: #000000;
+  --bg-subtle: #050505;
+  --surface: #0A0A0C;
+  --surface-raised: #131316;
+  --surface-hover: #1A1A1E;
+
+  /* ── Lines / Borders（极淡中性灰，不用蓝色调） ── */
   --line: rgba(255, 255, 255, 0.06);
   --line-strong: rgba(255, 255, 255, 0.10);
-  --text: #e8ecf4;
-  --text-secondary: #9aa3be;
-  --muted: #5c6585;
-  --accent: #f59e0b;
-  --accent-hover: #fbbf24;
-  --accent-dim: rgba(245, 158, 11, 0.08);
-  --accent-glow: rgba(245, 158, 11, 0.15);
-  --gold: #fbbf24;
-  --gold-dim: rgba(251, 191, 36, 0.12);
-  --silver: #94a3b8;
-  --silver-dim: rgba(148, 163, 184, 0.10);
-  --bronze: #cd7f32;
-  --bronze-dim: rgba(205, 127, 50, 0.10);
-  --danger: #ef4444;
-  --ok: #22c55e;
-  --ok-dim: rgba(34, 197, 94, 0.10);
-  --cyan: #22d3ee;
-  --cyan-dim: rgba(34, 211, 238, 0.08);
-  --purple: #a78bfa;
-  --purple-dim: rgba(167, 139, 250, 0.08);
-  --radius: 14px;
-  --radius-sm: 8px;
-  --radius-xs: 6px;
-  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.2);
-  --shadow-card-hover: 0 2px 8px rgba(0, 0, 0, 0.3), 0 8px 32px rgba(0, 0, 0, 0.25);
-  --transition: 200ms ease;
-  --transition-slow: 350ms cubic-bezier(0.4, 0, 0.2, 1);
+  --line-faint: rgba(255, 255, 255, 0.04);
+
+  /* ── Text（中性灰，不用蓝色调） ── */
+  --text: #FAFAFA;
+  --text-secondary: #A1A1AA;
+  --muted: #71717A;
+  --muted-soft: #52525B;
+
+  /* ── Accent — 单一柔和紫蓝（Linear 风格，主导 #1 强调） ── */
+  --accent: #7C8CF8;
+  --accent-strong: #6366F1;
+  --accent-soft: #A5B4FC;
+  --accent-dim: rgba(124, 140, 248, 0.10);
+  --accent-line: rgba(124, 140, 248, 0.22);
+  --accent-glow: rgba(124, 140, 248, 0.06);
+
+  /* ── 次级 accent（用于 #2/#3 冷色 hint） ── */
+  --mint: #5EEAD4;
+  --mint-dim: rgba(94, 234, 212, 0.06);
+  --mint-line: rgba(94, 234, 212, 0.20);
+  --lavender: #C4B5FD;
+  --lavender-dim: rgba(196, 181, 253, 0.06);
+  --lavender-line: rgba(196, 181, 253, 0.20);
+
+  /* ── Semantic ── */
+  --danger: #F87171;
+  --ok: #4ADE80;
+
+  /* ── Layout ── */
+  --radius: 12px;
+  --radius-sm: 6px;
+  --radius-xs: 4px;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-card-hover: 0 1px 3px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
+  --transition: 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --transition-slow: 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  /* ── Fonts（优先 system stack + Inter + JetBrains Mono） ── */
+  --font-mono: "JetBrains Mono", "SF Mono", "Cascadia Code", ui-monospace, "Menlo", monospace;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
 }
 
 /* ========== Base ========== */
@@ -103,35 +120,24 @@ body::before {
 
 .header-brand {
   display: flex;
-  align-items: center;
-  gap: 14px;
-}
-
-.header-icon {
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 20px;
-  background: linear-gradient(135deg, var(--accent-dim), rgba(245, 158, 11, 0.2));
-  border: 1px solid rgba(245, 158, 11, 0.2);
-  border-radius: var(--radius-sm);
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
 }
 
 .header-title {
-  font-size: 17px;
-  font-weight: 800;
-  color: #fff;
-  letter-spacing: -0.03em;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.01em;
 }
 
 .header-subtitle {
   font-size: 12px;
   color: var(--muted);
-  margin: 0;
-  margin-top: 1px;
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .header-meta {
@@ -155,6 +161,154 @@ body::before {
   width: 100%;
   margin: 0 auto;
   padding: 28px 24px 40px;
+}
+
+/* ========== Stats Banner (Hero) ========== */
+.stats-banner {
+  position: relative;
+  margin-bottom: 32px;
+  padding: 24px 26px 22px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background:
+    radial-gradient(ellipse 70% 100% at 0% 0%, rgba(124, 140, 248, 0.06) 0%, transparent 55%),
+    radial-gradient(ellipse 50% 70% at 100% 0%, rgba(196, 181, 253, 0.04) 0%, transparent 60%);
+  overflow: hidden;
+}
+
+.stats-banner-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.stats-banner-title-block {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.stats-banner-headline {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.01em;
+  font-family: var(--font-sans);
+}
+
+.stats-banner-sub {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 500;
+  font-family: var(--font-mono);
+  letter-spacing: 0;
+}
+
+.stats-banner-sub .v-chip {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-line);
+  border-radius: 3px;
+  letter-spacing: 0.02em;
+  vertical-align: 1px;
+}
+
+.stats-banner-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 500;
+  margin-left: auto;
+}
+
+.stats-banner-sep { opacity: 0.4; }
+
+.stats-banner-metrics {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.stats-banner-cell {
+  position: relative;
+  padding: 4px 16px 4px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.stats-banner-cell + .stats-banner-cell {
+  padding-left: 16px;
+  border-left: 1px solid var(--line);
+}
+
+.stats-banner-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stats-banner-value {
+  font-family: "JetBrains Mono", "SF Mono", monospace;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stats-banner-unit {
+  font-size: 10px;
+  color: var(--muted);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 980px) {
+  .stats-banner-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .stats-banner-cell:nth-child(4n+1) { padding-left: 0; border-left: none; }
+  .stats-banner-cell { padding: 8px 12px 8px 0; }
+  .stats-banner-cell + .stats-banner-cell { padding-left: 12px; }
+}
+
+@media (max-width: 600px) {
+  .stats-banner-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stats-banner-cell:nth-child(2n+1) { padding-left: 0; border-left: none; }
+  .stats-banner-cell { padding: 8px 12px 8px 0; }
+  .stats-banner-cell + .stats-banner-cell { padding-left: 12px; }
+  .stats-banner-headline { font-size: 16px; }
 }
 
 /* ========== Loading & Error States ========== */
@@ -345,7 +499,16 @@ body::before {
 .card-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+}
+
+/* ========== Percentile Label (subtle inline text) ========== */
+.pct-label {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.04em;
 }
 
 /* ========== Model Card ========== */
@@ -354,7 +517,7 @@ body::before {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 20px 24px;
+  padding: 18px 22px;
   cursor: pointer;
   box-shadow: var(--shadow-card);
   transition:
@@ -385,36 +548,47 @@ body::before {
   content: '';
   position: absolute;
   left: 0;
-  top: 12px;
-  bottom: 12px;
-  width: 3px;
-  border-radius: 0 3px 3px 0;
+  top: 14px;
+  bottom: 14px;
+  width: 1.5px;
+  border-radius: 0 1.5px 1.5px 0;
   background: var(--muted);
-  opacity: 0.2;
+  opacity: 0.15;
   transition: opacity var(--transition), background var(--transition);
 }
 
+/* 前 3 名：用细微背景差 + 单色细线撑结构，不靠装饰 */
+.model-card.rank-1 {
+  background: linear-gradient(90deg, var(--accent-glow) 0%, transparent 60%), var(--surface);
+  border-color: var(--accent-line);
+}
 .model-card.rank-1::before {
-  background: linear-gradient(180deg, var(--gold), #f59e0b);
-  opacity: 1;
+  background: var(--accent-strong);
+  opacity: 0.85;
+  width: 3px;
 }
-.model-card.rank-1 { border-color: rgba(251, 191, 36, 0.15); }
 .model-card.rank-1:hover {
-  border-color: rgba(251, 191, 36, 0.30);
-  box-shadow: var(--shadow-card-hover), 0 0 40px rgba(251, 191, 36, 0.06);
+  border-color: rgba(96, 165, 250, 0.32);
+  background: linear-gradient(90deg, rgba(96, 165, 250, 0.10) 0%, transparent 60%), var(--surface);
 }
 
+.model-card.rank-2 {
+  background: linear-gradient(90deg, rgba(34, 211, 238, 0.04) 0%, transparent 60%), var(--surface);
+}
 .model-card.rank-2::before {
-  background: linear-gradient(180deg, var(--silver), #64748b);
-  opacity: 0.8;
+  background: var(--mint);
+  opacity: 0.55;
+  width: 2px;
 }
-.model-card.rank-2:hover { border-color: rgba(148, 163, 184, 0.20); }
 
-.model-card.rank-3::before {
-  background: linear-gradient(180deg, var(--bronze), #a0612a);
-  opacity: 0.8;
+.model-card.rank-3 {
+  background: linear-gradient(90deg, rgba(167, 139, 250, 0.04) 0%, transparent 60%), var(--surface);
 }
-.model-card.rank-3:hover { border-color: rgba(205, 127, 50, 0.20); }
+.model-card.rank-3::before {
+  background: var(--lavender);
+  opacity: 0.50;
+  width: 2px;
+}
 
 /* ── Card Header ── */
 .card-header {
@@ -425,37 +599,50 @@ body::before {
 
 .rank-badge {
   flex-shrink: 0;
-  width: 42px;
-  height: 42px;
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 15px;
-  font-weight: 800;
-  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 4px;
   background: var(--surface-raised);
-  color: var(--muted);
-  border: 2px solid transparent;
-  transition: all var(--transition);
+  color: var(--text);
+  border: 1px solid var(--line);
+  font-family: "JetBrains Mono", monospace;
+  letter-spacing: -0.02em;
 }
 
+/* #1 序号用冷蓝作主 accent（克制但有锚点） */
 .rank-1 .rank-badge {
-  background: linear-gradient(135deg, rgba(251, 191, 36, 0.18), rgba(251, 191, 36, 0.08));
-  color: var(--gold);
-  border-color: rgba(251, 191, 36, 0.25);
-  box-shadow: 0 0 16px rgba(251, 191, 36, 0.10);
+  width: 36px;
+  height: 36px;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border-color: var(--accent-line);
 }
 
+/* #2/#3 序号加 mono 数字稍大 + 微妙冷色 */
 .rank-2 .rank-badge {
-  background: linear-gradient(135deg, rgba(148, 163, 184, 0.14), rgba(148, 163, 184, 0.06));
-  color: var(--silver);
-  border-color: rgba(148, 163, 184, 0.18);
+  width: 34px;
+  height: 34px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--mint);
+  border-color: rgba(34, 211, 238, 0.18);
+  background: rgba(34, 211, 238, 0.04);
 }
-
 .rank-3 .rank-badge {
-  background: linear-gradient(135deg, rgba(205, 127, 50, 0.14), rgba(205, 127, 50, 0.06));
-  color: var(--bronze);
-  border-color: rgba(205, 127, 50, 0.18);
+  width: 34px;
+  height: 34px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--lavender);
+  border-color: rgba(167, 139, 250, 0.18);
+  background: rgba(167, 139, 250, 0.04);
 }
 
 .model-info {
@@ -464,12 +651,13 @@ body::before {
 }
 
 .model-name {
-  font-size: 17px;
-  font-weight: 700;
-  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
   overflow-wrap: anywhere;
   word-break: break-word;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
 }
 
 .model-note-tag {
@@ -491,9 +679,9 @@ body::before {
 .model-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 4px;
-  font-size: 12px;
+  gap: 4px 6px;
+  margin-top: 5px;
+  font-size: 11px;
   color: var(--muted);
 }
 
@@ -501,10 +689,29 @@ body::before {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 1px 8px;
+  padding: 1px 7px;
   background: var(--surface-raised);
-  border-radius: 100px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
   font-weight: 500;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0;
+}
+
+.model-meta .pct-label {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+  font-weight: 600;
+  padding: 1px 0;
+}
+
+/* 仅 #1 的 Top 1 用 accent 色 */
+.rank-1 .model-meta .pct-label {
+  color: var(--accent);
+  font-weight: 700;
 }
 
 /* ── Primary Stats (right side) ── */
@@ -517,25 +724,26 @@ body::before {
 
 .stat-block {
   text-align: right;
-  padding: 6px 12px;
-  background: var(--surface-raised);
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--line);
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
 }
 
 .stat-block.primary-stat {
-  padding: 8px 14px;
-  border-color: rgba(245, 158, 11, 0.15);
-  background: linear-gradient(135deg, var(--surface-raised), rgba(245, 158, 11, 0.04));
+  padding: 0;
+  border: none;
+  background: transparent;
 }
 
 .stat-label {
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--muted);
   margin-bottom: 2px;
+  font-family: var(--font-mono);
 }
 
 .stat-value {
@@ -547,8 +755,33 @@ body::before {
 }
 
 .stat-value.rank-val {
+  color: var(--text);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.rank-1 .stat-value.rank-val {
   color: var(--accent);
-  font-size: 20px;
+  font-size: 26px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 5px;
+  text-decoration-skip-ink: none;
+}
+
+.rank-2 .stat-value.rank-val,
+.rank-3 .stat-value.rank-val {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.stat-block.primary-stat {
+  background: transparent;
+  border: none;
+  padding: 0;
 }
 
 /* ── Expand Chevron ── */
@@ -576,64 +809,75 @@ body::before {
   color: var(--accent);
 }
 
-/* ── Metrics Row (efficiency + game quality) ── */
+/* ── Metrics Row (efficiency + game quality) — 表格化、克制 ── */
 .metrics-row {
   display: flex;
-  gap: 12px;
-  margin-top: 16px;
-  padding-top: 16px;
+  flex-wrap: wrap;
+  gap: 0;
+  margin-top: 14px;
+  padding-top: 14px;
   border-top: 1px solid var(--line);
 }
 
-.metrics-group {
+.metric-group {
   flex: 1;
   min-width: 0;
-}
-
-.metrics-group-title {
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: var(--muted);
-  margin-bottom: 8px;
-}
-
-.metrics-chips {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 6px;
 }
 
-.metric-chip {
+.metric-group-title {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  white-space: nowrap;
+  margin: 0;
+}
+
+.metric-group-cells {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(80px, auto);
+  gap: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.metric-cell {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 6px 10px;
-  background: var(--bg-subtle);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-xs);
-  min-width: 90px;
-  transition: background var(--transition), border-color var(--transition);
+  gap: 1px;
+  padding: 0 14px 0 0;
+  margin: 0;
+  min-width: 0;
 }
 
-.model-card:hover .metric-chip {
-  background: var(--surface-raised);
+.metric-cell + .metric-cell {
+  padding-left: 14px;
+  border-left: 1px solid var(--line);
 }
 
-.metric-chip-label {
+.metric-cell-label {
   font-size: 10px;
   font-weight: 600;
   color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 0;
   white-space: nowrap;
 }
 
-.metric-chip-value {
+.metric-cell-value {
   font-family: "JetBrains Mono", "SF Mono", "Cascadia Code", ui-monospace, monospace;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
   letter-spacing: -0.02em;
+  margin: 0;
+  white-space: nowrap;
 }
 
 /* ── Detail Panel (expandable) ── */
@@ -864,9 +1108,8 @@ body::before {
 /* ========== Footer ========== */
 .footer {
   flex-shrink: 0;
-  text-align: center;
-  padding: 16px 24px;
-  font-size: 12px;
+  padding: 18px 24px;
+  font-size: 11px;
   color: var(--muted);
   border-top: 1px solid var(--line);
   background: var(--surface);
@@ -877,14 +1120,29 @@ body::before {
 .footer-inner {
   max-width: 1100px;
   margin: 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  text-align: center;
 }
 
-.footer-sep { opacity: 0.3; }
+.footer-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.footer-meta code {
+  font-size: 10px;
+  padding: 0 4px;
+  background: var(--bg-subtle);
+  border-radius: 3px;
+  color: var(--text-secondary);
+  font-family: "JetBrains Mono", monospace;
+}
+
+.footer-sep { opacity: 0.4; }
 
 /* ========== Responsive ========== */
 @media (max-width: 768px) {
@@ -1064,7 +1322,7 @@ body::before {
 }
 
 .curve-legend {
-  width: 280px;
+  width: 320px;
   flex-shrink: 0;
   padding: 16px;
   border-left: 1px solid var(--line);
@@ -1142,7 +1400,7 @@ body::before {
 }
 
 .curve-legend-meta {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--muted);
   white-space: nowrap;
   margin-left: auto;

@@ -75,7 +75,21 @@ function fmtTokens(n) {
   return String(n);
 }
 
-const MEDALS = ['🥇', '🥈', '🥉'];
+const MEDALS = ['#1', '#2', '#3'];
+
+// 简洁的位置/分位标识
+function percentileForRank(rank, total) {
+  if (rank == null || !total) return null;
+  // topPct 越小越靠前
+  const topPct = (rank / total) * 100;
+  if (rank === 1) return 'Top 1';
+  if (topPct <= 6) return 'Top 5%';
+  if (topPct <= 11) return 'Top 10%';
+  if (topPct <= 22) return 'Top 20%';
+  if (topPct <= 33) return 'Top 33%';
+  if (topPct <= 50) return 'Top 50%';
+  return null;
+}
 
 // ============================================================================
 // Global State
@@ -405,9 +419,23 @@ function renderLeaderboard(data) {
     return;
   }
 
+  // Stats banner metrics
+  renderStatsBanner(data);
+
   // Build cards with staggered animation delay
+  const topScore = data.models
+    .map((m) => (m.rank_score && m.rank_score.best) || 0)
+    .reduce((a, b) => Math.max(a, b), 0);
+  const avgScore = data.models
+    .map((m) => (m.rank_score && m.rank_score.best) || 0)
+    .filter((v) => v > 0);
+  const avgVal = avgScore.length
+    ? avgScore.reduce((a, b) => a + b, 0) / avgScore.length
+    : null;
+  const total = data.models.length;
+
   const cards = data.models.map((m, i) => {
-    const html = renderCard(m);
+    const html = renderCard(m, { topScore, avgVal, total });
     return html.replace(
       'class="model-card',
       `style="animation-delay:${i * 80}ms" class="model-card`
@@ -426,16 +454,72 @@ function renderLeaderboard(data) {
   });
 }
 
-function renderCard(m) {
+function renderStatsBanner(data) {
+  const el = $('#statsBannerMetrics');
+  if (!el) return;
+
+  const models = data.models || [];
+  const totalRuns = data.total_runs || 0;
+  const validScores = models
+    .map((m) => (m.rank_score && m.rank_score.best) || 0)
+    .filter((v) => v > 0);
+
+  const topScore = validScores.length ? Math.max(...validScores) : 0;
+  const avgScore = validScores.length
+    ? validScores.reduce((a, b) => a + b, 0) / validScores.length
+    : 0;
+  const lastUpdated = data.generated_at
+    ? data.generated_at.slice(0, 10)  // YYYY-MM-DD
+    : '—';
+
+  // 计算 seed 信息
+  const seeds = new Set();
+  const scoringSeeds = new Set();
+  for (const m of models) {
+    for (const r of m.run_details || []) {
+      if (r.game_seed != null) seeds.add(r.game_seed);
+      if (r.scoring_seed != null) scoringSeeds.add(r.scoring_seed);
+    }
+  }
+  const seedList = Array.from(seeds).sort((a, b) => a - b);
+  const scoreSeedList = Array.from(scoringSeeds).sort((a, b) => a - b);
+  const seedLabel = seedList.length === 1 ? `seed ${seedList[0]}` : '—';
+  const scoreSeedLabel = scoreSeedList.length === 1 ? `score ${scoreSeedList[0]}` : '—';
+
+  const items = [
+    { label: '参赛模型', value: models.length, unit: '个' },
+    { label: '累计运行', value: totalRuns, unit: '次' },
+    { label: '最高分', value: fmtRankScore(topScore) || '—', unit: 'Rank Score' },
+    { label: '平均分', value: fmtRankScore(Math.round(avgScore)) || '—', unit: 'Rank Score' },
+    { label: '游戏种子', value: seedLabel, unit: '复现' },
+    { label: '评分种子', value: scoreSeedLabel, unit: '复现' },
+  ];
+
+  el.innerHTML = items
+    .map(
+      (it) => `
+      <div class="stats-banner-cell">
+        <dt class="stats-banner-label">${esc(it.label)}</dt>
+        <dd class="stats-banner-value">${esc(String(it.value))}</dd>
+        <span class="stats-banner-unit">${esc(it.unit || '')}</span>
+      </div>`
+    )
+    .join('');
+}
+
+function renderCard(m, ctx = {}) {
   const rank = m.rank;
   const rankCls = rank <= 3 ? ` rank-${rank}` : '';
-  const medal = rank <= 3 ? `<span class="medal">${MEDALS[rank - 1]}</span> ` : '';
   const runDetails = Array.isArray(m.run_details) ? m.run_details : [];
   const latestRun = runDetails[0] || {};
+  const total = (ctx && ctx.total) || 0;
 
   // Primary stat: rank_score
   const rs = m.rank_score;
   const rankScoreVal = rs ? esc(fmtRankScore(rs.best)) : '—';
+
+  // Percentile (subtle, plain text)
+  const pctLabel = percentileForRank(rank, total);
 
   // Efficiency stats
   const eff = m.efficiency || {};
@@ -471,10 +555,11 @@ function renderCard(m) {
   return `
     <div class="model-card${rankCls}" data-rank="${rank}">
       <div class="card-header">
-        <div class="rank-badge">${medal}${rank}</div>
+        <div class="rank-badge">${rank}</div>
         <div class="model-info">
           <div class="model-name" title="${esc(m.model)}">${esc(m.model)}${renderModelNote(m.model)}</div>
           <div class="model-meta">
+            ${pctLabel ? `<span class="pct-label">${esc(pctLabel)}</span>` : ''}
             <span>${m.runs} 次运行</span>
             ${latestRun.preset ? `<span>${esc(latestRun.preset)}</span>` : ''}
             ${m.last_run ? `<span>${esc(fmtTimestamp(m.last_run))}</span>` : ''}
@@ -510,60 +595,58 @@ function renderCard(m) {
 }
 
 function renderEfficiencySection(eff) {
-  const items = [];
-
-  if (eff.input_tokens) {
-    const inTok = eff.input_tokens;
-    items.push(metricChip('📥 Input', fmtTokens(inTok.mean), inTok.total !== inTok.mean ? `总计 ${fmtInt(inTok.total)}` : null));
+  const cells = [];
+  if (eff.input_tokens != null) {
+    const v = typeof eff.input_tokens === 'object' ? eff.input_tokens.mean : eff.input_tokens;
+    cells.push(metricCell('Input', fmtInt(v) + ' tok'));
   }
-  if (eff.output_tokens) {
-    const outTok = eff.output_tokens;
-    items.push(metricChip('📤 Output', fmtTokens(outTok.mean), outTok.total !== outTok.mean ? `总计 ${fmtInt(outTok.total)}` : null));
+  if (eff.output_tokens != null) {
+    const v = typeof eff.output_tokens === 'object' ? eff.output_tokens.mean : eff.output_tokens;
+    cells.push(metricCell('Output', fmtInt(v) + ' tok'));
   }
-  if (eff.duration_seconds) {
-    const dur = eff.duration_seconds;
-    items.push(metricChip('⏱ 耗时', fmtDuration(dur.mean), dur.total !== dur.mean ? `总计 ${fmtDuration(dur.total)}` : null));
+  if (eff.duration_seconds != null) {
+    const v = typeof eff.duration_seconds === 'object' ? eff.duration_seconds.mean : eff.duration_seconds;
+    cells.push(metricCell('Duration', fmtDuration(v)));
   }
-  if (eff.tool_calls) {
-    const tc = eff.tool_calls;
-    items.push(metricChip('🔧 操作', fmtInt(tc.mean), tc.total !== tc.mean ? `总计 ${fmtInt(tc.total)}` : null));
+  if (eff.tool_calls != null) {
+    const v = typeof eff.tool_calls === 'object' ? eff.tool_calls.mean : eff.tool_calls;
+    cells.push(metricCell('Tool Calls', fmtInt(v)));
   }
-
-  if (!items.length) return '';
+  if (!cells.length) return '';
   return `
-    <div class="metrics-group">
-      <div class="metrics-group-title">效率</div>
-      <div class="metrics-chips">${items.join('')}</div>
+    <div class="metric-group">
+      <div class="metric-group-title">Efficiency</div>
+      <div class="metric-group-cells">${cells.join('')}</div>
     </div>`;
 }
 
 function renderGameQualitySection(gq) {
-  const items = [];
-
+  const cells = [];
   if (gq.battle_win_rate != null) {
-    const pct = (gq.battle_win_rate * 100).toFixed(1);
-    items.push(metricChip('⚔ 战斗胜率', `${pct}%`, gq.battles_won != null ? `${fmtInt(gq.battles_won)} / ${fmtInt(gq.battles_total)}` : null));
+    cells.push(metricCell('Battle Win', (gq.battle_win_rate * 100).toFixed(1) + '%'));
   }
-  if (gq.gold_earned) {
-    items.push(metricChip('💰 金币', fmtInt(gq.gold_earned.mean), gq.gold_earned.best !== gq.gold_earned.mean ? `最佳 ${fmtInt(gq.gold_earned.best)}` : null));
+  if (gq.gold_earned != null) {
+    const v = typeof gq.gold_earned === 'object' ? gq.gold_earned.mean : gq.gold_earned;
+    cells.push(metricCell('Gold', fmtInt(v)));
   }
-  if (gq.exp_earned) {
-    items.push(metricChip('✨ 经验', fmtInt(gq.exp_earned.mean), gq.exp_earned.best !== gq.exp_earned.mean ? `最佳 ${fmtInt(gq.exp_earned.best)}` : null));
+  if (gq.exp_earned != null) {
+    const v = typeof gq.exp_earned === 'object' ? gq.exp_earned.mean : gq.exp_earned;
+    cells.push(metricCell('EXP', fmtInt(v)));
   }
-
-  if (!items.length) return '';
+  if (!cells.length) return '';
   return `
-    <div class="metrics-group">
-      <div class="metrics-group-title">游戏</div>
-      <div class="metrics-chips">${items.join('')}</div>
+    <div class="metric-group">
+      <div class="metric-group-title">Game</div>
+      <div class="metric-group-cells">${cells.join('')}</div>
     </div>`;
 }
 
-function metricChip(label, value, subtitle) {
+function metricCell(label, value, opts = {}) {
+  const cls = opts.cls ? ` ${opts.cls}` : '';
   return `
-    <div class="metric-chip"${subtitle ? ` title="${esc(subtitle)}"` : ''}>
-      <div class="metric-chip-label">${esc(label)}</div>
-      <div class="metric-chip-value">${esc(value)}</div>
+    <div class="metric-cell${cls}">
+      <dt class="metric-cell-label">${esc(label)}</dt>
+      <dd class="metric-cell-value">${value}</dd>
     </div>`;
 }
 

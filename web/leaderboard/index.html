@@ -15,11 +15,8 @@
   <header class="header">
     <div class="header-inner">
       <div class="header-brand">
-        <div class="header-icon">⚔</div>
-        <div>
-          <h1 class="header-title">Guild Manager Bench</h1>
-          <p class="header-subtitle">模型排行榜</p>
-        </div>
+        <h1 class="header-title">Guild Manager Bench</h1>
+        <span class="header-subtitle">模型排行榜</span>
       </div>
       <div class="header-actions">
         <button class="tab-btn active" data-tab="leaderboard" id="tabLeaderboard">排行榜</button>
@@ -36,40 +33,29 @@
 
   <!-- ===== Leaderboard Content ===== -->
   <main class="main" id="leaderboardMain">
-    <!-- 设计说明 -->
-    <section class="intro-card" id="introCard">
-      <div class="intro-header">
-        <h2 class="intro-title">设计思路</h2>
-        <button class="intro-toggle" id="introToggle" title="收起说明">收起</button>
-      </div>
-      <div class="intro-body">
-        <p class="intro-text">
-          Guild Manager Bench 是一个<strong>LLM Agent 长程决策能力</strong>评测基准。每个模型作为冒险者公会的管理者，
-          在有限回合内通过招募、训练、装备和战斗来培养队伍，最终以队伍战力接受排名。
-        </p>
-        <div class="intro-grid">
-          <div class="intro-col">
-            <h4 class="intro-col-title">评测设计</h4>
-            <ul class="intro-list">
-              <li>模型在<strong>同一游戏种子</strong>下运行，保证公平可比</li>
-              <li>每回合模型观察完整游戏状态，产出<strong>多步操作序列</strong>（行动、装备、训练等）</li>
-              <li>考察的是<strong>长期规划</strong>而非单步最优：每一轮决策都会影响后续的资源积累和队伍成长</li>
-              <li>终局通过<strong>多难度竞技场模拟</strong>评估队伍真实战力，而非简单结算数值</li>
-            </ul>
-          </div>
-          <div class="intro-col">
-            <h4 class="intro-col-title">排序依据</h4>
-            <ul class="intro-list">
-              <li>排行榜按 <strong>Rank Score（最佳）</strong> 降序排列</li>
-              <li>Rank Score 越高，代表模型培养的队伍在<strong>高难度</strong>战斗中胜率越高</li>
-              <li>均值和中位 Rank Score 用于评估模型的<strong>稳定性</strong></li>
-              <li>Arena Score（竞技场分）和游戏质量指标作为辅助参考</li>
-            </ul>
-          </div>
+    <!-- Stats Banner -->
+    <section class="stats-banner" id="statsBanner" aria-label="基准统计概览">
+      <div class="stats-banner-head">
+        <div class="stats-banner-title-block">
+          <h2 class="stats-banner-headline">Guild Manager Bench</h2>
+          <div class="stats-banner-sub">LLM Agent 长程决策基准<span class="v-chip">v0.6.0</span></div>
+        </div>
+        <div class="stats-banner-meta">
+          <span>同一游戏种子</span>
+          <span class="stats-banner-sep">·</span>
+          <span>多难度竞技场扫描</span>
+          <span class="stats-banner-sep">·</span>
+          <span>可复现</span>
         </div>
       </div>
+      <dl class="stats-banner-metrics" id="statsBannerMetrics">
+        <!-- 由 JS 渲染 -->
+      </dl>
     </section>
 
+    <!-- (设计说明已合并到 stats banner) -->
+
+    <div class="tab-section active" id="tab-leaderboard">
     <div id="cardListContainer">
       <div class="loading-state" id="loadingState">
         <div class="loading-spinner"></div>
@@ -108,7 +94,13 @@
   <!-- ===== Footer ===== -->
   <footer class="footer">
     <div class="footer-inner">
-      <span>Guild Manager Bench · LLM Agent 战力评估排行榜</span>
+      <div class="footer-meta">
+        <span>Guild Manager Bench · LLM Agent 长程决策基准</span>
+        <span class="footer-sep">·</span>
+        <span>所有模型在 <code>game seed 42</code> / <code>scoring seed 20260529</code> 下评估</span>
+        <span class="footer-sep">·</span>
+        <span>数据可复现</span>
+      </div>
     </div>
   </footer>
 
