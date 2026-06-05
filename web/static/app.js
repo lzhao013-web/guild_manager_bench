@@ -2494,7 +2494,7 @@ function renderTurnOverview(modelEntries, tools) {
         `<span class="llm-ov-item">` +
           `<span class="llm-ov-num">${stepNum++}</span>` +
           `<span class="llm-ov-tool">${escapeHtml(toolName)}</span>` +
-          `<span class="llm-ov-arrow">─→</span>` +
+          `<span class="llm-ov-arrow">→</span>` +
           result +
         `</span>`
       );

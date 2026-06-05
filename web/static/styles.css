@@ -2566,47 +2566,39 @@ textarea {
   margin: 0;
   padding: 0;
   position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .llm-ov-step {
   position: relative;
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  padding: 0 0 6px 0;
+  gap: 8px;
+  padding: 0;
   min-width: 0;
 }
 
-.llm-ov-step:not(:last-child)::before {
-  content: "";
-  position: absolute;
-  left: 11px;
-  top: 22px;
-  bottom: 0;
-  width: 2px;
-  background: var(--line);
-  border-radius: 1px;
+.llm-ov-step::before {
+  content: none; /* 思考+行动不画连接线——更紧凑 */
 }
 
 .llm-ov-step:last-child {
   padding-bottom: 0;
 }
 
-/* 思考行：紧凑"前置摘要"，无连接线 / 最多 2 行省略 / bullet 用虚线圈占编号 */
+/* 思考行：紧凑"前置摘要"，无连接线 / 1 行省略 / bullet 透明底 + 虚线边 */
 .llm-ov-step-think {
-  padding: 0 0 4px 0; /* 与行动行同高 */
   color: var(--muted);
 }
 
-.llm-ov-step-think::before {
-  content: none; /* 不画连接线 */
-}
-
 .llm-ov-step-think .llm-ov-bullet {
-  background: rgba(120, 120, 140, 0.10);
+  background: transparent;
   color: var(--text-secondary);
   border: 1px dashed var(--line-strong);
-  font-size: 11px;
+  font-size: 10px;
+  font-weight: 500;
 }
 
 .llm-ov-step-think .llm-ov-body {
@@ -2614,26 +2606,22 @@ textarea {
 }
 
 .llm-ov-step-think .llm-ov-text {
-  display: -webkit-box;
-  -webkit-line-clamp: 2; /* 最多 2 行 */
-  line-clamp: 2;
-  -webkit-box-orient: vertical;
+  display: block;
+  white-space: nowrap;
   overflow: hidden;
-  white-space: normal; /* 重置 pre-wrap，让 line-clamp 生效 */
+  text-overflow: ellipsis;
   color: var(--text-secondary);
-  line-height: 1.45;
+  line-height: 1.5;
+  min-width: 0;
 }
 
 /* 行动行：所有工具 inline 在一行，wrap 自然 */
-.llm-ov-step-action::before {
-  content: none; /* 不画连接线 */
-}
-
 .llm-ov-step-action .llm-ov-bullet {
-  background: rgba(74, 222, 128, 0.10);
-  color: var(--ok);
-  border: 1px solid rgba(74, 222, 128, 0.3);
+  background: transparent;
+  color: var(--accent);
+  border: none;
   font-size: 12px;
+  font-weight: 500;
 }
 
 .llm-ov-chain {
@@ -2643,6 +2631,7 @@ textarea {
   gap: 4px 6px;
   line-height: 1.5;
   min-width: 0;
+  padding: 1px 0;
 }
 
 .llm-ov-item {
@@ -2656,28 +2645,29 @@ textarea {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
-  background: var(--accent-dim);
+  background: rgba(91, 141, 239, 0.10);
   color: var(--accent);
   font-size: 9px;
-  font-weight: 700;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
-  border: 1px solid rgba(91, 141, 239, 0.4);
   flex-shrink: 0;
 }
 
 .llm-ov-sep {
-  color: var(--line);
-  margin: 0 2px;
+  color: var(--line-strong);
+  font-size: 10px;
+  margin: 0 1px;
   user-select: none;
+  opacity: 0.7;
 }
 
 .llm-ov-bullet {
   flex-shrink: 0;
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   background: var(--accent-dim);
   color: var(--accent);
@@ -2690,18 +2680,13 @@ textarea {
   position: relative;
   z-index: 1;
   font-variant-numeric: tabular-nums;
-}
-
-.llm-ov-step-think .llm-ov-bullet {
-  background: rgba(120, 120, 140, 0.15);
-  color: var(--text-secondary);
-  border-color: rgba(120, 120, 140, 0.35);
+  margin-top: 1px;
 }
 
 .llm-ov-body {
   flex: 1;
   min-width: 0;
-  padding-top: 1px;
+  padding-top: 0;
 }
 
 .llm-ov-tag {
@@ -2728,43 +2713,63 @@ textarea {
   line-height: 1.55;
 }
 
+/* 工具名 chip：圆角矩形 + 蓝底蓝字（视觉锚点） */
 .llm-ov-tool {
   display: inline-block;
-  padding: 1px 7px;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 500;
   color: var(--accent);
-  background: var(--accent-dim);
-  border: 1px solid rgba(91, 141, 239, 0.3);
-  font-variant-numeric: tabular-nums;
+  background: rgba(91, 141, 239, 0.10);
+  border: 1px solid rgba(91, 141, 239, 0.25);
+  font-family: var(--mono);
+  letter-spacing: 0.01em;
   line-height: 1.5;
 }
 
+/* 箭头：单字符，柔和色 */
 .llm-ov-arrow {
-  color: var(--muted);
-  font-size: 12px;
+  color: var(--line-strong);
+  font-size: 11px;
   user-select: none;
   font-weight: 500;
+  margin: 0 -1px;
 }
 
+/* 结果 pill：胶囊形，状态色 */
 .llm-ov-res {
-  font-size: 10px;
+  display: inline-block;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
   font-weight: 500;
   line-height: 1.5;
-  word-break: break-word;
+  white-space: nowrap;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  min-width: 0; /* flex item: 允许收缩触发截断 */
+  flex-shrink: 1;
 }
 
 .llm-ov-res.ok {
-  color: var(--ok);
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.10);
+  border: 1px solid rgba(74, 222, 128, 0.28);
 }
 
 .llm-ov-res.fail {
   color: var(--danger);
+  background: rgba(248, 113, 113, 0.10);
+  border: 1px solid rgba(248, 113, 113, 0.28);
 }
 
 .llm-ov-res.pending {
-  color: var(--muted);
+  color: var(--text-secondary);
+  background: rgba(120, 120, 140, 0.08);
+  border: 1px solid rgba(120, 120, 140, 0.25);
   font-style: italic;
 }
 
