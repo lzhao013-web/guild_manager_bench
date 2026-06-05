@@ -2480,7 +2480,6 @@ function renderTurnOverview(modelEntries, tools) {
         `<li class="llm-ov-step llm-ov-step-think">` +
           `<span class="llm-ov-bullet">${stepNum++}</span>` +
           `<div class="llm-ov-body">` +
-            `<div class="llm-ov-tag"><span class="llm-ov-tag-label">思考</span></div>` +
             `<div class="llm-ov-text">${escapeHtml(s.text)}</div>` +
           `</div>` +
         `</li>`
