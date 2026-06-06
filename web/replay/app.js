@@ -126,7 +126,8 @@ async function loadRunList() {
       const o = document.createElement('option'); o.value = run.run_id;
       runIds.add(run.run_id);
       const rank = run.rank_score != null ? ` · R${Math.round(run.rank_score)}` : '';
-      o.textContent = `${(run.created_at||'').slice(0,15)} · ${run.preset||'?'} · T${run.turns} · ${run.status}${rank}${run.has_observations?' 📷':''}`;
+      const model = run.model ? ` · ${run.model}` : '';
+      o.textContent = `${(run.created_at||'').slice(0,15)}${model} · ${run.preset||'?'} · T${run.turns} · ${run.status}${rank}${run.has_observations?' 📷':''}`;
       DOM.runSelector.appendChild(o);
     });
   } catch(e) { console.error(e); }
@@ -1316,7 +1317,92 @@ function fmtMap(o) {
 const STAT_KEYS = new Set(['hp','mp','attack','defense','speed','recovery','mp_recovery','HP','MP','攻击','防御','速度','恢复','回魔']);
 function isStatKey(k) { return STAT_KEYS.has(k); }
 function displayLabel(k) { return isStatKey(k) ? statLabel(k) : matLabel(k); }
-function skillTip(s) { const p=[]; if(s.kind)p.push(`类型:${s.kind}`); if(s.mp_cost!=null)p.push(`MP:${s.mp_cost}`); if(s.condition)p.push(`条件:${s.condition}`); if(s.effects){p.push('效果:'+(Array.isArray(s.effects)?s.effects:[s.effects]).map(e=>`${e.type||'?'}:${e.value!=null?(e.value>0?'+':'')+e.value:'?'}`).join(', '));} return p.join('\n'); }
+function skillTip(s){
+  const p=[];
+  const kindMap={active:'主动',passive:'被动'};
+  if(s.kind) p.push('类型:'+(kindMap[s.kind]||s.kind));
+  if(s.mp_cost!=null) p.push('MP:'+s.mp_cost);
+  if(s.condition) p.push('条件:'+condText(s.condition));
+  if(s.effects){
+    const eff=(Array.isArray(s.effects)?s.effects:[s.effects]).map(effectText).join('，');
+    if(eff) p.push('效果:'+eff);
+  }
+  return p.join('\n');
+}
+function pct(v){return(typeof v==='number'?Math.round(v*100)+'%':v);}
+function num(v){return(typeof v==='number'&&Number.isInteger(v)?String(v):String(v));}
+function condText(c){
+  if(!c||typeof c!=='object') return '';
+  const t=c.type;
+  if(!t||t==='always') return '总是';
+  if(t==='all'||t==='any'){
+    const ch=(Array.isArray(c.conditions)?c.conditions:[]).map(condText).filter(x=>x&&x!=='总是');
+    if(!ch.length) return '总是';
+    return (t==='all'?'同时满足':'满足任一')+'（'+ch.join('；')+'）';
+  }
+  if(t==='self_hp_pct_lte') return '自身HP不高于'+pct(c.value);
+  if(t==='self_hp_pct_gte') return '自身HP不低于'+pct(c.value);
+  if(t==='target_hp_pct_lte') return '目标HP不高于'+pct(c.value);
+  if(t==='target_hp_pct_gte') return '目标HP不低于'+pct(c.value);
+  if(t==='self_mp_pct_lte') return '自身MP不高于'+pct(c.value);
+  if(t==='self_mp_pct_gte') return '自身MP不低于'+pct(c.value);
+  if(t==='target_mp_pct_lte') return '目标MP不高于'+pct(c.value);
+  if(t==='target_mp_pct_gte') return '目标MP不低于'+pct(c.value);
+  if(t==='action_index_lte') return '行动序号不超过'+num(c.value);
+  if(t==='action_index_gte') return '行动序号至少为'+num(c.value);
+  return c.value!=null?t+':'+c.value:t;
+}
+function statText(s){
+  const m={hp:'HP',mp:'MP',attack:'攻击',defense:'防御',speed:'速度',recovery:'战后回血',mp_recovery:'战后回魔'};
+  return m[s]||s||'';
+}
+function targetText(t){
+  const m={target:'目标',self:'自身'};
+  return t==null?'目标':(m[t]||t);
+}
+function effectText(e){
+  if(!e||typeof e!=='object') return '';
+  const t=e.type,v=e.value,s=e.stat,tgt=targetText(e.target);
+  if(t==='damage_multiplier') return '造成普通攻击伤害的'+num(v)+'倍';
+  if(t==='heal') return '为'+tgt+'恢复'+num(v)+'点HP';
+  if(t==='heal_percent') return '为'+tgt+'恢复'+pct(v)+'最大HP';
+  if(t==='mp_restore') return '为'+tgt+'恢复'+num(v)+'点MP';
+  if(t==='damage_bonus') return '额外+'+num(v)+'伤害';
+  if(t==='true_damage') return '造成'+num(v)+'点无视防御伤害';
+  if(t==='atk_ratio_damage') return '造成攻击力的'+pct(v)+'作为无视防御伤害';
+  if(t==='self_damage') return '自身受到'+num(v)+'点伤害';
+  if(t==='apply_status'){
+    const st=e.status;
+    if(st&&typeof st==='object') return '对'+tgt+'施加状态：'+statusText(st);
+    return '对'+tgt+'施加状态';
+  }
+  if(t==='stat_bonus') return tgt+statText(s)+'+'+num(v);
+  if(t==='stat_multiplier') return tgt+statText(s)+'×'+num(v);
+  if(s!=null) return t+':'+statText(s)+':'+num(v);
+  return v!=null?t+':'+num(v):t;
+}
+function statusText(st){
+  const name=st.name||st.status_id||'状态';
+  const parts=[];
+  const polMap={positive:'正面',negative:'负面'};
+  if(st.polarity&&polMap[st.polarity]) parts.push(polMap[st.polarity]+'状态');
+  if(typeof st.duration==='number') parts.push('持续'+st.duration+'次行动');
+  const stackMap={refresh:'重复施加会刷新持续时间',replace:'重复施加会替换旧状态',add_duration:'重复施加会延长持续时间',stack:'可叠加'};
+  if(st.stack_mode&&stackMap[st.stack_mode]) parts.push(stackMap[st.stack_mode]);
+  const effs=(Array.isArray(st.effects)?st.effects:[]).map(function(e2){
+    if(!e2||typeof e2!=='object') return '';
+    const t2=e2.type,v2=e2.value,tgt2='状态持有者';
+    if(t2==='true_damage') return tgt2+'每次行动开始受到'+num(v2)+'点无视防御伤害';
+    if(t2==='heal') return tgt2+'每次行动开始恢复'+num(v2)+'点HP';
+    if(t2==='heal_percent') return tgt2+'每次行动开始恢复'+pct(v2)+'最大HP';
+    if(t2==='mp_restore') return tgt2+'每次行动开始恢复'+num(v2)+'点MP';
+    if(t2==='stat_bonus') return tgt2+statText(e2.stat)+'+'+num(v2);
+    if(t2==='stat_multiplier') return tgt2+statText(e2.stat)+'×'+num(v2);
+    return '';
+  }).filter(Boolean);
+  if(effs.length) parts.push('效果：'+effs.join('；'));
+  return parts.length?name+'（'+parts.join('，')+'）':name;
+}
 function refId(refs,c,id) { return (refs&&refs[c]&&id)?(refs[c][id]??null):null; }
 function toolLabel(name) {
   const m = {
