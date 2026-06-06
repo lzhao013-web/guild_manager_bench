@@ -106,6 +106,28 @@ def test_anthropic_config_max_tokens_defaults_to_4096(tmp_path, monkeypatch) -> 
     assert config.max_tokens == 4096
 
 
+def test_anthropic_config_reads_thinking_and_effort(tmp_path, monkeypatch) -> None:
+    monkeypatch.delenv("ANTHROPIC_MODEL", raising=False)
+    monkeypatch.delenv("ANTHROPIC_THINKING", raising=False)
+    monkeypatch.delenv("ANTHROPIC_EFFORT", raising=False)
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "\n".join(
+            [
+                "ANTHROPIC_MODEL=claude-sonnet-4-6",
+                "ANTHROPIC_THINKING=true",
+                "ANTHROPIC_EFFORT=medium",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    config = AnthropicMessagesConfig.from_env(env_file=env_file)
+
+    assert config.thinking is True
+    assert config.effort == "medium"
+
+
 # ---------------------------------------------------------------------------
 # 非流式请求测试
 # ---------------------------------------------------------------------------
@@ -187,6 +209,64 @@ def test_anthropic_agent_sends_messages_request_and_parses_tool_use() -> None:
         LlmToolCall("end_turn", {"hunts": []}, call_id="toolu_abc"),
     )
     assert response.usage == {"input_tokens": 100, "output_tokens": 50}
+
+
+def test_anthropic_agent_sends_thinking_and_effort_controls() -> None:
+    captured: dict[str, Any] = {}
+
+    def transport(
+        url: str,
+        headers: Mapping[str, str],
+        body: Mapping[str, Any],
+        timeout: float,
+    ) -> Mapping[str, Any]:
+        captured["body"] = dict(body)
+        return {"content": [{"type": "text", "text": "ok"}]}
+
+    agent = AnthropicMessagesAgent(
+        AnthropicMessagesConfig(
+            model="claude-sonnet-4-6",
+            thinking=True,
+            effort="high",
+        ),
+        transport=transport,
+    )
+
+    agent.respond(
+        messages=({"role": "user", "content": "play"},),
+        tools=(),
+    )
+
+    assert captured["body"]["thinking"] == {"type": "adaptive"}
+    assert captured["body"]["output_config"] == {"effort": "high"}
+
+
+def test_anthropic_agent_can_explicitly_disable_thinking() -> None:
+    captured: dict[str, Any] = {}
+
+    def transport(
+        url: str,
+        headers: Mapping[str, str],
+        body: Mapping[str, Any],
+        timeout: float,
+    ) -> Mapping[str, Any]:
+        captured["body"] = dict(body)
+        return {"content": [{"type": "text", "text": "ok"}]}
+
+    agent = AnthropicMessagesAgent(
+        AnthropicMessagesConfig(
+            model="claude-sonnet-4-6",
+            thinking=False,
+        ),
+        transport=transport,
+    )
+
+    agent.respond(
+        messages=({"role": "user", "content": "play"},),
+        tools=(),
+    )
+
+    assert captured["body"]["thinking"] == {"type": "disabled"}
 
 
 # ---------------------------------------------------------------------------
@@ -342,6 +422,68 @@ def test_anthropic_assistant_tool_calls_become_tool_use_blocks() -> None:
     }
 
 
+def test_anthropic_thinking_blocks_are_preserved_for_followup_tool_results() -> None:
+    captured_bodies: list[dict[str, Any]] = []
+    response_blocks = [
+        {
+            "type": "thinking",
+            "thinking": "先检查队伍。",
+            "signature": "signed-thinking",
+        },
+        {
+            "type": "tool_use",
+            "id": "toolu_1",
+            "name": "get_party",
+            "input": {},
+        },
+    ]
+
+    def transport(
+        url: str,
+        headers: Mapping[str, str],
+        body: Mapping[str, Any],
+        timeout: float,
+    ) -> Mapping[str, Any]:
+        captured_bodies.append(dict(body))
+        if len(captured_bodies) == 1:
+            return {"content": response_blocks}
+        return {"content": [{"type": "text", "text": "done"}]}
+
+    agent = AnthropicMessagesAgent(
+        AnthropicMessagesConfig(model="claude-sonnet-4-6"),
+        transport=transport,
+    )
+
+    response = agent.respond(
+        messages=({"role": "user", "content": "start"},),
+        tools=(),
+    )
+    agent.respond(
+        messages=(
+            {"role": "user", "content": "start"},
+            {
+                "role": "assistant",
+                "content": response.text,
+                "tool_calls": [call.to_dict() for call in response.tool_calls],
+                **response.assistant_metadata,
+            },
+            {
+                "role": "tool",
+                "tool_call_id": "toolu_1",
+                "name": "get_party",
+                "content": "队伍详情",
+            },
+        ),
+        tools=(),
+    )
+
+    assert response.assistant_metadata == {
+        "anthropic_content_blocks": response_blocks,
+        "reasoning_content": "先检查队伍。",
+    }
+    assert captured_bodies[1]["messages"][1]["content"] == response_blocks
+
+
 # ---------------------------------------------------------------------------
 # 流式响应测试
 # ---------------------------------------------------------------------------
@@ -426,6 +568,57 @@ def test_anthropic_streaming_response_emits_deltas_and_accumulates_tool_use() ->
     assert events[-1]["usage"]["output_tokens"] == 50
 
 
+def test_anthropic_streaming_response_accumulates_thinking_and_signature() -> None:
+    events: list[dict[str, Any]] = []
+
+    def stream_transport(
+        url: str,
+        headers: Mapping[str, str],
+        body: Mapping[str, Any],
+        timeout: float,
+    ):
+        yield {
+            "type": "content_block_start",
+            "index": 0,
+            "content_block": {"type": "thinking", "thinking": ""},
+        }
+        yield {
+            "type": "content_block_delta",
+            "index": 0,
+            "delta": {"type": "thinking_delta", "thinking": "检查资源。"},
+        }
+        yield {
+            "type": "content_block_delta",
+            "index": 0,
+            "delta": {"type": "signature_delta", "signature": "signed"},
+        }
+        yield {"type": "content_block_stop", "index": 0}
+        yield {"type": "message_stop"}
+
+    agent = AnthropicMessagesAgent(
+        AnthropicMessagesConfig(model="claude-sonnet-4-6"),
+        stream_transport=stream_transport,
+    )
+
+    response = agent.respond_stream(
+        messages=({"role": "user", "content": "start"},),
+        tools=(),
+        event_sink=events.append,
+    )
+
+    assert response.assistant_metadata == {
+        "anthropic_content_blocks": [
+            {
+                "type": "thinking",
+                "thinking": "检查资源。",
+                "signature": "signed",
+            }
+        ],
+        "reasoning_content": "检查资源。",
+    }
+    assert events[0] == {"type": "model_reasoning_delta", "text": "检查资源。"}
+
+
 # ---------------------------------------------------------------------------
 # Runner 集成形状测试
 # ---------------------------------------------------------------------------
@@ -441,9 +634,25 @@ def test_runner_messages_are_accepted_by_anthropic_agent_shape() -> None:
             if self.calls == 1:
                 return LlmAgentResponse(
                     tool_calls=(LlmToolCall("get_party", {}),),
+                    assistant_metadata={
+                        "anthropic_content_blocks": [
+                            {
+                                "type": "thinking",
+                                "thinking": "inspect",
+                                "signature": "signed",
+                            },
+                            {
+                                "type": "tool_use",
+                                "id": "call_1",
+                                "name": "get_party",
+                                "input": {},
+                            },
+                        ]
+                    },
                 )
             assert messages[-1]["role"] == "tool"
             assert messages[-1]["tool_call_id"] == "call_1"
+            assert messages[-2]["anthropic_content_blocks"][0]["signature"] == "signed"
             return LlmAgentResponse(
                 tool_calls=(LlmToolCall("end_turn", {"hunts": []}, call_id="call_2"),)
             )

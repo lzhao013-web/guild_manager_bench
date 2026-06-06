@@ -795,9 +795,9 @@ def _assistant_message(response: LlmAgentResponse) -> dict[str, Any]:
         "content": response.text,
         "tool_calls": [call.to_dict() for call in response.tool_calls],
     }
-    reasoning_content = response.assistant_metadata.get("reasoning_content")
-    if isinstance(reasoning_content, str):
-        message["reasoning_content"] = reasoning_content
+    for key, value in response.assistant_metadata.items():
+        if key not in message:
+            message[key] = value
     return message
 
 

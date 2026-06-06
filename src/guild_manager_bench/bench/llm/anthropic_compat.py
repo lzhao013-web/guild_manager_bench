@@ -24,6 +24,26 @@ class AnthropicMessagesError(RuntimeError):
     """Anthropic Messages API 调用失败。"""
 
 
+def _optional_bool_config(
+    explicit_value: bool | None,
+    dotenv_values: Mapping[str, str],
+    name: str,
+) -> bool | None:
+    if explicit_value is not None:
+        return explicit_value
+    value = _first_config_value(None, dotenv_values, name)
+    if value is None:
+        return None
+    normalized = value.lower()
+    if normalized in {"1", "true", "yes", "on", "enabled"}:
+        return True
+    if normalized in {"0", "false", "no", "off", "disabled"}:
+        return False
+    raise AnthropicMessagesError(
+        f"{name} must be true/false, yes/no, on/off, enabled/disabled, or 1/0"
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class AnthropicMessagesConfig:
     """Anthropic Messages API 配置。"""
@@ -37,6 +57,8 @@ class AnthropicMessagesConfig:
     temperature: float | None = None
     top_p: float | None = None
     tool_choice: str | Mapping[str, Any] | None = "auto"
+    thinking: bool | None = None
+    effort: str | None = None
     extra_body: Mapping[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -53,6 +75,8 @@ class AnthropicMessagesConfig:
         temperature: float | None = None,
         top_p: float | None = None,
         tool_choice: str | Mapping[str, Any] | None = "auto",
+        thinking: bool | None = None,
+        effort: str | None = None,
         extra_body: Mapping[str, Any] | None = None,
     ) -> AnthropicMessagesConfig:
         """从显式参数、进程环境变量或 dotenv 文件创建配置。"""
@@ -109,6 +133,17 @@ class AnthropicMessagesConfig:
             temperature=temperature,
             top_p=top_p,
             tool_choice=tool_choice,
+            thinking=_optional_bool_config(
+                thinking,
+                dotenv_values,
+                "ANTHROPIC_THINKING",
+            ),
+            effort=_first_config_value(
+                effort,
+                dotenv_values,
+                "ANTHROPIC_EFFORT",
+                "ANTHROPIC_REASONING_EFFORT",
+            ),
             extra_body={} if extra_body is None else dict(extra_body),
         )
 
@@ -141,6 +176,8 @@ class AnthropicMessagesAgent:
         temperature: float | None = None,
         top_p: float | None = None,
         tool_choice: str | Mapping[str, Any] | None = "auto",
+        thinking: bool | None = None,
+        effort: str | None = None,
         extra_body: Mapping[str, Any] | None = None,
     ) -> AnthropicMessagesAgent:
         """从 ANTHROPIC_* 配置创建适配器。"""
@@ -157,6 +194,8 @@ class AnthropicMessagesAgent:
                 temperature=temperature,
                 top_p=top_p,
                 tool_choice=tool_choice,
+                thinking=thinking,
+                effort=effort,
                 extra_body=extra_body,
             )
         )
@@ -190,6 +229,9 @@ class AnthropicMessagesAgent:
         body = self._request_body(messages, tools)
         body["stream"] = True
         text_parts: list[str] = []
+        reasoning_parts: list[str] = []
+        has_reasoning_content = False
+        content_block_parts: dict[int, dict[str, Any]] = {}
         tool_call_parts: dict[int, dict[str, Any]] = {}
         usage: dict[str, Any] = {}
         stop_reason: str | None = None
@@ -214,6 +256,8 @@ class AnthropicMessagesAgent:
                 block = event.get("content_block", {})
                 block_type = block.get("type")
                 index = event.get("index", 0)
+                if isinstance(index, int) and isinstance(block, Mapping):
+                    content_block_parts[index] = dict(block)
                 if block_type == "tool_use":
                     tool_call_parts[index] = {
                         "id": block.get("id", ""),
@@ -228,7 +272,33 @@ class AnthropicMessagesAgent:
                     text = delta.get("text", "")
                     if text:
                         text_parts.append(text)
+                        block = content_block_parts.get(event.get("index", 0))
+                        if block is not None:
+                            block["text"] = str(block.get("text") or "") + text
                         _emit(event_sink, "model_delta", text=text)
+                elif delta_type == "thinking_delta":
+                    thinking = delta.get("thinking", "")
+                    if isinstance(thinking, str):
+                        has_reasoning_content = True
+                        reasoning_parts.append(thinking)
+                        block = content_block_parts.get(event.get("index", 0))
+                        if block is not None:
+                            block["thinking"] = (
+                                str(block.get("thinking") or "") + thinking
+                            )
+                        if thinking:
+                            _emit(
+                                event_sink,
+                                "model_reasoning_delta",
+                                text=thinking,
+                            )
+                elif delta_type == "signature_delta":
+                    signature = delta.get("signature", "")
+                    block = content_block_parts.get(event.get("index", 0))
+                    if block is not None and isinstance(signature, str):
+                        block["signature"] = (
+                            str(block.get("signature") or "") + signature
+                        )
                 elif delta_type == "input_json_delta":
                     index = event.get("index", 0)
                     partial = delta.get("partial_json", "")
@@ -260,6 +330,19 @@ class AnthropicMessagesAgent:
             )
             for _, part in sorted(tool_call_parts.items())
         ]
+        for index, part in tool_call_parts.items():
+            block = content_block_parts.get(index)
+            if block is not None:
+                block["input"] = _parse_arguments(part["input_json"])
+        content_blocks = [
+            dict(block)
+            for _, block in sorted(content_block_parts.items())
+        ]
+        assistant_metadata: dict[str, Any] = {}
+        if content_blocks:
+            assistant_metadata["anthropic_content_blocks"] = content_blocks
+        if has_reasoning_content:
+            assistant_metadata["reasoning_content"] = "".join(reasoning_parts)
         text = "".join(text_parts)
         _emit(
             event_sink,
@@ -281,6 +364,7 @@ class AnthropicMessagesAgent:
         return LlmAgentResponse(
             text=text,
             tool_calls=tuple(tool_calls),
+            assistant_metadata=assistant_metadata,
             usage=usage,
             raw=raw,
         )
@@ -308,6 +392,12 @@ class AnthropicMessagesAgent:
             body["temperature"] = self.config.temperature
         if self.config.top_p is not None:
             body["top_p"] = self.config.top_p
+        if self.config.thinking is not None:
+            body["thinking"] = {
+                "type": "adaptive" if self.config.thinking else "disabled"
+            }
+        if self.config.effort is not None:
+            body["output_config"] = {"effort": self.config.effort}
         body.update(dict(self.config.extra_body))
         return body
 
@@ -387,6 +477,18 @@ def _to_anthropic_tool_choice(
 def _assistant_to_content_blocks(message: Mapping[str, Any]) -> list[dict[str, Any]]:
     """将内部 assistant 消息转换为 Anthropic content blocks 数组。"""
 
+    preserved_blocks = message.get("anthropic_content_blocks")
+    if isinstance(preserved_blocks, Sequence) and not isinstance(
+        preserved_blocks, str | bytes
+    ):
+        blocks = [
+            dict(block)
+            for block in preserved_blocks
+            if isinstance(block, Mapping)
+        ]
+        if blocks:
+            return blocks
+
     blocks: list[dict[str, Any]] = []
     content = message.get("content")
     if isinstance(content, str) and content:
@@ -461,14 +563,23 @@ def _parse_messages_response(response: Mapping[str, Any]) -> LlmAgentResponse:
         raise AnthropicMessagesError("response content must be an array")
 
     text_parts: list[str] = []
+    reasoning_parts: list[str] = []
+    has_reasoning_content = False
+    content_blocks: list[dict[str, Any]] = []
     tool_calls: list[LlmToolCall] = []
 
     for block in content:
         if not isinstance(block, Mapping):
             continue
+        content_blocks.append(dict(block))
         block_type = block.get("type")
         if block_type == "text":
             text_parts.append(block.get("text", ""))
+        elif block_type == "thinking":
+            thinking = block.get("thinking")
+            if isinstance(thinking, str):
+                has_reasoning_content = True
+                reasoning_parts.append(thinking)
         elif block_type == "tool_use":
             tool_calls.append(
                 LlmToolCall(
@@ -484,10 +595,16 @@ def _parse_messages_response(response: Mapping[str, Any]) -> LlmAgentResponse:
 
     usage_raw = response.get("usage")
     usage = dict(usage_raw) if isinstance(usage_raw, Mapping) else {}
+    assistant_metadata: dict[str, Any] = {}
+    if content_blocks:
+        assistant_metadata["anthropic_content_blocks"] = content_blocks
+    if has_reasoning_content:
+        assistant_metadata["reasoning_content"] = "".join(reasoning_parts)
 
     return LlmAgentResponse(
         text="".join(text_parts),
         tool_calls=tuple(tool_calls),
+        assistant_metadata=assistant_metadata,
         usage=usage,
         raw=dict(response),
     )
