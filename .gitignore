@@ -51,3 +51,7 @@ sim_*.py
 # Root-level analysis scripts & their generated artifacts (dev/analysis only)
 脚本与产物/
 
+# Local presentation artifacts
+llm_bench_presentation.html
+presentation/
+
