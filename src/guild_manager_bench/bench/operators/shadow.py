@@ -5,10 +5,15 @@
 """
 from __future__ import annotations
 
+import json
 from copy import deepcopy
 from dataclasses import dataclass, field
 from math import ceil
 from typing import Any
+
+from guild_manager_bench.game.combat import Combatant, run_auto_battle
+from guild_manager_bench.game.models import CombatResources, CombatStats
+from guild_manager_bench.game.skills import Skill, SkillCondition, SkillEffect, StatusDefinition
 
 
 @dataclass(slots=True)
@@ -220,6 +225,7 @@ class ShadowState:
             "template_id": candidate["template_id"],
             "base_stats": dict(candidate["base_stats"]),
             "effective_stats": dict(candidate["base_stats"]),
+            "stat_growth_per_level": dict(candidate.get("stat_growth_per_level", {})),
             "resources": {
                 "current_hp": candidate["base_stats"]["hp"],
                 "current_mp": candidate["base_stats"]["mp"],
@@ -229,6 +235,7 @@ class ShadowState:
             "level": 1,
             "experience": 0,
             "next_level": {},
+            "level_skill_unlocks": list(candidate.get("level_skill_unlocks", [])),
         }
         self.equipped[adv_id] = {}
 
@@ -382,6 +389,165 @@ def estimate_matchup_score(
     rounds_to_kill = ceil(defender_stats["hp"] / dmg_per_round)
     rounds_to_die = ceil(attacker_stats["hp"] / counter_dmg) if counter_dmg > 0 else 100
     return (rounds_to_die - rounds_to_kill) / max(rounds_to_die, 1)
+
+
+# ── 战斗模拟函数 ────────────────────────────────────────
+
+
+def _dict_to_combat_stats(d: dict[str, Any]) -> CombatStats:
+    return CombatStats(
+        hp=max(1, int(d.get("hp", 1))),
+        mp=max(0, int(d.get("mp", 0))),
+        attack=max(0, int(d.get("attack", 0))),
+        defense=max(0, int(d.get("defense", 0))),
+        speed=max(0, int(d.get("speed", 0))),
+        recovery=max(0, int(d.get("recovery", 0))),
+        mp_recovery=max(0, int(d.get("mp_recovery", 0))),
+    )
+
+
+def _dict_to_resources(stats: CombatStats, d: dict[str, Any] | None) -> CombatResources:
+    if d is None:
+        return CombatResources.full(stats)
+    return CombatResources(
+        current_hp=min(d.get("current_hp", stats.hp), stats.hp),
+        current_mp=min(d.get("current_mp", stats.mp), stats.mp),
+    )
+
+
+def _dict_to_status(d: dict[str, Any]) -> StatusDefinition:
+    effects = d.get("effects", [])
+    return StatusDefinition(
+        status_id=str(d.get("status_id") or d.get("name") or "status"),
+        name=str(d.get("name") or d.get("status_id") or "status"),
+        duration=max(1, d.get("duration", 1)),
+        effects=tuple(
+            _dict_to_skill_effect(e) for e in effects if isinstance(e, dict)
+        ),
+        polarity=d.get("polarity", "neutral"),
+        stack_mode=d.get("stack_mode", "refresh"),
+    )
+
+
+def _dict_to_skill_effect(d: dict[str, Any]) -> SkillEffect:
+    status = d.get("status")
+    return SkillEffect(
+        effect_type=d.get("type"),
+        value=d.get("value", 0),
+        stat=d.get("stat"),
+        target=d.get("target") or "target",
+        status=_dict_to_status(status) if isinstance(status, dict) else None,
+    )
+
+
+def _dict_to_condition(d: Any) -> SkillCondition:
+    if not isinstance(d, dict):
+        return SkillCondition(condition_type="always")
+    children = d.get("conditions", [])
+    return SkillCondition(
+        condition_type=d.get("type", "always"),
+        value=d.get("value"),
+        conditions=tuple(_dict_to_condition(c) for c in children if isinstance(c, dict)),
+    )
+
+
+def _dict_to_skill(d: dict[str, Any]) -> Skill:
+    effects = d.get("effects", [])
+    return Skill(
+        skill_id=str(d.get("skill_id") or d.get("name") or "skill"),
+        name=str(d.get("name") or d.get("skill_id") or "skill"),
+        kind=d.get("kind", "active"),
+        condition=_dict_to_condition(d.get("condition")),
+        effects=tuple(
+            _dict_to_skill_effect(e) for e in effects if isinstance(e, dict)
+        ),
+        mp_cost=d.get("mp_cost", 0) or 0,
+        priority=d.get("priority", 0) or 0,
+        once_per_battle=bool(d.get("once_per_battle", False)),
+        free=bool(d.get("free", False)),
+    )
+
+
+def simulate_battle_score(
+    adv_stats: dict[str, Any],
+    adv_resources: dict[str, Any] | None,
+    adv_skills: list[Any],
+    monster_stats: dict[str, Any],
+    monster_skills: list[Any],
+    *,
+    _cache: dict[str, float] | None = None,
+) -> float:
+    """模拟 1v1 战斗并返回 0-100 分数。
+
+    分数公式与 metrics.py 一致：70% 胜负 + 20% 伤害进度 + 10% 存活率。
+    _cache: 可选缓存字典，跨调用复用以避免重复模拟。
+    """
+    cache_key: str | None = None
+    if _cache is not None:
+        cache_key = json.dumps(
+            [adv_stats, adv_resources, adv_skills, monster_stats, monster_skills],
+            sort_keys=True, separators=(",", ":"),
+        )
+        if cache_key in _cache:
+            return _cache[cache_key]
+
+    stats = _dict_to_combat_stats(adv_stats)
+    resources = _dict_to_resources(stats, adv_resources)
+    skills = tuple(_dict_to_skill(s) for s in adv_skills if isinstance(s, dict))
+
+    mon_stats = _dict_to_combat_stats(monster_stats)
+    mon_skills = tuple(_dict_to_skill(s) for s in monster_skills if isinstance(s, dict))
+
+    result = run_auto_battle(
+        Combatant(combatant_id="adv", stats=stats, resources=resources, skills=skills),
+        Combatant(
+            combatant_id="mon",
+            stats=mon_stats,
+            resources=CombatResources.full(mon_stats),
+            skills=mon_skills,
+        ),
+    )
+    enemy_progress = 1 - result.right_resources.current_hp / max(mon_stats.hp, 1)
+    survival_margin = result.left_resources.current_hp / max(stats.hp, 1)
+    outcome_score = {"left_win": 1.0, "draw": 0.4, "right_win": 0.0}[result.outcome]
+    score = 70 * outcome_score + 20 * enemy_progress + 10 * survival_margin
+    score = max(0.0, min(100.0, round(score, 2)))
+
+    if _cache is not None and cache_key is not None:
+        _cache[cache_key] = score
+    return score
+
+
+def simulate_party_value(
+    adventurers: list[dict[str, Any]],
+    monsters: list[dict[str, Any]],
+    *,
+    _cache: dict[str, float] | None = None,
+) -> float:
+    """通过战斗模拟 + 最优分配评估队伍对当前怪物的综合战斗力。
+
+    对每个 (冒险者, 怪物) 对模拟战斗，然后用最优分配求最大总得分。
+    """
+    if not adventurers or not monsters:
+        return 0.0
+
+    matrix = [
+        [
+            simulate_battle_score(
+                adv.get("effective_stats") or adv.get("base_stats", {}),
+                adv.get("resources"),
+                adv.get("skills", []),
+                mon.get("stats", {}),
+                mon.get("skills", []),
+                _cache=_cache,
+            )
+            for mon in monsters
+        ]
+        for adv in adventurers
+    ]
+
+    pairs = best_assignment(matrix)
+    return sum(matrix[a][m] for a, m in pairs)
 
 
 def best_assignment(matrix: list[list[float]]) -> tuple[tuple[int, int], ...]:

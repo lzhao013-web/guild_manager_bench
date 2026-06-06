@@ -1,6 +1,7 @@
 from dataclasses import replace
 from pathlib import Path
 
+from guild_manager_bench.bench import metrics
 from guild_manager_bench.bench.metrics import score_final_state
 from guild_manager_bench.game.actions import RecruitAction
 from guild_manager_bench.game.engine import apply_preparation_action, new_game
@@ -69,6 +70,54 @@ def test_rank_score_rewards_stronger_team() -> None:
 
     assert stronger.score > normal.score
     assert stronger.rank_score > normal.rank_score
+
+
+def test_arena_battle_cache_distinguishes_scaled_monster_stats() -> None:
+    adventurer = metrics._ArenaAdventurer(
+        adventurer_id="hero",
+        name="Hero",
+        stats=CombatStats(hp=50, mp=0, attack=20, defense=0, speed=10, recovery=0),
+        current_hp=50,
+        current_mp=0,
+        skills=(),
+    )
+    weak_monster = metrics._ArenaMonster(
+        monster_id="weak",
+        archetype_id="same_archetype",
+        stats=CombatStats(hp=5, mp=0, attack=0, defense=0, speed=1, recovery=0),
+        skills=(),
+    )
+    scaled_monster = metrics._ArenaMonster(
+        monster_id="scaled",
+        archetype_id="same_archetype",
+        stats=CombatStats(hp=100, mp=0, attack=50, defense=0, speed=10, recovery=0),
+        skills=(),
+    )
+    cache = {}
+
+    weak = metrics._evaluate_arena_battle(adventurer, weak_monster, cache)
+    scaled = metrics._evaluate_arena_battle(adventurer, scaled_monster, cache)
+
+    assert weak.score > scaled.score
+    assert len(cache) == 2
+
+
+def test_small_rank_score_avoids_process_pool(monkeypatch) -> None:
+    definition = _small_scoring_definition()
+    state = new_game(definition)
+    state = apply_preparation_action(
+        definition,
+        state,
+        RecruitAction(candidate_id=state.recruit_candidates[0].candidate_id),
+    )
+
+    class FailingProcessPoolExecutor:
+        def __init__(self, *args, **kwargs) -> None:
+            raise AssertionError("small rank scoring should stay in-process")
+
+    monkeypatch.setattr(metrics, "ProcessPoolExecutor", FailingProcessPoolExecutor)
+
+    score_final_state(definition, state)
 
 
 def _small_scoring_definition():

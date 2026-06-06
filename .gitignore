@@ -48,3 +48,6 @@ web/leaderboard/.build_cache.json
 # Simulation scripts
 sim_*.py
 
+# Root-level analysis scripts & their generated artifacts (dev/analysis only)
+脚本与产物/
+

@@ -68,6 +68,54 @@ def test_run_auto_battle_does_not_mutate_input_resources() -> None:
     assert left_resources.current_hp == 18
 
 
+def test_run_auto_battle_can_skip_events_without_changing_result() -> None:
+    left = Combatant(
+        combatant_id="left",
+        stats=CombatStats(hp=30, mp=0, attack=1, defense=0, speed=10, recovery=0),
+        skills=(
+            Skill(
+                skill_id="poison_dart",
+                name="毒镖",
+                kind="active",
+                condition=SkillCondition(condition_type="action_index_lte", value=1),
+                effects=(
+                    SkillEffect(
+                        effect_type="apply_status",
+                        target="target",
+                        status=StatusDefinition(
+                            status_id="poison",
+                            name="中毒",
+                            duration=2,
+                            polarity="negative",
+                            effects=(
+                                SkillEffect(effect_type="true_damage", value=3),
+                            ),
+                        ),
+                    ),
+                ),
+                priority=100,
+            ),
+        ),
+    )
+    right = Combatant(
+        combatant_id="right",
+        stats=CombatStats(hp=20, mp=0, attack=1, defense=0, speed=10, recovery=0),
+    )
+
+    logged = run_auto_battle(left, right, max_actions=4)
+    unlogged = run_auto_battle(left, right, max_actions=4, record_events=False)
+
+    assert unlogged.events == ()
+    assert unlogged.outcome == logged.outcome
+    assert unlogged.reason == logged.reason
+    assert unlogged.actions_taken == logged.actions_taken
+    assert unlogged.time_elapsed == logged.time_elapsed
+    assert unlogged.left_resources.current_hp == logged.left_resources.current_hp
+    assert unlogged.left_resources.current_mp == logged.left_resources.current_mp
+    assert unlogged.right_resources.current_hp == logged.right_resources.current_hp
+    assert unlogged.right_resources.current_mp == logged.right_resources.current_mp
+
+
 def test_zero_speed_combatants_draw() -> None:
     left = Combatant(
         combatant_id="left",

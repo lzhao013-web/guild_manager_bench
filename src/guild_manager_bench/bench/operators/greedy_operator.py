@@ -8,6 +8,7 @@ from guild_manager_bench.bench.operators.shadow import (
     ShadowState,
     best_assignment,
     estimate_matchup_score,
+    simulate_battle_score,
 )
 
 
@@ -91,39 +92,45 @@ class GreedyOperator:
                 continue
             if not shadow.can_recruit():
                 continue
-            score = self._score_recruit(candidate)
+            score = self._score_recruit(candidate, obs=obs)
             results.append((score, candidate))
         return results
 
     @staticmethod
-    def _score_recruit(candidate: dict[str, Any]) -> float:
-        """评估招募候选项的综合价值。"""
+    def _score_recruit(candidate: dict[str, Any], *, obs: dict[str, Any] | None = None) -> float:
+        """通过战斗模拟评估招募候选项的战斗价值。"""
 
         stats = candidate["base_stats"]
-        current_total = (
-            stats["hp"] * 0.3
-            + stats["attack"] * 2.0
-            + stats["defense"] * 1.5
-            + stats["speed"] * 1.8
-            + stats["recovery"] * 0.5
-        )
-        growth = candidate.get("stat_growth_per_level", {})
-        growth_total = (
-            growth.get("attack", 0) * 2.0
-            + growth.get("defense", 0) * 1.5
-            + growth.get("speed", 0) * 1.8
-            + growth.get("hp", 0) * 0.3
-        )
-        # 技能数量加分
-        skill_bonus = len(candidate.get("skills", [])) * 5.0
-        # 等级解锁技能加分
-        unlock_bonus = sum(
+        skills = candidate.get("skills", [])
+        resources = {"current_hp": stats["hp"], "current_mp": stats["mp"]}
+
+        monsters = obs.get("monsters", []) if obs else []
+        if not monsters:
+            # 没有怪物数据时退回属性启发式
+            current_total = (
+                stats["hp"] * 0.3
+                + stats["attack"] * 2.0
+                + stats["defense"] * 1.5
+                + stats["speed"] * 1.8
+                + stats["recovery"] * 0.5
+            )
+            return current_total / max(candidate["recruit_gold"], 1)
+
+        total_score = 0.0
+        for mon in monsters:
+            total_score += simulate_battle_score(
+                stats, resources, skills,
+                mon["stats"], mon.get("skills", []),
+            )
+
+        # 加上未来技能解锁的预期价值
+        unlock_count = sum(
             len(u.get("skills", []))
             for u in candidate.get("level_skill_unlocks", [])
-        ) * 3.0
+        )
+        unlock_bonus = unlock_count * 5.0
 
-        composite = 0.6 * current_total + 0.4 * growth_total + skill_bonus + unlock_bonus
-        return composite / max(candidate["recruit_gold"], 1)
+        return (total_score + unlock_bonus) / max(candidate["recruit_gold"], 1)
 
     # ── 阶段 2：升级 ──────────────────────────────────────
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 from math import ceil
 from typing import Literal
 
@@ -90,12 +91,14 @@ def run_auto_battle(
     *,
     action_gauge_max: int = DEFAULT_ACTION_GAUGE_MAX,
     max_actions: int = DEFAULT_MAX_ACTIONS,
+    record_events: bool = True,
 ) -> CombatResult:
     """执行一场 1v1 行动条自动战斗。
 
     双方按速度积累行动条，行动条达到阈值的一方自动进行普通攻击。
     若双方同时可行动，当前行动条更高的一方先动；仍相同则速度更高的一方先动；
     还相同则左侧先动。函数不会修改传入的 CombatResources。
+    record_events=False 时只跳过 CombatEvent 分配，战斗结算逻辑保持一致。
     """
 
     if action_gauge_max <= 0:
@@ -117,6 +120,7 @@ def run_auto_battle(
             winner_side=winner_side,
             reason=reason,
             events=events,
+            actions_taken=0,
             time_elapsed=time_elapsed,
         )
 
@@ -134,6 +138,7 @@ def run_auto_battle(
                 winner_side=None,
                 reason="no_combatant_can_act",
                 events=events,
+                actions_taken=action_index - 1,
                 time_elapsed=time_elapsed,
             )
 
@@ -142,8 +147,14 @@ def run_auto_battle(
         actor.action_gauge -= action_gauge_max
 
         active_statuses = list(actor.statuses)
-        status_event = _apply_status_ticks(action_index, time_elapsed, actor, target)
-        if status_event is not None:
+        status_event = _apply_status_ticks(
+            action_index,
+            time_elapsed,
+            actor,
+            target,
+            record_event=record_events,
+        )
+        if record_events and status_event is not None:
             events.append(status_event)
 
         if not actor.resources.is_alive:
@@ -154,10 +165,19 @@ def run_auto_battle(
                 winner_side=target.side,
                 reason="status_defeated_actor",
                 events=events,
+                actions_taken=action_index - 1,
                 time_elapsed=time_elapsed,
             )
 
-        events.append(_perform_action(action_index, time_elapsed, actor, target))
+        action_event = _perform_action(
+            action_index,
+            time_elapsed,
+            actor,
+            target,
+            record_event=record_events,
+        )
+        if record_events and action_event is not None:
+            events.append(action_event)
         _decrement_statuses(actor, active_statuses)
 
         if not actor.resources.is_alive and not target.resources.is_alive:
@@ -167,6 +187,7 @@ def run_auto_battle(
                 winner_side=None,
                 reason="both_defeated",
                 events=events,
+                actions_taken=action_index,
                 time_elapsed=time_elapsed,
             )
         if not target.resources.is_alive:
@@ -176,6 +197,7 @@ def run_auto_battle(
                 winner_side=actor.side,
                 reason="target_defeated",
                 events=events,
+                actions_taken=action_index,
                 time_elapsed=time_elapsed,
             )
         if not actor.resources.is_alive:
@@ -185,6 +207,7 @@ def run_auto_battle(
                 winner_side=target.side,
                 reason="actor_defeated",
                 events=events,
+                actions_taken=action_index,
                 time_elapsed=time_elapsed,
             )
 
@@ -194,6 +217,7 @@ def run_auto_battle(
         winner_side=None,
         reason="max_actions_reached",
         events=events,
+        actions_taken=max_actions,
         time_elapsed=time_elapsed,
     )
 
@@ -209,10 +233,14 @@ def _perform_action(
     time_elapsed: int,
     actor: _RuntimeCombatant,
     target: _RuntimeCombatant,
-) -> CombatEvent:
+    *,
+    record_event: bool,
+) -> CombatEvent | None:
     active_skill = _select_active_skill(actor, target, action_index=action_index)
     if active_skill is None:
         damage = _apply_basic_attack(actor, target, action_index=action_index)
+        if not record_event:
+            return None
         return CombatEvent(
             action_index=action_index,
             time_elapsed=time_elapsed,
@@ -240,6 +268,9 @@ def _perform_action(
     if active_skill.free:
         bonus_damage = _apply_basic_attack(actor, target, action_index=action_index)
         damage += bonus_damage
+
+    if not record_event:
+        return None
 
     return CombatEvent(
         action_index=action_index,
@@ -419,11 +450,13 @@ def _apply_status_ticks(
     time_elapsed: int,
     actor: _RuntimeCombatant,
     target: _RuntimeCombatant,
+    *,
+    record_event: bool,
 ) -> CombatEvent | None:
     total_damage = 0
     total_healing = 0
     healing_target: _RuntimeCombatant | None = None
-    triggered: list[str] = []
+    triggered: list[str] | None = [] if record_event else None
 
     for status in actor.statuses:
         for effect in status.definition.effects:
@@ -431,7 +464,8 @@ def _apply_status_ticks(
                 damage = int(effect.value)
                 _apply_damage(actor, damage)
                 total_damage += damage
-                triggered.append(status.definition.name)
+                if triggered is not None:
+                    triggered.append(status.definition.name)
                 continue
 
             if effect.effect_type == "heal":
@@ -442,7 +476,8 @@ def _apply_status_ticks(
                     healing,
                     actor,
                 )
-                triggered.append(status.definition.name)
+                if triggered is not None:
+                    triggered.append(status.definition.name)
                 continue
 
             if effect.effect_type == "heal_percent":
@@ -453,12 +488,14 @@ def _apply_status_ticks(
                     healing,
                     actor,
                 )
-                triggered.append(status.definition.name)
+                if triggered is not None:
+                    triggered.append(status.definition.name)
                 continue
 
             if effect.effect_type == "mp_restore":
                 _apply_mp_restore(actor, int(effect.value))
-                triggered.append(status.definition.name)
+                if triggered is not None:
+                    triggered.append(status.definition.name)
 
     if not triggered:
         return None
@@ -526,6 +563,7 @@ def _build_runtime_combatant(side: CombatSide, combatant: Combatant) -> _Runtime
     )
 
 
+@lru_cache(maxsize=4096)
 def _active_skills(skills: tuple[Skill, ...]) -> tuple[Skill, ...]:
     return tuple(
         sorted(
@@ -535,6 +573,7 @@ def _active_skills(skills: tuple[Skill, ...]) -> tuple[Skill, ...]:
     )
 
 
+@lru_cache(maxsize=4096)
 def _passive_skills(skills: tuple[Skill, ...]) -> tuple[Skill, ...]:
     return tuple(skill for skill in skills if skill.kind == "passive")
 
@@ -568,16 +607,12 @@ def _effective_stats(
     if not combatant.passive_skills and not combatant.statuses:
         return combatant.stats
 
-    bonuses = {
-        "attack": 0,
-        "defense": 0,
-        "speed": 0,
-    }
-    multipliers = {
-        "attack": 1.0,
-        "defense": 1.0,
-        "speed": 1.0,
-    }
+    attack_bonus = 0
+    defense_bonus = 0
+    speed_bonus = 0
+    attack_multiplier = 1.0
+    defense_multiplier = 1.0
+    speed_multiplier = 1.0
 
     for skill in combatant.passive_skills:
         if not _is_condition_met(
@@ -588,28 +623,56 @@ def _effective_stats(
         ):
             continue
         for effect in skill.effects:
-            if effect.effect_type == "stat_bonus" and effect.stat is not None:
-                bonuses[effect.stat] += int(effect.value)
-            elif effect.effect_type == "stat_multiplier" and effect.stat is not None:
-                multipliers[effect.stat] *= float(effect.value)
+            if effect.effect_type == "stat_bonus":
+                if effect.stat == "attack":
+                    attack_bonus += int(effect.value)
+                elif effect.stat == "defense":
+                    defense_bonus += int(effect.value)
+                elif effect.stat == "speed":
+                    speed_bonus += int(effect.value)
+            elif effect.effect_type == "stat_multiplier":
+                if effect.stat == "attack":
+                    attack_multiplier *= float(effect.value)
+                elif effect.stat == "defense":
+                    defense_multiplier *= float(effect.value)
+                elif effect.stat == "speed":
+                    speed_multiplier *= float(effect.value)
 
     for status in combatant.statuses:
         for effect in status.definition.effects:
-            if effect.effect_type == "stat_bonus" and effect.stat is not None:
-                bonuses[effect.stat] += int(effect.value)
-            elif effect.effect_type == "stat_multiplier" and effect.stat is not None:
-                multipliers[effect.stat] *= float(effect.value)
+            if effect.effect_type == "stat_bonus":
+                if effect.stat == "attack":
+                    attack_bonus += int(effect.value)
+                elif effect.stat == "defense":
+                    defense_bonus += int(effect.value)
+                elif effect.stat == "speed":
+                    speed_bonus += int(effect.value)
+            elif effect.effect_type == "stat_multiplier":
+                if effect.stat == "attack":
+                    attack_multiplier *= float(effect.value)
+                elif effect.stat == "defense":
+                    defense_multiplier *= float(effect.value)
+                elif effect.stat == "speed":
+                    speed_multiplier *= float(effect.value)
 
     return CombatStats(
         hp=combatant.stats.hp,
         mp=combatant.stats.mp,
-        attack=_effective_stat_value(combatant.stats.attack, bonuses["attack"], multipliers["attack"]),
+        attack=_effective_stat_value(
+            combatant.stats.attack,
+            attack_bonus,
+            attack_multiplier,
+        ),
         defense=_effective_stat_value(
             combatant.stats.defense,
-            bonuses["defense"],
-            multipliers["defense"],
+            defense_bonus,
+            defense_multiplier,
         ),
-        speed=_effective_stat_value(combatant.stats.speed, bonuses["speed"], multipliers["speed"]),
+        speed=_effective_stat_value(
+            combatant.stats.speed,
+            speed_bonus,
+            speed_multiplier,
+        ),
         recovery=combatant.stats.recovery,
         mp_recovery=combatant.stats.mp_recovery,
     )
@@ -671,14 +734,6 @@ def _mp_pct(combatant: _RuntimeCombatant) -> float:
     return combatant.resources.current_mp / combatant.stats.mp
 
 
-def _opponent(
-    combatant: _RuntimeCombatant,
-    left: _RuntimeCombatant,
-    right: _RuntimeCombatant,
-) -> _RuntimeCombatant:
-    return right if combatant.side == "left" else left
-
-
 def _resolve_immediate_result(
     left: _RuntimeCombatant,
     right: _RuntimeCombatant,
@@ -699,37 +754,41 @@ def _advance_until_ready(
     action_gauge_max: int,
     action_index: int,
 ) -> tuple[_RuntimeCombatant, _RuntimeCombatant, int] | None:
-    candidate_speeds = [
-        (
-            combatant,
-            _effective_stats(
-                combatant,
-                _opponent(combatant, left, right),
-                action_index=action_index,
-            ).speed,
-        )
-        for combatant in (left, right)
-    ]
-    candidates = [
-        (combatant, speed)
-        for combatant, speed in candidate_speeds
-        if speed > 0
-    ]
-    if not candidates:
+    left_speed = _effective_stats(left, right, action_index=action_index).speed
+    right_speed = _effective_stats(right, left, action_index=action_index).speed
+    if left_speed <= 0 and right_speed <= 0:
         return None
 
-    elapsed = min(
-        _ticks_until_ready(combatant, speed=speed, action_gauge_max=action_gauge_max)
-        for combatant, speed in candidates
+    ticks_until_left = (
+        _ticks_until_ready(left, speed=left_speed, action_gauge_max=action_gauge_max)
+        if left_speed > 0
+        else None
     )
-    for combatant, speed in candidates:
-        combatant.action_gauge += speed * elapsed
+    ticks_until_right = (
+        _ticks_until_ready(right, speed=right_speed, action_gauge_max=action_gauge_max)
+        if right_speed > 0
+        else None
+    )
+    if ticks_until_left is None:
+        elapsed = ticks_until_right
+    elif ticks_until_right is None:
+        elapsed = ticks_until_left
+    else:
+        elapsed = min(ticks_until_left, ticks_until_right)
+    if elapsed is None:
+        return None
+
+    if left_speed > 0:
+        left.action_gauge += left_speed * elapsed
+    if right_speed > 0:
+        right.action_gauge += right_speed * elapsed
 
     actor = _select_ready_actor(
         left,
         right,
         action_gauge_max=action_gauge_max,
-        action_index=action_index,
+        left_speed=left_speed,
+        right_speed=right_speed,
     )
     if actor is None:
         return None
@@ -742,24 +801,21 @@ def _select_ready_actor(
     right: _RuntimeCombatant,
     *,
     action_gauge_max: int,
-    action_index: int,
+    left_speed: int,
+    right_speed: int,
 ) -> _RuntimeCombatant | None:
-    ready = [
-        combatant
-        for combatant in (left, right)
-        if combatant.action_gauge >= action_gauge_max
-    ]
-    if not ready:
+    left_ready = left.action_gauge >= action_gauge_max
+    right_ready = right.action_gauge >= action_gauge_max
+    if not left_ready and not right_ready:
         return None
-    return max(
-        ready,
-        key=lambda combatant: _action_priority(
-            combatant,
-            left,
-            right,
-            action_index=action_index,
-        ),
-    )
+    if left_ready and not right_ready:
+        return left
+    if right_ready and not left_ready:
+        return right
+
+    left_priority = (left.action_gauge, left_speed, 1)
+    right_priority = (right.action_gauge, right_speed, 0)
+    return left if left_priority >= right_priority else right
 
 
 def _ticks_until_ready(
@@ -773,25 +829,6 @@ def _ticks_until_ready(
     return ceil((action_gauge_max - combatant.action_gauge) / speed)
 
 
-def _action_priority(
-    combatant: _RuntimeCombatant,
-    left: _RuntimeCombatant,
-    right: _RuntimeCombatant,
-    *,
-    action_index: int,
-) -> tuple[int, int, int]:
-    side_priority = 1 if combatant.side == "left" else 0
-    return (
-        combatant.action_gauge,
-        _effective_stats(
-            combatant,
-            _opponent(combatant, left, right),
-            action_index=action_index,
-        ).speed,
-        side_priority,
-    )
-
-
 def _finish_result(
     *,
     left_runtime: _RuntimeCombatant,
@@ -799,6 +836,7 @@ def _finish_result(
     winner_side: CombatSide | None,
     reason: str,
     events: list[CombatEvent],
+    actions_taken: int | None = None,
     time_elapsed: int,
 ) -> CombatResult:
     if winner_side == "left":
@@ -815,6 +853,10 @@ def _finish_result(
         left_resources=left_runtime.resources,
         right_resources=right_runtime.resources,
         events=tuple(events),
-        actions_taken=sum(1 for event in events if event.action_type != "status"),
+        actions_taken=(
+            sum(1 for event in events if event.action_type != "status")
+            if actions_taken is None
+            else actions_taken
+        ),
         time_elapsed=time_elapsed,
     )

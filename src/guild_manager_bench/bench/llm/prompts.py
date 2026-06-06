@@ -113,6 +113,7 @@ def _endgame_notice(
         f"现在是终局阶段：当前回合 {turn}/{max_turns}，剩余 {turns_remaining} 回合。"
         "游戏即将结束，请在继续运营的同时优先最大化队伍终局战力评分 rank_score；"
         "可使用 preview_team_power 预览当前队伍 rank_score 和每个冒险者的贡献占比。"
+        "rank_score与队伍强度和多面性直接挂钩。你可通过提升装备、解锁全局加成、升级/替换冒险者等方式提高rank score。"
     )
 
 
