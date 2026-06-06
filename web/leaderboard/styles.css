@@ -623,12 +623,71 @@ body::before {
   border-color: rgba(196, 181, 253, 0.35);
 }
 
-/* #4+ 普通卡：降阶、紧凑、安静 */
+/* ── #4+ per-rank hue (cool spectrum teal → slate) ──
+   让 #4–#12 每一张都有自己的微弱色相，建立视觉节奏
+   而不破坏 podium 的色彩身份。前三档与 podium 重叠反而起到承接作用 */
+.model-card[data-rank="4"]  { --rank-hue: #5EEAD4; }
+.model-card[data-rank="5"]  { --rank-hue: #60A5FA; }
+.model-card[data-rank="6"]  { --rank-hue: #818CF8; }
+.model-card[data-rank="7"]  { --rank-hue: #A78BFA; }
+.model-card[data-rank="8"]  { --rank-hue: #C084FC; }
+.model-card[data-rank="9"]  { --rank-hue: #E879F9; }
+.model-card[data-rank="10"] { --rank-hue: #F472B6; }
+.model-card[data-rank="11"] { --rank-hue: #FB923C; }
+.model-card[data-rank="12"] { --rank-hue: #94A3B8; }
+
+/* #4+ 普通卡：per-rank 色相 + 微弱背景渐变，紧凑但有节奏 */
 .model-card:not(.rank-1):not(.rank-2):not(.rank-3) {
   padding: 16px 22px;
+  background: linear-gradient(180deg, var(--surface-raised) 0%, var(--surface) 100%);
 }
 .model-card:not(.rank-1):not(.rank-2):not(.rank-3)::before {
-  opacity: 0.08;
+  background: var(--rank-hue, var(--muted));
+  opacity: 0.65;
+  width: 2px;
+}
+.model-card:not(.rank-1):not(.rank-2):not(.rank-3):hover {
+  background: linear-gradient(180deg, var(--surface-hover) 0%, var(--surface-raised) 100%);
+  border-color: var(--rank-hue, var(--line-strong));
+  box-shadow:
+    var(--shadow-card-hover),
+    0 0 0 1px color-mix(in srgb, var(--rank-hue) 22%, transparent) inset;
+}
+
+/* #4+ 排名徽标：outlined 样式 + per-rank 色相 — 替代原先的灰暗方块 */
+.model-card:not(.rank-1):not(.rank-2):not(.rank-3) .rank-badge {
+  background: color-mix(in srgb, var(--rank-hue, var(--text)) 8%, transparent);
+  border-color: color-mix(in srgb, var(--rank-hue, var(--line-strong)) 55%, transparent);
+  color: var(--rank-hue, var(--text-secondary));
+  width: 32px;
+  height: 32px;
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--rank-hue, transparent) 30%, transparent) inset;
+  transition:
+    background var(--transition),
+    border-color var(--transition),
+    color var(--transition),
+    box-shadow var(--transition);
+}
+.model-card:not(.rank-1):not(.rank-2):not(.rank-3):hover .rank-badge {
+  background: color-mix(in srgb, var(--rank-hue, var(--text)) 14%, transparent);
+  border-color: var(--rank-hue, var(--line-strong));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--rank-hue, transparent) 50%, transparent) inset;
+}
+
+/* #4+ 模型名：加微小色相提示（仅在末尾跟一个色点），让每张卡有微弱的"个性" */
+.model-card:not(.rank-1):not(.rank-2):not(.rank-3) .model-name::after {
+  content: '';
+  display: inline-block;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  margin-left: 8px;
+  vertical-align: middle;
+  background: var(--rank-hue, var(--muted));
+  opacity: 0.7;
+  transform: translateY(-1px);
 }
 
 /* ── Card Header ── */
