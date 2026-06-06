@@ -46,6 +46,8 @@ def test_leaderboard_uses_final_observation_rank_fallback(tmp_path: Path) -> Non
     definition = _small_scoring_definition()
     replay = _legacy_replay(definition)
     replay["agent"] = {"config": {"model": "test-model"}}
+    unlocked_upgrade = replay["final_observation"]["global_upgrades"][0]
+    unlocked_upgrade["unlocked"] = True
     replay["stats"] = {
         "tool_calls": {
             "total": 3,
@@ -96,10 +98,24 @@ def test_leaderboard_uses_final_observation_rank_fallback(tmp_path: Path) -> Non
     assert model["run_details"][0]["score"] == 12.34
     assert model["run_details"][0]["rank_score"] == expected["score"]["rank_score"]
     assert model["run_details"][0]["rank_score_per_adventurer"]
+    contributor = model["run_details"][0]["rank_score_per_adventurer"][0]
+    adventurer = contributor["adventurer"]
+    assert adventurer["adventurer_id"] == contributor["adventurer_id"]
+    assert adventurer["effective_stats"]["hp"] > 0
+    assert adventurer["skills"]
+    assert adventurer["equipment_slots"]
+    assert "next_level" not in adventurer
     assert model["run_details"][0]["preset"] == "default"
     assert model["run_details"][0]["tool_calls"]["by_name_detail"]["get_party"]["failed"] == 1
     assert model["run_details"][0]["game_actions"]["economy_curve"][0]["cumulative_gold_earned"] == 12
     assert model["run_details"][0]["game_actions"]["strongest_defeated_enemy"]["name"] == "测试怪物"
+    upgrade = model["run_details"][0]["upgrades"][0]
+    assert upgrade["upgrade_id"] == unlocked_upgrade["upgrade_id"]
+    assert upgrade["name"] == unlocked_upgrade["name"]
+    assert upgrade["stats"] == unlocked_upgrade["stats"]
+    assert upgrade["party_size_bonus"] == unlocked_upgrade["party_size_bonus"]
+    assert upgrade["skills"] == unlocked_upgrade["skills"]
+    assert "missing" not in upgrade
 
 
 def _legacy_replay(definition):

@@ -8,7 +8,9 @@ from guild_manager_bench.bench.eval_runner import (
     run_eval_suite,
     run_single_eval,
     save_eval_results,
+    save_leaderboard_replays,
 )
+from guild_manager_bench.bench.leaderboard import build_leaderboard
 from guild_manager_bench.bench.metrics import score_final_state
 from guild_manager_bench.bench.operators.greedy_operator import GreedyOperator
 from guild_manager_bench.bench.operators.random_full_operator import RandomFullOperator
@@ -300,7 +302,13 @@ def test_save_eval_results_json(tmp_path: Path) -> None:
     )
 
     output_path = tmp_path / "results.json"
-    save_eval_results(results, output_path, config=config)
+    leaderboard_dir = tmp_path / "leaderboard"
+    save_eval_results(
+        results,
+        output_path,
+        config=config,
+        leaderboard_dir=leaderboard_dir,
+    )
 
     import json
     content = json.loads(output_path.read_text(encoding="utf-8"))
@@ -308,6 +316,44 @@ def test_save_eval_results_json(tmp_path: Path) -> None:
     assert "results" in content
     assert "RandomFull" in content["results"]
     assert content["results"]["RandomFull"]["seed_count"] == 1
+    assert len(list(leaderboard_dir.glob("baseline-*.json"))) == 1
+
+
+def test_save_baseline_leaderboard_replays(tmp_path: Path) -> None:
+    config = EvalConfig(
+        data_dir=str(_data_dir()),
+        seeds=(0,),
+        max_steps=200,
+        max_workers=1,
+        score_waves=_FAST_WAVES,
+    )
+    results = run_eval_suite(
+        {"RandomFull": lambda seed: RandomFullOperator(seed=seed)},
+        config=config,
+    )
+
+    replay_dir = tmp_path / "replays"
+    paths = save_leaderboard_replays(results, replay_dir, config=config)
+
+    assert len(paths) == 1
+    import json
+    replay = json.loads(paths[0].read_text(encoding="utf-8"))
+    assert replay["kind"] == "baseline_replay"
+    assert replay["baseline"]["operator"] == "RandomFull"
+    assert replay["data"]["game_seed"] == 0
+    assert replay["score"]["rank_score"] == results["RandomFull"].rank_scores[0]
+    assert replay["final_observation"]["finished"] is True
+    assert replay["turns"] == []
+
+    output = tmp_path / "leaderboard_data.json"
+    build_leaderboard(replay_dir, output, incremental=False)
+    leaderboard = json.loads(output.read_text(encoding="utf-8"))
+    model = leaderboard["models"][0]
+    assert model["model"] == "Baseline · RandomFull"
+    assert model["is_baseline"] is True
+    assert model["rank_score"]["best"] == results["RandomFull"].rank_scores[0]
+    assert model["run_details"][0]["game_seed"] == 0
+    assert model["run_details"][0]["rank_score_per_adventurer"]
 
 
 # ── 辅助函数 ──────────────────────────────────────────────

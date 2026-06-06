@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
@@ -15,6 +16,7 @@ from guild_manager_bench.bench.metrics import score_final_state
 from guild_manager_bench.bench.operators.base import Operator
 from guild_manager_bench.bench.runner import run_operator
 from guild_manager_bench.game.loader import load_game_definition
+from guild_manager_bench.game.presets import describe_data_source
 from guild_manager_bench.game.state import GameDefinition
 
 
@@ -40,6 +42,9 @@ class OperatorResult:
     duration_seconds: float
     status: str  # "completed" | "failed"
     error: str | None = None
+    session_id: str | None = None
+    score_data: dict[str, Any] | None = None
+    final_observation: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,6 +141,9 @@ def run_single_eval(
             rank_score=report.rank_score,
             duration_seconds=round(duration, 4),
             status="completed",
+            session_id=session.session_id,
+            score_data=report.to_dict(),
+            final_observation=session.observation(),
         )
     except Exception as exc:
         duration = perf_counter() - started
@@ -272,8 +280,9 @@ def save_eval_results(
     path: str | Path,
     *,
     config: EvalConfig | None = None,
+    leaderboard_dir: str | Path | None = None,
 ) -> None:
-    """保存评估结果为 JSON 文件。"""
+    """保存评估结果，并可同时写出 leaderboard 专用 replay。"""
 
     output = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -292,6 +301,80 @@ def save_eval_results(
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(output, indent=2, ensure_ascii=False), encoding="utf-8")
+    if leaderboard_dir is not None:
+        save_leaderboard_replays(results, leaderboard_dir, config=config)
+
+
+def save_leaderboard_replays(
+    results: dict[str, EvalReport],
+    directory: str | Path,
+    *,
+    config: EvalConfig | None = None,
+) -> list[Path]:
+    """将每个成功的基准方法运行保存为 leaderboard 专用 replay。"""
+
+    output_dir = Path(directory)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    created_at = datetime.now(timezone.utc).isoformat()
+    data_metadata = _leaderboard_data_metadata(config)
+    written: list[Path] = []
+
+    for name, report in results.items():
+        operator_slug = _filename_slug(name)
+        for result in report.per_seed:
+            if (
+                result.status != "completed"
+                or result.score_data is None
+                or result.final_observation is None
+            ):
+                continue
+
+            replay_data = dict(data_metadata)
+            replay_data["game_seed"] = result.seed
+            replay_data["scoring_seed"] = result.score_data.get("seed")
+            replay = {
+                "schema_version": 1,
+                "kind": "baseline_replay",
+                "created_at": created_at,
+                "updated_at": created_at,
+                "session_id": result.session_id,
+                "status": "completed",
+                "baseline": {
+                    "operator": name,
+                    "implementation": result.operator_name,
+                },
+                "data": replay_data,
+                "turns": [],
+                "final_observation": result.final_observation,
+                "score": result.score_data,
+                "stats": {
+                    "timing": {
+                        "total_duration_seconds": result.duration_seconds,
+                    },
+                },
+            }
+            path = output_dir / f"baseline-{operator_slug}-seed-{result.seed}.json"
+            path.write_text(
+                json.dumps(replay, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            written.append(path)
+
+    return written
+
+
+def _leaderboard_data_metadata(config: EvalConfig | None) -> dict[str, Any]:
+    if config is None:
+        return {}
+    try:
+        return describe_data_source(config.data_dir)
+    except (OSError, ValueError):
+        return {"data_dir": str(config.data_dir)}
+
+
+def _filename_slug(value: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", value.strip().lower()).strip("-")
+    return slug or "operator"
 
 
 def print_eval_summary(results: dict[str, EvalReport]) -> None:

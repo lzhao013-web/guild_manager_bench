@@ -34,7 +34,7 @@ from guild_manager_bench.bench.replay_scoring import (
 )
 
 # Incremental build cache version — bump when _extract_run_info schema changes.
-_CACHE_VERSION = 6
+_CACHE_VERSION = 10
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -44,6 +44,9 @@ def _extract_run_info(replay: dict, *, source_path: Path | None = None) -> dict 
 
     if kind == "manual_replay":
         return _extract_manual_run_info(replay, source_path=source_path)
+
+    if kind == "baseline_replay":
+        return _extract_baseline_run_info(replay, source_path=source_path)
 
     if kind != "llm_replay":
         return None
@@ -137,7 +140,11 @@ def _extract_run_info(replay: dict, *, source_path: Path | None = None) -> dict 
         "party_size": final_observation.get("party_size"),
         "party_size_limit": final_observation.get("party_size_limit"),
         "best_adventurer": _best_adventurer(score_data),
-        "rank_score_per_adventurer": _rank_score_per_adventurer(score_data),
+        "rank_score_per_adventurer": _rank_score_per_adventurer(
+            score_data,
+            final_observation,
+        ),
+        "upgrades": _unlocked_upgrades(final_observation),
         # ── New fields ──
         "rank_score_curve": rank_score_curve or None,
         "token_usage": _extract_token_usage(stats) or fallback_tokens,
@@ -163,7 +170,7 @@ def _extract_manual_run_info(replay: dict, *, source_path: Path | None = None) -
     game_actions = manual_stats.get("game_actions")
     game_actions = game_actions if isinstance(game_actions, dict) else {}
 
-    per_adv = _rank_score_per_adventurer(score_data)
+    per_adv = _rank_score_per_adventurer(score_data, final_observation)
 
     # Build economy curve from turns battles
     turns_list = replay.get("turns") or []
@@ -196,6 +203,7 @@ def _extract_manual_run_info(replay: dict, *, source_path: Path | None = None) -
         "party_size_limit": final_observation.get("party_size_limit"),
         "best_adventurer": _best_adventurer(score_data),
         "rank_score_per_adventurer": per_adv,
+        "upgrades": _unlocked_upgrades(final_observation),
         "rank_score_curve": None,
         "token_usage": None,
         "timing": None,
@@ -208,6 +216,68 @@ def _extract_manual_run_info(replay: dict, *, source_path: Path | None = None) -
             "economy_curve": economy_curve,
             "strongest_defeated_enemy": game_actions.get("strongest_defeated_enemy"),
         },
+    }
+
+
+def _extract_baseline_run_info(replay: dict, *, source_path: Path | None = None) -> dict | None:
+    """Extract leaderboard fields from a purpose-built baseline replay."""
+    if replay.get("status") != "completed":
+        return None
+
+    score_data = replay.get("score")
+    if not isinstance(score_data, dict) or score_data.get("rank_score") is None:
+        return None
+
+    baseline = replay.get("baseline")
+    baseline = baseline if isinstance(baseline, dict) else {}
+    operator = str(baseline.get("operator") or "").strip()
+    if not operator:
+        return None
+
+    data = replay.get("data")
+    data = data if isinstance(data, dict) else {}
+    final_observation = replay.get("final_observation")
+    final_observation = final_observation if isinstance(final_observation, dict) else {}
+    stats = replay.get("stats")
+    stats = stats if isinstance(stats, dict) else {}
+
+    return {
+        "run_id": source_path.stem if source_path is not None else replay.get("session_id", ""),
+        "session_id": replay.get("session_id"),
+        "model": f"Baseline · {operator}",
+        "is_baseline": True,
+        "score": score_data.get("score"),
+        "rank_score": score_data.get("rank_score"),
+        "rank_score_source": score_data.get("rank_score_source", "game_state"),
+        "win_rate": score_data.get("chosen_win_rate"),
+        "score_mode": score_data.get("mode"),
+        "score_seed": score_data.get("seed"),
+        "score_waves": score_data.get("waves"),
+        "score_wave_size": score_data.get("wave_size"),
+        "created_at": replay.get("created_at", ""),
+        "updated_at": replay.get("updated_at", replay.get("created_at", "")),
+        "turns": final_observation.get("max_turns"),
+        "preset": data.get("preset") or _preset_from_data_dir(data.get("data_dir")),
+        "data_hash": data.get("data_hash"),
+        "game_seed": data.get("game_seed", final_observation.get("seed")),
+        "scoring_seed": data.get("scoring_seed"),
+        "final_turn": final_observation.get("turn"),
+        "max_turns": final_observation.get("max_turns"),
+        "final_gold": final_observation.get("gold"),
+        "final_experience_pool": final_observation.get("experience_pool"),
+        "party_size": final_observation.get("party_size"),
+        "party_size_limit": final_observation.get("party_size_limit"),
+        "best_adventurer": _best_adventurer(score_data),
+        "rank_score_per_adventurer": _rank_score_per_adventurer(
+            score_data,
+            final_observation,
+        ),
+        "upgrades": _unlocked_upgrades(final_observation),
+        "rank_score_curve": None,
+        "token_usage": None,
+        "timing": _extract_timing(stats),
+        "tool_calls": None,
+        "game_actions": _extract_game_actions(stats),
     }
 
 
@@ -1101,7 +1171,10 @@ def _aggregate_model(runs: list[dict]) -> dict:
     win_rates = [r["win_rate"] for r in runs if r["win_rate"] is not None]
     timestamps = [r["created_at"] for r in runs if r["created_at"]]
 
-    result: dict = {"runs": len(runs)}
+    result: dict = {
+        "runs": len(runs),
+        "is_baseline": any(run.get("is_baseline") is True for run in runs),
+    }
 
     # ── Core metrics ──
     if scores:
@@ -1450,6 +1523,7 @@ def _run_detail(run: dict) -> dict:
         "party_size_limit": run.get("party_size_limit"),
         "best_adventurer": run.get("best_adventurer"),
         "rank_score_per_adventurer": run.get("rank_score_per_adventurer"),
+        "upgrades": run.get("upgrades"),
         # ── New fields ──
         "rank_score_curve": run.get("rank_score_curve"),
         "token_usage": run.get("token_usage"),
@@ -1475,12 +1549,24 @@ def _best_adventurer(score_data: dict) -> dict | None:
     }
 
 
-def _rank_score_per_adventurer(score_data: dict) -> list[dict] | None:
+def _rank_score_per_adventurer(
+    score_data: dict,
+    final_observation: dict | None = None,
+) -> list[dict] | None:
     values = score_data.get("rank_score_per_adventurer")
     if not isinstance(values, list):
         values = score_data.get("per_adventurer")
     if not isinstance(values, list):
         return None
+
+    observation = final_observation if isinstance(final_observation, dict) else {}
+    adventurers = observation.get("adventurers")
+    adventurers = adventurers if isinstance(adventurers, list) else []
+    adventurer_by_id = {
+        str(item.get("adventurer_id")): item
+        for item in adventurers
+        if isinstance(item, dict) and item.get("adventurer_id") is not None
+    }
 
     result: list[dict] = []
     for item in values:
@@ -1491,17 +1577,118 @@ def _rank_score_per_adventurer(score_data: dict) -> list[dict] | None:
             contribution = item.get("rank_score")
         if contribution is None:
             continue
+        adventurer_id = item.get("adventurer_id")
+        entry = {
+            "adventurer_id": adventurer_id,
+            "name": item.get("name"),
+            "rank_score": contribution,
+            "rank_score_contribution": contribution,
+            "rank_score_share": item.get("rank_score_share"),
+            "assignments": item.get("assignments"),
+        }
+        adventurer = adventurer_by_id.get(str(adventurer_id))
+        if adventurer is not None:
+            entry["adventurer"] = _adventurer_detail(adventurer)
+        result.append(entry)
+    return result or None
+
+
+def _adventurer_detail(adventurer: dict) -> dict:
+    """Keep only final adventurer fields used by leaderboard hover details."""
+    skills = adventurer.get("skills")
+    equipment_slots = adventurer.get("equipment_slots")
+    skills = skills if isinstance(skills, list) else []
+    equipment_slots = equipment_slots if isinstance(equipment_slots, list) else []
+    return {
+        "adventurer_id": adventurer.get("adventurer_id"),
+        "name": adventurer.get("name"),
+        "template_id": adventurer.get("template_id"),
+        "level": adventurer.get("level"),
+        "experience": adventurer.get("experience"),
+        "base_stats": _dict_or_none(adventurer.get("base_stats")),
+        "effective_stats": _dict_or_none(adventurer.get("effective_stats")),
+        "resources": _dict_or_none(adventurer.get("resources")),
+        "skills": [
+            _skill_detail(skill)
+            for skill in skills
+            if isinstance(skill, dict)
+        ],
+        "equipment_slots": [
+            _equipment_slot_detail(slot)
+            for slot in equipment_slots
+            if isinstance(slot, dict)
+        ],
+    }
+
+
+def _equipment_slot_detail(slot: dict) -> dict:
+    item = slot.get("item")
+    return {
+        "slot": slot.get("slot"),
+        "blocked_by": slot.get("blocked_by"),
+        "item": (
+            {
+                "instance_id": item.get("instance_id"),
+                "template_id": item.get("template_id"),
+                "name": item.get("name"),
+                "slot": item.get("slot"),
+                "stats": _dict_or_none(item.get("stats")),
+                "skills": [
+                    _skill_detail(skill)
+                    for skill in item.get("skills") or []
+                    if isinstance(skill, dict)
+                ],
+            }
+            if isinstance(item, dict)
+            else None
+        ),
+    }
+
+
+def _skill_detail(skill: dict) -> dict:
+    return {
+        "skill_id": skill.get("skill_id"),
+        "name": skill.get("name"),
+        "kind": skill.get("kind"),
+        "condition": skill.get("condition"),
+        "effects": skill.get("effects"),
+        "mp_cost": skill.get("mp_cost"),
+        "priority": skill.get("priority"),
+        "once_per_battle": skill.get("once_per_battle"),
+        "free": skill.get("free"),
+    }
+
+
+def _unlocked_upgrades(final_observation: dict) -> list[dict] | None:
+    """Keep final unlocked upgrade details used by each leaderboard run card."""
+    upgrades = final_observation.get("global_upgrades")
+    if not isinstance(upgrades, list):
+        return None
+
+    result = []
+    for upgrade in upgrades:
+        if not isinstance(upgrade, dict) or upgrade.get("unlocked") is not True:
+            continue
         result.append(
             {
-                "adventurer_id": item.get("adventurer_id"),
-                "name": item.get("name"),
-                "rank_score": contribution,
-                "rank_score_contribution": contribution,
-                "rank_score_share": item.get("rank_score_share"),
-                "assignments": item.get("assignments"),
+                "upgrade_id": upgrade.get("upgrade_id"),
+                "name": upgrade.get("name"),
+                "description": upgrade.get("description"),
+                "gold_cost": upgrade.get("gold_cost"),
+                "stats": _dict_or_none(upgrade.get("stats")),
+                "party_size_bonus": upgrade.get("party_size_bonus"),
+                "skills": [
+                    _skill_detail(skill)
+                    for skill in upgrade.get("skills") or []
+                    if isinstance(skill, dict)
+                ],
             }
         )
     return result or None
+
+
+def _dict_or_none(value: Any) -> dict | None:
+    return value if isinstance(value, dict) else None
 
 
 def _preset_from_data_dir(value) -> str | None:
