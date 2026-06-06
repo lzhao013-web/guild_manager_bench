@@ -467,7 +467,10 @@ def _json_content(value: Any) -> Any:
 
 
 def _write_json_atomic(path: Path, data: Mapping[str, Any]) -> None:
-    temp_path = path.with_suffix(f"{path.suffix}.tmp")
+    # 使用唯一临时文件名，避免并发写入冲突
+    import uuid
+
+    temp_path = path.with_suffix(f"{path.suffix}.tmp.{uuid.uuid4().hex[:8]}")
     temp_path.write_text(
         json.dumps(_json_safe(data), ensure_ascii=False, indent=2),
         encoding="utf-8",
@@ -475,7 +478,7 @@ def _write_json_atomic(path: Path, data: Mapping[str, Any]) -> None:
     _replace_file(temp_path, path)
 
 
-def _replace_file(src: Path, dst: Path, retries: int = 3, delay: float = 0.1) -> None:
+def _replace_file(src: Path, dst: Path, retries: int = 5, delay: float = 0.3) -> None:
     """替换文件，在 Windows 上自动重试以应对文件被短暂占用的情况。"""
     for attempt in range(retries):
         try:
@@ -485,7 +488,12 @@ def _replace_file(src: Path, dst: Path, retries: int = 3, delay: float = 0.1) ->
             if attempt < retries - 1:
                 time.sleep(delay)
             else:
-                raise
+                # 最后一次尝试：先删除目标文件再重命名
+                try:
+                    dst.unlink(missing_ok=True)
+                    src.replace(dst)
+                except PermissionError:
+                    raise
 
 
 def _json_safe(value: Any) -> Any:

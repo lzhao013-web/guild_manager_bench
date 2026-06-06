@@ -628,6 +628,24 @@ h3 { font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bot
   font-family: "JetBrains Mono", "SF Mono", "Cascadia Code", ui-monospace, monospace;
 }
 
+/* Material chip: 紧凑的 icon + 数量徽章 */
+.mat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 7px;
+  border-radius: 99px;
+  background: var(--warning-dim);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+  font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  margin: 0 1px;
+  white-space: nowrap;
+}
+.mat-chip:first-child { margin-left: 0; }
+
 /* HP / MP Bars */
 .resource-bars {
   display: flex;
@@ -765,7 +783,7 @@ h3 { font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bot
 
 /* LLM Trace Steps */
 .llm-step {
-  margin-bottom: 12px;
+  margin-bottom: 10px;
   padding: 10px 12px;
   border-radius: var(--radius-sm);
   background: var(--surface-raised);
@@ -778,11 +796,14 @@ h3 { font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bot
   box-shadow: 0 0 8px var(--accent-glow);
 }
 
+.llm-step.step-read { border-left: 2px solid var(--accent); }
+.llm-step.step-write { border-left: 2px solid var(--warning); }
+
 .llm-step-header {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 6px;
+  min-height: 24px;
 }
 
 .llm-step-icon {
@@ -803,39 +824,209 @@ h3 { font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bot
 .llm-step-icon.retry { background: var(--warning-dim); color: var(--warning); }
 
 .llm-step-title {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.llm-step-body {
+.llm-step-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.llm-meta-chip {
+  font-size: 10px;
+  color: var(--muted);
+  font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+  padding: 1px 6px;
+  border-radius: 99px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+/* Tool result summary: 摘要行（剥掉 "OK <tool>:" 前缀） */
+.llm-result-summary {
+  margin-top: 6px;
+  padding: 6px 8px;
   font-size: 11px;
-  color: var(--text-secondary);
-  line-height: 1.5;
+  line-height: 1.45;
+  border-radius: var(--radius-xs);
+  background: var(--bg);
+  border-left: 2px solid var(--muted);
+  color: var(--text);
   white-space: pre-wrap;
   word-break: break-word;
 }
+.llm-result-summary.ok    { border-left-color: var(--ok); color: var(--ok); }
+.llm-result-summary.fail  { border-left-color: var(--danger); color: var(--danger); }
+.llm-result-summary.neutral { color: var(--text-secondary); }
 
-.llm-step-body.reasoning {
+/* Args grid: 紧凑的 key / value 配对 */
+.llm-args-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 10px;
+  margin-top: 6px;
+  padding: 6px 8px;
+  background: var(--bg);
+  border-radius: var(--radius-xs);
+  font-size: 11px;
+  align-items: baseline;
+}
+.llm-arg-key {
+  color: var(--muted);
+  font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+  font-size: 10px;
+  text-transform: lowercase;
+  white-space: nowrap;
+}
+.llm-arg-val {
+  color: var(--text);
+  font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+  word-break: break-all;
+  min-width: 0;
+}
+.llm-arg-val em {
+  color: var(--muted);
+  font-style: normal;
+}
+
+/* Battles list (end_turn) */
+.llm-battles {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.llm-battles-head {
+  font-size: 10px;
+  color: var(--text-secondary);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.llm-battle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: var(--radius-xs);
+  background: var(--bg);
+  font-size: 11px;
+  border-left: 2px solid var(--line-strong);
+}
+.llm-battle.win  { border-left-color: var(--ok); }
+.llm-battle.loss { border-left-color: var(--danger); opacity: 0.85; }
+.llm-battle-vs { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
+.llm-battle-vs em { font-style: normal; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.llm-vs-sep { color: var(--muted); font-size: 9px; text-transform: uppercase; }
+.llm-battle-tag {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 99px;
+  flex-shrink: 0;
+}
+.llm-battle.win  .llm-battle-tag { background: var(--ok-dim); color: var(--ok); }
+.llm-battle.loss .llm-battle-tag { background: var(--danger-dim); color: var(--danger); }
+
+/* Collapsible details (long content / reasoning) */
+.llm-result-details, .llm-reasoning {
+  margin-top: 6px;
+  background: var(--bg);
+  border-radius: var(--radius-xs);
+  font-size: 11px;
+}
+.llm-result-details summary, .llm-reasoning summary {
+  cursor: pointer;
+  padding: 4px 8px;
+  color: var(--muted);
+  font-size: 10px;
+  user-select: none;
+  list-style: none;
+  display: inline-block;
+}
+.llm-result-details summary::before { content: '▸ '; transition: transform 150ms; display: inline-block; }
+.llm-result-details[open] summary::before { transform: rotate(90deg); }
+.llm-reasoning summary::before { content: '💭 '; }
+.llm-reasoning summary:hover, .llm-result-details summary:hover { color: var(--text); }
+.llm-result-details pre, .llm-reasoning-body {
+  margin: 0;
+  padding: 6px 8px 8px;
+  font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+  font-size: 10.5px;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  border-top: 1px solid var(--line);
+  max-height: 240px;
+  overflow-y: auto;
+}
+.llm-reasoning-body { font-style: italic; color: var(--purple); border-top-color: var(--purple-dim); }
+
+.llm-reasoning-inline {
+  margin-top: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
   font-style: italic;
   color: var(--purple);
   border-left: 2px solid var(--purple-dim);
-  padding-left: 10px;
-  margin-top: 4px;
+  background: var(--bg);
+  border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
 }
 
-.llm-args {
-  font-family: "JetBrains Mono", "SF Mono", "Cascadia Code", monospace;
-  font-size: 10px;
-  background: var(--bg);
+.llm-result-text {
+  margin: 6px 0 0;
   padding: 6px 8px;
+  background: var(--bg);
   border-radius: var(--radius-xs);
-  margin-top: 4px;
-  overflow-x: auto;
-  white-space: pre;
+  font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+  font-size: 10.5px;
   color: var(--text-secondary);
-  max-height: 120px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 160px;
   overflow-y: auto;
+}
+
+/* Assistant tool calls list */
+.llm-tool-calls {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.llm-tool-call {
+  padding: 6px 8px;
+  background: var(--bg);
+  border-radius: var(--radius-xs);
+  border-left: 2px solid var(--accent);
+}
+.llm-tool-call-name {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+.llm-tool-call .llm-args-grid { margin-top: 0; padding: 0; background: transparent; }
+
+.llm-retry-body {
+  margin-top: 6px;
+  padding: 6px 8px;
+  font-size: 11px;
+  color: var(--warning);
+  background: var(--warning-dim);
+  border-radius: var(--radius-xs);
+  border-left: 2px solid var(--warning);
 }
 
 /* ========== Status Bar ========== */

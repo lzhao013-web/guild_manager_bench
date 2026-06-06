@@ -942,7 +942,11 @@ function renderOverview() {
   DOM.ovMaxTurn.textContent = obs.max_turns||'—';
   DOM.ovGold.textContent = fmt(obs.gold);
   DOM.ovExp.textContent = fmt(obs.experience_pool);
-  const mats = obs.materials||{}; DOM.ovMaterials.textContent = Object.entries(mats).map(([k,v])=>`${matLabel(k)}:${fmt(v)}`).join(' ')||'无材料';
+  const mats = obs.materials||{};
+  const matEntries = Object.entries(mats).filter(([,v]) => v && Number(v) > 0);
+  DOM.ovMaterials.innerHTML = matEntries.length
+    ? matEntries.map(([k,v]) => `<span class="mat-chip" title="${esc(matLabel(k))}">${matIcon(k)}${fmt(v)}</span>`).join(' ')
+    : '<span class="muted">无材料</span>';
   const advs = obs.adventurers||[]; DOM.ovParty.textContent = `${advs.length}/${obs.party_size_limit||'?'}`;
   if (S.replay&&S.replay.score) { DOM.ovScore.textContent = S.replay.score.total_score||S.replay.score.score||'—'; } else { DOM.ovScore.textContent='—'; }
   // Per-turn rank score with fallback to overall
@@ -1063,7 +1067,7 @@ function monsterCard(m, refs) {
     <div class="card-header"><div class="avatar-slot monster" data-tier="${esc(m.tier||'normal')}">${monsterIconHtml(m)}</div><div class="card-info"><div class="card-name">${esc(m.name||'?')}</div><div class="card-subtitle">Tier ${fmt(m.tier)} · ${esc(m.archetype_id||'')}${rid?' · ID '+rid:''}</div></div></div>
     <div class="card-stats">${statCell('HP',s.hp)}${statCell('MP',s.mp)}${statCell('攻击',s.attack)}${statCell('防御',s.defense)}${statCell('速度',s.speed)}</div>
     ${sk.length?`<div class="skill-chips">${sk.map(sk=>`<span class="skill-chip ${sk.kind==='active'?'active':''}" title="${esc(skillTip(sk))}">${esc(sk.name||sk.skill_id)}</span>`).join('')}</div>`:''}
-    <div class="card-subtitle" style="margin-top:4px;">奖励: 💰${fmt(rw.gold)} ⭐${fmt(rw.experience)} ${Object.entries(rw.materials||{}).map(([k,v])=>`${matLabel(k)}:${fmt(v)}`).join(' ')}</div>
+    <div class="card-subtitle" style="margin-top:4px;">奖励: 💰${fmt(rw.gold)} ⭐${fmt(rw.experience)} ${Object.entries(rw.materials||{}).filter(([,v])=>v>0).map(([k,v])=>`<span class="mat-chip" title="${esc(matLabel(k))}">${matIcon(k)}${fmt(v)}</span>`).join(' ')}</div>
   </div>`;
 }
 
@@ -1112,32 +1116,143 @@ function renderLLMTrace() {
 }
 
 function renderLLMStep(step, idx, active, isRead, isWrite) {
-  let cls='llm-step'; if (active) cls+=' active'; if (isRead) cls+=' step-read'; if (isWrite) cls+=' step-write';
-  let icon='', title='', body='';
+  let cls='llm-step';
+  if (active) cls += ' active';
+  if (isRead) cls += ' step-read';
+  if (isWrite) cls += ' step-write';
 
-  if (step.type==='assistant') {
-    icon='<span class="llm-step-icon reasoning">🧠</span>'; title='LLM 响应';
-    if (step.reasoning_content) body+=`<div class="llm-step-body reasoning">💭 ${esc(trunc(step.reasoning_content,200))}</div>`;
-    if (step.tool_calls&&step.tool_calls.length) {
-      body+=`<div class="llm-step-body" style="color:var(--accent);margin-top:4px;">调用 ${step.tool_calls.length} 个工具:</div>`;
-      step.tool_calls.forEach(tc=>{const fn=tc.function?tc.function.name:(tc.name||'?');const fa=tc.function?tc.function.arguments:(tc.arguments||{});body+=`<div class="llm-args">🔧 ${esc(fn)}(${esc(JSON.stringify(fa,null,1))})</div>`;});
-    }
-    if (step.usage) body+=`<div style="font-size:10px;color:var(--muted);margin-top:2px;">Tokens: ${step.usage.input_tokens||'?'} → ${step.usage.output_tokens||'?'}</div>`;
-  } else if (step.type==='tool_result') {
-    const ok = step.content&&step.content.trimStart().startsWith('OK');
-    const fail = step.content&&step.content.trimStart().startsWith('FAIL');
-    icon=`<span class="llm-step-icon ${ok?(isWrite?'tool-ok':'tool-read'):'tool-fail'}">${ok?(isWrite?'▶':'📖'):'✗'}</span>`;
-    title=`${isRead?'📖 ':isWrite?'⚡ ':''}${esc(step.name)}`;
-    if (step.arguments&&Object.keys(step.arguments).length) body+=`<div class="llm-args">参数: ${esc(JSON.stringify(step.arguments,null,1))}</div>`;
-    if (step.content) {
-      const lines=step.content.split('\n'); body+=`<div class="llm-step-body" style="color:${ok?'var(--ok)':'var(--danger)'}">${esc(lines[0])}</div>`;
-      const rest=lines.slice(1).join('\n'); if (rest.trim()) body+=`<div class="llm-step-body">${esc(trunc(rest,250))}</div>`;
-    }
-  } else if (step.type==='retry_prompt') {
-    icon='<span class="llm-step-icon retry">↻</span>'; title='重试'; body=`<div class="llm-step-body">${esc(trunc(step.content,120))}</div>`;
-  } else return '';
+  const header = renderLLMStepHeader(step, isRead, isWrite);
+  if (!header) return '';
 
-  return `<div class="${cls}" data-step="${idx}"><div class="llm-step-header">${icon}<span class="llm-step-title">${title}</span>${step.timing?`<span style="font-size:10px;color:var(--muted);margin-left:auto">${step.timing.duration_ms||0}ms</span>`:''}</div>${body}</div>`;
+  let body = '';
+  if (step.type === 'assistant') body = renderAssistantBody(step);
+  else if (step.type === 'tool_result') body = renderToolResultBody(step, isRead, isWrite);
+  else if (step.type === 'retry_prompt') body = `<div class="llm-retry-body">${esc(trunc(step.content || '', 200))}</div>`;
+
+  return `<div class="${cls}" data-step="${idx}">${header}${body}</div>`;
+}
+
+function renderLLMStepHeader(step, isRead, isWrite) {
+  let icon = '', title = '';
+  if (step.type === 'assistant') {
+    icon = '<span class="llm-step-icon reasoning">🧠</span>';
+    title = 'LLM 响应';
+  } else if (step.type === 'tool_result') {
+    const ok = step.content && step.content.trimStart().startsWith('OK');
+    const fail = step.content && step.content.trimStart().startsWith('FAIL');
+    if (ok && isWrite) icon = '<span class="llm-step-icon tool-ok">⚡</span>';
+    else if (ok) icon = '<span class="llm-step-icon tool-read">📖</span>';
+    else icon = '<span class="llm-step-icon tool-fail">✗</span>';
+    title = toolLabel(step.name) || esc(step.name);
+  } else if (step.type === 'retry_prompt') {
+    icon = '<span class="llm-step-icon retry">↻</span>';
+    title = '重试';
+  } else return null;
+
+  const meta = [];
+  if (step.type === 'assistant' && step.usage) {
+    const inp = step.usage.input_tokens || step.usage.prompt_tokens;
+    const out = step.usage.output_tokens || step.usage.completion_tokens;
+    if (inp != null || out != null) {
+      meta.push(`<span class="llm-meta-chip" title="Token 使用">🔤 ${fmt(inp)}→${fmt(out)}</span>`);
+    }
+  }
+  if (step.timing && Number(step.timing.duration_ms) > 0) {
+    meta.push(`<span class="llm-meta-chip" title="耗时">⏱ ${formatReplayDuration(step.timing.duration_ms)}</span>`);
+  }
+  const metaHtml = meta.length ? `<span class="llm-step-meta">${meta.join('')}</span>` : '';
+  return `<div class="llm-step-header">${icon}<span class="llm-step-title">${title}</span>${metaHtml}</div>`;
+}
+
+function renderArgsGrid(args) {
+  if (!args || typeof args !== 'object') return '';
+  const entries = Object.entries(args).filter(([, v]) => v !== null && v !== undefined && v !== '');
+  if (!entries.length) return '';
+  const cells = entries.map(([k, v]) => {
+    let valHtml;
+    if (Array.isArray(v)) {
+      const preview = v.slice(0, 3).map(x => typeof x === 'object' ? '{…}' : String(x)).join(', ');
+      const more = v.length > 3 ? ` …+${v.length - 3}` : '';
+      valHtml = `<span class="llm-arg-val">[${v.length}] ${esc(preview)}${more ? `<em>${esc(more)}</em>` : ''}</span>`;
+    } else if (typeof v === 'object') {
+      const keys = Object.keys(v);
+      valHtml = `<span class="llm-arg-val">{${keys.length} 字段}</span>`;
+    } else {
+      const s = String(v);
+      valHtml = `<span class="llm-arg-val">${s.length > 80 ? esc(s.slice(0, 80)) + '…' : esc(s)}</span>`;
+    }
+    return `<span class="llm-arg-key">${esc(k)}</span>${valHtml}`;
+  }).join('');
+  return `<div class="llm-args-grid">${cells}</div>`;
+}
+
+function renderToolResultBody(step, isRead, isWrite) {
+  const content = step.content || '';
+  const lines = content.split('\n');
+  const firstLine = lines[0] || '';
+  const rest = lines.slice(1).join('\n').trim();
+
+  const ok = content.trimStart().startsWith('OK');
+  const fail = content.trimStart().startsWith('FAIL');
+  // 剥掉 "OK <tool>:" 前缀，让摘要更短
+  let summary = firstLine;
+  if (ok) summary = firstLine.replace(/^OK\s+\S+:?\s*/, '✓ ').replace(/^OK\s+/, '✓ ') || firstLine;
+  else if (fail) summary = firstLine.replace(/^FAIL\s+\S+:?\s*/, '✗ ').replace(/^FAIL\s+/, '✗ ') || firstLine;
+
+  let html = `<div class="llm-result-summary ${ok ? 'ok' : fail ? 'fail' : 'neutral'}">${esc(summary)}</div>`;
+
+  if (step.arguments && Object.keys(step.arguments).length) {
+    html += renderArgsGrid(step.arguments);
+  }
+
+  // end_turn 特殊处理：把战斗列表做成紧凑卡片
+  if (step.name === 'end_turn' && /战斗/.test(content)) {
+    const battles = parseBattles(content);
+    if (battles.length) {
+      const wins = battles.filter(b => b.won).length;
+      html += `<div class="llm-battles">
+        <div class="llm-battles-head">⚔ ${wins}/${battles.length} 胜</div>
+        ${battles.map(b => `<div class="llm-battle ${b.won ? 'win' : 'loss'}">
+          <span class="llm-battle-vs"><em>${esc(b.adventurer)}</em><span class="llm-vs-sep">vs</span><em>${esc(b.monster)}</em></span>
+          <span class="llm-battle-tag">${b.won ? '胜' : '负'}</span>
+        </div>`).join('')}
+      </div>`;
+    }
+  }
+
+  // 剩余内容：超过 2 行就折叠
+  if (rest) {
+    const extraLines = rest.split('\n').filter(l => l.trim()).length;
+    if (extraLines > 2) {
+      html += `<details class="llm-result-details"><summary>详细 (${extraLines} 行)</summary><pre>${esc(rest)}</pre></details>`;
+    } else {
+      html += `<pre class="llm-result-text">${esc(rest)}</pre>`;
+    }
+  }
+  return html;
+}
+
+function renderAssistantBody(step) {
+  let html = '';
+  if (step.reasoning_content) {
+    const r = step.reasoning_content;
+    if (r.length > 240) {
+      html += `<details class="llm-reasoning"><summary>💭 推理 (${r.length} 字符)</summary><div class="llm-reasoning-body">${esc(r)}</div></details>`;
+    } else {
+      html += `<div class="llm-reasoning-inline">💭 ${esc(r)}</div>`;
+    }
+  }
+  if (step.tool_calls && step.tool_calls.length) {
+    html += `<div class="llm-tool-calls">${step.tool_calls.map(tc => {
+      const fn = tc.function ? tc.function.name : (tc.name || '?');
+      const fa = tc.function ? tc.function.arguments : (tc.arguments || {});
+      return `<div class="llm-tool-call">
+        <span class="llm-tool-call-name">🔧 ${esc(toolLabel(fn) || fn)}</span>
+        ${renderArgsGrid(fa)}
+      </div>`;
+    }).join('')}</div>`;
+  }
+  return html;
 }
 
 function formatTurnMeta(tu) {
@@ -1172,13 +1287,35 @@ function fmt(v) { if(v==null)return'—'; return typeof v==='number'?v.toLocaleS
 function trunc(t,l) { if(!t)return''; const s=String(t); return s.length<=l?s:s.slice(0,l)+'…'; }
 function statCell(l,v) { return `<div class="stat-item"><span class="stat-label">${l}</span><span class="stat-value">${fmt(v)}</span></div>`; }
 function statLabel(k) { const m={hp:'HP',mp:'MP',attack:'攻击',defense:'防御',speed:'速度',recovery:'恢复',mp_recovery:'回魔'}; return m[k]||k; }
-function matLabel(k) { const m={iron:'铁',wood:'木',cloth:'布',leather:'皮',gem:'宝石',herb:'草药',crystal:'水晶',essence:'精华'}; return m[k]||k; }
+// 与 src/guild_manager_bench/game/state.py 的 MATERIAL_NAMES 保持一致
+const MATERIAL_LABELS = {
+  iron_ore: '铁矿石', wood: '木材', leather: '皮革', herb: '草药', bone: '骨头',
+  beast_hide: '兽皮', sharp_claw: '利爪', arcane_dust: '奥术之尘',
+  spider_silk: '蛛丝', mithril_shard: '秘银碎片', dragon_scale: '龙鳞',
+  demon_core: '恶魔核心', soul_shard: '灵魂碎片', dragon_blood: '龙血',
+};
+const MATERIAL_ICONS = {
+  iron_ore: '🪨', wood: '🪵', leather: '🟫', herb: '🌿', bone: '🦴',
+  beast_hide: '🟫', sharp_claw: '🗡️', arcane_dust: '✨',
+  spider_silk: '🕸️', mithril_shard: '💠', dragon_scale: '🐉',
+  demon_core: '💜', soul_shard: '👻', dragon_blood: '🩸',
+};
+function matLabel(k) { return MATERIAL_LABELS[k] || k; }
+function matIcon(k) { return MATERIAL_ICONS[k] || '📦'; }
 function upgradePrereqText(upgrades, ids) { if (!ids || !ids.length) return ''; return ids.map((id) => { const u = upgrades.find((g) => g.upgrade_id === id); return u ? u.name : id; }).join('、'); }
 function fmtRankScore(v) { return v == null ? '—' : Number(v).toLocaleString(undefined, { maximumFractionDigits: 1 }); }
 function fmtPct(v) { return v == null ? '—' : `${(Number(v) * 100).toFixed(1)}%`; }
 function slotIcon(s) { const m={main_hand:'⚔️',off_hand:'🛡️',two_hand:'🗡️',helmet:'⛑️',armor:'🛡️',boots:'👢',accessory:'💍'}; return m[s]||'?'; }
-function fmtMap(o) { if(!o||!Object.keys(o).length)return'—'; return Object.entries(o).map(([k,v])=>`${displayLabel(k)}:${fmt(v)}`).join(' '); }
-function displayLabel(k) { const s=statLabel(k); return s!==k?s:matLabel(k); }
+function fmtMap(o) {
+  if(!o||!Object.keys(o).length) return '—';
+  return Object.entries(o).map(([k,v]) => {
+    if (isStatKey(k)) return `${statLabel(k)}:${fmt(v)}`;
+    return `<span class="mat-chip" title="${esc(matLabel(k))}">${matIcon(k)}${fmt(v)}</span>`;
+  }).join(' ');
+}
+const STAT_KEYS = new Set(['hp','mp','attack','defense','speed','recovery','mp_recovery','HP','MP','攻击','防御','速度','恢复','回魔']);
+function isStatKey(k) { return STAT_KEYS.has(k); }
+function displayLabel(k) { return isStatKey(k) ? statLabel(k) : matLabel(k); }
 function skillTip(s) { const p=[]; if(s.kind)p.push(`类型:${s.kind}`); if(s.mp_cost!=null)p.push(`MP:${s.mp_cost}`); if(s.condition)p.push(`条件:${s.condition}`); if(s.effects){p.push('效果:'+(Array.isArray(s.effects)?s.effects:[s.effects]).map(e=>`${e.type||'?'}:${e.value!=null?(e.value>0?'+':'')+e.value:'?'}`).join(', '));} return p.join('\n'); }
 function refId(refs,c,id) { return (refs&&refs[c]&&id)?(refs[c][id]??null):null; }
 function toolLabel(name) {

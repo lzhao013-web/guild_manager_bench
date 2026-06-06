@@ -185,6 +185,7 @@ def run_llm_game(
             status="running",
             traces=traces,
             final_observation=initial_observation,
+            fatal=False,
         )
 
     active_turn_trace: TurnTrace | None = None
@@ -201,6 +202,7 @@ def run_llm_game(
             traces=traces,
             active_turn=active_turn,
             final_observation=tools.get_observation(session_id)["observation"],
+            fatal=False,
         )
 
     _emit(
@@ -1947,20 +1949,26 @@ def _write_replay(
     failure_reason: str | None = None,
     score: Mapping[str, Any] | None = None,
     stats: Mapping[str, Any] | None = None,
+    fatal: bool = True,
 ) -> None:
     if archive_writer is None:
         return
     turns = [t for t in traces if t.status is not None]
     if active_turn is not None and active_turn.status is not None and active_turn not in turns:
         turns.append(active_turn)
-    archive_writer.write_replay(
-        status=status,
-        turns=turns,
-        final_observation=final_observation,
-        failure_reason=failure_reason,
-        score=score,
-        stats=stats,
-    )
+    try:
+        archive_writer.write_replay(
+            status=status,
+            turns=turns,
+            final_observation=final_observation,
+            failure_reason=failure_reason,
+            score=score,
+            stats=stats,
+        )
+    except PermissionError:
+        # running 状态的 replay 写入不应崩溃游戏
+        if fatal:
+            raise
 
 
 def _definition_for_config(
