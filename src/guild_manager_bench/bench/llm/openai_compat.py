@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
@@ -13,6 +14,29 @@ from guild_manager_bench.bench.llm.runner import LlmAgentResponse, LlmToolCall
 
 class OpenAICompatibleError(RuntimeError):
     """OpenAI-compatible API 调用失败。"""
+
+
+_RETRYABLE_HTTP_CODES = frozenset({429, 500, 502, 503, 504})
+_MAX_API_RETRIES = 2
+
+
+def _urlopen_with_retry(
+    request: urllib.request.Request,
+    timeout: float,
+    max_retries: int = _MAX_API_RETRIES,
+):
+    """打开 URL，对瞬时服务器错误自动重试 (最多 max_retries 次)。"""
+    for attempt in range(max_retries + 1):
+        try:
+            return urllib.request.urlopen(request, timeout=timeout)
+        except urllib.error.HTTPError as exc:
+            if exc.code not in _RETRYABLE_HTTP_CODES or attempt >= max_retries:
+                raise
+            time.sleep(2 ** attempt)
+        except urllib.error.URLError as exc:
+            if attempt >= max_retries:
+                raise
+            time.sleep(2 ** attempt)
 
 
 Transport = Callable[[str, Mapping[str, str], Mapping[str, Any], float], Mapping[str, Any]]
@@ -593,7 +617,7 @@ def _urllib_transport(
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with _urlopen_with_retry(request, timeout) as response:
             payload = response.read().decode("utf-8")
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
@@ -623,7 +647,7 @@ def _urllib_stream_transport(
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with _urlopen_with_retry(request, timeout) as response:
             for raw_line in response:
                 line = raw_line.decode("utf-8", errors="replace").strip()
                 if not line or line.startswith(":"):
