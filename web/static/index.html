@@ -188,6 +188,13 @@
               <div class="llm-form-section-title">模型接入</div>
               <div class="llm-form llm-form-wide">
                 <label>
+                  <span>Provider</span>
+                  <select id="llmProvider">
+                    <option value="openai">OpenAI-compatible</option>
+                    <option value="anthropic">Anthropic Messages</option>
+                  </select>
+                </label>
+                <label>
                   <span>模型名</span>
                   <input id="llmModel" type="text" placeholder="OPENAI_MODEL" autocomplete="off" />
                 </label>
@@ -212,6 +219,24 @@
                 <label>
                   <span>Temperature</span>
                   <input id="llmTemperature" type="number" min="0" max="2" step="0.1" placeholder="默认" />
+                </label>
+                <label data-anthropic-control hidden>
+                  <span>Anthropic 思考</span>
+                  <select id="llmThinking">
+                    <option value="">默认（不传）</option>
+                    <option value="true">启用 adaptive thinking</option>
+                    <option value="false">禁用思考</option>
+                  </select>
+                </label>
+                <label data-anthropic-control hidden>
+                  <span>Anthropic 思考强度</span>
+                  <select id="llmThinkingEffort">
+                    <option value="">默认（不传）</option>
+                    <option value="low">low</option>
+                    <option value="medium">medium</option>
+                    <option value="high">high</option>
+                    <option value="max">max（仅部分模型支持）</option>
+                  </select>
                 </label>
                 <label>
                   <span>游戏 Seed</span>
@@ -339,6 +364,6 @@
 
     <div id="equipPopup" class="equip-popup" hidden></div>
     <div id="toast" class="toast" hidden></div>
-    <script src="/app.js?v=20260604-llm-operation"></script>
+    <script src="/app.js?v=20260606-anthropic-thinking"></script>
   </body>
 </html>

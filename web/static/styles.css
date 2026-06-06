@@ -1821,12 +1821,15 @@ textarea {
   min-width: 0;
 }
 
+.llm-form label[hidden] { display: none; }
+
 .llm-form label span {
   font-weight: 600;
   color: var(--text-secondary);
 }
 
 .llm-form input,
+.llm-form select,
 .llm-form textarea {
   width: 100%;
   min-height: 32px;
@@ -1836,6 +1839,7 @@ textarea {
 }
 
 .llm-form input:focus,
+.llm-form select:focus,
 .llm-form textarea:focus {
   border-color: var(--accent);
   background: var(--surface);
@@ -3044,4 +3048,3 @@ textarea {
 }
 
 .llm-scroll-bottom[hidden] { display: none; }
-

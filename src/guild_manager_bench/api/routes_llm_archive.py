@@ -39,6 +39,12 @@ def llm_archive_router(base_dir: str | Path = "runs/llm") -> APIRouter:
             data = data if isinstance(data, dict) else {}
             score = replay.get("score")
             score = score if isinstance(score, dict) else {}
+            agent = replay.get("agent")
+            agent_config = (
+                agent.get("config")
+                if isinstance(agent, dict)
+                else None
+            ) or {}
             runs.append(
                 {
                     "run_id": directory.name,
@@ -49,6 +55,7 @@ def llm_archive_router(base_dir: str | Path = "runs/llm") -> APIRouter:
                     "turns": len(replay.get("turns", [])),
                     "preset": data.get("preset")
                     or _preset_from_data_dir(data.get("data_dir")),
+                    "model": agent_config.get("model"),
                     "data_hash": data.get("data_hash"),
                     "score": score.get("score"),
                     "rank_score": score.get("rank_score"),

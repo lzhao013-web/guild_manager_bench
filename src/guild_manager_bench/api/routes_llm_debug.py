@@ -7,6 +7,8 @@ from typing import Any, Mapping
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from guild_manager_bench.bench.llm import (
+    AnthropicMessagesAgent,
+    AnthropicMessagesConfig,
     LlmRunConfig,
     OpenAIChatCompletionsAgent,
     OpenAIChatCompletionsConfig,
@@ -50,16 +52,7 @@ def llm_debug_router(
                 payload = request.get("payload", {})
                 if not isinstance(payload, Mapping):
                     payload = {}
-                agent = OpenAIChatCompletionsAgent(
-                    OpenAIChatCompletionsConfig.from_env(
-                        model=_optional_string(payload, "model"),
-                        api_key=_optional_string(payload, "api_key"),
-                        base_url=_optional_string(payload, "base_url"),
-                        timeout=_float_value(payload, "timeout", DEFAULT_LLM_DEBUG_TIMEOUT),
-                        temperature=_optional_float(payload, "temperature"),
-                        max_tokens=_optional_int(payload, "max_tokens"),
-                    )
-                )
+                agent = _debug_agent(payload)
                 config = LlmRunConfig(
                     objective=_string_value(payload, "objective", DEFAULT_OBJECTIVE),
                     max_tool_calls_per_turn=_int_value(payload, "max_tool_calls_per_turn", 20),
@@ -91,6 +84,36 @@ def llm_debug_router(
                 return
 
     return router
+
+
+def _debug_agent(
+    payload: Mapping[str, Any],
+) -> OpenAIChatCompletionsAgent | AnthropicMessagesAgent:
+    provider = _string_value(payload, "provider", "openai").lower()
+    common = {
+        "model": _optional_string(payload, "model"),
+        "api_key": _optional_string(payload, "api_key"),
+        "base_url": _optional_string(payload, "base_url"),
+        "timeout": _float_value(payload, "timeout", DEFAULT_LLM_DEBUG_TIMEOUT),
+        "temperature": _optional_float(payload, "temperature"),
+        "max_tokens": _optional_int(payload, "max_tokens"),
+    }
+    if provider == "anthropic":
+        return AnthropicMessagesAgent(
+            AnthropicMessagesConfig.from_env(
+                **common,
+                thinking=_optional_bool(payload, "thinking"),
+                effort=_optional_string(payload, "thinking_effort"),
+            )
+        )
+    if provider == "openai":
+        return OpenAIChatCompletionsAgent(
+            OpenAIChatCompletionsConfig.from_env(
+                **common,
+                reasoning_effort=_optional_string(payload, "reasoning_effort"),
+            )
+        )
+    raise ValueError(f"unsupported LLM provider: {provider}")
 
 
 def _resume_archive_dir(payload: Mapping[str, Any]) -> Path | None:
@@ -150,3 +173,18 @@ def _optional_float(payload: Mapping[str, Any], key: str) -> float | None:
     if value in (None, ""):
         return None
     return _float_value(payload, key, 0.0)
+
+
+def _optional_bool(payload: Mapping[str, Any], key: str) -> bool | None:
+    value = payload.get(key)
+    if value in (None, ""):
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on", "enabled"}:
+            return True
+        if normalized in {"0", "false", "no", "off", "disabled"}:
+            return False
+    raise ValueError(f"{key} must be a boolean")

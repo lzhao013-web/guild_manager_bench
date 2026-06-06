@@ -128,6 +128,8 @@ window.addEventListener("load", () => {
   $("llmAutoScrollButton").addEventListener("click", () => toggleLlmAutoScroll());
   $("llmScrollBottomButton")?.addEventListener("click", () => scrollLlmPanelToBottom({ force: true, smooth: true }));
   $("llmPresetSelect").addEventListener("change", (event) => applyLlmPreset(event.target.value));
+  $("llmProvider").addEventListener("change", syncLlmProviderFields);
+  syncLlmProviderFields();
   initLlmRuntimeTabs();
   initLlmAutoScrollWatchers();
   syncLlmAutoScrollButton();
@@ -1884,6 +1886,7 @@ function stopLlmDebug(update = true) {
 
 function llmPayload(options = {}) {
   const payload = {
+    provider: readOptionalValue("llmProvider") || "openai",
     model: readOptionalValue("llmModel"),
     base_url: readOptionalValue("llmBaseUrl"),
     api_key: readOptionalValue("llmApiKey"),
@@ -1893,6 +1896,14 @@ function llmPayload(options = {}) {
     temperature: readOptionalNumber("llmTemperature"),
     objective: readOptionalValue("llmObjective"),
   };
+  const thinking = readOptionalValue("llmThinking");
+  if (thinking) {
+    payload.thinking = thinking === "true";
+  }
+  const thinkingEffort = readOptionalValue("llmThinkingEffort");
+  if (thinkingEffort) {
+    payload.thinking_effort = thinkingEffort;
+  }
   if (options.resumeRunId) {
     payload.resume_run_id = options.resumeRunId;
   }
@@ -2285,16 +2296,19 @@ function clearLlmEventLog() {
 
 const LLM_PRESETS = {
   openai: {
+    provider: "openai",
     base_url: "https://api.openai.com/v1",
     model: "gpt-4o-mini",
   },
   deepseek: {
+    provider: "openai",
     base_url: "https://api.deepseek.com/v1",
     model: "deepseek-chat",
   },
   anthropic: {
-    base_url: "https://api.anthropic.com/v1",
-    model: "claude-3-5-sonnet-latest",
+    provider: "anthropic",
+    base_url: "https://api.anthropic.com",
+    model: "claude-sonnet-4-6",
   },
 };
 
@@ -2305,9 +2319,28 @@ function applyLlmPreset(value) {
   }
   const preset = LLM_PRESETS[value];
   if (!preset) return;
+  $("llmProvider").value = preset.provider;
+  syncLlmProviderFields();
   setInputIfEmpty("llmBaseUrl", preset.base_url);
   setInputIfEmpty("llmModel", preset.model);
   $("llmPresetSelect").value = "";
+}
+
+function syncLlmProviderFields() {
+  const isAnthropic = $("llmProvider")?.value === "anthropic";
+  document.querySelectorAll("[data-anthropic-control]").forEach((element) => {
+    element.hidden = !isAnthropic;
+  });
+  const modelInput = $("llmModel");
+  const baseUrlInput = $("llmBaseUrl");
+  if (modelInput) {
+    modelInput.placeholder = isAnthropic ? "ANTHROPIC_MODEL" : "OPENAI_MODEL";
+  }
+  if (baseUrlInput) {
+    baseUrlInput.placeholder = isAnthropic
+      ? "https://api.anthropic.com"
+      : "https://api.openai.com/v1";
+  }
 }
 
 function setInputIfEmpty(id, value) {
@@ -2323,11 +2356,14 @@ function setInputIfEmpty(id, value) {
 function labelOf(id) {
   const labels = {
     llmBaseUrl: "Base URL",
+    llmProvider: "Provider",
     llmModel: "模型名",
     llmApiKey: "API Key",
     llmGameSeed: "游戏 Seed",
     llmScoringSeed: "评分 Seed",
     llmTemperature: "Temperature",
+    llmThinking: "Anthropic 思考",
+    llmThinkingEffort: "Anthropic 思考强度",
   };
   return labels[id] || id;
 }
