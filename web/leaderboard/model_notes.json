@@ -16,5 +16,6 @@
   "gemma4-26b-a4b-q8-0": "本地部署",
   "minimax-m2.7": "OpenCode GO 套餐",
   "minimax-m2.7-highspeed": "官方token plan",
-  "minimax-m3": "官方token plan"
+  "minimax-m3": "官方token plan",
+  "Baseline · Search": "程序会模拟不同招募、升级、装备和战斗安排，选择预计效果最好的一组操作。"
 }

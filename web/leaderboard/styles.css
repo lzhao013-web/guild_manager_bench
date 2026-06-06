@@ -58,8 +58,8 @@
   --transition-slow: 650ms cubic-bezier(0.2, 0.8, 0.2, 1);
 
   /* ── Fonts（system stack + Inter + 显式 CJK 兜底） ── */
-  --font-mono: "JetBrains Mono", "SF Mono", "Cascadia Code", ui-monospace, "Menlo", monospace;
-  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", "Source Han Sans SC", "Noto Sans CJK SC", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", "Cascadia Code", "Noto Sans SC", "Microsoft YaHei UI", ui-monospace, "Menlo", monospace;
+  --font-sans: "Inter", "Noto Sans SC", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Hiragino Sans GB", "Source Han Sans SC", "Noto Sans CJK SC", system-ui, sans-serif;
 }
 
 /* ========== Base ========== */
@@ -69,7 +69,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--font-sans);
   font-size: 14px;
   line-height: 1.6;
   min-height: 100vh;
@@ -767,7 +767,7 @@ body::before {
 }
 
 .model-name {
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 600;
   color: var(--text);
   overflow-wrap: anywhere;
@@ -779,7 +779,7 @@ body::before {
 /* #2/#3：升一档，加粗 */
 .rank-2 .model-name,
 .rank-3 .model-name {
-  font-size: 18px;
+  font-size: 19px;
   font-weight: 700;
   color: var(--text);
   letter-spacing: -0.015em;
@@ -787,7 +787,7 @@ body::before {
 
 /* #1 冠军：模型名就是标题 — 全卡片最大、最显眼的字 */
 .rank-1 .model-name {
-  font-size: 22px;
+  font-size: 23px;
   font-weight: 700;
   color: var(--text);
   letter-spacing: -0.025em;
@@ -798,14 +798,15 @@ body::before {
   display: inline;
   margin-left: 8px;
   padding: 2px 8px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
-  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--font-sans);
   color: var(--text-secondary);
   background: var(--surface-raised);
   border: 1px solid var(--line-strong);
   border-radius: 100px;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
   vertical-align: middle;
   letter-spacing: 0;
 }
@@ -815,7 +816,7 @@ body::before {
   flex-wrap: wrap;
   gap: 4px 6px;
   margin-top: 5px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 
@@ -830,7 +831,7 @@ body::before {
   font-weight: 500;
   color: var(--text-secondary);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0;
 }
 
@@ -847,9 +848,9 @@ body::before {
   display: inline-flex;
   align-items: center;
   padding: 1px 8px 2px;
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 600;
-  font-family: "Inter", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-family: var(--font-sans);
   border-radius: 100px;
   border: 1px solid;
   letter-spacing: 0.01em;
@@ -902,7 +903,7 @@ body::before {
 }
 
 .stat-label {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   text-transform: none;
   letter-spacing: 0;
@@ -922,7 +923,7 @@ body::before {
 /* 默认 (#4+) 排名分：降阶、变小变淡 */
 .stat-value.rank-val {
   color: var(--text-secondary);
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 600;
   letter-spacing: -0.02em;
 }
@@ -995,7 +996,7 @@ body::before {
 }
 
 .metric-group-title {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -1028,7 +1029,7 @@ body::before {
 }
 
 .metric-cell-label {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--muted);
   text-transform: uppercase;
@@ -1039,7 +1040,7 @@ body::before {
 
 .metric-cell-value {
   font-family: "JetBrains Mono", "SF Mono", "Cascadia Code", ui-monospace, monospace;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--text);
   letter-spacing: -0.02em;
@@ -1077,7 +1078,7 @@ body::before {
 
 .detail-title {
   margin-bottom: 12px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--text-secondary);
   text-transform: uppercase;
@@ -1099,7 +1100,7 @@ body::before {
   background: var(--bg-subtle);
   border: 1px solid var(--line);
   border-radius: 3px;
-  font-size: 9.5px;
+  font-size: 10.5px;
   font-weight: 600;
   font-family: var(--font-mono);
   text-transform: none;
@@ -1146,7 +1147,7 @@ body::before {
 }
 
 .aggregate-group-name {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.10em;
@@ -1165,7 +1166,7 @@ body::before {
   height: 14px;
   padding: 0 5px;
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: 10.5px;
   font-weight: 600;
   color: var(--muted);
   background: var(--surface-raised);
@@ -1191,7 +1192,7 @@ body::before {
 .aggregate-row .aggregate-label {
   flex-shrink: 1;
   min-width: 0;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-secondary);
   font-weight: 500;
   overflow: hidden;
@@ -1202,7 +1203,7 @@ body::before {
 .aggregate-row .aggregate-value {
   flex-shrink: 0;
   font-family: "JetBrains Mono", "SF Mono", "Cascadia Code", ui-monospace, monospace;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text);
   white-space: nowrap;
@@ -1266,7 +1267,7 @@ body::before {
   border: 1px solid var(--accent-line);
   border-radius: 3px;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--accent);
   letter-spacing: 0.02em;
@@ -1274,7 +1275,7 @@ body::before {
 
 .run-card-header .run-time {
   font-family: "JetBrains Mono", "SF Mono", "Cascadia Code", ui-monospace, monospace;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text);
 }
@@ -1284,7 +1285,7 @@ body::before {
   min-width: 0;
   text-align: right;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 11.5px;
   color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1311,7 +1312,7 @@ body::before {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 9.5px;
+  font-size: 10.5px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.10em;
@@ -1349,7 +1350,7 @@ body::before {
 }
 
 .run-stat-label {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--muted);
   letter-spacing: 0.04em;
@@ -1360,7 +1361,7 @@ body::before {
 
 .run-stat-value {
   font-family: "JetBrains Mono", "SF Mono", "Cascadia Code", ui-monospace, monospace;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text);
   word-break: break-word;
@@ -1387,7 +1388,7 @@ body::before {
 
 .run-section-title {
   margin-bottom: 8px;
-  font-size: 9.5px;
+  font-size: 10.5px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.10em;
@@ -1426,11 +1427,63 @@ body::before {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 3px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
   color: var(--text-secondary);
   font-family: var(--font-mono);
   letter-spacing: 0;
+}
+
+/* ── Purchased upgrades — compact strategic-effect cards ── */
+.upgrade-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 6px;
+}
+
+.upgrade-item {
+  min-width: 0;
+  padding: 8px 10px;
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.08), transparent 85%), var(--surface);
+  border: 1px solid rgba(34, 197, 94, 0.20);
+  border-radius: 3px;
+}
+
+.upgrade-item-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  margin-bottom: 4px;
+}
+
+.upgrade-item-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.upgrade-item-cost {
+  flex-shrink: 0;
+  color: var(--medal-gold);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.upgrade-item-effect {
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 /* ── Tool chips（工具调用） — 冷色 / 工具属性 ──
@@ -1450,7 +1503,7 @@ body::before {
   border: 1px solid var(--line);
   border-radius: 3px;
   font-family: var(--font-sans);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--text-secondary);
   line-height: 1.4;
@@ -1458,7 +1511,7 @@ body::before {
 .tool-chip-name { color: var(--text); font-weight: 500; }
 .tool-chip-count {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 700;
   font-feature-settings: "tnum";
   color: var(--text-secondary);
@@ -1468,7 +1521,7 @@ body::before {
 }
 .tool-chip-fail {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--danger);
 }
@@ -1489,7 +1542,7 @@ body::before {
   border: 1px solid rgba(245, 158, 11, 0.22);
   border-radius: 3px;
   font-family: var(--font-sans);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   line-height: 1.4;
 }
@@ -1504,7 +1557,7 @@ body::before {
 }
 .contrib-chip-score {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 700;
   font-feature-settings: "tnum";
   color: var(--medal-gold);
@@ -1514,7 +1567,7 @@ body::before {
 }
 .contrib-chip-share {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   font-feature-settings: "tnum";
   color: var(--muted);
@@ -1527,7 +1580,7 @@ body::before {
   background: transparent;
   color: var(--medal-gold);
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 700;
   font-feature-settings: "tnum";
   cursor: help;

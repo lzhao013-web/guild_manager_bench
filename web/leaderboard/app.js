@@ -90,6 +90,11 @@ const BADGE_CATEGORIES = [
   { key: 'most_exp',    dir: 'max', label: '最多经验',   tone: 'gold',   pick: (m) => m.game_quality?.exp_earned?.mean },
 ];
 
+function isBaselineModel(model) {
+  return model?.is_baseline === true
+    || (typeof model?.model === 'string' && model.model.startsWith('Baseline ·'));
+}
+
 // 聚合一个模型所有 run 中击败过的最强怪物
 function strongestKillPower(m) {
   if (!Array.isArray(m.run_details)) return null;
@@ -105,11 +110,12 @@ function strongestKillPower(m) {
 function computeModelBadges(models) {
   const result = new Map();
   for (const m of models) result.set(m.model, []);
+  const eligibleModels = models.filter((m) => !isBaselineModel(m));
 
   // 标准维度
   for (const cat of BADGE_CATEGORIES) {
     const candidates = [];
-    for (const m of models) {
+    for (const m of eligibleModels) {
       const v = cat.pick(m);
       if (v != null && Number.isFinite(v) && v > 0) {
         candidates.push({ model: m.model, val: v });
@@ -129,7 +135,7 @@ function computeModelBadges(models) {
 
   // 最强击败（聚合跨 run）
   const killCandidates = [];
-  for (const m of models) {
+  for (const m of eligibleModels) {
     const p = strongestKillPower(m);
     if (p != null) killCandidates.push({ model: m.model, val: p });
   }
@@ -585,19 +591,21 @@ function renderStatsBanner(data) {
   const seedLabel = seedList.length === 1 ? `seed ${seedList[0]}` : '—';
   const scoreSeedLabel = scoreSeedList.length === 1 ? `score ${scoreSeedList[0]}` : '—';
 
+  // 把指标分两档：primary (最高分 / 平均分) 和 secondary
+  // primary 显示为大字号,secondary 显示为小字号 — 拉开权重
   const items = [
-    { label: '参赛模型', value: models.length, unit: '个' },
-    { label: '累计运行', value: totalRuns, unit: '次' },
-    { label: '最高分', value: fmtRankScore(topScore) || '—', unit: 'Rank Score' },
-    { label: '平均分', value: fmtRankScore(Math.round(avgScore)) || '—', unit: 'Rank Score' },
-    { label: '游戏种子', value: seedLabel, unit: '复现' },
-    { label: '评分种子', value: scoreSeedLabel, unit: '复现' },
+    { label: '最高分', value: fmtRankScore(topScore) || '—', unit: 'Rank Score', tier: 'primary' },
+    { label: '平均分', value: fmtRankScore(Math.round(avgScore)) || '—', unit: 'Rank Score', tier: 'primary' },
+    { label: '参赛模型', value: models.length, unit: '个', tier: 'secondary' },
+    { label: '累计运行', value: totalRuns, unit: '次', tier: 'secondary' },
+    { label: '游戏种子', value: seedLabel, unit: '复现', tier: 'secondary' },
+    { label: '评分种子', value: scoreSeedLabel, unit: '复现', tier: 'secondary' },
   ];
 
   el.innerHTML = items
     .map(
       (it) => `
-      <div class="stats-banner-cell">
+      <div class="stats-banner-cell tier-${it.tier}">
         <dt class="stats-banner-label">${esc(it.label)}</dt>
         <dd class="stats-banner-value">${esc(String(it.value))}</dd>
         <span class="stats-banner-unit">${esc(it.unit || '')}</span>
@@ -839,6 +847,8 @@ function renderRunCard(run, num, total) {
   if (ga.total_gold_earned != null) resultStats.push(runStat('金币', fmtInt(ga.total_gold_earned)));
   if (ga.total_experience_earned != null) resultStats.push(runStat('EXP', fmtInt(ga.total_experience_earned)));
   if (defeatedText) resultStats.push(runStat('击败 Boss', defeatedText));
+  const upgrades = Array.isArray(run.upgrades) ? run.upgrades : [];
+  if (upgrades.length) resultStats.push(runStat('升级', `${upgrades.length} 项`));
 
   // Footer tags
   const tags = [];
@@ -850,6 +860,7 @@ function renderRunCard(run, num, total) {
 
   const toolBreakdown = renderToolBreakdown(tc);
   const contributors = renderRankContributors(run.rank_score_per_adventurer);
+  const upgradeList = renderRunUpgrades(upgrades);
 
   const numLabel = total > 1 ? `Run ${num}/${total}` : 'Run';
 
@@ -876,6 +887,11 @@ function renderRunCard(run, num, total) {
           <div class="run-stats">${resultStats.join('')}</div>
         </div>` : ''}
       </div>
+      ${upgradeList ? `
+      <div class="run-card-section">
+        <div class="run-section-title">已购买升级</div>
+        ${upgradeList}
+      </div>` : ''}
       ${toolBreakdown ? `
       <div class="run-card-section">
         <div class="run-section-title">工具调用</div>
@@ -904,6 +920,41 @@ function runStat(label, value, primary = false) {
       <div class="run-stat-value" title="${esc(display)}">${esc(display)}</div>
     </div>
   `;
+}
+
+function renderRunUpgrades(upgrades) {
+  if (!Array.isArray(upgrades) || !upgrades.length) return '';
+  return `
+    <div class="upgrade-list">
+      ${upgrades.map((upgrade) => {
+        const name = upgrade.name || upgrade.upgrade_id || '未知升级';
+        const description = upgrade.description || '';
+        const cost = upgrade.gold_cost != null ? `${fmtInt(upgrade.gold_cost)} 金币` : '';
+        return `
+          <div class="upgrade-item" title="${esc(description)}">
+            <div class="upgrade-item-head">
+              <span class="upgrade-item-name">${esc(name)}</span>
+              ${cost ? `<span class="upgrade-item-cost">${esc(cost)}</span>` : ''}
+            </div>
+            <div class="upgrade-item-effect">${esc(upgradeEffectText(upgrade))}</div>
+          </div>`;
+      }).join('')}
+    </div>`;
+}
+
+function upgradeEffectText(upgrade) {
+  const parts = [];
+  const stats = statModifierText(upgrade.stats);
+  if (stats !== '无属性加成') parts.push(stats);
+  if (Number(upgrade.party_size_bonus) > 0) {
+    parts.push(`队伍上限 +${upgrade.party_size_bonus}`);
+  }
+  const skills = Array.isArray(upgrade.skills) ? upgrade.skills : [];
+  const skillNames = skills
+    .map((skill) => skill?.name || skill?.skill_id)
+    .filter(Boolean);
+  if (skillNames.length) parts.push(`技能：${skillNames.join('、')}`);
+  return parts.join(' · ') || upgrade.description || '已解锁';
 }
 
 function toolBreakdownItems(toolCalls) {
