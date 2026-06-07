@@ -150,6 +150,11 @@ tests/                           自动化测试
 
 `game/` 不依赖 API、页面或模型服务。修改核心规则时，应同步更新测试。
 
+## 鸣谢
+
+- [Backpacker Guild](https://store.steampowered.com/app/2824000/Backpacker_Guild/) 提供了本 bench 游戏主体的初始灵感——这不是一个成熟、好玩的游戏，但在恰当的时间出现在了我面前。
+- [Orion-zhen](https://github.com/Orion-zhen) 与 [stacklands-bench](https://github.com/Orion-zhen/stacklands-bench)🔒——在与 Orion-zhen 合作开发 stacklands-bench 的过程中积攒了很多想法和教训，这些想法很大程度上决定了本 bench 的设计思路。
+
 ## License
 
-当前仓库尚未添加许可证。
+[AGPL-3.0](LICENSE)
