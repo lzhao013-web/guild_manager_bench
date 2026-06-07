@@ -52,7 +52,7 @@ class LlmRunArchiveWriter:
         self.directory = (
             Path(directory)
             if directory is not None
-            else Path(base_dir) / _run_directory_name(self.created_at, session_id)
+            else Path(base_dir) / _run_directory_name(self.created_at, agent)
         )
         self.directory.mkdir(parents=True, exist_ok=append_existing)
         self.trace_jsonl_path = self.directory / "trace.jsonl"
@@ -504,8 +504,18 @@ def _timestamp() -> str:
     return datetime.now().strftime("%Y%m%d-%H%M%S-%f")
 
 
-def _run_directory_name(created_at: str, session_id: str) -> str:
-    return f"{created_at}_{_safe_path_part(session_id)}"
+def _run_directory_name(created_at: str, agent: Mapping[str, Any]) -> str:
+    model_name = _extract_model_name(agent)
+    return f"{created_at}_{_safe_path_part(model_name)}"
+
+
+def _extract_model_name(agent: Mapping[str, Any]) -> str:
+    config = agent.get("config")
+    if isinstance(config, Mapping):
+        model = config.get("model")
+        if isinstance(model, str) and model.strip():
+            return model.strip()
+    return "unknown"
 
 
 def _safe_path_part(value: str) -> str:
