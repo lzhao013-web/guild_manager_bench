@@ -1589,11 +1589,16 @@ def _aggregate_game_quality(runs: list[dict]) -> dict | None:
 
 
 def _sort_key(entry: dict) -> float:
-    """Sort key: rank_score.best descending, then score.best descending."""
+    """Sort key: rank_score.mean descending, then score.mean descending."""
     rank = entry.get("rank_score")
+    if rank and rank.get("mean") is not None:
+        return rank["mean"]
+    score = entry.get("score")
+    if score and score.get("mean") is not None:
+        return score["mean"]
+    # Fallback to best when mean is unavailable (single-run models)
     if rank and rank.get("best") is not None:
         return rank["best"]
-    score = entry.get("score")
     if score and score.get("best") is not None:
         return score["best"]
     return -1.0
