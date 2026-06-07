@@ -2,7 +2,7 @@
   "glm-5.1": "OpenCode GO 套餐",
   "mimo-v2.5-pro": "OpenCode GO 套餐",
   "gpt-5.5-medium": "推理强度medium，第三方反代",
-  "✋ 手动操作": "由开发者本人操作，有部分先验知识，但是没有进行过多思考",
+  "✋ 手动操作": "由开发者本人操作，拥有大量先验知识且不受预览次数限制。",
   "kimi-k2.6": "OpenCode GO 套餐",
   "deepseek-v4-pro": "官方api",
   "deepseek-v4-pro-max": "官方api",
@@ -16,6 +16,16 @@
   "gemma4-26b-a4b-q8-0": "本地部署",
   "minimax-m2.7": "OpenCode GO 套餐",
   "minimax-m2.7-highspeed": "官方token plan",
-  "minimax-m3": "官方token plan",
-  "Baseline · Search": "程序会模拟不同招募、升级、装备和战斗安排，选择预计效果最好的一组操作。"
+  "MiniMax-M3": "官方token plan",
+  "Baseline · Search": "通过固定逻辑模拟不同招募、升级、装备和战斗安排，选择预计效果最好的一组操作。",
+  "doubao-seed-2.0-pro": "火山引擎",
+  "doubao-seed-2.0-lite": "火山引擎",
+  "claude-opus-4-8-medium": "第三方反代",
+  "claude-opus-4-8-high": "第三方反代",
+  "gemini-3.1-pro-preview": "第三方反代",
+  "gemini-3.5-flash": "第三方反代",
+  "gemma-4-26b-a4b-it-q8-0": "本地部署",
+  "nemotron-3-ultra-free": "openCode GO 套餐",
+  "gemma-4-26b-a4b-it-qat-ud-q4-k-xl": "本地部署",
+  "gemma-4-26b-a4b-it-qat-google-q4-0": "本地部署"
 }

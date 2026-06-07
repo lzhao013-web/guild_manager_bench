@@ -2059,6 +2059,26 @@ body::before {
 
 .footer-sep { opacity: 0.4; }
 
+.footer-credits {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.footer-credits a {
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+
+.footer-credits a:hover {
+  text-decoration: underline;
+}
+
 /* ========== Responsive ========== */
 @media (max-width: 768px) {
   .header-inner {

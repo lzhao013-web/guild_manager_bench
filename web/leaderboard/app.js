@@ -235,6 +235,8 @@ function toolLabel(name) {
     allocate_experience: '分配经验',
     recruit_adventurer: '招募冒险者',
     dismiss_adventurer: '遣散冒险者',
+    write_memo: '写备忘录',
+    preview_team_power: '预览战力',
     equip_item: '装备物品',
     unequip_item: '卸下装备',
     end_turn: '结束回合',
@@ -528,10 +530,10 @@ function renderLeaderboard(data) {
 
   // Build cards with staggered animation delay
   const topScore = data.models
-    .map((m) => (m.rank_score && m.rank_score.best) || 0)
+    .map((m) => (m.rank_score && m.rank_score.mean) || 0)
     .reduce((a, b) => Math.max(a, b), 0);
   const avgScore = data.models
-    .map((m) => (m.rank_score && m.rank_score.best) || 0)
+    .map((m) => (m.rank_score && m.rank_score.mean) || 0)
     .filter((v) => v > 0);
   const avgVal = avgScore.length
     ? avgScore.reduce((a, b) => a + b, 0) / avgScore.length
@@ -624,7 +626,7 @@ function renderCard(m, ctx = {}) {
 
   // Primary stat: rank_score
   const rs = m.rank_score;
-  const rankScoreVal = rs ? esc(fmtRankScore(rs.best)) : '—';
+  const rankScoreVal = rs ? esc(fmtRankScore(rs.mean)) : '—';
 
   // Efficiency stats
   const eff = m.efficiency || {};
@@ -632,7 +634,23 @@ function renderCard(m, ctx = {}) {
 
   // Game quality stats
   const gq = m.game_quality || {};
-  const hasGq = gq && (gq.gold_earned || gq.exp_earned || gq.battle_win_rate != null);
+  const hasGq = gq && (gq.gold_earned || gq.exp_earned || gq.battle_win_rate != null || gq.dismissals != null);
+
+  // Aggregate dismiss count across all runs
+  let dismissTotal = 0;
+  for (const run of runDetails) {
+    const tc = run.tool_calls || {};
+    const bnd = tc.by_name_detail || {};
+    if (bnd.dismiss_adventurer) {
+      dismissTotal += bnd.dismiss_adventurer.total || 0;
+    } else {
+      const bn = tc.by_name || {};
+      dismissTotal += bn.dismiss_adventurer || 0;
+    }
+  }
+  if (dismissTotal > 0) {
+    gq.dismissals = dismissTotal;
+  }
 
   // Detail rows（结构化数据，传给 renderAggregateList 分组渲染）
   const details = [];
@@ -742,6 +760,9 @@ function renderGameQualitySection(gq) {
   if (gq.exp_earned != null) {
     const v = typeof gq.exp_earned === 'object' ? gq.exp_earned.mean : gq.exp_earned;
     cells.push(metricCell('EXP', fmtInt(v)));
+  }
+  if (gq.dismissals != null) {
+    cells.push(metricCell('遣散', fmtInt(gq.dismissals)));
   }
   if (!cells.length) return '';
   return `
