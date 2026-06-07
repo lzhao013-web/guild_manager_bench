@@ -628,6 +628,27 @@ h3 { font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bot
   font-family: "JetBrains Mono", "SF Mono", "Cascadia Code", ui-monospace, monospace;
 }
 
+.adventurer-record {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 8px;
+  margin-top: 8px;
+  padding: 7px 8px;
+  border: 1px solid rgba(245, 158, 11, 0.24);
+  border-radius: var(--radius-xs);
+  background: var(--warning-dim);
+  font-size: 11px;
+}
+
+.adventurer-record span { color: var(--muted); }
+.adventurer-record strong { color: var(--text); text-align: right; }
+.adventurer-record em {
+  grid-column: 1 / -1;
+  color: var(--warning);
+  font-style: normal;
+  font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+}
+
 /* Material chip: 紧凑的 icon + 数量徽章 */
 .mat-chip {
   display: inline-flex;

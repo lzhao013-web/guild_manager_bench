@@ -39,6 +39,10 @@ def llm_archive_router(base_dir: str | Path = "runs/llm") -> APIRouter:
             data = data if isinstance(data, dict) else {}
             score = replay.get("score")
             score = score if isinstance(score, dict) else {}
+            stats = replay.get("stats")
+            stats = stats if isinstance(stats, dict) else {}
+            game_actions = stats.get("game_actions")
+            game_actions = game_actions if isinstance(game_actions, dict) else {}
             agent = replay.get("agent")
             agent_config = (
                 agent.get("config")
@@ -59,6 +63,7 @@ def llm_archive_router(base_dir: str | Path = "runs/llm") -> APIRouter:
                     "data_hash": data.get("data_hash"),
                     "score": score.get("score"),
                     "rank_score": score.get("rank_score"),
+                    "adventurer_stats": game_actions.get("adventurer_stats") or [],
                     "has_observations": _replay_has_observations(replay),
                 }
             )

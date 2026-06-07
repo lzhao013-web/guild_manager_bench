@@ -838,6 +838,8 @@ def test_run_llm_game_archives_interrupted_run_incrementally(tmp_path) -> None:
 
     assert replay["status"] == "interrupted"
     assert replay["failure_reason"] == "model unavailable"
+    assert replay["stats"]["game_actions"]["adventurer_stats"] == []
+    assert replay["stats"]["game_actions"]["adventurer_stats_curve"] == []
     # Interrupted runs may have empty steps if the model request failed immediately
     if replay["turns"]:
         assert replay["turns"][0]["steps"][0]["type"] == "system_prompt"
@@ -1205,6 +1207,99 @@ def test_compute_run_stats_battle_results() -> None:
     assert ga["strongest_defeated_enemy"]["name"] == "哥布林队长"
 
 
+def test_compute_run_stats_tracks_cumulative_adventurer_battle_stats() -> None:
+    turns = []
+    battle_sets = [
+        [
+            {
+                "adventurer_id": "adv-1",
+                "adventurer_name": "先锋",
+                "won": True,
+                "reward": {"gold": 20, "experience": 30},
+            },
+            {
+                "adventurer_id": "adv-2",
+                "adventurer_name": "秘术师",
+                "won": False,
+                "reward": {"gold": 0, "experience": 0},
+            },
+        ],
+        [
+            {
+                "adventurer_id": "adv-1",
+                "adventurer_name": "先锋",
+                "won": False,
+                "reward": {"gold": 0, "experience": 0},
+            },
+            {
+                "adventurer_id": "adv-2",
+                "adventurer_name": "秘术师",
+                "won": True,
+                "reward": {"gold": 15, "experience": 25},
+            },
+        ],
+    ]
+    for turn_number, battles in enumerate(battle_sets, start=1):
+        turn = TurnTrace(
+            turn=turn_number,
+            prompt="test",
+            observation_before={
+                "adventurers": [
+                    {"adventurer_id": "adv-1", "name": "先锋"},
+                    {"adventurer_id": "adv-2", "name": "秘术师"},
+                ],
+            },
+        )
+        turn.tool_calls.append(
+            ToolCallRecord(
+                name="end_turn",
+                arguments={"hunts": []},
+                result={"ok": True, "turn_result": {"battles": battles}},
+            )
+        )
+        turn.complete()
+        turns.append(turn)
+
+    run = LlmGameRun(
+        status="completed",
+        session_id="test-adventurer-stats",
+        final_observation={"finished": True, "adventurers": []},
+        turns=turns,
+    )
+
+    stats = _compute_run_stats(run)["game_actions"]
+
+    assert stats["adventurer_stats"] == [
+        {
+            "adventurer_id": "adv-1",
+            "adventurer_name": "先锋",
+            "cumulative_battles_total": 2,
+            "cumulative_battles_won": 1,
+            "cumulative_battles_lost": 1,
+            "cumulative_gold_earned": 20,
+            "cumulative_experience_earned": 30,
+        },
+        {
+            "adventurer_id": "adv-2",
+            "adventurer_name": "秘术师",
+            "cumulative_battles_total": 2,
+            "cumulative_battles_won": 1,
+            "cumulative_battles_lost": 1,
+            "cumulative_gold_earned": 15,
+            "cumulative_experience_earned": 25,
+        },
+    ]
+    assert stats["adventurer_stats_curve"][0]["adventurers"][0][
+        "cumulative_battles_won"
+    ] == 1
+    assert stats["adventurer_stats_curve"][0]["adventurers"][1][
+        "cumulative_battles_lost"
+    ] == 1
+    assert stats["adventurer_stats_curve"][1]["adventurers"] == stats[
+        "adventurer_stats"
+    ]
+
+
 def test_compute_run_stats_mixed_game_actions() -> None:
     turn = TurnTrace(turn=1, prompt="test")
     for name, ok in [
@@ -1340,6 +1435,26 @@ def test_compute_run_stats_uses_legacy_replay_text_rewards() -> None:
     assert stats["game_actions"]["battles_won"] == 2
     assert stats["game_actions"]["total_gold_earned"] == 36
     assert stats["game_actions"]["total_experience_earned"] == 62
+    assert stats["game_actions"]["adventurer_stats"] == [
+        {
+            "adventurer_id": "先锋",
+            "adventurer_name": "先锋",
+            "cumulative_battles_total": 1,
+            "cumulative_battles_won": 1,
+            "cumulative_battles_lost": 0,
+            "cumulative_gold_earned": 20,
+            "cumulative_experience_earned": 34,
+        },
+        {
+            "adventurer_id": "mystic",
+            "adventurer_name": "mystic",
+            "cumulative_battles_total": 1,
+            "cumulative_battles_won": 1,
+            "cumulative_battles_lost": 0,
+            "cumulative_gold_earned": 16,
+            "cumulative_experience_earned": 28,
+        },
+    ]
 
 
 def _data_dir() -> Path:

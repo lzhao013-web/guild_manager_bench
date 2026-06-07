@@ -74,6 +74,33 @@ def test_leaderboard_uses_final_observation_rank_fallback(tmp_path: Path) -> Non
                     "cumulative_experience_earned": 34,
                 },
             ],
+            "adventurer_stats": [
+                {
+                    "adventurer_id": "adv-1",
+                    "adventurer_name": "先锋",
+                    "cumulative_battles_total": 1,
+                    "cumulative_battles_won": 1,
+                    "cumulative_battles_lost": 0,
+                    "cumulative_gold_earned": 12,
+                    "cumulative_experience_earned": 34,
+                }
+            ],
+            "adventurer_stats_curve": [
+                {
+                    "turn": 1,
+                    "adventurers": [
+                        {
+                            "adventurer_id": "adv-1",
+                            "adventurer_name": "先锋",
+                            "cumulative_battles_total": 1,
+                            "cumulative_battles_won": 1,
+                            "cumulative_battles_lost": 0,
+                            "cumulative_gold_earned": 12,
+                            "cumulative_experience_earned": 34,
+                        }
+                    ],
+                }
+            ],
             "strongest_defeated_enemy": {
                 "turn": 1,
                 "monster_id": "m1",
@@ -108,6 +135,9 @@ def test_leaderboard_uses_final_observation_rank_fallback(tmp_path: Path) -> Non
     assert model["run_details"][0]["preset"] == "default"
     assert model["run_details"][0]["tool_calls"]["by_name_detail"]["get_party"]["failed"] == 1
     assert model["run_details"][0]["game_actions"]["economy_curve"][0]["cumulative_gold_earned"] == 12
+    assert model["run_details"][0]["game_actions"]["adventurer_stats"][0][
+        "cumulative_experience_earned"
+    ] == 34
     assert model["run_details"][0]["game_actions"]["strongest_defeated_enemy"]["name"] == "测试怪物"
     upgrade = model["run_details"][0]["upgrades"][0]
     assert upgrade["upgrade_id"] == unlocked_upgrade["upgrade_id"]

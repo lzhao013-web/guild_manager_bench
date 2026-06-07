@@ -90,9 +90,10 @@ const BADGE_CATEGORIES = [
   { key: 'most_exp',    dir: 'max', label: '最多经验',   tone: 'gold',   pick: (m) => m.game_quality?.exp_earned?.mean },
 ];
 
-function isBaselineModel(model) {
-  return model?.is_baseline === true
-    || (typeof model?.model === 'string' && model.model.startsWith('Baseline ·'));
+function isExcludedFromBadges(model) {
+  if (model?.is_baseline === true) return true;
+  const name = typeof model?.model === 'string' ? model.model : '';
+  return name.startsWith('Baseline ·') || name === '✋ 手动操作';
 }
 
 // 聚合一个模型所有 run 中击败过的最强怪物
@@ -110,7 +111,7 @@ function strongestKillPower(m) {
 function computeModelBadges(models) {
   const result = new Map();
   for (const m of models) result.set(m.model, []);
-  const eligibleModels = models.filter((m) => !isBaselineModel(m));
+  const eligibleModels = models.filter((m) => !isExcludedFromBadges(m));
 
   // 标准维度
   for (const cat of BADGE_CATEGORIES) {
@@ -860,6 +861,7 @@ function renderRunCard(run, num, total) {
 
   const toolBreakdown = renderToolBreakdown(tc);
   const contributors = renderRankContributors(run.rank_score_per_adventurer);
+  const adventurerResults = renderAdventurerResults(ga.adventurer_stats);
   const upgradeList = renderRunUpgrades(upgrades);
 
   const numLabel = total > 1 ? `Run ${num}/${total}` : 'Run';
@@ -901,6 +903,11 @@ function renderRunCard(run, num, total) {
       <div class="run-card-section">
         <div class="run-section-title">Rank 贡献者</div>
         ${contributors}
+      </div>` : ''}
+      ${adventurerResults ? `
+      <div class="run-card-section">
+        <div class="run-section-title">冒险者累计战绩</div>
+        ${adventurerResults}
       </div>` : ''}
       ${tags.length ? `
       <div class="run-card-footer">
@@ -1037,6 +1044,24 @@ function renderRankContributors(values) {
             ${share}
           </span>`;
       }).join('')}
+    </div>`;
+}
+
+function renderAdventurerResults(values) {
+  if (!Array.isArray(values) || !values.length) return '';
+  const items = values
+    .filter((item) => item && typeof item === 'object')
+    .sort((a, b) => Number(b.cumulative_battles_total || 0) - Number(a.cumulative_battles_total || 0));
+  if (!items.length) return '';
+  return `
+    <div class="adventurer-result-grid">
+      ${items.map((item) => `
+        <div class="adventurer-result">
+          <strong>${esc(item.adventurer_name || item.adventurer_id || '?')}</strong>
+          <span>${esc(fmtInt(item.cumulative_battles_won || 0))} 胜 / ${esc(fmtInt(item.cumulative_battles_lost || 0))} 负</span>
+          <em>金币 ${esc(fmtInt(item.cumulative_gold_earned || 0))} · EXP ${esc(fmtInt(item.cumulative_experience_earned || 0))}</em>
+        </div>
+      `).join('')}
     </div>`;
 }
 

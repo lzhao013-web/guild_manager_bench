@@ -46,6 +46,20 @@ def test_rescore_replay_fills_rank_score_and_writes_file(tmp_path: Path) -> None
 def test_list_runs_infers_preset_from_archived_data_dir(tmp_path: Path) -> None:
     replay = _legacy_replay()
     replay["data"] = {"data_dir": str(Path("data") / "presets" / "full")}
+    replay["stats"] = {
+        "game_actions": {
+            "adventurer_stats": [
+                {
+                    "adventurer_id": "adv-1",
+                    "adventurer_name": "先锋",
+                    "cumulative_battles_won": 2,
+                    "cumulative_battles_lost": 1,
+                    "cumulative_gold_earned": 30,
+                    "cumulative_experience_earned": 40,
+                }
+            ]
+        }
+    }
     _write_replay(tmp_path, "run-c", replay)
 
     response = _call_route(
@@ -55,6 +69,7 @@ def test_list_runs_infers_preset_from_archived_data_dir(tmp_path: Path) -> None:
     )
 
     assert response["runs"][0]["preset"] == "full"
+    assert response["runs"][0]["adventurer_stats"][0]["adventurer_name"] == "先锋"
 
 
 def _call_route(

@@ -1015,6 +1015,13 @@ function adventurerCard(a, refs) {
   const hpc = hpPct>50?'hp':hpPct>25?'hp warning':'hp danger';
   const skills = a.skills||[]; const slots = a.equipment_slots||[];
   const rankContribution = rankContributionForAdventurer(a.adventurer_id);
+  const battleStats = currentAdventurerStats(a.adventurer_id);
+  const battleStatsHtml = battleStats ? `
+    <div class="adventurer-record">
+      <span>截至 T${fmt(battleStats.turn)}</span>
+      <strong>${fmt(battleStats.cumulative_battles_won)} 胜 / ${fmt(battleStats.cumulative_battles_lost)} 负</strong>
+      <em>💰 ${fmt(battleStats.cumulative_gold_earned)} · ⭐ ${fmt(battleStats.cumulative_experience_earned)}</em>
+    </div>` : '';
   const rankContributionHtml = rankContribution ? `
     <div class="rank-contrib">
       <span>Rank 贡献</span>
@@ -1033,6 +1040,7 @@ function adventurerCard(a, refs) {
     <div class="card-stats">${statCell('攻击',s.attack)}${statCell('防御',s.defense)}${statCell('速度',s.speed)}${statCell('恢复',s.recovery)}${statCell('回魔',s.mp_recovery)}</div>
     ${skills.length?`<div class="skill-chips">${skills.map(sk=>`<span class="skill-chip ${sk.kind==='active'?'active':''}" title="${esc(skillTip(sk))}">${esc(sk.name||sk.skill_id)}</span>`).join('')}</div>`:''}
     ${slots.length?`<div class="equipment-slots">${slots.map(sl=>equipSlot(sl,refs)).join('')}</div>`:''}
+    ${battleStatsHtml}
     ${rankContributionHtml}
     <div class="card-subtitle" style="margin-top:6px;">经验: ${fmt(a.experience)}${a.next_level?' → Lv.'+(a.next_level.preview_level||'?'):''}</div>
   </div>`;
@@ -1454,6 +1462,25 @@ function rankContributionForAdventurer(adventurerId) {
   return items.find(item => String(item.adventurer_id) === String(adventurerId)) || null;
 }
 
+function currentAdventurerStats(adventurerId) {
+  const stats = computeReplayStats(S.replay);
+  const curve = stats?.game_actions?.adventurer_stats_curve;
+  if (!Array.isArray(curve)) return null;
+  const turn = currentTurn();
+  if (!turn) return null;
+  let effectiveTurn = Number(turn.turn) || S.currentTurnIdx + 1;
+  const steps = Array.isArray(turn.steps) ? turn.steps : [];
+  const endTurnIndex = steps.findIndex(step => step?.type === 'tool_result' && step?.name === 'end_turn');
+  if (S.currentStepIdx < 0 || (endTurnIndex >= 0 && S.currentStepIdx < endTurnIndex)) {
+    effectiveTurn -= 1;
+  }
+  const point = [...curve].reverse().find(item => Number(item?.turn) <= effectiveTurn);
+  const item = point?.adventurers?.find(
+    value => String(value?.adventurer_id) === String(adventurerId),
+  );
+  return item ? { ...item, turn: point.turn } : null;
+}
+
 // ============================================================================
 // Replay Stats (client-side computation from turns/steps)
 // ============================================================================
@@ -1485,6 +1512,119 @@ function structuredEndTurnStats(step) {
     if (Number.isFinite(exp)) stats.expEarned += exp;
   }
   return stats;
+}
+
+function structuredEndTurnAdventurerStats(step, observation) {
+  const battles = step?.result?.turn_result?.battles;
+  if (!Array.isArray(battles)) return null;
+  const stats = {};
+  for (const battle of battles) {
+    if (!battle || typeof battle !== 'object') continue;
+    const identity = adventurerIdentity(battle, observation);
+    if (!identity) continue;
+    const item = stats[identity.id] || emptyAdventurerStats(identity.id, identity.name);
+    item.battles_total++;
+    const won = battleWon(battle);
+    if (won === true) item.battles_won++;
+    else if (won === false) item.battles_lost++;
+    const reward = battle.reward && typeof battle.reward === 'object' ? battle.reward : {};
+    const gold = Number(reward.gold);
+    const exp = Number(reward.experience);
+    if (Number.isFinite(gold)) item.gold_earned += gold;
+    if (Number.isFinite(exp)) item.experience_earned += exp;
+    stats[identity.id] = item;
+  }
+  return stats;
+}
+
+function textEndTurnAdventurerStats(content, observation) {
+  const stats = {};
+  for (const line of String(content || '').split(/\r?\n/)) {
+    const match = line.match(/^\s*-\s+(?:(\d+)\s+)?(.+?)\s+vs\s+(?:(\d+)\s+)?(.+?)[:：]\s*([^;；]+)/i);
+    if (!match) continue;
+    const identity = adventurerIdentityFromText(observation, match[1], match[2].trim());
+    if (!identity) continue;
+    const item = stats[identity.id] || emptyAdventurerStats(identity.id, identity.name);
+    item.battles_total++;
+    const outcome = String(match[5] || '').trim().toLowerCase();
+    if (outcome.includes('负') || ['right_win', 'monster_win', 'enemy_win', 'loss', 'lost', 'defeat'].includes(outcome)) item.battles_lost++;
+    else if (outcome.includes('胜') || ['left_win', 'adventurer_win', 'player_win', 'win', 'won', 'victory'].includes(outcome)) item.battles_won++;
+    const gold = line.match(/(?:金币|gold)\s*[:=＝]\s*(\d+)/i);
+    const exp = line.match(/(?:经验|experience|exp)\s*[:=＝]\s*(\d+)/i);
+    if (gold) item.gold_earned += parseInt(gold[1], 10);
+    if (exp) item.experience_earned += parseInt(exp[1], 10);
+    stats[identity.id] = item;
+  }
+  return stats;
+}
+
+function adventurerIdentity(battle, observation) {
+  let id = battle?.adventurer_id;
+  let name = battle?.adventurer_name ?? battle?.adventurer ?? battle?.name;
+  const adventurers = Array.isArray(observation?.adventurers) ? observation.adventurers : [];
+  const found = id != null
+    ? adventurers.find(item => item && String(item.adventurer_id) === String(id))
+    : adventurers.find(item => item && item.name === name);
+  if (found) {
+    id = id ?? found.adventurer_id;
+    name = name ?? found.name;
+  }
+  id = id ?? name;
+  return id == null ? null : { id: String(id), name: String(name ?? id) };
+}
+
+function adventurerIdentityFromText(observation, ref, name) {
+  const adventurers = Array.isArray(observation?.adventurers) ? observation.adventurers : [];
+  const index = Number.parseInt(ref, 10) - 1;
+  if (Number.isInteger(index) && index >= 0 && index < adventurers.length) {
+    return adventurerIdentity(adventurers[index], observation);
+  }
+  const found = adventurers.find(item => item && item.name === name);
+  return found ? adventurerIdentity(found, observation) : (name ? { id: name, name } : null);
+}
+
+function emptyAdventurerStats(id, name) {
+  return {
+    adventurer_id: id,
+    adventurer_name: name,
+    battles_total: 0,
+    battles_won: 0,
+    battles_lost: 0,
+    gold_earned: 0,
+    experience_earned: 0,
+  };
+}
+
+function registerObservationAdventurers(totals, observation) {
+  for (const adventurer of observation?.adventurers || []) {
+    const identity = adventurerIdentity(adventurer, observation);
+    if (!identity) continue;
+    totals[identity.id] ||= emptyAdventurerStats(identity.id, identity.name);
+    totals[identity.id].adventurer_name = identity.name;
+  }
+}
+
+function mergeAdventurerStats(totals, deltas) {
+  for (const [id, delta] of Object.entries(deltas || {})) {
+    const item = totals[id] || emptyAdventurerStats(id, delta.adventurer_name || id);
+    item.adventurer_name = delta.adventurer_name || item.adventurer_name;
+    for (const key of ['battles_total', 'battles_won', 'battles_lost', 'gold_earned', 'experience_earned']) {
+      item[key] += Number(delta[key]) || 0;
+    }
+    totals[id] = item;
+  }
+}
+
+function adventurerStatsSnapshot(totals) {
+  return Object.values(totals).map(item => ({
+    adventurer_id: item.adventurer_id,
+    adventurer_name: item.adventurer_name,
+    cumulative_battles_total: item.battles_total,
+    cumulative_battles_won: item.battles_won,
+    cumulative_battles_lost: item.battles_lost,
+    cumulative_gold_earned: item.gold_earned,
+    cumulative_experience_earned: item.experience_earned,
+  }));
 }
 
 function battleWon(battle) {
@@ -1657,10 +1797,14 @@ function computeReplayStats(replay) {
   let modelSteps = 0, turnsCompleted = 0, turnsFailed = 0;
   let cumulativeGoldEarned = 0, cumulativeExpEarned = 0;
   const economyCurve = [];
+  const adventurerTotals = {};
+  const adventurerStatsCurve = [];
 
   // Prefer pre-computed stats from replay.json
   const savedGA = replay.stats && replay.stats.game_actions;
   const savedEconomyCurve = Array.isArray(savedGA?.economy_curve) ? savedGA.economy_curve : null;
+  const savedAdventurerStats = Array.isArray(savedGA?.adventurer_stats) ? savedGA.adventurer_stats : null;
+  const savedAdventurerStatsCurve = Array.isArray(savedGA?.adventurer_stats_curve) ? savedGA.adventurer_stats_curve : null;
   let strongestDefeatedEnemy = savedGA?.strongest_defeated_enemy || null;
   if (savedGA) {
     goldEarned = savedGA.total_gold_earned || 0;
@@ -1669,6 +1813,7 @@ function computeReplayStats(replay) {
 
   for (const [turnIndex, turn] of replay.turns.entries()) {
     if (!turn || typeof turn !== "object") continue;
+    registerObservationAdventurers(adventurerTotals, turn.observation_before);
     let turnGoldEarned = 0, turnExpEarned = 0;
     if (turn.status === "completed") turnsCompleted++;
     else if (turn.status === "failed") turnsFailed++;
@@ -1716,6 +1861,9 @@ function computeReplayStats(replay) {
           else if (name === "unequip_item") unequipped++;
           else if (name === "end_turn") {
             const structured = structuredEndTurnStats(step);
+            const adventurerDeltas = structuredEndTurnAdventurerStats(step, turn.observation_before)
+              ?? textEndTurnAdventurerStats(content, turn.observation_before);
+            mergeAdventurerStats(adventurerTotals, adventurerDeltas);
             if (structured) {
               battlesTotal += structured.battlesTotal;
               battlesWon += structured.battlesWon;
@@ -1758,7 +1906,15 @@ function computeReplayStats(replay) {
         cumulative_gold_earned: cumulativeGoldEarned,
         cumulative_experience_earned: cumulativeExpEarned,
       });
+      adventurerStatsCurve.push({
+        turn: turn.turn ?? turnIndex + 1,
+        adventurers: adventurerStatsSnapshot(adventurerTotals),
+      });
     }
+  }
+  registerObservationAdventurers(adventurerTotals, replay.final_observation);
+  if (adventurerStatsCurve.length) {
+    adventurerStatsCurve[adventurerStatsCurve.length - 1].adventurers = adventurerStatsSnapshot(adventurerTotals);
   }
 
   const tokenUsage = { input_tokens: inputTokens, output_tokens: outputTokens };
@@ -1776,6 +1932,8 @@ function computeReplayStats(replay) {
       total_recruits: recruited, total_dismissals: dismissed,
       total_experience_allocated: allocated, total_equips: equipped, total_unequips: unequipped,
       economy_curve: savedEconomyCurve || economyCurve,
+      adventurer_stats: savedAdventurerStats || adventurerStatsSnapshot(adventurerTotals),
+      adventurer_stats_curve: savedAdventurerStatsCurve || adventurerStatsCurve,
       strongest_defeated_enemy: strongestDefeatedEnemy,
     },
     model_interaction: { total_model_steps: modelSteps, total_turns_completed: turnsCompleted, total_turns_failed: turnsFailed },

@@ -34,7 +34,7 @@ from guild_manager_bench.bench.replay_scoring import (
 )
 
 # Incremental build cache version — bump when _extract_run_info schema changes.
-_CACHE_VERSION = 10
+_CACHE_VERSION = 11
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -214,6 +214,9 @@ def _extract_manual_run_info(replay: dict, *, source_path: Path | None = None) -
             "total_gold_earned": game_actions.get("total_gold_earned", 0),
             "total_experience_earned": game_actions.get("total_experience_earned", 0),
             "economy_curve": economy_curve,
+            "adventurer_stats": _sanitize_adventurer_stats(
+                game_actions.get("adventurer_stats")
+            ),
             "strongest_defeated_enemy": game_actions.get("strongest_defeated_enemy"),
         },
     }
@@ -400,16 +403,20 @@ def _extract_game_actions(stats: dict) -> dict | None:
         "total_unequips": ga.get("total_unequips"),
     }
     economy_curve = _sanitize_economy_curve(ga.get("economy_curve"))
+    adventurer_stats = _sanitize_adventurer_stats(ga.get("adventurer_stats"))
     strongest = _sanitize_strongest_enemy(ga.get("strongest_defeated_enemy"))
     if (
         not any(isinstance(v, int) for v in fields.values())
         and not economy_curve
+        and not adventurer_stats
         and not strongest
     ):
         return None
     result: dict[str, Any] = {k: v for k, v in fields.items() if isinstance(v, int)}
     if economy_curve:
         result["economy_curve"] = economy_curve
+    if adventurer_stats:
+        result["adventurer_stats"] = adventurer_stats
     if strongest:
         result["strongest_defeated_enemy"] = strongest
     return result
@@ -533,6 +540,19 @@ def _compute_game_actions(
     if economy_curve:
         result["economy_curve"] = economy_curve
 
+    adventurer_stats = (
+        stats_result.get("adventurer_stats")
+        if isinstance(stats_result, dict)
+        else None
+    )
+    if not adventurer_stats:
+        adventurer_stats = _compute_adventurer_stats_from_turns(
+            turns_list,
+            final_observation,
+        )
+    if adventurer_stats:
+        result["adventurer_stats"] = adventurer_stats
+
     strongest = (
         stats_result.get("strongest_defeated_enemy")
         if isinstance(stats_result, dict)
@@ -569,6 +589,299 @@ def _sanitize_economy_curve(value: Any) -> list[dict[str, int]] | None:
         if len(point) > 1:
             result.append(point)
     return result or None
+
+
+def _sanitize_adventurer_stats(value: Any) -> list[dict[str, Any]] | None:
+    if not isinstance(value, list):
+        return None
+    result: list[dict[str, Any]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        adventurer_id = item.get("adventurer_id")
+        if adventurer_id is None:
+            continue
+        point: dict[str, Any] = {
+            "adventurer_id": str(adventurer_id),
+            "adventurer_name": str(
+                item.get("adventurer_name") or item.get("name") or adventurer_id
+            ),
+        }
+        for key in (
+            "cumulative_battles_total",
+            "cumulative_battles_won",
+            "cumulative_battles_lost",
+            "cumulative_gold_earned",
+            "cumulative_experience_earned",
+        ):
+            val = item.get(key)
+            if isinstance(val, int):
+                point[key] = val
+        result.append(point)
+    return result or None
+
+
+def _compute_adventurer_stats_from_turns(
+    turns_list: list,
+    final_observation: dict | None = None,
+) -> list[dict[str, Any]] | None:
+    totals: dict[str, dict[str, Any]] = {}
+    for turn in turns_list:
+        if not isinstance(turn, dict):
+            continue
+        observation = (
+            turn.get("observation_before")
+            if isinstance(turn.get("observation_before"), dict)
+            else None
+        )
+        _register_adventurers_from_observation(totals, observation)
+        for step in turn.get("steps") or []:
+            if not (
+                isinstance(step, dict)
+                and step.get("type") == "tool_result"
+                and step.get("name") == "end_turn"
+            ):
+                continue
+            deltas = _adventurer_deltas_from_step(step, observation)
+            _merge_adventurer_stats(totals, deltas)
+    _register_adventurers_from_observation(totals, final_observation)
+    return _adventurer_stats_snapshot(totals) or None
+
+
+def _adventurer_deltas_from_step(
+    step: dict,
+    observation: dict | None,
+) -> dict[str, dict[str, Any]]:
+    result = step.get("result")
+    turn_result = result.get("turn_result") if isinstance(result, dict) else None
+    battles = turn_result.get("battles") if isinstance(turn_result, dict) else None
+    if isinstance(battles, list):
+        deltas: dict[str, dict[str, Any]] = {}
+        for battle in battles:
+            if not isinstance(battle, dict):
+                continue
+            identity = _adventurer_identity_dict(battle, observation)
+            if identity is None:
+                continue
+            adventurer_id, adventurer_name = identity
+            item = deltas.setdefault(
+                adventurer_id,
+                _empty_adventurer_stats(adventurer_id, adventurer_name),
+            )
+            _add_battle_to_adventurer_stats(item, battle)
+        return deltas
+    return _adventurer_deltas_from_text(step.get("content"), observation)
+
+
+def _adventurer_deltas_from_text(
+    content: Any,
+    observation: dict | None,
+) -> dict[str, dict[str, Any]]:
+    import re
+
+    if not isinstance(content, str):
+        return {}
+    deltas: dict[str, dict[str, Any]] = {}
+    for line in content.splitlines():
+        if not line.lstrip().startswith("-") or " vs " not in line:
+            continue
+        match = re.match(
+            r"^\s*-\s+(?:(\d+)\s+)?(.+?)\s+vs\s+(?:(\d+)\s+)?(.+?)[:：]\s*([^;；]+)",
+            line,
+            re.IGNORECASE,
+        )
+        if not match:
+            continue
+        identity = _adventurer_identity_from_text_dict(
+            observation,
+            match.group(1),
+            match.group(2).strip(),
+        )
+        if identity is None:
+            continue
+        adventurer_id, adventurer_name = identity
+        item = deltas.setdefault(
+            adventurer_id,
+            _empty_adventurer_stats(adventurer_id, adventurer_name),
+        )
+        item["battles_total"] += 1
+        outcome = match.group(5).strip().lower()
+        if "负" in outcome or outcome in {
+            "right_win",
+            "monster_win",
+            "enemy_win",
+            "loss",
+            "lost",
+            "defeat",
+        }:
+            item["battles_lost"] += 1
+        elif "胜" in outcome or outcome in {
+            "left_win",
+            "adventurer_win",
+            "player_win",
+            "win",
+            "won",
+            "victory",
+        }:
+            item["battles_won"] += 1
+        gold = re.search(r"(?:金币|gold)\s*[:=＝]\s*(\d+)", line, re.IGNORECASE)
+        experience = re.search(
+            r"(?:经验|experience|exp)\s*[:=＝]\s*(\d+)",
+            line,
+            re.IGNORECASE,
+        )
+        if gold:
+            item["gold_earned"] += int(gold.group(1))
+        if experience:
+            item["experience_earned"] += int(experience.group(1))
+    return deltas
+
+
+def _add_battle_to_adventurer_stats(item: dict[str, Any], battle: dict) -> None:
+    item["battles_total"] += 1
+    won = _battle_won_dict(battle)
+    if won is True:
+        item["battles_won"] += 1
+    elif won is False:
+        item["battles_lost"] += 1
+    reward = battle.get("reward")
+    if isinstance(reward, dict):
+        gold = reward.get("gold")
+        experience = reward.get("experience")
+        if isinstance(gold, (int, float)) and not isinstance(gold, bool):
+            item["gold_earned"] += int(gold)
+        if isinstance(experience, (int, float)) and not isinstance(experience, bool):
+            item["experience_earned"] += int(experience)
+
+
+def _register_adventurers_from_observation(
+    totals: dict[str, dict[str, Any]],
+    observation: dict | None,
+) -> None:
+    adventurers = observation.get("adventurers") if isinstance(observation, dict) else None
+    if not isinstance(adventurers, list):
+        return
+    for adventurer in adventurers:
+        if not isinstance(adventurer, dict):
+            continue
+        identity = _adventurer_identity_dict(adventurer, observation)
+        if identity is None:
+            continue
+        adventurer_id, adventurer_name = identity
+        totals.setdefault(
+            adventurer_id,
+            _empty_adventurer_stats(adventurer_id, adventurer_name),
+        )["adventurer_name"] = adventurer_name
+
+
+def _adventurer_identity_dict(
+    battle: dict,
+    observation: dict | None,
+) -> tuple[str, str] | None:
+    adventurer_id = battle.get("adventurer_id")
+    adventurer_name = (
+        battle.get("adventurer_name")
+        or battle.get("adventurer")
+        or battle.get("name")
+    )
+    adventurers = observation.get("adventurers") if isinstance(observation, dict) else None
+    if isinstance(adventurers, list):
+        for adventurer in adventurers:
+            if not isinstance(adventurer, dict):
+                continue
+            if (
+                adventurer_id is not None
+                and str(adventurer.get("adventurer_id")) == str(adventurer_id)
+            ):
+                adventurer_name = adventurer_name or adventurer.get("name")
+                break
+            if (
+                adventurer_id is None
+                and adventurer_name is not None
+                and adventurer.get("name") == adventurer_name
+            ):
+                adventurer_id = adventurer.get("adventurer_id")
+                break
+    if adventurer_id is None:
+        adventurer_id = adventurer_name
+    if adventurer_id is None:
+        return None
+    return str(adventurer_id), str(adventurer_name or adventurer_id)
+
+
+def _adventurer_identity_from_text_dict(
+    observation: dict | None,
+    ref: str | None,
+    name: str,
+) -> tuple[str, str] | None:
+    adventurers = observation.get("adventurers") if isinstance(observation, dict) else None
+    if isinstance(adventurers, list):
+        if ref is not None:
+            try:
+                index = int(ref) - 1
+            except ValueError:
+                index = -1
+            if 0 <= index < len(adventurers) and isinstance(adventurers[index], dict):
+                return _adventurer_identity_dict(adventurers[index], observation)
+        for adventurer in adventurers:
+            if isinstance(adventurer, dict) and adventurer.get("name") == name:
+                return _adventurer_identity_dict(adventurer, observation)
+    return (name, name) if name else None
+
+
+def _merge_adventurer_stats(
+    totals: dict[str, dict[str, Any]],
+    deltas: dict[str, dict[str, Any]],
+) -> None:
+    for adventurer_id, delta in deltas.items():
+        adventurer_name = str(delta.get("adventurer_name") or adventurer_id)
+        item = totals.setdefault(
+            adventurer_id,
+            _empty_adventurer_stats(adventurer_id, adventurer_name),
+        )
+        item["adventurer_name"] = adventurer_name
+        for key in (
+            "battles_total",
+            "battles_won",
+            "battles_lost",
+            "gold_earned",
+            "experience_earned",
+        ):
+            value = delta.get(key)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                item[key] += int(value)
+
+
+def _adventurer_stats_snapshot(
+    totals: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "adventurer_id": adventurer_id,
+            "adventurer_name": str(item.get("adventurer_name") or adventurer_id),
+            "cumulative_battles_total": int(item.get("battles_total", 0)),
+            "cumulative_battles_won": int(item.get("battles_won", 0)),
+            "cumulative_battles_lost": int(item.get("battles_lost", 0)),
+            "cumulative_gold_earned": int(item.get("gold_earned", 0)),
+            "cumulative_experience_earned": int(item.get("experience_earned", 0)),
+        }
+        for adventurer_id, item in totals.items()
+    ]
+
+
+def _empty_adventurer_stats(
+    adventurer_id: str,
+    adventurer_name: str,
+) -> dict[str, Any]:
+    return {
+        "adventurer_id": adventurer_id,
+        "adventurer_name": adventurer_name,
+        "battles_total": 0,
+        "battles_won": 0,
+        "battles_lost": 0,
+        "gold_earned": 0,
+        "experience_earned": 0,
+    }
 
 
 def _sanitize_strongest_enemy(value: Any) -> dict[str, Any] | None:

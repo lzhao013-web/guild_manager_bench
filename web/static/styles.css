@@ -2356,6 +2356,39 @@ textarea {
   padding: 0;
 }
 
+.llm-adventurer-stats {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+}
+
+.llm-adventurer-stats-title {
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.llm-adventurer-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 6px;
+}
+
+.llm-adventurer-stat {
+  display: grid;
+  gap: 2px;
+  padding: 7px 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.14);
+  font-size: 11px;
+}
+
+.llm-adventurer-stat strong { color: var(--text); }
+.llm-adventurer-stat span { color: var(--text-secondary); }
+.llm-adventurer-stat em { color: var(--warning); font-style: normal; }
+
 .model-prompt-button {
   margin-left: auto;
   display: inline-flex;

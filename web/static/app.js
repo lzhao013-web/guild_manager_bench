@@ -3268,6 +3268,10 @@ function renderLlmReplay() {
   const rankContrib = renderReplayRankContributors(replay.score);
   const stats = computeReplayStats(replay);
   const statsBadges = stats ? renderReplayStatsBadges(stats) : "";
+  const adventurerStats = renderAdventurerRunStats(
+    stats?.game_actions?.adventurer_stats,
+    "冒险者累计战绩",
+  );
   const summary = `
     <div class="llm-replay-summary">
       <span>来源：${escapeHtml(state.llm.replay.source || "replay.json")}</span>
@@ -3282,12 +3286,17 @@ function renderLlmReplay() {
       ${statsBadges}
     </div>
     ${rankContrib}
+    ${adventurerStats}
   `;
-  const turns = (replay.turns || []).map((turn) => renderReplayTurn(turn)).join("");
+  const adventurerCurve = stats?.game_actions?.adventurer_stats_curve || [];
+  const turns = (replay.turns || []).map((turn) => {
+    const point = adventurerCurve.find(item => Number(item?.turn) === Number(turn?.turn));
+    return renderReplayTurn(turn, point?.adventurers);
+  }).join("");
   return summary + turns;
 }
 
-function renderReplayTurn(turn) {
+function renderReplayTurn(turn, adventurerStats) {
   const steps = (turn.steps || []).map((step, index) => renderReplayStep(step, index + 1)).join("");
   const open = turn.status === "failed" ? "open" : "";
   const timingHtml = renderTurnTimingUsage(turn.timing_usage);
@@ -3299,6 +3308,7 @@ function renderReplayTurn(turn) {
         ${timingHtml}
       </summary>
       ${turn.failure_reason ? `<div class="llm-retry">失败原因：${escapeHtml(turn.failure_reason)}</div>` : ""}
+      ${renderAdventurerRunStats(adventurerStats, `截至第 ${turn.turn} 回合`)}
       <div class="llm-replay-steps">${steps}</div>
     </details>
   `;
@@ -3489,6 +3499,25 @@ function renderRunSummary(entry) {
       <div class="llm-replay-summary">
         ${badges.map((b) => `<span>${escapeHtml(b)}</span>`).join("")}
       </div>
+      ${renderAdventurerRunStats(ga?.adventurer_stats, "冒险者累计战绩")}
+    </div>
+  `;
+}
+
+function renderAdventurerRunStats(values, title) {
+  if (!Array.isArray(values) || !values.length) return "";
+  return `
+    <div class="llm-adventurer-stats">
+      <div class="llm-adventurer-stats-title">${escapeHtml(title)}</div>
+      <div class="llm-adventurer-stats-grid">
+        ${values.map((item) => `
+          <div class="llm-adventurer-stat">
+            <strong>${escapeHtml(item.adventurer_name || item.adventurer_id || "?")}</strong>
+            <span>${escapeHtml(`${item.cumulative_battles_won || 0} 胜 / ${item.cumulative_battles_lost || 0} 负`)}</span>
+            <em>💰 ${escapeHtml(String(item.cumulative_gold_earned || 0))} · ⭐ ${escapeHtml(String(item.cumulative_experience_earned || 0))}</em>
+          </div>
+        `).join("")}
+      </div>
     </div>
   `;
 }
@@ -3516,6 +3545,115 @@ function structuredEndTurnStats(step) {
     if (Number.isFinite(exp)) stats.expEarned += exp;
   }
   return stats;
+}
+
+function structuredEndTurnAdventurerStats(step, observation) {
+  const battles = step?.result?.turn_result?.battles;
+  if (!Array.isArray(battles)) return null;
+  const stats = {};
+  for (const battle of battles) {
+    if (!battle || typeof battle !== "object") continue;
+    const identity = adventurerIdentity(battle, observation);
+    if (!identity) continue;
+    const item = stats[identity.id] || emptyAdventurerStats(identity.id, identity.name);
+    item.battles_total++;
+    const won = battleWon(battle);
+    if (won === true) item.battles_won++;
+    else if (won === false) item.battles_lost++;
+    const reward = battle.reward && typeof battle.reward === "object" ? battle.reward : {};
+    const gold = Number(reward.gold);
+    const exp = Number(reward.experience);
+    if (Number.isFinite(gold)) item.gold_earned += gold;
+    if (Number.isFinite(exp)) item.experience_earned += exp;
+    stats[identity.id] = item;
+  }
+  return stats;
+}
+
+function textEndTurnAdventurerStats(content, observation) {
+  const stats = {};
+  for (const line of String(content || "").split(/\r?\n/)) {
+    const match = line.match(/^\s*-\s+(?:(\d+)\s+)?(.+?)\s+vs\s+(?:(\d+)\s+)?(.+?)[:：]\s*([^;；]+)/i);
+    if (!match) continue;
+    const identity = adventurerIdentityFromText(observation, match[1], match[2].trim());
+    if (!identity) continue;
+    const item = stats[identity.id] || emptyAdventurerStats(identity.id, identity.name);
+    item.battles_total++;
+    const outcome = String(match[5] || "").trim().toLowerCase();
+    if (outcome.includes("负") || ["right_win", "monster_win", "enemy_win", "loss", "lost", "defeat"].includes(outcome)) item.battles_lost++;
+    else if (outcome.includes("胜") || ["left_win", "adventurer_win", "player_win", "win", "won", "victory"].includes(outcome)) item.battles_won++;
+    const gold = line.match(/(?:金币|gold)\s*[:=＝]\s*(\d+)/i);
+    const exp = line.match(/(?:经验|experience|exp)\s*[:=＝]\s*(\d+)/i);
+    if (gold) item.gold_earned += parseInt(gold[1], 10);
+    if (exp) item.experience_earned += parseInt(exp[1], 10);
+    stats[identity.id] = item;
+  }
+  return stats;
+}
+
+function adventurerIdentity(battle, observation) {
+  let id = battle?.adventurer_id;
+  let name = battle?.adventurer_name ?? battle?.adventurer ?? battle?.name;
+  const adventurers = Array.isArray(observation?.adventurers) ? observation.adventurers : [];
+  const found = id != null
+    ? adventurers.find(item => item && String(item.adventurer_id) === String(id))
+    : adventurers.find(item => item && item.name === name);
+  if (found) {
+    id = id ?? found.adventurer_id;
+    name = name ?? found.name;
+  }
+  id = id ?? name;
+  return id == null ? null : { id: String(id), name: String(name ?? id) };
+}
+
+function adventurerIdentityFromText(observation, ref, name) {
+  const adventurers = Array.isArray(observation?.adventurers) ? observation.adventurers : [];
+  const index = Number.parseInt(ref, 10) - 1;
+  if (Number.isInteger(index) && index >= 0 && index < adventurers.length) {
+    return adventurerIdentity(adventurers[index], observation);
+  }
+  const found = adventurers.find(item => item && item.name === name);
+  return found ? adventurerIdentity(found, observation) : (name ? { id: name, name } : null);
+}
+
+function emptyAdventurerStats(id, name) {
+  return {
+    adventurer_id: id, adventurer_name: name,
+    battles_total: 0, battles_won: 0, battles_lost: 0,
+    gold_earned: 0, experience_earned: 0,
+  };
+}
+
+function registerObservationAdventurers(totals, observation) {
+  for (const adventurer of observation?.adventurers || []) {
+    const identity = adventurerIdentity(adventurer, observation);
+    if (!identity) continue;
+    totals[identity.id] ||= emptyAdventurerStats(identity.id, identity.name);
+    totals[identity.id].adventurer_name = identity.name;
+  }
+}
+
+function mergeAdventurerStats(totals, deltas) {
+  for (const [id, delta] of Object.entries(deltas || {})) {
+    const item = totals[id] || emptyAdventurerStats(id, delta.adventurer_name || id);
+    item.adventurer_name = delta.adventurer_name || item.adventurer_name;
+    for (const key of ["battles_total", "battles_won", "battles_lost", "gold_earned", "experience_earned"]) {
+      item[key] += Number(delta[key]) || 0;
+    }
+    totals[id] = item;
+  }
+}
+
+function adventurerStatsSnapshot(totals) {
+  return Object.values(totals).map(item => ({
+    adventurer_id: item.adventurer_id,
+    adventurer_name: item.adventurer_name,
+    cumulative_battles_total: item.battles_total,
+    cumulative_battles_won: item.battles_won,
+    cumulative_battles_lost: item.battles_lost,
+    cumulative_gold_earned: item.gold_earned,
+    cumulative_experience_earned: item.experience_earned,
+  }));
 }
 
 function battleWon(battle) {
@@ -3712,10 +3850,14 @@ function computeReplayStats(replay) {
   let modelSteps = 0, turnsCompleted = 0, turnsFailed = 0;
   let cumulativeGoldEarned = 0, cumulativeExpEarned = 0;
   const economyCurve = [];
+  const adventurerTotals = {};
+  const adventurerStatsCurve = [];
 
   // Prefer pre-computed stats from replay.json
   const savedGA = replay.stats && replay.stats.game_actions;
   const savedEconomyCurve = Array.isArray(savedGA?.economy_curve) ? savedGA.economy_curve : null;
+  const savedAdventurerStats = Array.isArray(savedGA?.adventurer_stats) ? savedGA.adventurer_stats : null;
+  const savedAdventurerStatsCurve = Array.isArray(savedGA?.adventurer_stats_curve) ? savedGA.adventurer_stats_curve : null;
   let strongestDefeatedEnemy = savedGA?.strongest_defeated_enemy || null;
   if (savedGA) {
     goldEarned = savedGA.total_gold_earned || 0;
@@ -3724,6 +3866,7 @@ function computeReplayStats(replay) {
 
   for (const [turnIndex, turn] of replay.turns.entries()) {
     if (!turn || typeof turn !== "object") continue;
+    registerObservationAdventurers(adventurerTotals, turn.observation_before);
     let turnGoldEarned = 0, turnExpEarned = 0;
     // Turn status
     if (turn.status === "completed") turnsCompleted++;
@@ -3775,6 +3918,9 @@ function computeReplayStats(replay) {
           else if (name === "unequip_item") unequipped++;
           else if (name === "end_turn") {
             const structured = structuredEndTurnStats(step);
+            const adventurerDeltas = structuredEndTurnAdventurerStats(step, turn.observation_before)
+              ?? textEndTurnAdventurerStats(content, turn.observation_before);
+            mergeAdventurerStats(adventurerTotals, adventurerDeltas);
             if (structured) {
               battlesTotal += structured.battlesTotal;
               battlesWon += structured.battlesWon;
@@ -3824,7 +3970,15 @@ function computeReplayStats(replay) {
         cumulative_gold_earned: cumulativeGoldEarned,
         cumulative_experience_earned: cumulativeExpEarned,
       });
+      adventurerStatsCurve.push({
+        turn: turn.turn ?? turnIndex + 1,
+        adventurers: adventurerStatsSnapshot(adventurerTotals),
+      });
     }
+  }
+  registerObservationAdventurers(adventurerTotals, replay.final_observation);
+  if (adventurerStatsCurve.length) {
+    adventurerStatsCurve[adventurerStatsCurve.length - 1].adventurers = adventurerStatsSnapshot(adventurerTotals);
   }
 
   const tokenUsage = { input_tokens: inputTokens, output_tokens: outputTokens };
@@ -3842,6 +3996,8 @@ function computeReplayStats(replay) {
       total_recruits: recruited, total_dismissals: dismissed,
       total_experience_allocated: allocated, total_equips: equipped, total_unequips: unequipped,
       economy_curve: savedEconomyCurve || economyCurve,
+      adventurer_stats: savedAdventurerStats || adventurerStatsSnapshot(adventurerTotals),
+      adventurer_stats_curve: savedAdventurerStatsCurve || adventurerStatsCurve,
       strongest_defeated_enemy: strongestDefeatedEnemy,
     },
     model_interaction: { total_model_steps: modelSteps, total_turns_completed: turnsCompleted, total_turns_failed: turnsFailed },
