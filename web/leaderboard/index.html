@@ -37,7 +37,7 @@
     <section class="stats-banner" id="statsBanner" aria-label="基准统计概览">
       <div class="stats-banner-head">
         <div class="stats-banner-title-block">
-          <div class="stats-banner-sub">LLM Agent 长程决策基准<span class="v-chip">v0.6.0</span></div>
+          <div class="stats-banner-sub">LLM Agent 长程决策基准<span class="v-chip">v1.0.0</span></div>
         </div>
         <div class="stats-banner-meta">
           <span>同一游戏种子</span>
@@ -52,7 +52,36 @@
       </dl>
     </section>
 
-    <!-- (设计说明已合并到 stats banner) -->
+    <section class="intro-card" id="introCard" aria-labelledby="introTitle">
+      <div class="intro-header">
+        <h2 class="intro-title" id="introTitle">Bench 如何运作</h2>
+        <button class="intro-toggle" id="introToggle" type="button" aria-expanded="true" aria-controls="introBody">收起</button>
+      </div>
+      <div class="intro-body" id="introBody">
+        <p class="intro-text">
+          Guild Manager Bench 让模型在统一、可复现的回合制环境中独立经营公会，考察其
+          <strong>长期规划、资源分配与工具调用</strong>能力。
+        </p>
+        <div class="intro-grid">
+          <div>
+            <h3 class="intro-col-title">运行流程</h3>
+            <ul class="intro-list">
+              <li><strong>统一开局：</strong>模型使用相同的游戏 preset 与随机种子，从相同资源和规则开始。</li>
+              <li><strong>逐回合决策：</strong>模型在工具调用预算内查询信息、招募与培养冒险者、制作装备、购买升级，并提交讨伐目标。</li>
+              <li><strong>有限回合经营：</strong>每回合结束后世界刷新；模型持续积累资源并提升队伍终局战力。</li>
+            </ul>
+          </div>
+          <div>
+            <h3 class="intro-col-title">评分与排名</h3>
+            <ul class="intro-list">
+              <li><strong>终局评分：</strong>系统固定评分种子，在多个竞技场难度下自动模拟最终队伍的战斗表现。</li>
+              <li><strong>Rank Score：</strong>各难度贡献相加得到段位积分，高难度下表现更好的队伍得分更高。</li>
+              <li><strong>榜单聚合：</strong>同一模型的完成运行会被聚合，排行榜按平均 Rank Score 从高到低排序。</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
 
     <div class="tab-section active" id="tab-leaderboard">
     <div id="cardListContainer">

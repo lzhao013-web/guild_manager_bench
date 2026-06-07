@@ -1424,7 +1424,9 @@ function initIntroToggle() {
   if (!card || !btn) return;
   btn.addEventListener('click', () => {
     card.classList.toggle('collapsed');
-    btn.textContent = card.classList.contains('collapsed') ? '展开' : '收起';
+    const collapsed = card.classList.contains('collapsed');
+    btn.textContent = collapsed ? '展开' : '收起';
+    btn.setAttribute('aria-expanded', String(!collapsed));
   });
 }
 
