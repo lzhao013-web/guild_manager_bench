@@ -1,10 +1,11 @@
-name: Deploy Leaderboard
+name: Deploy Site
 
 on:
   push:
     branches: ["main"]
     paths:
-      - "web/leaderboard/**"
+      - "web/**"
+      - "scripts/build_pages_site.py"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
@@ -25,9 +26,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
       - uses: actions/configure-pages@v5
+      - name: Build static site
+        run: python scripts/build_pages_site.py --output _site
       - uses: actions/upload-pages-artifact@v4
         with:
-          path: web/leaderboard
+          path: _site
       - id: deployment
         uses: actions/deploy-pages@v4
