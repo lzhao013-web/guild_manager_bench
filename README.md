@@ -40,26 +40,6 @@ uv run guild-manager serve --preset full
 - 回放页面：<http://127.0.0.1:8000/replay/>
 - 排行榜：<http://127.0.0.1:8000/leaderboard/>
 
-## GitHub Pages 部署
-
-仓库包含 GitHub Pages workflow：`.github/workflows/pages.yml`。当 `main` 分支里的
-`web/**` 或部署脚本变化时，会执行：
-
-```powershell
-python scripts/build_pages_site.py --output _site
-```
-
-生成的静态站点会发布到 GitHub Pages：
-
-- `/`：主操作页面的静态前端
-- `/replay/`：回放查看器前端
-- `/leaderboard/`：排行榜
-- `/assets/`：职业与怪物图标资源
-
-注意：GitHub Pages 只能托管静态文件，不能运行 FastAPI、WebSocket 或 LLM 调用。
-因此 `/` 和 `/replay/` 中依赖 `/api`、`/ws` 的实时功能仍需要通过
-`uv run guild-manager serve --preset full` 启动本地服务，或另行部署后端服务。
-
 ## 运行 LLM Benchmark
 
 在项目根目录创建 `.env`，配置所使用的模型服务：
