@@ -1,9 +1,11 @@
 {
   "glm-5.1": "OpenCode GO 套餐",
+  "glm-5.2": "火山引擎 coding plan",
   "mimo-v2.5-pro": "OpenCode GO 套餐",
   "gpt-5.5-medium": "推理强度medium，第三方反代",
   "✋ 手动操作": "由开发者本人操作，拥有大量先验知识且不受预览次数限制。",
   "kimi-k2.6": "OpenCode GO 套餐",
+  "kimi-k2.7-code": "火山引擎 coding plan",
   "deepseek-v4-pro": "官方api",
   "deepseek-v4-pro-max": "官方api",
   "gpt-5.5-xhigh": "推理强度xhigh，第三方反代",
