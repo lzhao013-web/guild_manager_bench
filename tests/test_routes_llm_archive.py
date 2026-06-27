@@ -72,6 +72,25 @@ def test_list_runs_infers_preset_from_archived_data_dir(tmp_path: Path) -> None:
     assert response["runs"][0]["adventurer_stats"][0]["adventurer_name"] == "先锋"
 
 
+def test_rebuild_replay_fills_missing_step_observations(tmp_path: Path) -> None:
+    replay_path = _write_replay(tmp_path, "run-d", _partial_step_observation_replay())
+
+    response = _call_route(
+        tmp_path,
+        "/api/llm/runs/{run_id}/rebuild",
+        "POST",
+        run_id="run-d",
+        preset=None,
+    )
+
+    step = response["turns"][0]["steps"][0]
+    stored = json.loads(replay_path.read_text(encoding="utf-8"))
+    assert response["_observations_rebuilt"] is True
+    assert step["observation_after"]["party_size"] == 1
+    assert step["observation_after"]["adventurers"][0]["adventurer_id"]
+    assert stored["turns"][0]["steps"][0]["observation_after"]["party_size"] == 1
+
+
 def _call_route(
     base_dir: Path,
     path: str,
@@ -121,6 +140,57 @@ def _legacy_replay() -> dict[str, Any]:
         "turns": [],
         "final_observation": observation,
         "score": {"score": 12.34},
+    }
+
+
+def _partial_step_observation_replay() -> dict[str, Any]:
+    definition = _small_scoring_definition()
+    session = GameSession(definition)
+    observation_before = session.observation()
+    candidate_id = observation_before["recruit_candidates"][0]["candidate_id"]
+    session.apply_preparation(RecruitAction(candidate_id=candidate_id))
+    observation_after = session.observation()
+    observation_after["scoring"].update(
+        {
+            "rank_min_diff": definition.scoring.rank_min_diff,
+            "rank_max_diff": definition.scoring.rank_max_diff,
+            "rank_step": definition.scoring.rank_step,
+            "rank_waves": definition.scoring.rank_waves,
+        }
+    )
+    return {
+        "kind": "llm_replay",
+        "status": "completed",
+        "created_at": "2026-05-31T00:00:00",
+        "agent": {"config": {"model": "test-model"}},
+        "data": {"data_dir": str(_data_dir())},
+        "turns": [
+            {
+                "turn": 1,
+                "status": "completed",
+                "observation_before": observation_before,
+                "rank_score": 0.0,
+                "steps": [
+                    {
+                        "type": "tool_result",
+                        "name": "recruit_adventurer",
+                        "arguments": {"candidate_id": 1},
+                        "content": "成功 recruit_adventurer",
+                    }
+                ],
+            }
+        ],
+        "final_observation": observation_after,
+        "score": {
+            "score": 12.34,
+            "rank_score": 12.34,
+            "rank_score_per_adventurer": [
+                {
+                    "adventurer_id": observation_after["adventurers"][0]["adventurer_id"],
+                    "rank_score": 12.34,
+                }
+            ],
+        },
     }
 
 

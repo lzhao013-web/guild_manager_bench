@@ -3098,23 +3098,50 @@ _STATE_MUTATING_TOOL_NAMES = {
 }
 
 
+def replay_observations_complete(replay: Mapping[str, Any]) -> bool:
+    """Return whether replay has the snapshots needed for step playback."""
+
+    turns = _sequence(replay.get("turns"))
+    if not turns:
+        return False
+
+    has_completed_turn = False
+    for turn_data in turns:
+        if not isinstance(turn_data, Mapping):
+            return False
+        if turn_data.get("status") != "completed":
+            continue
+        has_completed_turn = True
+        if turn_data.get("observation_before") is None:
+            return False
+        for step in _sequence(turn_data.get("steps")):
+            if not isinstance(step, Mapping):
+                continue
+            if step.get("type") != "tool_result":
+                continue
+            if step.get("name") not in _STATE_MUTATING_TOOL_NAMES:
+                continue
+            if not _replay_tool_step_succeeded(step):
+                continue
+            if step.get("observation_after") is None:
+                return False
+
+    return has_completed_turn
+
+
 def rebuild_replay_observations(
     replay: dict[str, Any],
     *,
     data_dir: str | Path = "data/presets/default",
 ) -> dict[str, Any]:
-    """为没有 observation_before 的旧 replay 重建回合状态快照。
+    """为缺少 observation 快照的旧 replay 重建回合和步骤状态。
 
     通过在全新 GameSession 上重放所有变更工具调用来重建每个回合开始时的游戏状态。
     读操作不改变状态因此跳过，只重放写操作和 end_turn。
     """
 
     turns = _sequence(replay.get("turns"))
-    has_observations = any(
-        isinstance(t, Mapping) and t.get("observation_before") is not None
-        for t in turns
-    )
-    if has_observations or not turns:
+    if replay_observations_complete(replay) or not turns:
         return dict(replay)
 
     tools = GuildManagerTools(load_game_definition(data_dir))
@@ -3130,6 +3157,11 @@ def rebuild_replay_observations(
 
         observation_before = tools.get_observation(session_id)["observation"]
         rebuilt_steps: list[dict[str, Any]] = []
+        harness = TurnToolHarness(
+            tools, session_id,
+            max_tool_calls=1_000_000,
+            endgame_start_turn=tools.definition.llm_tools.endgame_start_turn,
+        )
 
         for step in _sequence(turn_data.get("steps")):
             step_copy = dict(step) if isinstance(step, Mapping) else {}
@@ -3144,11 +3176,6 @@ def rebuild_replay_observations(
             if not _replay_tool_step_succeeded(step):
                 continue
             arguments = _replay_tool_arguments(step)
-            harness = TurnToolHarness(
-                tools, session_id,
-                max_tool_calls=1_000_000,
-                endgame_start_turn=tools.definition.llm_tools.endgame_start_turn,
-            )
             result = harness.call_tool(str(name), arguments)
             if result.get("ok") is not True:
                 raise ValueError(

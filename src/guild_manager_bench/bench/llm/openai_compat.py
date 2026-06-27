@@ -413,7 +413,10 @@ class OpenAIChatCompletionsAgent:
         openai_tools = [_to_openai_tool(tool) for tool in tools]
         body: dict[str, Any] = {
             "model": self.config.model,
-            "messages": [_to_openai_message(message) for message in messages],
+            "messages": [
+                _to_openai_message(message)
+                for message in _merge_system_messages(messages)
+            ],
         }
         if openai_tools:
             body["tools"] = openai_tools
@@ -455,6 +458,23 @@ def _to_openai_tool(schema: Mapping[str, Any]) -> dict[str, Any]:
             "parameters": schema.get("parameters", {"type": "object"}),
         },
     }
+
+
+def _merge_system_messages(
+    messages: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    system_parts: list[str] = []
+    remaining: list[dict[str, Any]] = []
+    for message in messages:
+        if message.get("role") == "system":
+            content = message.get("content")
+            if isinstance(content, str) and content:
+                system_parts.append(content)
+            continue
+        remaining.append(dict(message))
+    if not system_parts:
+        return remaining
+    return [{"role": "system", "content": "\n\n".join(system_parts)}, *remaining]
 
 
 def _to_openai_message(message: Mapping[str, Any]) -> dict[str, Any]:

@@ -454,6 +454,13 @@ def _compact_tool_result(result: Mapping[str, Any]) -> dict[str, Any] | None:
     turn_result = result.get("turn_result")
     if isinstance(turn_result, Mapping):
         compact["turn_result"] = dict(turn_result)
+    refs = result.get("_llm_refs")
+    if isinstance(refs, Mapping):
+        compact["_llm_refs"] = {
+            str(category): dict(values)
+            for category, values in refs.items()
+            if isinstance(values, Mapping)
+        }
     return compact if compact else None
 
 

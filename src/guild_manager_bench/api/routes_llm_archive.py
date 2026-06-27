@@ -3,10 +3,14 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Query
 
-from guild_manager_bench.bench.llm.runner import rebuild_replay_observations
+from guild_manager_bench.bench.llm.runner import (
+    rebuild_replay_observations,
+    replay_observations_complete,
+)
 from guild_manager_bench.bench.replay_scoring import (
     with_rank_score_curve,
     with_rank_score_from_final_observation,
@@ -120,11 +124,7 @@ def _run_directory(base_dir: Path, run_id: str) -> Path:
 
 
 def _replay_has_observations(replay: dict[str, Any]) -> bool:
-    turns = replay.get("turns")
-    if not isinstance(turns, list) or not turns:
-        return False
-    first = turns[0]
-    return isinstance(first, dict) and first.get("observation_before") is not None
+    return replay_observations_complete(replay)
 
 
 def _replay_data_dir(replay: dict[str, Any], preset: str | None) -> Path:
@@ -172,13 +172,24 @@ def _read_replay(path: Path) -> dict[str, Any]:
 def _with_scores(replay: dict[str, Any], *, save_path: Path) -> dict[str, Any]:
     try:
         scored = with_rank_score_from_final_observation(replay, save_path=save_path)
-        return with_rank_score_curve(scored, save_path=save_path)
+        result = with_rank_score_curve(scored, save_path=save_path)
+        _write_json_atomic(save_path, result)
+        return result
     except HTTPException:
         raise
     except (OSError, ValueError, TypeError, KeyError) as exc:
         raise HTTPException(status_code=422, detail=f"无法补全 replay 分数: {exc}") from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"补全 replay 分数失败: {exc}") from exc
+
+
+def _write_json_atomic(path: Path, data: dict[str, Any]) -> None:
+    temp_path = path.with_suffix(f"{path.suffix}.tmp.{uuid4().hex[:8]}")
+    temp_path.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2, default=str),
+        encoding="utf-8",
+    )
+    temp_path.replace(path)
 
 
 def _read_json(path: Path) -> Any:

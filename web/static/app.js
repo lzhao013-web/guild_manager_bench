@@ -2608,6 +2608,12 @@ const MUTATING_TOOL_NAMES = new Set([
   "unequip_item", "end_turn", "write_memo",
 ]);
 
+const REPLAY_STATE_MUTATING_TOOL_NAMES = new Set([
+  "craft_equipment", "purchase_upgrade", "allocate_experience",
+  "recruit_adventurer", "dismiss_adventurer", "equip_item",
+  "unequip_item", "end_turn",
+]);
+
 function isMutatingTool(name) {
   return MUTATING_TOOL_NAMES.has(name);
 }
@@ -3117,7 +3123,21 @@ async function readJsonOrThrow(response, fallbackMessage) {
 
 function hasReplayObservations(replay) {
   const turns = replay?.turns;
-  return Array.isArray(turns) && turns.length > 0 && turns[0]?.observation_before != null;
+  if (!Array.isArray(turns) || turns.length === 0) return false;
+  let hasCompletedTurn = false;
+  for (const turn of turns) {
+    if (!turn || typeof turn !== "object") return false;
+    if (turn.status !== "completed") continue;
+    hasCompletedTurn = true;
+    if (turn.observation_before == null) return false;
+    for (const step of turn.steps || []) {
+      if (!step || typeof step !== "object") continue;
+      if (step.type !== "tool_result" || !REPLAY_STATE_MUTATING_TOOL_NAMES.has(step.name)) continue;
+      if (!toolStepSucceeded(step, step.content || "")) continue;
+      if (step.observation_after == null) return false;
+    }
+  }
+  return hasCompletedTurn;
 }
 
 function needsReplayRankScores(replay) {

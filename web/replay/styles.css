@@ -1315,6 +1315,7 @@ h3 { font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bot
   visibility: visible;
   opacity: 1;
   transition: opacity 300ms ease, visibility 0s 0s;
+}
 
 
 .battle-backdrop {

@@ -253,6 +253,41 @@ def test_openai_message_conversion_preserves_tool_call_ids() -> None:
     assert messages[2]["tool_call_id"] == "call_1"
 
 
+def test_openai_message_conversion_merges_system_messages_at_front() -> None:
+    captured: dict[str, Any] = {}
+
+    def transport(
+        url: str,
+        headers: Mapping[str, str],
+        body: Mapping[str, Any],
+        timeout: float,
+    ) -> Mapping[str, Any]:
+        captured["body"] = dict(body)
+        return {"choices": [{"message": {"content": "done"}}]}
+
+    agent = OpenAIChatCompletionsAgent(
+        OpenAIChatCompletionsConfig(model="test-model"),
+        transport=transport,
+    )
+
+    agent.respond(
+        messages=(
+            {"role": "system", "content": "基础规则"},
+            {"role": "user", "content": "start"},
+            {"role": "system", "content": "终局提示"},
+            {"role": "assistant", "content": "ok"},
+        ),
+        tools=(),
+    )
+
+    messages = captured["body"]["messages"]
+    assert messages == [
+        {"role": "system", "content": "基础规则\n\n终局提示"},
+        {"role": "user", "content": "start"},
+        {"role": "assistant", "content": "ok"},
+    ]
+
+
 def test_openai_response_preserves_reasoning_content_for_followup() -> None:
     def transport(
         url: str,

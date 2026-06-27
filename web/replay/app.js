@@ -13,6 +13,7 @@
 const READ_TOOLS = new Set([
   'get_party', 'get_monsters', 'get_crafting', 'get_inventory',
   'get_upgrades', 'get_recruitment', 'get_events', 'preview_battle',
+  'preview_team_power',
 ]);
 
 const WRITE_TOOLS = new Set([
@@ -20,6 +21,8 @@ const WRITE_TOOLS = new Set([
   'recruit_adventurer', 'dismiss_adventurer', 'equip_item', 'unequip_item',
   'end_turn',
 ]);
+
+const NOTICE_TOOLS = new Set(['write_memo']);
 
 const TOOL_FOCUS = {
   recruit_adventurer:    { tab: 'adventurers', entityType: null,           idArg: null },          // special: find new adventurer from obs diff
@@ -177,7 +180,22 @@ async function responseErrorMessage(response, fallback) {
 }
 
 function hasObservations(replay) {
-  const t = replay.turns; return Array.isArray(t) && t.length && t[0].observation_before != null;
+  const turns = replay?.turns;
+  if (!Array.isArray(turns) || !turns.length) return false;
+  let hasCompletedTurn = false;
+  for (const turn of turns) {
+    if (!turn || typeof turn !== 'object') return false;
+    if (turn.status !== 'completed') continue;
+    hasCompletedTurn = true;
+    if (turn.observation_before == null) return false;
+    for (const step of turn.steps || []) {
+      if (!step || typeof step !== 'object') continue;
+      if (step.type !== 'tool_result' || !WRITE_TOOLS.has(step.name)) continue;
+      if (stepOutcome(step) === false) continue;
+      if (step.observation_after == null) return false;
+    }
+  }
+  return hasCompletedTurn;
 }
 
 function needsRankScores(replay) {
@@ -208,12 +226,22 @@ function hasRankScoreContributions(score) {
 function getEffectiveObservation() {
   if (!S.replay) return null;
   const turn = currentTurn(); if (!turn) return null;
+  return observationForStepIndex(turn, S.currentStepIdx);
+}
 
-  // If we're at a step that has observation_after, use that as the current state
-  if (S.currentStepIdx >= 0) {
+function getObservationBeforeCurrentStep() {
+  const turn = currentTurn(); if (!turn) return null;
+  return observationForStepIndex(turn, S.currentStepIdx - 1);
+}
+
+function observationForStepIndex(turn, stepIndex) {
+  if (!turn) return null;
+
+  // If we're at a step that has observation_after, use that as the current state.
+  if (stepIndex >= 0) {
     const steps = turn.steps || [];
-    // Find the most recent write step with observation_after up to currentStepIdx
-    for (let i = S.currentStepIdx; i >= 0; i--) {
+    // Find the most recent write step with observation_after up to stepIndex.
+    for (let i = stepIndex; i >= 0; i--) {
       const step = steps[i];
       if (step && step.observation_after) {
         return step.observation_after;
@@ -322,7 +350,7 @@ function scheduleNextStep() {
     const step = steps[nextIdx];
     const isMutating = step.type === 'tool_result' && WRITE_TOOLS.has(step.name);
     const isEndTurn = step.type === 'tool_result' && step.name === 'end_turn';
-    const delay = isMutating ? baseDelay * 1.5 : isEndTurn ? baseDelay * 0.8 : baseDelay * 0.25;
+    const delay = isEndTurn ? baseDelay * 0.8 : isMutating ? baseDelay * 1.5 : baseDelay * 0.25;
 
     S.playTimer = setTimeout(() => {
       S.currentStepIdx = nextIdx; updateAll();
@@ -355,13 +383,149 @@ function scheduleNextStep() {
 // ============================================================================
 // Focus & Highlight
 // ============================================================================
+const ENTITY_CONFIG = {
+  adventurer: {
+    ref: 'adventurer',
+    listKey: 'adventurers',
+    idKey: 'adventurer_id',
+    cardClass: 'adventurer-card',
+    container: () => DOM.adventurerCards,
+  },
+  monster: {
+    ref: 'monster',
+    listKey: 'monsters',
+    idKey: 'monster_id',
+    cardClass: 'entity-card',
+    container: () => DOM.monsterCards,
+  },
+  equipment: {
+    ref: 'equipment',
+    listKey: 'equipment_inventory',
+    idKey: 'instance_id',
+    cardClass: 'entity-card',
+    container: () => DOM.inventoryCards,
+  },
+  upgrade: {
+    ref: 'upgrade',
+    listKey: 'global_upgrades',
+    idKey: 'upgrade_id',
+    cardClass: 'list-item',
+    container: () => DOM.upgradeList,
+  },
+  recipe: {
+    ref: 'recipe',
+    listKey: 'crafting_recipes',
+    idKey: 'recipe_id',
+    cardClass: 'list-item',
+    container: () => DOM.recipeList,
+  },
+};
+
+function resolveEntityRef(entityType, rawId, observations, step, refs) {
+  const cfg = ENTITY_CONFIG[entityType]; if (!cfg || rawId == null) return null;
+  const rawText = String(rawId);
+  const allObservations = Array.isArray(observations) ? observations.filter(Boolean) : [];
+  const numeric = numericRef(rawId);
+
+  // Future replays may preserve the stable LLM ref map directly on the step.
+  const stepRefs = step?.result?._llm_refs?.[cfg.ref];
+  if (stepRefs && typeof stepRefs === 'object') {
+    if (numeric != null) {
+      for (const [canonicalId, ref] of Object.entries(stepRefs)) {
+        if (Number(ref) === numeric) return canonicalId;
+      }
+    }
+  }
+
+  if (numeric != null && refs?.[cfg.ref]) {
+    for (const [canonicalId, ref] of Object.entries(refs[cfg.ref])) {
+      if (Number(ref) === numeric) return canonicalId;
+    }
+  }
+
+  for (const obs of allObservations) {
+    const direct = entityList(obs, cfg).find(item => String(item?.[cfg.idKey]) === rawText);
+    if (direct) return String(direct[cfg.idKey]);
+  }
+
+  if (numeric == null) return rawText;
+
+  for (const obs of allObservations) {
+    const refs = refsForObservation(obs)?.[cfg.ref] || {};
+    for (const [canonicalId, ref] of Object.entries(refs)) {
+      if (Number(ref) === numeric) return canonicalId;
+    }
+    const byIndex = entityList(obs, cfg)[numeric - 1];
+    if (byIndex?.[cfg.idKey] != null) return String(byIndex[cfg.idKey]);
+  }
+  return rawText;
+}
+
+function refsBeforeStep(turn, stepIndex) {
+  const refs = refsForObservation(turn?.observation_before || {});
+  const steps = Array.isArray(turn?.steps) ? turn.steps : [];
+  for (let i = 0; i < stepIndex; i++) {
+    const step = steps[i];
+    if (!step?.observation_after || step.name === 'end_turn' || stepOutcome(step) === false) continue;
+    updateStableRefs(refs, step.observation_after);
+  }
+  return refs;
+}
+
+function updateStableRefs(refs, observation) {
+  for (const cfg of Object.values(ENTITY_CONFIG)) {
+    const categoryRefs = refs[cfg.ref] || {};
+    let maxRef = 0;
+    for (const ref of Object.values(categoryRefs)) {
+      const numeric = Number(ref);
+      if (Number.isFinite(numeric)) maxRef = Math.max(maxRef, numeric);
+    }
+    for (const item of entityList(observation, cfg)) {
+      const id = item?.[cfg.idKey];
+      if (id == null || categoryRefs[String(id)] != null) continue;
+      maxRef += 1;
+      categoryRefs[String(id)] = maxRef;
+    }
+    refs[cfg.ref] = categoryRefs;
+  }
+}
+
+function addedEntities(entityType, beforeObs, afterObs) {
+  const cfg = ENTITY_CONFIG[entityType]; if (!cfg || !afterObs) return [];
+  const beforeIds = new Set(entityList(beforeObs, cfg).map(item => String(item?.[cfg.idKey])));
+  return entityList(afterObs, cfg).filter(item => {
+    const id = item?.[cfg.idKey];
+    return id != null && !beforeIds.has(String(id));
+  });
+}
+
+function entityList(obs, cfg) {
+  const value = obs?.[cfg.listKey];
+  return Array.isArray(value) ? value : [];
+}
+
+function numericRef(value) {
+  if (typeof value === 'boolean') return null;
+  if (typeof value === 'number' && Number.isInteger(value)) return value;
+  if (typeof value === 'string' && /^\d+$/.test(value.trim())) return Number(value.trim());
+  return null;
+}
+
 function focusOnCurrentStep() {
   if (S.currentStepIdx < 0) return;
   const step = currentStep(); if (!step || step.type !== 'tool_result') return;
-  if (!WRITE_TOOLS.has(step.name)) return;
+  clearFocusFlash();
+  const isStateWrite = WRITE_TOOLS.has(step.name);
+  const isNotice = NOTICE_TOOLS.has(step.name);
+  if (!isStateWrite && !isNotice) return;
 
   const focus = TOOL_FOCUS[step.name];
+  const beforeObs = getObservationBeforeCurrentStep();
+  const afterObs = step.observation_after || getEffectiveObservation();
+  const focusObservations = [afterObs, beforeObs, currentTurn()?.observation_before].filter(Boolean);
+  const focusRefs = refsBeforeStep(currentTurn(), S.currentStepIdx);
   showActionToast(step);
+  if (!isStateWrite || stepOutcome(step) === false) return;
 
   // Handle end_turn battles (for manual stepping too)
   if (step.name === 'end_turn' && stepHasBattles(step)) {
@@ -373,79 +537,56 @@ function focusOnCurrentStep() {
 
   if (focus.entityType && focus.idArg) {
     const args = step.arguments || {};
-    const entityId = args[focus.idArg];
+    const entityId = resolveEntityRef(focus.entityType, args[focus.idArg], focusObservations, step, focusRefs);
     if (entityId) setTimeout(() => flashEntity(focus.entityType, entityId, step), 200);
   }
 
   if (step.name === 'end_turn') {
-    const args = step.arguments || {};
-    const hunts = args.hunts || [];
-    hunts.forEach((hunt, i) => {
-      setTimeout(() => {
-        if (hunt.adventurer_id) flashEntity('adventurer', hunt.adventurer_id, step);
-        if (hunt.monster_id) flashEntity('monster', hunt.monster_id, step);
-      }, 250 + i * 150);
-    });
-    // Also show any new adventurers from observation_after
-    if (step.observation_after) {
-      const newAdvs = step.observation_after.adventurers || [];
-      setTimeout(() => {
-        newAdvs.forEach(a => flashEntity('adventurer', a.adventurer_id, step));
-      }, 500);
-    }
+    const newMonsters = addedEntities('monster', beforeObs, afterObs);
+    setTimeout(() => newMonsters.forEach(m => flashEntity('monster', m.monster_id, step)), 250);
   }
 
   // For recruit, find the new adventurer from observation_after
-  if (step.name === 'recruit_adventurer' && step.observation_after) {
-    const obs = step.observation_after;
-    const prevObs = currentTurn().observation_before;
-    if (prevObs) {
-      const prevIds = new Set((prevObs.adventurers||[]).map(a=>a.adventurer_id));
-      const newAdvs = (obs.adventurers||[]).filter(a => !prevIds.has(a.adventurer_id));
-      setTimeout(() => newAdvs.forEach(a => flashEntity('adventurer', a.adventurer_id, step)), 300);
-    }
+  if (step.name === 'recruit_adventurer' && afterObs) {
+    const newAdvs = addedEntities('adventurer', beforeObs, afterObs);
+    setTimeout(() => newAdvs.forEach(a => flashEntity('adventurer', a.adventurer_id, step)), 300);
   }
 
   // For craft, find the newly created equipment from observation_after
-  if (step.name === 'craft_equipment' && step.observation_after) {
-    const obs = step.observation_after;
-    const prevObs = currentTurn().observation_before;
-    if (prevObs) {
-      const prevIds = new Set((prevObs.equipment_inventory||[]).map(e=>e.instance_id));
-      const newItems = (obs.equipment_inventory||[]).filter(e => !prevIds.has(e.instance_id));
-      setTimeout(() => newItems.forEach(e => flashEntity('equipment', e.instance_id, step)), 300);
-    }
+  if (step.name === 'craft_equipment' && afterObs) {
+    const newItems = addedEntities('equipment', beforeObs, afterObs);
+    setTimeout(() => newItems.forEach(e => flashEntity('equipment', e.instance_id, step)), 300);
   }
 
   // For dismiss, flash remaining adventurers to highlight party change
-  if (step.name === 'dismiss_adventurer' && step.observation_after) {
-    const remaining = step.observation_after.adventurers || [];
+  if (step.name === 'dismiss_adventurer' && afterObs) {
+    const remaining = afterObs.adventurers || [];
     setTimeout(() => remaining.forEach(a => flashEntity('adventurer', a.adventurer_id, step)), 200);
   }
 }
 
 function flashEntity(entityType, entityId, step) {
-  let sel;
-  switch (entityType) {
-    case 'adventurer': sel = `.adventurer-card[data-id="${CSS.escape(entityId)}"]`; break;
-    case 'monster': sel = `.entity-card[data-id="${CSS.escape(entityId)}"]`; break;
-    case 'equipment': sel = `.entity-card[data-id="${CSS.escape(entityId)}"]`; break;
-    case 'upgrade': flashListItems(DOM.upgradeList, entityId); return;
-    case 'recipe': flashListItems(DOM.recipeList, entityId); return;
-    default: return;
-  }
-  const el = document.querySelector(sel); if (!el) return;
+  const cfg = ENTITY_CONFIG[entityType]; if (!cfg || entityId == null) return;
+  if (entityType === 'upgrade') { flashListItems(DOM.upgradeList, entityId); return; }
+  if (entityType === 'recipe') { flashListItems(DOM.recipeList, entityId); return; }
+  const container = cfg.container ? cfg.container() : document;
+  const el = container.querySelector(`.${cfg.cardClass}[data-id="${CSS.escape(String(entityId))}"]`);
+  if (!el) return;
   el.classList.remove('focus-flash'); void el.offsetWidth; el.classList.add('focus-flash');
   el.scrollIntoView({ block: 'center', behavior: 'smooth' });
 }
 
 function flashListItems(container, id) {
-  for (const item of container.querySelectorAll('.list-item')) {
-    if ((item.textContent||'').includes(id)) {
-      item.classList.remove('focus-flash'); void item.offsetWidth; item.classList.add('focus-flash');
-      item.scrollIntoView({ block: 'center', behavior: 'smooth' }); return;
-    }
+  if (!container || id == null) return;
+  const exact = container.querySelector(`.list-item[data-id="${CSS.escape(String(id))}"]`);
+  if (exact) {
+    exact.classList.remove('focus-flash'); void exact.offsetWidth; exact.classList.add('focus-flash');
+    exact.scrollIntoView({ block: 'center', behavior: 'smooth' }); return;
   }
+}
+
+function clearFocusFlash() {
+  document.querySelectorAll('.focus-flash').forEach(el => el.classList.remove('focus-flash'));
 }
 
 // ============================================================================
@@ -456,9 +597,8 @@ function showActionToast(step) {
   if (toastTimer) clearTimeout(toastTimer);
   const name = step.name || '', content = step.content || '';
   const firstLine = content.split('\n')[0].trim();
-  let summary = firstLine;
-  if (firstLine.startsWith('OK ')) summary = firstLine.slice(3);
-  else if (firstLine.startsWith('FAIL ')) summary = '❌ ' + firstLine.slice(5);
+  const outcome = stepOutcome(step);
+  const summary = summarizeToolLine(firstLine, outcome);
   DOM.actionToast.innerHTML = `<span class="toast-icon">${stepIcon(name)}</span>${esc(summary)}`;
   DOM.actionToast.classList.add('show'); DOM.actionToast.setAttribute('aria-hidden','false');
   toastTimer = setTimeout(() => {
@@ -470,12 +610,40 @@ function stepIcon(n) {
   return m[n]||'🔧';
 }
 
+function stepOutcome(step) {
+  if (step?.ok === true || step?.result?.ok === true) return true;
+  if (step?.ok === false || step?.result?.ok === false || step?.error || step?.result?.error) return false;
+  const content = String(step?.content || '').trimStart();
+  if (/^(?:OK\b|成功)/i.test(content)) return true;
+  if (/^(?:FAIL\b|ERROR\b|失败|错误)/i.test(content)) return false;
+  try {
+    const data = JSON.parse(content);
+    if (typeof data?.ok === 'boolean') return data.ok;
+  } catch {}
+  return null;
+}
+
+function summarizeToolLine(firstLine, outcome) {
+  const line = String(firstLine || '').trim();
+  if (!line) return outcome === false ? '失败' : '成功';
+  if (outcome === true) {
+    const rest = line.replace(/^(?:OK|成功)\s+\S+\s*[:：]?\s*/i, '').trim();
+    return rest || line.replace(/^(?:OK|成功)\s*/i, '').trim() || line;
+  }
+  if (outcome === false) {
+    const rest = line.replace(/^(?:FAIL|失败|ERROR|错误)\s+\S+\s*[:：]?\s*/i, '').trim();
+    return `❌ ${rest || line.replace(/^(?:FAIL|失败|ERROR|错误)\s*/i, '').trim() || line}`;
+  }
+  return line;
+}
+
 // ============================================================================
 // Battle Overlay (staged animation)
 // ============================================================================
 function stepHasBattles(step) {
   if (!step || step.name !== 'end_turn') return false;
-  return /战斗/.test(step.content||'');
+  const battles = step?.result?.turn_result?.battles;
+  return (Array.isArray(battles) && battles.length > 0) || /战斗/.test(step.content||'');
 }
 
 /** Extract HP change from content like "黑魔法师 HP: 250 -> 180" */
@@ -1147,11 +1315,10 @@ function renderLLMStepHeader(step, isRead, isWrite) {
     icon = '<span class="llm-step-icon reasoning">🧠</span>';
     title = 'LLM 响应';
   } else if (step.type === 'tool_result') {
-    const ok = step.content && step.content.trimStart().startsWith('OK');
-    const fail = step.content && step.content.trimStart().startsWith('FAIL');
-    if (ok && isWrite) icon = '<span class="llm-step-icon tool-ok">⚡</span>';
-    else if (ok) icon = '<span class="llm-step-icon tool-read">📖</span>';
-    else icon = '<span class="llm-step-icon tool-fail">✗</span>';
+    const outcome = stepOutcome(step);
+    if (outcome === false) icon = '<span class="llm-step-icon tool-fail">✗</span>';
+    else if (isWrite) icon = '<span class="llm-step-icon tool-ok">⚡</span>';
+    else icon = '<span class="llm-step-icon tool-read">📖</span>';
     title = toolLabel(step.name) || esc(step.name);
   } else if (step.type === 'retry_prompt') {
     icon = '<span class="llm-step-icon retry">↻</span>';
@@ -1201,14 +1368,12 @@ function renderToolResultBody(step, isRead, isWrite) {
   const firstLine = lines[0] || '';
   const rest = lines.slice(1).join('\n').trim();
 
-  const ok = content.trimStart().startsWith('OK');
-  const fail = content.trimStart().startsWith('FAIL');
-  // 剥掉 "OK <tool>:" 前缀，让摘要更短
-  let summary = firstLine;
-  if (ok) summary = firstLine.replace(/^OK\s+\S+:?\s*/, '✓ ').replace(/^OK\s+/, '✓ ') || firstLine;
-  else if (fail) summary = firstLine.replace(/^FAIL\s+\S+:?\s*/, '✗ ').replace(/^FAIL\s+/, '✗ ') || firstLine;
+  const outcome = stepOutcome(step);
+  const ok = outcome === true;
+  const fail = outcome === false;
+  const summary = `${ok ? '✓ ' : fail ? '✗ ' : ''}${esc(summarizeToolLine(firstLine, outcome).replace(/^❌\s*/, ''))}`;
 
-  let html = `<div class="llm-result-summary ${ok ? 'ok' : fail ? 'fail' : 'neutral'}">${esc(summary)}</div>`;
+  let html = `<div class="llm-result-summary ${ok ? 'ok' : fail ? 'fail' : 'neutral'}">${summary}</div>`;
 
   if (step.arguments && Object.keys(step.arguments).length) {
     html += renderArgsGrid(step.arguments);
@@ -1422,6 +1587,7 @@ function toolLabel(name) {
     get_recruitment: '查看招募',
     get_events: '查看事件',
     preview_battle: '预览战斗',
+    preview_team_power: '预览战力',
     craft_equipment: '制作装备',
     purchase_upgrade: '购买升级',
     allocate_experience: '分配经验',
@@ -1430,6 +1596,7 @@ function toolLabel(name) {
     equip_item: '装备物品',
     unequip_item: '卸下装备',
     end_turn: '结束回合',
+    write_memo: '写备忘',
   };
   return m[name] || name || '未知工具';
 }
