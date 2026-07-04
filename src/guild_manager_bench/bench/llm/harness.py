@@ -265,8 +265,8 @@ _WRITE_MEMO_SCHEMA: dict[str, Any] = {
             "content": {
                 "type": "string",
                 "minLength": 1,
-                "maxLength": 2000,
-                "description": "要记录的文字，最多 2000 字符。",
+                "maxLength": 200,
+                "description": "要记录的文字，最多 200 字符。",
             },
         },
         "additionalProperties": False,
