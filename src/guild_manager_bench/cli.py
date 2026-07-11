@@ -105,7 +105,7 @@ def main() -> None:
     run_parser.add_argument("--archive-dir", default="runs/llm", help="存档目录 (默认: runs/llm，设为 none 禁用存档)")
     run_parser.add_argument("--resume", default=None, help="从指定存档目录续跑 (传入 archive run 目录路径)")
     run_parser.add_argument("--max-tool-calls-per-turn", type=int, default=20, help="每回合最大工具调用次数 (默认: 20)")
-    run_parser.add_argument("--reasoning-effort", default=None, choices=["none", "minimal", "low", "medium", "high", "xhigh"], help="OpenAI-compatible 推理强度 (默认不传)")
+    run_parser.add_argument("--reasoning-effort", default=None, choices=["none", "minimal", "low", "medium", "high", "xhigh", "max"], help="OpenAI-compatible 推理强度，max 仅部分模型支持 (默认不传)")
     run_parser.add_argument("--thinking", action=argparse.BooleanOptionalAction, default=None, help="启用或禁用 Anthropic adaptive thinking (默认不传)")
     run_parser.add_argument("--thinking-effort", default=None, choices=["low", "medium", "high", "max"], help="Anthropic 思考强度，max 仅部分模型支持 (默认不传)")
     run_parser.add_argument("--timeout", type=float, default=None, help="API 请求超时秒数 (也可通过 provider 对应环境变量设置)")
