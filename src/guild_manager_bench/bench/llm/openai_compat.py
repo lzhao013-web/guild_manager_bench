@@ -17,6 +17,7 @@ class OpenAICompatibleError(RuntimeError):
 
 
 _RETRYABLE_HTTP_CODES = frozenset({429, 500, 502, 503, 504})
+_RETRYABLE_NETWORK_ERRORS = (urllib.error.URLError, ConnectionError, TimeoutError)
 _MAX_API_RETRIES = 2
 
 
@@ -25,7 +26,7 @@ def _urlopen_with_retry(
     timeout: float,
     max_retries: int = _MAX_API_RETRIES,
 ):
-    """打开 URL，对瞬时服务器错误自动重试 (最多 max_retries 次)。"""
+    """打开 URL，对瞬时 HTTP 或连接错误自动重试 (最多 max_retries 次)。"""
     for attempt in range(max_retries + 1):
         try:
             return urllib.request.urlopen(request, timeout=timeout)
@@ -33,7 +34,7 @@ def _urlopen_with_retry(
             if exc.code not in _RETRYABLE_HTTP_CODES or attempt >= max_retries:
                 raise
             time.sleep(2 ** attempt)
-        except urllib.error.URLError as exc:
+        except _RETRYABLE_NETWORK_ERRORS:
             if attempt >= max_retries:
                 raise
             time.sleep(2 ** attempt)
@@ -642,7 +643,7 @@ def _urllib_transport(
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
         raise OpenAICompatibleError(f"HTTP {exc.code}: {detail}") from exc
-    except urllib.error.URLError as exc:
+    except _RETRYABLE_NETWORK_ERRORS as exc:
         raise OpenAICompatibleError(str(exc)) from exc
 
     try:
@@ -687,5 +688,5 @@ def _urllib_stream_transport(
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
         raise OpenAICompatibleError(f"HTTP {exc.code}: {detail}") from exc
-    except urllib.error.URLError as exc:
+    except _RETRYABLE_NETWORK_ERRORS as exc:
         raise OpenAICompatibleError(str(exc)) from exc

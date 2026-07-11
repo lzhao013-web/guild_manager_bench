@@ -1,4 +1,7 @@
+import http.client
 from typing import Any, Mapping
+
+import pytest
 
 from guild_manager_bench.bench.llm import (
     LlmToolCall,
@@ -6,8 +9,59 @@ from guild_manager_bench.bench.llm import (
     OpenAIChatCompletionsConfig,
     load_dotenv_values,
 )
+from guild_manager_bench.bench.llm import openai_compat
 from guild_manager_bench.bench.llm.runner import LlmAgentResponse, run_llm_turn
 from guild_manager_bench.bench.llm.tools import GuildManagerTools
+
+
+def test_urlopen_retries_remote_disconnect(monkeypatch) -> None:
+    request = openai_compat.urllib.request.Request("https://api.example.test/v1")
+    response = object()
+    attempts = 0
+    sleeps: list[int] = []
+
+    def urlopen(request, timeout):
+        nonlocal attempts
+        attempts += 1
+        if attempts < 3:
+            raise http.client.RemoteDisconnected("closed without response")
+        return response
+
+    monkeypatch.setattr(openai_compat.urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(openai_compat.time, "sleep", sleeps.append)
+
+    result = openai_compat._urlopen_with_retry(request, timeout=30.0)
+
+    assert result is response
+    assert attempts == 3
+    assert sleeps == [1, 2]
+
+
+def test_stream_transport_wraps_remote_disconnect_after_retries(monkeypatch) -> None:
+    attempts = 0
+
+    def urlopen(request, timeout):
+        nonlocal attempts
+        attempts += 1
+        raise http.client.RemoteDisconnected("closed without response")
+
+    monkeypatch.setattr(openai_compat.urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(openai_compat.time, "sleep", lambda delay: None)
+
+    with pytest.raises(
+        openai_compat.OpenAICompatibleError,
+        match="closed without response",
+    ):
+        list(
+            openai_compat._urllib_stream_transport(
+                "https://api.example.test/v1/chat/completions",
+                {},
+                {"stream": True},
+                30.0,
+            )
+        )
+
+    assert attempts == 3
 
 
 def test_openai_config_reads_openai_compat_dotenv(tmp_path, monkeypatch) -> None:
