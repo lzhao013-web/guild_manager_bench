@@ -84,10 +84,30 @@
     </section>
 
     <div class="tab-section active" id="tab-leaderboard">
-    <div id="cardListContainer">
-      <div class="loading-state" id="loadingState">
-        <div class="loading-spinner"></div>
-        <p>正在加载排行榜数据…</p>
+      <section class="leaderboard-toolbar" aria-label="排行榜搜索">
+        <div class="leaderboard-search">
+          <svg class="leaderboard-search-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+            <circle cx="7" cy="7" r="4.5"></circle>
+            <path d="M10.5 10.5L14 14"></path>
+          </svg>
+          <label class="sr-only" for="leaderboardSearchInput">搜索模型</label>
+          <input
+            id="leaderboardSearchInput"
+            type="search"
+            placeholder="搜索模型名称或备注…"
+            autocomplete="off"
+            spellcheck="false"
+            disabled
+          />
+          <button class="leaderboard-search-clear" id="leaderboardSearchClear" type="button" aria-label="清除搜索" hidden>×</button>
+        </div>
+        <span class="leaderboard-search-status" id="leaderboardSearchStatus" role="status" aria-live="polite">正在加载模型…</span>
+      </section>
+      <div id="cardListContainer">
+        <div class="loading-state" id="loadingState">
+          <div class="loading-spinner"></div>
+          <p>正在加载排行榜数据…</p>
+        </div>
       </div>
     </div>
   </main>

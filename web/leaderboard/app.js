@@ -175,6 +175,7 @@ let _curveRunSelection = {}; // key: "model::run_id" -> boolean
 let _curveMetric = 'rank_score';
 let _adventurerTooltipSeq = 0;
 let _adventurerTooltipHideTimer = null;
+let _leaderboardSearchQuery = '';
 const _adventurerTooltipDetails = new Map();
 
 // Palette for curve lines — distinct colors readable on dark background
@@ -503,11 +504,8 @@ function updateCurveChart(data) {
 // Rendering — Leaderboard Cards
 // ============================================================================
 function renderLeaderboard(data) {
-  const main = $('#leaderboardMain');
   const meta = $('#topMeta');
   const container = $('#cardListContainer');
-  _adventurerTooltipDetails.clear();
-  _adventurerTooltipSeq = 0;
 
   // Top bar meta
   const genTime = data.generated_at ? data.generated_at.replace('T', ' ') : '—';
@@ -519,28 +517,85 @@ function renderLeaderboard(data) {
         <h2>暂无数据</h2>
         <p>暂无排行榜数据，请稍后再来查看。</p>
       </div>`;
+    updateLeaderboardSearchState(0, 0);
     return;
   }
 
   // Stats banner metrics
   renderStatsBanner(data);
 
+  const searchInput = $('#leaderboardSearchInput');
+  if (searchInput) searchInput.disabled = false;
+
+  renderLeaderboardCards(data);
+}
+
+function normalizeSearchText(value) {
+  return String(value || '').normalize('NFKC').toLocaleLowerCase();
+}
+
+function modelMatchesSearch(model, query) {
+  if (!query) return true;
+  const searchableText = [model.model, _modelNotes[model.model]]
+    .filter(Boolean)
+    .map(normalizeSearchText)
+    .join('\n');
+  return searchableText.includes(query);
+}
+
+function updateLeaderboardSearchState(visibleCount, totalCount) {
+  const input = $('#leaderboardSearchInput');
+  const clear = $('#leaderboardSearchClear');
+  const status = $('#leaderboardSearchStatus');
+  const hasQuery = Boolean(_leaderboardSearchQuery);
+
+  if (input && input.value !== _leaderboardSearchQuery) {
+    input.value = _leaderboardSearchQuery;
+  }
+  if (clear) clear.hidden = !hasQuery;
+  if (status) {
+    status.textContent = hasQuery
+      ? `找到 ${visibleCount} / ${totalCount} 个模型`
+      : `共 ${totalCount} 个模型`;
+  }
+}
+
+function renderLeaderboardCards(data) {
+  const container = $('#cardListContainer');
+  const models = data.models || [];
+  const normalizedQuery = normalizeSearchText(_leaderboardSearchQuery.trim());
+  const visibleModels = models.filter((model) => modelMatchesSearch(model, normalizedQuery));
+
+  _adventurerTooltipDetails.clear();
+  _adventurerTooltipSeq = 0;
+  updateLeaderboardSearchState(visibleModels.length, models.length);
+
+  if (!visibleModels.length) {
+    container.innerHTML = `
+      <div class="empty-state search-empty-state">
+        <h2>未找到匹配模型</h2>
+        <p>请尝试其他模型名称或备注关键词。</p>
+        <button class="search-empty-clear" type="button" data-action="clear-leaderboard-search">清除搜索</button>
+      </div>`;
+    return;
+  }
+
   // 预计算多口径徽标（避免每个 card 内重算）
-  const allBadges = computeModelBadges(data.models);
+  const allBadges = computeModelBadges(models);
 
   // Build cards with staggered animation delay
-  const topScore = data.models
+  const topScore = models
     .map((m) => (m.rank_score && m.rank_score.mean) || 0)
     .reduce((a, b) => Math.max(a, b), 0);
-  const avgScore = data.models
+  const avgScore = models
     .map((m) => (m.rank_score && m.rank_score.mean) || 0)
     .filter((v) => v > 0);
   const avgVal = avgScore.length
     ? avgScore.reduce((a, b) => a + b, 0) / avgScore.length
     : null;
-  const total = data.models.length;
+  const total = models.length;
 
-  const cards = data.models.map((m, i) => {
+  const cards = visibleModels.map((m, i) => {
     const badges = allBadges.get(m.model) || [];
     const html = renderCard(m, { topScore, avgVal, total, badges });
     return html.replace(
@@ -559,6 +614,40 @@ function renderLeaderboard(data) {
       if (e.target.closest('a, button')) return;
       card.classList.toggle('expanded');
     });
+  });
+}
+
+function clearLeaderboardSearch({ focus = true } = {}) {
+  if (!_leaderboardSearchQuery && !$('#leaderboardSearchInput')?.value) return;
+  _leaderboardSearchQuery = '';
+  const input = $('#leaderboardSearchInput');
+  if (input) input.value = '';
+  if (_leaderboardData) renderLeaderboardCards(_leaderboardData);
+  if (focus) input?.focus();
+}
+
+function initLeaderboardSearch() {
+  const input = $('#leaderboardSearchInput');
+  const clear = $('#leaderboardSearchClear');
+  if (!input || !clear) return;
+
+  input.addEventListener('input', () => {
+    _leaderboardSearchQuery = input.value.trim();
+    if (_leaderboardData) renderLeaderboardCards(_leaderboardData);
+  });
+
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && input.value) {
+      event.preventDefault();
+      clearLeaderboardSearch();
+    }
+  });
+
+  clear.addEventListener('click', () => clearLeaderboardSearch());
+  $('#cardListContainer')?.addEventListener('click', (event) => {
+    if (event.target.closest('[data-action="clear-leaderboard-search"]')) {
+      clearLeaderboardSearch();
+    }
   });
 }
 
@@ -1394,6 +1483,7 @@ function showError(msg) {
 // Init
 // ============================================================================
 async function init() {
+  initLeaderboardSearch();
   try {
     const [res, notesRes] = await Promise.all([
       fetch('leaderboard_data.json'),
