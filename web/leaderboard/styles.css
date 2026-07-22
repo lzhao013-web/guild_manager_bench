@@ -82,13 +82,51 @@ body {
 h1, h2, h3 { margin: 0; letter-spacing: -0.02em; }
 
 code {
-  font-family: "JetBrains Mono", "SF Mono", "Cascadia Code", ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 0.88em;
   padding: 2px 7px;
   background: var(--surface-raised);
   border: 1px solid var(--line);
   border-radius: var(--radius-xs);
   color: var(--accent);
+}
+
+/* ── Focus & Selection（统一 accent 焦点环 + accent-dim 选中底色） ── */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+::selection {
+  background: var(--accent-dim);
+  color: var(--text);
+}
+
+/* ── Custom Scrollbar（细、半透明、hover 加深；webkit + Firefox 全站生效） ── */
+:root {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.10);
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+/* main 显隐统一走 class（替代内联 style） */
+.main.main-hidden {
+  display: none;
 }
 
 /* ========== Background pattern ========== */
@@ -113,6 +151,18 @@ body::before {
   -webkit-backdrop-filter: blur(16px) saturate(180%);
   border-bottom: 1px solid var(--line);
   flex-shrink: 0;
+}
+
+/* header 底部 1px accent 微光线 — 从左到右淡出 */
+.header::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  background: linear-gradient(90deg, var(--accent-line) 0%, rgba(124, 140, 248, 0.08) 40%, transparent 75%);
+  pointer-events: none;
 }
 
 .header-inner {
@@ -282,7 +332,8 @@ body::before {
 }
 
 .stats-banner-value {
-  font-family: "JetBrains Mono", "SF Mono", monospace;
+  font-family: var(--font-mono);
+  font-feature-settings: "tnum";
   font-size: 16px;
   font-weight: 700;
   color: var(--text);
@@ -304,6 +355,19 @@ body::before {
   text-overflow: ellipsis;
 }
 
+/* tier 层级：primary（最高分/平均分）大字号 accent 化，secondary 降一档 */
+.stats-banner-cell.tier-primary .stats-banner-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--accent-soft);
+  letter-spacing: -0.03em;
+}
+.stats-banner-cell.tier-secondary .stats-banner-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
 @media (max-width: 980px) {
   .stats-banner-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .stats-banner-cell:nth-child(4n+1) { padding-left: 0; border-left: none; }
@@ -320,7 +384,6 @@ body::before {
 }
 
 /* ========== Loading & Error States ========== */
-.loading-state,
 .error-state {
   display: flex;
   flex-direction: column;
@@ -332,13 +395,83 @@ body::before {
   text-align: center;
 }
 
-.loading-spinner {
-  width: 36px;
-  height: 36px;
-  border: 3px solid var(--line-strong);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+/* ── 骨架屏加载态（替代 spinner：3 张 shimmer 骨架卡，模拟真实卡片结构） ── */
+.skeleton-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.skeleton-card {
+  position: relative;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 18px 22px;
+}
+
+/* shimmer 扫光 */
+.skeleton-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.05) 50%, transparent 100%);
+  transform: translateX(-100%);
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+
+.skeleton-card:nth-child(2)::after { animation-delay: 0.15s; }
+.skeleton-card:nth-child(3)::after { animation-delay: 0.3s; }
+
+@keyframes shimmer {
+  to { transform: translateX(100%); }
+}
+
+.skeleton-block {
+  display: block;
+  background: var(--surface-raised);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-xs);
+}
+
+.skeleton-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.skeleton-rank {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+}
+
+.skeleton-head-lines {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.skeleton-line {
+  height: 10px;
+}
+
+.skeleton-score {
+  flex-shrink: 0;
+  width: 64px;
+  height: 20px;
+}
+
+.skeleton-metrics {
+  display: flex;
+  gap: 14px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
 }
 
 .spinner-wrap .spinner {
@@ -777,6 +910,11 @@ body::before {
   opacity: 0.65;
   width: 2px;
 }
+
+/* hover 时 rank stripe 提亮（::before 本就有 opacity transition，这里只给终态值） */
+.model-card:not(.rank-1):hover::before {
+  opacity: 1;
+}
 .model-card:not(.rank-1):not(.rank-2):not(.rank-3):hover {
   background: linear-gradient(180deg, var(--surface-hover) 0%, var(--surface-raised) 100%);
   border-color: var(--rank-hue, var(--line-strong));
@@ -842,7 +980,7 @@ body::before {
   background: var(--surface-raised);
   color: var(--text-secondary);
   border: 1px solid var(--line);
-  font-family: "JetBrains Mono", monospace;
+  font-family: var(--font-mono);
   letter-spacing: -0.02em;
 }
 
@@ -1044,7 +1182,8 @@ body::before {
 }
 
 .stat-value {
-  font-family: "JetBrains Mono", "SF Mono", "Cascadia Code", ui-monospace, monospace;
+  font-family: var(--font-mono);
+  font-feature-settings: "tnum";
   font-size: 18px;
   font-weight: 700;
   color: var(--text);
@@ -1075,12 +1214,6 @@ body::before {
   letter-spacing: -0.04em;
   color: var(--text);
   text-decoration: none;
-}
-
-.stat-block.primary-stat {
-  background: transparent;
-  border: none;
-  padding: 0;
 }
 
 /* ── Expand Chevron ── */
@@ -1170,7 +1303,8 @@ body::before {
 }
 
 .metric-cell-value {
-  font-family: "JetBrains Mono", "SF Mono", "Cascadia Code", ui-monospace, monospace;
+  font-family: var(--font-mono);
+  font-feature-settings: "tnum";
   font-size: 15px;
   font-weight: 600;
   color: var(--text);
@@ -1207,17 +1341,7 @@ body::before {
   opacity: 1;
 }
 
-.detail-title {
-  margin-bottom: 12px;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
+/* .detail-title 的完整定义见下方 Run Detail 区块（原此处为重复定义，已按后一处生效值合并） */
 
 .detail-title > span:first-child {
   flex-shrink: 0;
@@ -1237,13 +1361,6 @@ body::before {
   text-transform: none;
   letter-spacing: 0.02em;
   color: var(--text-secondary);
-}
-
-.detail-title::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: var(--line);
 }
 
 /* ── Aggregate Metrics（聚合指标） — 分组 + 主次高亮 ── */
@@ -1333,7 +1450,8 @@ body::before {
 
 .aggregate-row .aggregate-value {
   flex-shrink: 0;
-  font-family: "JetBrains Mono", "SF Mono", "Cascadia Code", ui-monospace, monospace;
+  font-family: var(--font-mono);
+  font-feature-settings: "tnum";
   font-size: 13px;
   font-weight: 600;
   color: var(--text);
@@ -1365,11 +1483,7 @@ body::before {
 }
 
 /* ── Run Cards（运行明细） — 清晰的卡片 + 分组 + 头部 ── */
-.run-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
+/* .run-list 的布局定义见下方 Run Detail List 区块（原此处为重复定义，已合并） */
 
 .run-card {
   background: var(--bg-subtle);
@@ -1405,7 +1519,7 @@ body::before {
 }
 
 .run-card-header .run-time {
-  font-family: "JetBrains Mono", "SF Mono", "Cascadia Code", ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   font-weight: 600;
   color: var(--text);
@@ -1491,7 +1605,8 @@ body::before {
 }
 
 .run-stat-value {
-  font-family: "JetBrains Mono", "SF Mono", "Cascadia Code", ui-monospace, monospace;
+  font-family: var(--font-mono);
+  font-feature-settings: "tnum";
   font-size: 14px;
   font-weight: 600;
   color: var(--text);
@@ -1775,45 +1890,6 @@ body::before {
   gap: 8px;
 }
 
-.detail-item {
-  display: flex;
-  gap: 10px;
-  justify-content: space-between;
-  align-items: baseline;
-  padding: 8px 12px;
-  background: var(--bg-subtle);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-xs);
-  min-width: 0;
-  transition: background var(--transition);
-}
-
-.model-card:hover .detail-item {
-  background: var(--surface-raised);
-}
-
-.detail-item.wide {
-  grid-column: 1 / -1;
-}
-
-.detail-item .detail-label {
-  flex-shrink: 0;
-  font-size: 11px;
-  color: var(--muted);
-  font-weight: 500;
-}
-
-.detail-item .detail-value {
-  min-width: 0;
-  text-align: right;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-  font-family: "JetBrains Mono", "SF Mono", "Cascadia Code", ui-monospace, monospace;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary);
-}
-
 /* ── Run Detail List ── */
 .run-list {
   display: grid;
@@ -1841,7 +1917,7 @@ body::before {
 }
 
 .run-time {
-  font-family: "JetBrains Mono", "SF Mono", "Cascadia Code", ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   font-weight: 700;
   color: var(--text);
@@ -1853,7 +1929,7 @@ body::before {
   text-align: right;
   overflow-wrap: anywhere;
   word-break: break-word;
-  font-family: "JetBrains Mono", "SF Mono", "Cascadia Code", ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   color: var(--muted);
 }
@@ -1885,7 +1961,7 @@ body::before {
   display: block;
   overflow-wrap: anywhere;
   word-break: break-word;
-  font-family: "JetBrains Mono", "SF Mono", "Cascadia Code", ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 600;
   color: var(--text-secondary);
@@ -1923,7 +1999,7 @@ body::before {
 
 .rank-contrib-chip em,
 .rank-contrib-chip span {
-  font-family: "JetBrains Mono", "SF Mono", "Cascadia Code", ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-style: normal;
 }
 
@@ -1939,7 +2015,7 @@ body::before {
   border-bottom: 1px dotted currentColor;
   background: transparent;
   color: var(--accent);
-  font-family: "JetBrains Mono", "SF Mono", "Cascadia Code", ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: inherit;
   font-weight: 700;
   line-height: inherit;
@@ -1997,7 +2073,7 @@ body::before {
   display: block;
   margin-top: 3px;
   color: var(--muted);
-  font-family: "JetBrains Mono", "SF Mono", "Cascadia Code", ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
 }
 
@@ -2063,7 +2139,7 @@ body::before {
 .adventurer-tooltip-stat strong {
   display: block;
   color: var(--text);
-  font-family: "JetBrains Mono", "SF Mono", "Cascadia Code", ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
 }
 
@@ -2185,7 +2261,7 @@ body::before {
   background: var(--bg-subtle);
   border-radius: 3px;
   color: var(--text-secondary);
-  font-family: "JetBrains Mono", monospace;
+  font-family: var(--font-mono);
 }
 
 .footer-sep { opacity: 0.4; }
@@ -2331,9 +2407,12 @@ body::before {
 }
 
 .tab-btn.active {
-  color: var(--text);
+  color: var(--accent-soft);
   background: var(--surface-raised);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  /* 1px accent-line 内阴影描边，与排行榜 accent 身份呼应 */
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.2),
+    0 0 0 1px var(--accent-line) inset;
 }
 
 /* ========== Curve Comparison Panel ========== */
@@ -2402,10 +2481,28 @@ body::before {
 }
 
 .curve-chart-wrap {
+  position: relative;
   flex: 1;
   min-width: 0;
   padding: 20px;
   height: 460px;
+}
+
+/* Chart.js 懒加载占位 / 加载失败提示（覆盖 canvas 区域） */
+.curve-chart-status {
+  position: absolute;
+  inset: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: 13px;
+  z-index: 2;
 }
 
 .curve-legend {
@@ -2539,7 +2636,7 @@ body::before {
   border-radius: 50%;
   background: var(--surface-raised);
   color: var(--muted);
-  font-family: "JetBrains Mono", "SF Mono", "Cascadia Code", ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 700;
   line-height: 1;
@@ -2637,7 +2734,7 @@ body::before {
 .rs-popover-formula {
   margin: 0 0 10px;
   padding: 10px 14px;
-  font-family: "JetBrains Mono", "SF Mono", "Cascadia Code", ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   font-weight: 500;
   color: var(--accent);
@@ -2673,5 +2770,35 @@ body::before {
   .rs-popover {
     width: calc(100vw - 16px);
     left: 8px !important;
+  }
+}
+
+/* ========== Reduced Motion（禁用动画与展开过渡，直接呈现终态） ========== */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  /* card-enter 起点是 opacity:0 — 动画禁用后必须直接给终态 */
+  .model-card {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  /* shimmer / spin 直接停掉 */
+  .skeleton-card::after,
+  .spinner-wrap .spinner {
+    animation: none;
+  }
+
+  /* 卡片展开（grid-template-rows 0fr→1fr）不再过渡 */
+  .card-detail-wrap,
+  .card-detail {
+    transition: none;
   }
 }

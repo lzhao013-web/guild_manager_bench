@@ -3,10 +3,12 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Guild Manager Bench — LLM Agent 长程决策基准排行榜：统一游戏种子、多难度竞技场扫描、可复现的模型经营能力对比。" />
+  <meta name="theme-color" content="#000000" />
   <title>Guild Manager Bench · Leaderboard</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -104,16 +106,63 @@
         <span class="leaderboard-search-status" id="leaderboardSearchStatus" role="status" aria-live="polite">正在加载模型…</span>
       </section>
       <div id="cardListContainer">
-        <div class="loading-state" id="loadingState">
-          <div class="loading-spinner"></div>
-          <p>正在加载排行榜数据…</p>
+        <!-- 骨架屏加载态：3 张 shimmer 骨架卡，模拟 徽标+标题行+指标行 -->
+        <div class="skeleton-wrap" id="loadingState" role="status" aria-label="正在加载排行榜数据">
+          <div class="skeleton-card">
+            <div class="skeleton-head">
+              <span class="skeleton-block skeleton-rank"></span>
+              <div class="skeleton-head-lines">
+                <span class="skeleton-block skeleton-line" style="width: 38%"></span>
+                <span class="skeleton-block skeleton-line" style="width: 62%"></span>
+              </div>
+              <span class="skeleton-block skeleton-score"></span>
+            </div>
+            <div class="skeleton-metrics">
+              <span class="skeleton-block skeleton-line" style="width: 18%"></span>
+              <span class="skeleton-block skeleton-line" style="width: 18%"></span>
+              <span class="skeleton-block skeleton-line" style="width: 18%"></span>
+              <span class="skeleton-block skeleton-line" style="width: 18%"></span>
+            </div>
+          </div>
+          <div class="skeleton-card">
+            <div class="skeleton-head">
+              <span class="skeleton-block skeleton-rank"></span>
+              <div class="skeleton-head-lines">
+                <span class="skeleton-block skeleton-line" style="width: 46%"></span>
+                <span class="skeleton-block skeleton-line" style="width: 55%"></span>
+              </div>
+              <span class="skeleton-block skeleton-score"></span>
+            </div>
+            <div class="skeleton-metrics">
+              <span class="skeleton-block skeleton-line" style="width: 18%"></span>
+              <span class="skeleton-block skeleton-line" style="width: 18%"></span>
+              <span class="skeleton-block skeleton-line" style="width: 18%"></span>
+              <span class="skeleton-block skeleton-line" style="width: 18%"></span>
+            </div>
+          </div>
+          <div class="skeleton-card">
+            <div class="skeleton-head">
+              <span class="skeleton-block skeleton-rank"></span>
+              <div class="skeleton-head-lines">
+                <span class="skeleton-block skeleton-line" style="width: 42%"></span>
+                <span class="skeleton-block skeleton-line" style="width: 58%"></span>
+              </div>
+              <span class="skeleton-block skeleton-score"></span>
+            </div>
+            <div class="skeleton-metrics">
+              <span class="skeleton-block skeleton-line" style="width: 18%"></span>
+              <span class="skeleton-block skeleton-line" style="width: 18%"></span>
+              <span class="skeleton-block skeleton-line" style="width: 18%"></span>
+              <span class="skeleton-block skeleton-line" style="width: 18%"></span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   </main>
 
   <!-- ===== Curve Comparison ===== -->
-  <main class="main" id="curvesMain" style="display:none">
+  <main class="main main-hidden" id="curvesMain" hidden>
     <div class="curve-panel">
       <div class="curve-toolbar">
         <div class="curve-toolbar-left">
@@ -157,8 +206,8 @@
     </div>
   </footer>
 
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-  <script src="app.js"></script>
+  <!-- Chart.js 不再同步加载：首次进入「曲线对比」时由 app.js 动态注入（ensureChartJs） -->
+  <script src="app.js" defer></script>
 
   <!-- Rank Score 释义浮窗 -->
   <div class="rs-popover" id="rsPopover" aria-hidden="true">

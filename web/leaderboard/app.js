@@ -12,10 +12,11 @@
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
 
+// esc() 高频调用 — 复用模块级单例元素，避免每次创建 div
+const _escEl = document.createElement('div');
 function esc(str) {
-  const d = document.createElement('div');
-  d.textContent = str;
-  return d.innerHTML;
+  _escEl.textContent = str;
+  return _escEl.innerHTML;
 }
 
 // ============================================================================
@@ -170,13 +171,39 @@ function renderBadges(badges) {
 // ============================================================================
 let _leaderboardData = null;
 let _modelNotes = {};       // model name -> note string
+let _cardModels = [];       // 当前排行榜 models，供详情懒渲染按 index 取用
 let _curveChart = null;
 let _curveRunSelection = {}; // key: "model::run_id" -> boolean
 let _curveMetric = 'rank_score';
+let _curveRunsCache = null;  // allCurveRuns 结果按指标缓存，指标切换/数据重载时失效
+let _curveRunsCacheMetric = null;
+let _chartJsPromise = null;  // Chart.js 懒加载 Promise（失败时重置以允许重试）
 let _adventurerTooltipSeq = 0;
 let _adventurerTooltipHideTimer = null;
 let _leaderboardSearchQuery = '';
+let _adventurerTooltipRaf = null; // scroll/resize 重定位的 rAF 节流句柄
 const _adventurerTooltipDetails = new Map();
+
+// ============================================================================
+// Chart.js 懒加载 — 首次进入「曲线对比」才动态注入 CDN script
+// ============================================================================
+const CHART_JS_URL = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js';
+function ensureChartJs() {
+  if (window.Chart) return Promise.resolve();
+  if (_chartJsPromise) return _chartJsPromise;
+  _chartJsPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = CHART_JS_URL;
+    s.async = true;
+    s.onload = () => resolve();
+    s.onerror = () => {
+      _chartJsPromise = null; // 允许重试
+      reject(new Error('Chart.js 加载失败'));
+    };
+    document.head.appendChild(s);
+  });
+  return _chartJsPromise;
+}
 
 // Palette for curve lines — distinct colors readable on dark background
 const CURVE_COLORS = [
@@ -248,6 +275,13 @@ function toolLabel(name) {
 // ============================================================================
 // Tab Navigation
 // ============================================================================
+// 两个 <main> 的显隐统一走 class + hidden 语义，不再写内联 style
+function setMainVisible(el, visible) {
+  if (!el) return;
+  el.classList.toggle('main-hidden', !visible);
+  el.hidden = !visible;
+}
+
 function initTabs() {
   const tabs = $$('.tab-btn');
   tabs.forEach((btn) => {
@@ -255,8 +289,8 @@ function initTabs() {
       tabs.forEach((t) => t.classList.remove('active'));
       btn.classList.add('active');
       const tab = btn.dataset.tab;
-      $('#leaderboardMain').style.display = tab === 'leaderboard' ? '' : 'none';
-      $('#curvesMain').style.display = tab === 'curves' ? '' : 'none';
+      setMainVisible($('#leaderboardMain'), tab === 'leaderboard');
+      setMainVisible($('#curvesMain'), tab === 'curves');
       if (tab === 'curves' && _leaderboardData) {
         renderCurvePanel();
       }
@@ -269,12 +303,12 @@ function initTabs() {
     const btn = $('#tabCurves');
     if (btn) btn.click();
   }
-  // ?expand=N 自动展开第 N 张卡（开发用）
+  // ?expand=N 自动展开第 N 张卡（开发用）— 展开即触发详情懒渲染
   const expandIdx = parseInt(params.get('expand') || '', 10);
   if (!Number.isNaN(expandIdx) && expandIdx > 0) {
     setTimeout(() => {
       const card = $$('.model-card')[expandIdx - 1];
-      if (card) card.classList.add('expanded');
+      if (card) toggleCardExpanded(card, true);
     }, 100);
   }
 }
@@ -308,7 +342,46 @@ function allCurveRuns(data) {
   return runs;
 }
 
-function renderCurvePanel() {
+// 按指标缓存 allCurveRuns 结果 — checkbox/全选/清除反复走缓存，
+// 仅指标切换或数据重载（renderLeaderboard）时才重新计算
+function getCurveRuns(data) {
+  if (_curveRunsCache && _curveRunsCacheMetric === _curveMetric) {
+    return _curveRunsCache;
+  }
+  _curveRunsCache = allCurveRuns(data);
+  _curveRunsCacheMetric = _curveMetric;
+  return _curveRunsCache;
+}
+
+// Chart.js 加载占位 / 错误提示（覆盖在 canvas 区域上）
+function setCurveChartStatus(state) {
+  const wrap = $('.curve-chart-wrap');
+  if (!wrap) return;
+  let el = wrap.querySelector('.curve-chart-status');
+  if (!state) {
+    el?.remove();
+    return;
+  }
+  if (!el) {
+    el = document.createElement('div');
+    el.className = 'curve-chart-status';
+    wrap.appendChild(el);
+  }
+  if (state === 'loading') {
+    el.innerHTML = `
+      <div class="spinner-wrap">
+        <div class="spinner"></div>
+        <span>正在加载图表组件…</span>
+      </div>`;
+  } else {
+    el.innerHTML = `
+      <span>图表组件加载失败，请检查网络后重试</span>
+      <button class="curve-btn" type="button" id="curveRetry">重试</button>`;
+    el.querySelector('#curveRetry')?.addEventListener('click', () => renderCurvePanel());
+  }
+}
+
+async function renderCurvePanel() {
   const data = _leaderboardData;
   if (!data) return;
 
@@ -321,7 +394,20 @@ function renderCurvePanel() {
     };
   }
 
-  const runs = allCurveRuns(data);
+  // Chart.js 懒加载：加载期间显示占位，失败显示可重试的错误提示
+  if (!window.Chart) {
+    setCurveChartStatus('loading');
+    try {
+      await ensureChartJs();
+    } catch (e) {
+      setCurveChartStatus('error');
+      return;
+    }
+    // 加载完成后若用户已切走 tab，仍完成渲染（隐藏状态下无碍）
+    setCurveChartStatus(null);
+  }
+
+  const runs = getCurveRuns(data);
   const legend = $('#curveLegend');
   const metric = currentCurveMetric();
 
@@ -393,7 +479,7 @@ function renderCurvePanel() {
 }
 
 function updateCurveChart(data) {
-  const runs = allCurveRuns(data);
+  const runs = getCurveRuns(data);
   const selected = runs.filter((r) => _curveRunSelection[r.key]);
 
   if (!selected.length) {
@@ -506,6 +592,8 @@ function updateCurveChart(data) {
 function renderLeaderboard(data) {
   const meta = $('#topMeta');
   const container = $('#cardListContainer');
+  _curveRunsCache = null; // 数据重载 → 曲线缓存失效
+  _curveRunsCacheMetric = null;
 
   // Top bar meta
   const genTime = data.generated_at ? data.generated_at.replace('T', ' ') : '—';
@@ -566,6 +654,8 @@ function renderLeaderboardCards(data) {
   const normalizedQuery = normalizeSearchText(_leaderboardSearchQuery.trim());
   const visibleModels = models.filter((model) => modelMatchesSearch(model, normalizedQuery));
 
+  // 详情按当前可见卡片索引懒加载；搜索过滤后必须同步索引来源。
+  _cardModels = visibleModels;
   _adventurerTooltipDetails.clear();
   _adventurerTooltipSeq = 0;
   updateLeaderboardSearchState(visibleModels.length, models.length);
@@ -597,7 +687,7 @@ function renderLeaderboardCards(data) {
 
   const cards = visibleModels.map((m, i) => {
     const badges = allBadges.get(m.model) || [];
-    const html = renderCard(m, { topScore, avgVal, total, badges });
+    const html = renderCard(m, { topScore, avgVal, total, badges, index: i });
     return html.replace(
       'class="model-card',
       `style="animation-delay:${i * 80}ms" class="model-card`
@@ -605,15 +695,100 @@ function renderLeaderboardCards(data) {
   }).join('');
 
   container.innerHTML = `<div class="card-list">${cards}</div>`;
-  bindAdventurerTooltips();
 
-  // Bind expand toggle
-  $$('.model-card').forEach((card) => {
-    card.addEventListener('click', (e) => {
-      // Don't toggle if clicking on a link or button inside
-      if (e.target.closest('a, button')) return;
-      card.classList.toggle('expanded');
-    });
+  // 卡片展开 + 冒险者 tooltip 均走容器级事件委托（绑定一次，重渲染不失效）
+  initCardInteractions();
+}
+
+// ============================================================================
+// Card Interactions — 容器级事件委托 + 详情懒渲染
+// ============================================================================
+
+// 首次展开某卡时才生成详情 HTML 注入（最大的 DOM 减重项）；
+// 冒险者 tooltip 数据（_adventurerTooltipDetails）也在此时注册
+function ensureCardDetailRendered(card) {
+  if (card.dataset.detailLoaded === 'true') return;
+  const idx = parseInt(card.dataset.cardIdx || '', 10);
+  const m = _cardModels[idx];
+  const detailEl = card.querySelector('.card-detail');
+  if (!m || !detailEl) return;
+  detailEl.innerHTML = renderCardDetail(m);
+  card.dataset.detailLoaded = 'true';
+}
+
+// 展开/收起统一入口 — 同步 .expanded 与 aria-expanded，展开前保证详情已注入
+function toggleCardExpanded(card, force) {
+  const expand = force != null ? force : !card.classList.contains('expanded');
+  if (expand) ensureCardDetailRendered(card);
+  card.classList.toggle('expanded', expand);
+  card.setAttribute('aria-expanded', String(expand));
+}
+
+let _cardInteractionsBound = false;
+function initCardInteractions() {
+  if (_cardInteractionsBound) return;
+  _cardInteractionsBound = true;
+  const container = $('#cardListContainer');
+  if (!container) return;
+
+  // 卡片 click 展开 — 单层委托；点击 a/button 不触发
+  container.addEventListener('click', (e) => {
+    const card = e.target.closest('.model-card');
+    if (!card || !container.contains(card)) return;
+    if (e.target.closest('a, button')) return;
+    toggleCardExpanded(card);
+  });
+
+  // 键盘可达：卡片聚焦时 Enter/Space 触发展开；Escape 关闭冒险者 tooltip
+  container.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      hideAdventurerTooltip();
+      return;
+    }
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const card = e.target.closest('.model-card');
+    if (!card || e.target !== card) return;
+    e.preventDefault();
+    toggleCardExpanded(card);
+  });
+
+  // 冒险者 tooltip — 委托 mouseover/mouseout + focusin/focusout
+  container.addEventListener('mouseover', (e) => {
+    const anchor = e.target.closest('[data-adventurer-tooltip]');
+    if (!anchor) return;
+    const tooltip = $('#adventurerTooltip');
+    if (tooltip && !tooltip.hidden && tooltip.dataset.anchor === anchor.dataset.adventurerTooltip) {
+      // 在同一 anchor 内移动：仅取消隐藏计时
+      cancelAdventurerTooltipHide();
+      return;
+    }
+    showAdventurerTooltip(anchor);
+  });
+  container.addEventListener('mouseout', (e) => {
+    if (e.target.closest('[data-adventurer-tooltip]')) scheduleAdventurerTooltipHide();
+  });
+  container.addEventListener('focusin', (e) => {
+    const anchor = e.target.closest('[data-adventurer-tooltip]');
+    if (anchor) showAdventurerTooltip(anchor);
+  });
+  container.addEventListener('focusout', (e) => {
+    if (e.target.closest('[data-adventurer-tooltip]')) scheduleAdventurerTooltipHide();
+  });
+
+  // tooltip 本体 hover 保持 + window scroll/resize 重定位（rAF 节流）
+  const tooltip = ensureAdventurerTooltip();
+  tooltip.addEventListener('mouseenter', cancelAdventurerTooltipHide);
+  tooltip.addEventListener('mouseleave', scheduleAdventurerTooltipHide);
+  window.addEventListener('resize', scheduleAdventurerTooltipReposition);
+  window.addEventListener('scroll', scheduleAdventurerTooltipReposition, true);
+}
+
+// scroll/resize 高频触发 — 用 rAF 合并到每帧最多一次重定位
+function scheduleAdventurerTooltipReposition() {
+  if (_adventurerTooltipRaf != null) return;
+  _adventurerTooltipRaf = requestAnimationFrame(() => {
+    _adventurerTooltipRaf = null;
+    repositionOpenAdventurerTooltip();
   });
 }
 
@@ -657,13 +832,18 @@ function renderStatsBanner(data) {
 
   const models = data.models || [];
   const totalRuns = data.total_runs || 0;
-  const validScores = models
+  const validBestScores = models
     .map((m) => (m.rank_score && m.rank_score.best) || 0)
     .filter((v) => v > 0);
+  // 排行榜按模型的 mean Rank Score 排序，概览“平均分”沿用同一口径，
+  // 不能拿每个模型的 best 再平均，否则多次运行的模型会被高估。
+  const validMeanScores = models
+    .map((m) => (m.rank_score && m.rank_score.mean) || 0)
+    .filter((v) => v > 0);
 
-  const topScore = validScores.length ? Math.max(...validScores) : 0;
-  const avgScore = validScores.length
-    ? validScores.reduce((a, b) => a + b, 0) / validScores.length
+  const topScore = validBestScores.length ? Math.max(...validBestScores) : 0;
+  const avgScore = validMeanScores.length
+    ? validMeanScores.reduce((a, b) => a + b, 0) / validMeanScores.length
     : 0;
   const lastUpdated = data.generated_at
     ? data.generated_at.slice(0, 10)  // YYYY-MM-DD
@@ -741,6 +921,52 @@ function renderCard(m, ctx = {}) {
     gq.dismissals = dismissTotal;
   }
 
+  // 详情区域（聚合指标 + 运行明细）改为懒渲染 — 首屏只留空占位，
+  // 首次展开时由 ensureCardDetailRendered 注入 renderCardDetail(m) 的结果
+  return `
+    <div class="model-card${rankCls}" data-rank="${rank}" data-card-idx="${ctx.index}" tabindex="0" role="button" aria-expanded="false" aria-label="${esc(m.model)} 详情，按 Enter 展开">
+      <div class="card-header">
+        <div class="rank-badge">${rank}</div>
+        <div class="model-info">
+          <div class="model-name" title="${esc(m.model)}">${esc(m.model)}${renderModelNote(m.model)}</div>
+          ${renderBadges(badges)}
+          <div class="model-meta">
+            <span>${m.runs} 次运行</span>
+            ${latestRun.preset ? `<span>${esc(latestRun.preset)}</span>` : ''}
+            ${m.last_run ? `<span>${esc(fmtTimestamp(m.last_run))}</span>` : ''}
+          </div>
+        </div>
+        <div class="card-stats">
+          <div class="stat-block primary-stat">
+            <div class="stat-label">Rank Score<button class="rs-help-btn" data-action="show-rs-help" title="Rank Score 释义">?</button></div>
+            <div class="stat-value rank-val">${rankScoreVal}</div>
+          </div>
+        </div>
+        <div class="expand-chevron" aria-hidden="true">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3.5 5.25L7 8.75L10.5 5.25"/>
+          </svg>
+        </div>
+      </div>
+
+      ${(hasEff || hasGq) ? `
+      <div class="metrics-row">
+        ${hasEff ? renderEfficiencySection(eff) : ''}
+        ${hasGq ? renderGameQualitySection(gq) : ''}
+      </div>` : ''}
+
+      <div class="card-detail-wrap">
+        <div class="card-detail"></div>
+      </div>
+    </div>`;
+}
+
+// 卡片详情（懒渲染）：聚合指标 + 运行明细，首次展开时才调用
+function renderCardDetail(m) {
+  const runDetails = Array.isArray(m.run_details) ? m.run_details : [];
+  const latestRun = runDetails[0] || {};
+  const rs = m.rank_score;
+
   // Detail rows（结构化数据，传给 renderAggregateList 分组渲染）
   const details = [];
   if (rs) {
@@ -765,50 +991,14 @@ function renderCard(m, ctx = {}) {
   }
 
   return `
-    <div class="model-card${rankCls}" data-rank="${rank}">
-      <div class="card-header">
-        <div class="rank-badge">${rank}</div>
-        <div class="model-info">
-          <div class="model-name" title="${esc(m.model)}">${esc(m.model)}${renderModelNote(m.model)}</div>
-          ${renderBadges(badges)}
-          <div class="model-meta">
-            <span>${m.runs} 次运行</span>
-            ${latestRun.preset ? `<span>${esc(latestRun.preset)}</span>` : ''}
-            ${m.last_run ? `<span>${esc(fmtTimestamp(m.last_run))}</span>` : ''}
-          </div>
-        </div>
-        <div class="card-stats">
-          <div class="stat-block primary-stat">
-            <div class="stat-label">Rank Score<button class="rs-help-btn" data-action="show-rs-help" title="Rank Score 释义">?</button></div>
-            <div class="stat-value rank-val">${rankScoreVal}</div>
-          </div>
-        </div>
-        <div class="expand-chevron" aria-label="展开详情">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M3.5 5.25L7 8.75L10.5 5.25"/>
-          </svg>
-        </div>
+    <div class="detail-section">
+      <div class="detail-title">
+        <span>聚合指标</span>
+        <span class="detail-count">${details.length} 项</span>
       </div>
-
-      ${(hasEff || hasGq) ? `
-      <div class="metrics-row">
-        ${hasEff ? renderEfficiencySection(eff) : ''}
-        ${hasGq ? renderGameQualitySection(gq) : ''}
-      </div>` : ''}
-
-      <div class="card-detail-wrap">
-        <div class="card-detail">
-          <div class="detail-section">
-            <div class="detail-title">
-              <span>聚合指标</span>
-              <span class="detail-count">${details.length} 项</span>
-            </div>
-            ${renderAggregateList(details)}
-          </div>
-          ${renderRunDetails(runDetails)}
-        </div>
-      </div>
-    </div>`;
+      ${renderAggregateList(details)}
+    </div>
+    ${renderRunDetails(runDetails)}`;
 }
 
 function renderEfficiencySection(eff) {
@@ -1175,25 +1365,7 @@ function renderAdventurerResults(values) {
     </div>`;
 }
 
-function bindAdventurerTooltips() {
-  const tooltip = ensureAdventurerTooltip();
-  $$('[data-adventurer-tooltip]').forEach((anchor) => {
-    anchor.addEventListener('mouseenter', () => showAdventurerTooltip(anchor));
-    anchor.addEventListener('mouseleave', scheduleAdventurerTooltipHide);
-    anchor.addEventListener('focus', () => showAdventurerTooltip(anchor));
-    anchor.addEventListener('blur', scheduleAdventurerTooltipHide);
-    anchor.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape') hideAdventurerTooltip();
-    });
-  });
-
-  if (tooltip.dataset.bound === 'true') return;
-  tooltip.dataset.bound = 'true';
-  tooltip.addEventListener('mouseenter', cancelAdventurerTooltipHide);
-  tooltip.addEventListener('mouseleave', scheduleAdventurerTooltipHide);
-  window.addEventListener('resize', repositionOpenAdventurerTooltip);
-  window.addEventListener('scroll', repositionOpenAdventurerTooltip, true);
-}
+// 冒险者 tooltip 的事件绑定已上移为 #cardListContainer 容器级委托（initCardInteractions）
 
 function ensureAdventurerTooltip() {
   let tooltip = $('#adventurerTooltip');
@@ -1457,15 +1629,6 @@ function slotLabel(slot) {
     armor: '护甲',
     accessory: '饰品',
   }[slot] || slot || '装备';
-}
-
-function runMetric(label, value) {
-  const display = value == null || value === '' ? '—' : String(value);
-  return `
-    <div class="run-metric">
-      <span>${esc(label)}</span>
-      <strong>${esc(display)}</strong>
-    </div>`;
 }
 
 // ============================================================================
