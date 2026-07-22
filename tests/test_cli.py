@@ -3,11 +3,21 @@ import sys
 from guild_manager_bench import cli
 
 
-def test_run_accepts_max_reasoning_effort(monkeypatch) -> None:
+def test_run_accepts_extended_reasoning_effort(monkeypatch) -> None:
     captured = {}
-    monkeypatch.setattr(sys, "argv", ["guild-manager", "run", "--reasoning-effort", "max"])
-    monkeypatch.setattr(cli, "_run", lambda args: captured.setdefault("args", args))
 
-    cli.main()
+    def fake_run(args) -> None:
+        captured["reasoning_effort"] = args.reasoning_effort
 
-    assert captured["args"].reasoning_effort == "max"
+    monkeypatch.setattr(cli, "_run", fake_run)
+
+    for reasoning_effort in ("ultra", "max"):
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["guild-manager", "run", "--reasoning-effort", reasoning_effort],
+        )
+
+        cli.main()
+
+        assert captured["reasoning_effort"] == reasoning_effort
