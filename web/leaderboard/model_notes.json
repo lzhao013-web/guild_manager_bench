@@ -46,6 +46,7 @@
   "claude-opus-4-8-high": "第三方反代",
   "gemini-3.1-pro-preview": "第三方反代",
   "gemini-3.5-flash": "第三方反代",
+  "gemini-3.7-flash": "第三方反代",
   "gemma-4-26b-a4b-it-q8-0": "本地部署",
   "openpangu-2-0-flash-base-q4-k-m": "本地部署",
   "nemotron-3-ultra-free": "openCode GO 套餐",
