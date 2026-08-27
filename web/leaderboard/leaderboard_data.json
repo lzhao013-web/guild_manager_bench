@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-08-27T09:18:08",
-  "total_runs": 64,
+  "generated_at": "2026-08-27T14:03:30",
+  "total_runs": 65,
   "models": [
     {
       "runs": 1,
@@ -95449,6 +95449,2193 @@
       "runs": 1,
       "is_baseline": false,
       "score": {
+        "best": 64.7454,
+        "mean": 64.75,
+        "median": 64.75
+      },
+      "rank_score": {
+        "best": 3059.1662,
+        "mean": 3059.17,
+        "median": 3059.17
+      },
+      "win_rate": {
+        "best": 0.9792,
+        "mean": 0.9792
+      },
+      "efficiency": {
+        "input_tokens": {
+          "mean": 3065341,
+          "total": 3065341
+        },
+        "output_tokens": {
+          "mean": 352419,
+          "total": 352419
+        },
+        "duration_seconds": {
+          "mean": 11696.6,
+          "total": 11696.6
+        },
+        "tool_calls": {
+          "mean": 339,
+          "total": 339
+        }
+      },
+      "game_quality": {
+        "gold_earned": {
+          "mean": 3774,
+          "best": 3774
+        },
+        "exp_earned": {
+          "mean": 8416,
+          "best": 8416
+        },
+        "battle_win_rate": 0.9732,
+        "battles_total": 112,
+        "battles_won": 109
+      },
+      "last_run": "20260827-101724-866800",
+      "run_details": [
+        {
+          "run_id": "glm-5.3-flash_20260827-101724-866800",
+          "session_id": "b6849c4eb4634a78a7493f4ab3ff82ce",
+          "created_at": "20260827-101724-866800",
+          "updated_at": "20260827-140047-949892",
+          "score": 64.7454,
+          "rank_score": 3059.1662,
+          "rank_score_source": null,
+          "win_rate": 0.9792,
+          "turns": 35,
+          "preset": "full",
+          "data_hash": "08abe457e84235f4ff9433c6de7aa95153bc250d738f8a98097402789816dd64",
+          "game_seed": 42,
+          "scoring_seed": 20260529,
+          "score_mode": "endgame_arena",
+          "score_seed": 20260529,
+          "score_waves": 1000,
+          "score_wave_size": 6,
+          "final_turn": 36,
+          "max_turns": 35,
+          "final_gold": 311,
+          "final_experience_pool": 536,
+          "party_size": 4,
+          "party_size_limit": 4,
+          "best_adventurer": {
+            "name": "林地射手·迟钝",
+            "average_score": 98.3414,
+            "win_rate": 0.985,
+            "assignments": 1000
+          },
+          "rank_score_per_adventurer": [
+            {
+              "adventurer_id": "recruit_0001",
+              "name": "林地射手·迟钝",
+              "rank_score": 721.4615,
+              "rank_score_contribution": 721.4615,
+              "rank_score_share": 0.2358,
+              "assignments": 3000,
+              "adventurer": {
+                "adventurer_id": "recruit_0001",
+                "name": "林地射手·迟钝",
+                "template_id": "woodland_archer",
+                "level": 9,
+                "experience": 0,
+                "base_stats": {
+                  "hp": 82,
+                  "mp": 0,
+                  "attack": 19,
+                  "defense": 4,
+                  "speed": 18,
+                  "recovery": 6,
+                  "mp_recovery": 0
+                },
+                "effective_stats": {
+                  "hp": 224,
+                  "mp": 23,
+                  "attack": 78,
+                  "defense": 42,
+                  "speed": 66,
+                  "recovery": 38,
+                  "mp_recovery": 24
+                },
+                "resources": {
+                  "current_hp": 169,
+                  "current_mp": 23
+                },
+                "skills": [
+                  {
+                    "skill_id": "first_volley",
+                    "name": "先发制人",
+                    "kind": "active",
+                    "condition": {
+                      "type": "action_index_lte",
+                      "value": 3,
+                      "conditions": []
+                    },
+                    "effects": [
+                      {
+                        "type": "damage_multiplier",
+                        "value": 1.6,
+                        "stat": null,
+                        "target": "target",
+                        "status": null
+                      }
+                    ],
+                    "mp_cost": 0,
+                    "priority": 15,
+                    "once_per_battle": true,
+                    "free": false
+                  },
+                  {
+                    "skill_id": "hunter_instinct",
+                    "name": "猎手直觉",
+                    "kind": "passive",
+                    "condition": {
+                      "type": "target_hp_pct_gte",
+                      "value": 0.6,
+                      "conditions": []
+                    },
+                    "effects": [
+                      {
+                        "type": "stat_multiplier",
+                        "value": 1.15,
+                        "stat": "attack",
+                        "target": "self",
+                        "status": null
+                      },
+                      {
+                        "type": "stat_multiplier",
+                        "value": 1.1,
+                        "stat": "speed",
+                        "target": "self",
+                        "status": null
+                      }
+                    ],
+                    "mp_cost": 0,
+                    "priority": 0,
+                    "once_per_battle": false,
+                    "free": false
+                  },
+                  {
+                    "skill_id": "kill_shot",
+                    "name": "致命射击",
+                    "kind": "active",
+                    "condition": {
+                      "type": "target_hp_pct_lte",
+                      "value": 0.25,
+                      "conditions": []
+                    },
+                    "effects": [
+                      {
+                        "type": "damage_multiplier",
+                        "value": 2.5,
+                        "stat": null,
+                        "target": "target",
+                        "status": null
+                      }
+                    ],
+                    "mp_cost": 0,
+                    "priority": 18,
+                    "once_per_battle": true,
+                    "free": false
+                  },
+                  {
+                    "skill_id": "steady_stance",
+                    "name": "稳固架势",
+                    "kind": "passive",
+                    "condition": {
+                      "type": "self_hp_pct_lte",
+                      "value": 0.7,
+                      "conditions": []
+                    },
+                    "effects": [
+                      {
+                        "type": "stat_bonus",
+                        "value": 5,
+                        "stat": "defense",
+                        "target": "self",
+                        "status": null
+                      }
+                    ],
+                    "mp_cost": 0,
+                    "priority": 0,
+                    "once_per_battle": false,
+                    "free": false
+                  }
+                ],
+                "equipment_slots": [
+                  {
+                    "slot": "main_hand",
+                    "blocked_by": "two_hand",
+                    "item": null
+                  },
+                  {
+                    "slot": "off_hand",
+                    "blocked_by": "two_hand",
+                    "item": null
+                  },
+                  {
+                    "slot": "two_hand",
+                    "blocked_by": null,
+                    "item": {
+                      "instance_id": "eq_0020",
+                      "template_id": "t2_elven_bow",
+                      "name": "精灵长弓",
+                      "slot": "two_hand",
+                      "stats": {
+                        "hp": 0,
+                        "mp": 0,
+                        "attack": 14,
+                        "defense": 0,
+                        "speed": 5,
+                        "recovery": 0,
+                        "mp_recovery": 0
+                      },
+                      "skills": []
+                    }
+                  },
+                  {
+                    "slot": "boots",
+                    "blocked_by": null,
+                    "item": {
+                      "instance_id": "eq_0028",
+                      "template_id": "t2_light_boots",
+                      "name": "附魔靴",
+                      "slot": "boots",
+                      "stats": {
+                        "hp": 0,
+                        "mp": 5,
+                        "attack": 0,
+                        "defense": 2,
+                        "speed": 5,
+                        "recovery": 0,
+                        "mp_recovery": 0
+                      },
+                      "skills": []
+                    }
+                  },
+                  {
+                    "slot": "helmet",
+                    "blocked_by": null,
+                    "item": {
+                      "instance_id": "eq_0023",
+                      "template_id": "t2_heavy_helmet",
+                      "name": "战盔",
+                      "slot": "helmet",
+                      "stats": {
+                        "hp": 15,
+                        "mp": 0,
+                        "attack": 0,
+                        "defense": 5,
+                        "speed": 0,
+                        "recovery": 0,
+                        "mp_recovery": 0
+                      },
+                      "skills": []
+                    }
+                  },
+                  {
+                    "slot": "armor",
+                    "blocked_by": null,
+                    "item": {
+                      "instance_id": "eq_0026",
+                      "template_id": "t2_heavy_armor",
+                      "name": "锁子甲",
+                      "slot": "armor",
+                      "stats": {
+                        "hp": 30,
+                        "mp": 0,
+                        "attack": 0,
+                        "defense": 8,
+                        "speed": 0,
+                        "recovery": 0,
+                        "mp_recovery": 0
+                      },
+                      "skills": [
+                        {
+                          "skill_id": "steady_stance",
+                          "name": "稳固架势",
+                          "kind": "passive",
+                          "condition": {
+                            "type": "self_hp_pct_lte",
+                            "value": 0.7,
+                            "conditions": []
+                          },
+                          "effects": [
+                            {
+                              "type": "stat_bonus",
+                              "value": 5,
+                              "stat": "defense",
+                              "target": "self",
+                              "status": null
+                            }
+                          ],
+                          "mp_cost": 0,
+                          "priority": 0,
+                          "once_per_battle": false,
+                          "free": false
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "slot": "accessory",
+                    "blocked_by": null,
+                    "item": {
+                      "instance_id": "eq_0003",
+                      "template_id": "t1_hunter_bracer",
+                      "name": "猎手护腕",
+                      "slot": "accessory",
+                      "stats": {
+                        "hp": 0,
+                        "mp": 0,
+                        "attack": 3,
+                        "defense": 0,
+                        "speed": 4,
+                        "recovery": 0,
+                        "mp_recovery": 0
+                      },
+                      "skills": []
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "adventurer_id": "recruit_0002",
+              "name": "佣兵战士·脆弱",
+              "rank_score": 973.977,
+              "rank_score_contribution": 973.977,
+              "rank_score_share": 0.3184,
+              "assignments": 3000,
+              "adventurer": {
+                "adventurer_id": "recruit_0002",
+                "name": "佣兵战士·脆弱",
+                "template_id": "mercenary_warrior",
+                "level": 10,
+                "experience": 0,
+                "base_stats": {
+                  "hp": 143,
+                  "mp": 0,
+                  "attack": 18,
+                  "defense": 9,
+                  "speed": 8,
+                  "recovery": 10,
+                  "mp_recovery": 0
+                },
+                "effective_stats": {
+                  "hp": 381,
+                  "mp": 31,
+                  "attack": 91,
+                  "defense": 72,
+                  "speed": 32,
+                  "recovery": 55,
+                  "mp_recovery": 27
+                },
+                "resources": {
+                  "current_hp": 217,
+                  "current_mp": 31
+                },
+                "skills": [
+                  {
+                    "skill_id": "power_strike",
+                    "name": "强力打击",
+                    "kind": "active",
+                    "condition": {
+                      "type": "always",
+                      "value": null,
+                      "conditions": []
+                    },
+                    "effects": [
+                      {
+                        "type": "damage_multiplier",
+                        "value": 1.5,
+                        "stat": null,
+                        "target": "target",
+                        "status": null
+                      }
+                    ],
+                    "mp_cost": 0,
+                    "priority": 15,
+                    "once_per_battle": true,
+                    "free": false
+                  },
+                  {
+                    "skill_id": "battle_hardening",
+                    "name": "战意高昂",
+                    "kind": "passive",
+                    "condition": {
+                      "type": "self_hp_pct_gte",
+                      "value": 0.5,
+                      "conditions": []
+                    },
+                    "effects": [
+                      {
+                        "type": "stat_multiplier",
+                        "value": 1.15,
+                        "stat": "attack",
+                        "target": "self",
+                        "status": null
+                      }
+                    ],
+                    "mp_cost": 0,
+                    "priority": 0,
+                    "once_per_battle": false,
+                    "free": false
+                  },
+                  {
+                    "skill_id": "execution",
+                    "name": "处决",
+                    "kind": "active",
+                    "condition": {
+                      "type": "target_hp_pct_lte",
+                      "value": 0.3,
+                      "conditions": []
+                    },
+                    "effects": [
+                      {
+                        "type": "damage_multiplier",
+                        "value": 2.0,
+                        "stat": null,
+                        "target": "target",
+                        "status": null
+                      },
+                      {
+                        "type": "true_damage",
+                        "value": 8,
+                        "stat": null,
+                        "target": "target",
+                        "status": null
+                      }
+                    ],
+                    "mp_cost": 0,
+                    "priority": 18,
+                    "once_per_battle": true,
+                    "free": false
+                  },
+                  {
+                    "skill_id": "dragon_hide",
+                    "name": "龙皮",
+                    "kind": "passive",
+                    "condition": {
+                      "type": "always",
+                      "value": null,
+                      "conditions": []
+                    },
+                    "effects": [
+                      {
+                        "type": "stat_bonus",
+                        "value": 6,
+                        "stat": "defense",
+                        "target": "self",
+                        "status": null
+                      }
+                    ],
+                    "mp_cost": 0,
+                    "priority": 0,
+                    "once_per_battle": false,
+                    "free": false
+                  }
+                ],
+                "equipment_slots": [
+                  {
+                    "slot": "main_hand",
+                    "blocked_by": null,
+                    "item": {
+                      "instance_id": "eq_0033",
+                      "template_id": "t3_heavy_sword",
+                      "name": "龙鳞大剑",
+                      "slot": "main_hand",
+                      "stats": {
+                        "hp": 10,
+                        "mp": 0,
+                        "attack": 16,
+                        "defense": 4,
+                        "speed": 0,
+                        "recovery": 0,
+                        "mp_recovery": 0
+                      },
+                      "skills": []
+                    }
+                  },
+                  {
+                    "slot": "off_hand",
+                    "blocked_by": null,
+                    "item": {
+                      "instance_id": "eq_0037",
+                      "template_id": "t2_heavy_shield",
+                      "name": "秘银盾",
+                      "slot": "off_hand",
+                      "stats": {
+                        "hp": 20,
+                        "mp": 0,
+                        "attack": 0,
+                        "defense": 7,
+                        "speed": 0,
+                        "recovery": 0,
+                        "mp_recovery": 0
+                      },
+                      "skills": []
+                    }
+                  },
+                  {
+                    "slot": "two_hand",
+                    "blocked_by": "hand",
+                    "item": null
+                  },
+                  {
+                    "slot": "boots",
+                    "blocked_by": null,
+                    "item": {
+                      "instance_id": "eq_0027",
+                      "template_id": "t2_light_boots",
+                      "name": "附魔靴",
+                      "slot": "boots",
+                      "stats": {
+                        "hp": 0,
+                        "mp": 5,
+                        "attack": 0,
+                        "defense": 2,
+                        "speed": 5,
+                        "recovery": 0,
+                        "mp_recovery": 0
+                      },
+                      "skills": []
+                    }
+                  },
+                  {
+                    "slot": "helmet",
+                    "blocked_by": null,
+                    "item": {
+                      "instance_id": "eq_0015",
+                      "template_id": "t1_heavy_helmet",
+                      "name": "爪冠盔",
+                      "slot": "helmet",
+                      "stats": {
+                        "hp": 8,
+                        "mp": 0,
+                        "attack": 0,
+                        "defense": 3,
+                        "speed": 0,
+                        "recovery": 0,
+                        "mp_recovery": 0
+                      },
+                      "skills": []
+                    }
+                  },
+                  {
+                    "slot": "armor",
+                    "blocked_by": null,
+                    "item": {
+                      "instance_id": "eq_0034",
+                      "template_id": "t3_heavy_armor",
+                      "name": "龙鳞甲",
+                      "slot": "armor",
+                      "stats": {
+                        "hp": 50,
+                        "mp": 0,
+                        "attack": 0,
+                        "defense": 14,
+                        "speed": 0,
+                        "recovery": 0,
+                        "mp_recovery": 0
+                      },
+                      "skills": [
+                        {
+                          "skill_id": "dragon_hide",
+                          "name": "龙皮",
+                          "kind": "passive",
+                          "condition": {
+                            "type": "always",
+                            "value": null,
+                            "conditions": []
+                          },
+                          "effects": [
+                            {
+                              "type": "stat_bonus",
+                              "value": 6,
+                              "stat": "defense",
+                              "target": "self",
+                              "status": null
+                            }
+                          ],
+                          "mp_cost": 0,
+                          "priority": 0,
+                          "once_per_battle": false,
+                          "free": false
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "slot": "accessory",
+                    "blocked_by": null,
+                    "item": {
+                      "instance_id": "eq_0031",
+                      "template_id": "t2_light_charm",
+                      "name": "魔力护符",
+                      "slot": "accessory",
+                      "stats": {
+                        "hp": 0,
+                        "mp": 8,
+                        "attack": 4,
+                        "defense": 0,
+                        "speed": 0,
+                        "recovery": 3,
+                        "mp_recovery": 3
+                      },
+                      "skills": []
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "adventurer_id": "recruit_0003",
+              "name": "炮手·坚壁",
+              "rank_score": 547.9731,
+              "rank_score_contribution": 547.9731,
+              "rank_score_share": 0.1791,
+              "assignments": 3000,
+              "adventurer": {
+                "adventurer_id": "recruit_0003",
+                "name": "炮手·坚壁",
+                "template_id": "cannoneer",
+                "level": 10,
+                "experience": 0,
+                "base_stats": {
+                  "hp": 115,
+                  "mp": 22,
+                  "attack": 16,
+                  "defense": 7,
+                  "speed": 5,
+                  "recovery": 8,
+                  "mp_recovery": 0
+                },
+                "effective_stats": {
+                  "hp": 320,
+                  "mp": 75,
+                  "attack": 81,
+                  "defense": 61,
+                  "speed": 33,
+                  "recovery": 50,
+                  "mp_recovery": 30
+                },
+                "resources": {
+                  "current_hp": 289,
+                  "current_mp": 75
+                },
+                "skills": [
+                  {
+                    "skill_id": "armor_piercing_shot",
+                    "name": "破甲炮击",
+                    "kind": "active",
+                    "condition": {
+                      "type": "always",
+                      "value": null,
+                      "conditions": []
+                    },
+                    "effects": [
+                      {
+                        "type": "true_damage",
+                        "value": 20,
+                        "stat": null,
+                        "target": "target",
+                        "status": null
+                      },
+                      {
+                        "type": "atk_ratio_damage",
+                        "value": 0.5,
+                        "stat": null,
+                        "target": "target",
+                        "status": null
+                      }
+                    ],
+                    "mp_cost": 6,
+                    "priority": 10,
+                    "once_per_battle": false,
+                    "free": false
+                  },
+                  {
+                    "skill_id": "shrapnel_round",
+                    "name": "破片弹",
+                    "kind": "active",
+                    "condition": {
+                      "type": "action_index_lte",
+                      "value": 5,
+                      "conditions": []
+                    },
+                    "effects": [
+                      {
+                        "type": "true_damage",
+                        "value": 10,
+                        "stat": null,
+                        "target": "target",
+                        "status": null
+                      }
+                    ],
+                    "mp_cost": 5,
+                    "priority": 12,
+                    "once_per_battle": true,
+                    "free": false
+                  },
+                  {
+                    "skill_id": "siege_stance",
+                    "name": "攻城模式",
+                    "kind": "passive",
+                    "condition": {
+                      "type": "target_hp_pct_gte",
+                      "value": 0.4,
+                      "conditions": []
+                    },
+                    "effects": [
+                      {
+                        "type": "stat_multiplier",
+                        "value": 1.35,
+                        "stat": "attack",
+                        "target": "self",
+                        "status": null
+                      },
+                      {
+                        "type": "stat_multiplier",
+                        "value": 1.15,
+                        "stat": "defense",
+                        "target": "self",
+                        "status": null
+                      }
+                    ],
+                    "mp_cost": 0,
+                    "priority": 0,
+                    "once_per_battle": false,
+                    "free": false
+                  },
+                  {
+                    "skill_id": "siege_cannon",
+                    "name": "攻城炮",
+                    "kind": "active",
+                    "condition": {
+                      "type": "always",
+                      "value": null,
+                      "conditions": []
+                    },
+                    "effects": [
+                      {
+                        "type": "true_damage",
+                        "value": 60,
+                        "stat": null,
+                        "target": "target",
+                        "status": null
+                      },
+                      {
+                        "type": "atk_ratio_damage",
+                        "value": 1.8,
+                        "stat": null,
+                        "target": "target",
+                        "status": null
+                      }
+                    ],
+                    "mp_cost": 10,
+                    "priority": 20,
+                    "once_per_battle": true,
+                    "free": false
+                  },
+                  {
+                    "skill_id": "rapid_reload",
+                    "name": "快速装填",
+                    "kind": "active",
+                    "condition": {
+                      "type": "action_index_lte",
+                      "value": 3,
+                      "conditions": []
+                    },
+                    "effects": [
+                      {
+                        "type": "mp_restore",
+                        "value": 10,
+                        "stat": null,
+                        "target": "self",
+                        "status": null
+                      },
+                      {
+                        "type": "apply_status",
+                        "value": 0,
+                        "stat": null,
+                        "target": "self",
+                        "status": {
+                          "status_id": "reload_boost",
+                          "name": "装填加速",
+                          "duration": 2,
+                          "polarity": "positive",
+                          "stack_mode": "refresh",
+                          "effects": [
+                            {
+                              "type": "stat_bonus",
+                              "value": 2,
+                              "stat": "speed",
+                              "target": "self",
+                              "status": null
+                            }
+                          ]
+                        }
+                      }
+                    ],
+                    "mp_cost": 3,
+                    "priority": 25,
+                    "once_per_battle": true,
+                    "free": true
+                  }
+                ],
+                "equipment_slots": [
+                  {
+                    "slot": "main_hand",
+                    "blocked_by": null,
+                    "item": {
+                      "instance_id": "eq_0025",
+                      "template_id": "t2_heavy_sword",
+                      "name": "秘银长剑",
+                      "slot": "main_hand",
+                      "stats": {
+                        "hp": 0,
+                        "mp": 0,
+                        "attack": 10,
+                        "defense": 2,
+                        "speed": 0,
+                        "recovery": 0,
+                        "mp_recovery": 0
+                      },
+                      "skills": []
+                    }
+                  },
+                  {
+                    "slot": "off_hand",
+                    "blocked_by": null,
+                    "item": {
+                      "instance_id": "eq_0038",
+                      "template_id": "t2_heavy_shield",
+                      "name": "秘银盾",
+                      "slot": "off_hand",
+                      "stats": {
+                        "hp": 20,
+                        "mp": 0,
+                        "attack": 0,
+                        "defense": 7,
+                        "speed": 0,
+                        "recovery": 0,
+                        "mp_recovery": 0
+                      },
+                      "skills": []
+                    }
+                  },
+                  {
+                    "slot": "two_hand",
+                    "blocked_by": "hand",
+                    "item": null
+                  },
+                  {
+                    "slot": "boots",
+                    "blocked_by": null,
+                    "item": {
+                      "instance_id": "eq_0036",
+                      "template_id": "t2_light_boots",
+                      "name": "附魔靴",
+                      "slot": "boots",
+                      "stats": {
+                        "hp": 0,
+                        "mp": 5,
+                        "attack": 0,
+                        "defense": 2,
+                        "speed": 5,
+                        "recovery": 0,
+                        "mp_recovery": 0
+                      },
+                      "skills": []
+                    }
+                  },
+                  {
+                    "slot": "helmet",
+                    "blocked_by": null,
+                    "item": {
+                      "instance_id": "eq_0032",
+                      "template_id": "t2_heavy_helmet",
+                      "name": "战盔",
+                      "slot": "helmet",
+                      "stats": {
+                        "hp": 15,
+                        "mp": 0,
+                        "attack": 0,
+                        "defense": 5,
+                        "speed": 0,
+                        "recovery": 0,
+                        "mp_recovery": 0
+                      },
+                      "skills": []
+                    }
+                  },
+                  {
+                    "slot": "armor",
+                    "blocked_by": null,
+                    "item": {
+                      "instance_id": "eq_0021",
+                      "template_id": "t2_light_armor",
+                      "name": "蛛丝甲",
+                      "slot": "armor",
+                      "stats": {
+                        "hp": 20,
+                        "mp": 0,
+                        "attack": 0,
+                        "defense": 5,
+                        "speed": 4,
+                        "recovery": 0,
+                        "mp_recovery": 0
+                      },
+                      "skills": []
+                    }
+                  },
+                  {
+                    "slot": "accessory",
+                    "blocked_by": null,
+                    "item": {
+                      "instance_id": "eq_0035",
+                      "template_id": "t2_cannon_kit",
+                      "name": "炮手弹药箱",
+                      "slot": "accessory",
+                      "stats": {
+                        "hp": 0,
+                        "mp": 12,
+                        "attack": 2,
+                        "defense": 0,
+                        "speed": 0,
+                        "recovery": 0,
+                        "mp_recovery": 6
+                      },
+                      "skills": [
+                        {
+                          "skill_id": "rapid_reload",
+                          "name": "快速装填",
+                          "kind": "active",
+                          "condition": {
+                            "type": "action_index_lte",
+                            "value": 3,
+                            "conditions": []
+                          },
+                          "effects": [
+                            {
+                              "type": "mp_restore",
+                              "value": 10,
+                              "stat": null,
+                              "target": "self",
+                              "status": null
+                            },
+                            {
+                              "type": "apply_status",
+                              "value": 0,
+                              "stat": null,
+                              "target": "self",
+                              "status": {
+                                "status_id": "reload_boost",
+                                "name": "装填加速",
+                                "duration": 2,
+                                "polarity": "positive",
+                                "stack_mode": "refresh",
+                                "effects": [
+                                  {
+                                    "type": "stat_bonus",
+                                    "value": 2,
+                                    "stat": "speed",
+                                    "target": "self",
+                                    "status": null
+                                  }
+                                ]
+                              }
+                            }
+                          ],
+                          "mp_cost": 3,
+                          "priority": 25,
+                          "once_per_battle": true,
+                          "free": true
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "adventurer_id": "recruit_0004",
+              "name": "魔弹法师",
+              "rank_score": 815.7545,
+              "rank_score_contribution": 815.7545,
+              "rank_score_share": 0.2667,
+              "assignments": 3000,
+              "adventurer": {
+                "adventurer_id": "recruit_0004",
+                "name": "魔弹法师",
+                "template_id": "spellshot_mage",
+                "level": 9,
+                "experience": 0,
+                "base_stats": {
+                  "hp": 87,
+                  "mp": 30,
+                  "attack": 18,
+                  "defense": 3,
+                  "speed": 9,
+                  "recovery": 6,
+                  "mp_recovery": 0
+                },
+                "effective_stats": {
+                  "hp": 220,
+                  "mp": 140,
+                  "attack": 82,
+                  "defense": 46,
+                  "speed": 32,
+                  "recovery": 45,
+                  "mp_recovery": 29
+                },
+                "resources": {
+                  "current_hp": 220,
+                  "current_mp": 140
+                },
+                "skills": [
+                  {
+                    "skill_id": "arcane_missile",
+                    "name": "奥术飞弹",
+                    "kind": "active",
+                    "condition": {
+                      "type": "always",
+                      "value": null,
+                      "conditions": []
+                    },
+                    "effects": [
+                      {
+                        "type": "true_damage",
+                        "value": 15,
+                        "stat": null,
+                        "target": "target",
+                        "status": null
+                      },
+                      {
+                        "type": "atk_ratio_damage",
+                        "value": 0.3,
+                        "stat": null,
+                        "target": "target",
+                        "status": null
+                      }
+                    ],
+                    "mp_cost": 8,
+                    "priority": 10,
+                    "once_per_battle": false,
+                    "free": false
+                  },
+                  {
+                    "skill_id": "mana_surge",
+                    "name": "魔力涌动",
+                    "kind": "passive",
+                    "condition": {
+                      "type": "self_mp_pct_gte",
+                      "value": 0.5,
+                      "conditions": []
+                    },
+                    "effects": [
+                      {
+                        "type": "stat_multiplier",
+                        "value": 1.25,
+                        "stat": "attack",
+                        "target": "self",
+                        "status": null
+                      }
+                    ],
+                    "mp_cost": 0,
+                    "priority": 0,
+                    "once_per_battle": false,
+                    "free": false
+                  },
+                  {
+                    "skill_id": "arcane_barrage",
+                    "name": "奥术弹幕",
+                    "kind": "active",
+                    "condition": {
+                      "type": "action_index_lte",
+                      "value": 4,
+                      "conditions": []
+                    },
+                    "effects": [
+                      {
+                        "type": "damage_multiplier",
+                        "value": 1.5,
+                        "stat": null,
+                        "target": "target",
+                        "status": null
+                      },
+                      {
+                        "type": "true_damage",
+                        "value": 10,
+                        "stat": null,
+                        "target": "target",
+                        "status": null
+                      }
+                    ],
+                    "mp_cost": 10,
+                    "priority": 20,
+                    "once_per_battle": true,
+                    "free": false
+                  },
+                  {
+                    "skill_id": "mana_dump",
+                    "name": "魔力倾泻",
+                    "kind": "active",
+                    "condition": {
+                      "type": "self_mp_pct_gte",
+                      "value": 0.3,
+                      "conditions": []
+                    },
+                    "effects": [
+                      {
+                        "type": "damage_multiplier",
+                        "value": 2.4,
+                        "stat": null,
+                        "target": "target",
+                        "status": null
+                      },
+                      {
+                        "type": "true_damage",
+                        "value": 34,
+                        "stat": null,
+                        "target": "target",
+                        "status": null
+                      }
+                    ],
+                    "mp_cost": 15,
+                    "priority": 20,
+                    "once_per_battle": false,
+                    "free": false
+                  },
+                  {
+                    "skill_id": "arcane_surge",
+                    "name": "奥术涌流",
+                    "kind": "passive",
+                    "condition": {
+                      "type": "self_mp_pct_gte",
+                      "value": 0.5,
+                      "conditions": []
+                    },
+                    "effects": [
+                      {
+                        "type": "stat_multiplier",
+                        "value": 1.12,
+                        "stat": "attack",
+                        "target": "self",
+                        "status": null
+                      }
+                    ],
+                    "mp_cost": 0,
+                    "priority": 0,
+                    "once_per_battle": false,
+                    "free": false
+                  },
+                  {
+                    "skill_id": "arcane_barrier",
+                    "name": "奥术护幕",
+                    "kind": "active",
+                    "condition": {
+                      "type": "self_hp_pct_lte",
+                      "value": 0.8,
+                      "conditions": []
+                    },
+                    "effects": [
+                      {
+                        "type": "heal_percent",
+                        "value": 0.18,
+                        "stat": null,
+                        "target": "self",
+                        "status": null
+                      },
+                      {
+                        "type": "mp_restore",
+                        "value": 4,
+                        "stat": null,
+                        "target": "self",
+                        "status": null
+                      },
+                      {
+                        "type": "apply_status",
+                        "value": 0,
+                        "stat": null,
+                        "target": "self",
+                        "status": {
+                          "status_id": "arcane_barrier",
+                          "name": "奥术护幕",
+                          "duration": 4,
+                          "polarity": "positive",
+                          "stack_mode": "refresh",
+                          "effects": [
+                            {
+                              "type": "stat_multiplier",
+                              "value": 1.7,
+                              "stat": "defense",
+                              "target": "self",
+                              "status": null
+                            }
+                          ]
+                        }
+                      }
+                    ],
+                    "mp_cost": 6,
+                    "priority": 24,
+                    "once_per_battle": true,
+                    "free": true
+                  }
+                ],
+                "equipment_slots": [
+                  {
+                    "slot": "main_hand",
+                    "blocked_by": "two_hand",
+                    "item": null
+                  },
+                  {
+                    "slot": "off_hand",
+                    "blocked_by": "two_hand",
+                    "item": null
+                  },
+                  {
+                    "slot": "two_hand",
+                    "blocked_by": null,
+                    "item": {
+                      "instance_id": "eq_0014",
+                      "template_id": "t1_staff",
+                      "name": "学徒法杖",
+                      "slot": "two_hand",
+                      "stats": {
+                        "hp": 0,
+                        "mp": 15,
+                        "attack": 3,
+                        "defense": 0,
+                        "speed": 0,
+                        "recovery": 0,
+                        "mp_recovery": 0
+                      },
+                      "skills": []
+                    }
+                  },
+                  {
+                    "slot": "boots",
+                    "blocked_by": null,
+                    "item": {
+                      "instance_id": "eq_0030",
+                      "template_id": "t2_light_boots",
+                      "name": "附魔靴",
+                      "slot": "boots",
+                      "stats": {
+                        "hp": 0,
+                        "mp": 5,
+                        "attack": 0,
+                        "defense": 2,
+                        "speed": 5,
+                        "recovery": 0,
+                        "mp_recovery": 0
+                      },
+                      "skills": []
+                    }
+                  },
+                  {
+                    "slot": "helmet",
+                    "blocked_by": null,
+                    "item": {
+                      "instance_id": "eq_0016",
+                      "template_id": "t1_heavy_helmet",
+                      "name": "爪冠盔",
+                      "slot": "helmet",
+                      "stats": {
+                        "hp": 8,
+                        "mp": 0,
+                        "attack": 0,
+                        "defense": 3,
+                        "speed": 0,
+                        "recovery": 0,
+                        "mp_recovery": 0
+                      },
+                      "skills": []
+                    }
+                  },
+                  {
+                    "slot": "armor",
+                    "blocked_by": null,
+                    "item": {
+                      "instance_id": "eq_0022",
+                      "template_id": "t2_arcane_robe",
+                      "name": "奥术法袍",
+                      "slot": "armor",
+                      "stats": {
+                        "hp": 36,
+                        "mp": 12,
+                        "attack": 0,
+                        "defense": 7,
+                        "speed": 0,
+                        "recovery": 7,
+                        "mp_recovery": 5
+                      },
+                      "skills": [
+                        {
+                          "skill_id": "arcane_barrier",
+                          "name": "奥术护幕",
+                          "kind": "active",
+                          "condition": {
+                            "type": "self_hp_pct_lte",
+                            "value": 0.8,
+                            "conditions": []
+                          },
+                          "effects": [
+                            {
+                              "type": "heal_percent",
+                              "value": 0.18,
+                              "stat": null,
+                              "target": "self",
+                              "status": null
+                            },
+                            {
+                              "type": "mp_restore",
+                              "value": 4,
+                              "stat": null,
+                              "target": "self",
+                              "status": null
+                            },
+                            {
+                              "type": "apply_status",
+                              "value": 0,
+                              "stat": null,
+                              "target": "self",
+                              "status": {
+                                "status_id": "arcane_barrier",
+                                "name": "奥术护幕",
+                                "duration": 4,
+                                "polarity": "positive",
+                                "stack_mode": "refresh",
+                                "effects": [
+                                  {
+                                    "type": "stat_multiplier",
+                                    "value": 1.7,
+                                    "stat": "defense",
+                                    "target": "self",
+                                    "status": null
+                                  }
+                                ]
+                              }
+                            }
+                          ],
+                          "mp_cost": 6,
+                          "priority": 24,
+                          "once_per_battle": true,
+                          "free": true
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "slot": "accessory",
+                    "blocked_by": null,
+                    "item": {
+                      "instance_id": "eq_0018",
+                      "template_id": "t2_mage_orb",
+                      "name": "法师宝珠",
+                      "slot": "accessory",
+                      "stats": {
+                        "hp": 0,
+                        "mp": 20,
+                        "attack": 3,
+                        "defense": 0,
+                        "speed": 0,
+                        "recovery": 0,
+                        "mp_recovery": 0
+                      },
+                      "skills": [
+                        {
+                          "skill_id": "arcane_surge",
+                          "name": "奥术涌流",
+                          "kind": "passive",
+                          "condition": {
+                            "type": "self_mp_pct_gte",
+                            "value": 0.5,
+                            "conditions": []
+                          },
+                          "effects": [
+                            {
+                              "type": "stat_multiplier",
+                              "value": 1.12,
+                              "stat": "attack",
+                              "target": "self",
+                              "status": null
+                            }
+                          ],
+                          "mp_cost": 0,
+                          "priority": 0,
+                          "once_per_battle": false,
+                          "free": false
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "upgrades": [
+            {
+              "upgrade_id": "roster_expansion_1",
+              "name": "扩编 I",
+              "description": "解锁中级全局加成的前置科技。",
+              "gold_cost": 350,
+              "stats": {
+                "hp": 0,
+                "mp": 0,
+                "attack": 0,
+                "defense": 0,
+                "speed": 0,
+                "recovery": 0,
+                "mp_recovery": 0
+              },
+              "party_size_bonus": 1,
+              "skills": []
+            },
+            {
+              "upgrade_id": "training_grounds",
+              "name": "训练场",
+              "description": "",
+              "gold_cost": 65,
+              "stats": {
+                "hp": 5,
+                "mp": 0,
+                "attack": 3,
+                "defense": 0,
+                "speed": 0,
+                "recovery": 0,
+                "mp_recovery": 0
+              },
+              "party_size_bonus": 0,
+              "skills": []
+            },
+            {
+              "upgrade_id": "herb_garden",
+              "name": "草药园",
+              "description": "",
+              "gold_cost": 60,
+              "stats": {
+                "hp": 6,
+                "mp": 4,
+                "attack": 0,
+                "defense": 0,
+                "speed": 0,
+                "recovery": 4,
+                "mp_recovery": 4
+              },
+              "party_size_bonus": 0,
+              "skills": []
+            },
+            {
+              "upgrade_id": "blacksmith",
+              "name": "铁匠铺",
+              "description": "",
+              "gold_cost": 80,
+              "stats": {
+                "hp": 0,
+                "mp": 0,
+                "attack": 4,
+                "defense": 2,
+                "speed": 0,
+                "recovery": 0,
+                "mp_recovery": 0
+              },
+              "party_size_bonus": 0,
+              "skills": []
+            },
+            {
+              "upgrade_id": "scout_network",
+              "name": "侦查网",
+              "description": "",
+              "gold_cost": 70,
+              "stats": {
+                "hp": 0,
+                "mp": 0,
+                "attack": 2,
+                "defense": 0,
+                "speed": 3,
+                "recovery": 0,
+                "mp_recovery": 0
+              },
+              "party_size_bonus": 0,
+              "skills": []
+            },
+            {
+              "upgrade_id": "supply_post",
+              "name": "补给站",
+              "description": "",
+              "gold_cost": 65,
+              "stats": {
+                "hp": 4,
+                "mp": 0,
+                "attack": 0,
+                "defense": 1,
+                "speed": 0,
+                "recovery": 6,
+                "mp_recovery": 6
+              },
+              "party_size_bonus": 0,
+              "skills": []
+            },
+            {
+              "upgrade_id": "armory",
+              "name": "军械库",
+              "description": "",
+              "gold_cost": 240,
+              "stats": {
+                "hp": 8,
+                "mp": 0,
+                "attack": 6,
+                "defense": 4,
+                "speed": 0,
+                "recovery": 0,
+                "mp_recovery": 0
+              },
+              "party_size_bonus": 0,
+              "skills": []
+            },
+            {
+              "upgrade_id": "field_hospital",
+              "name": "野战医院",
+              "description": "",
+              "gold_cost": 220,
+              "stats": {
+                "hp": 10,
+                "mp": 6,
+                "attack": 0,
+                "defense": 0,
+                "speed": 0,
+                "recovery": 8,
+                "mp_recovery": 8
+              },
+              "party_size_bonus": 0,
+              "skills": []
+            },
+            {
+              "upgrade_id": "tactics_academy",
+              "name": "战术学院",
+              "description": "",
+              "gold_cost": 300,
+              "stats": {
+                "hp": 0,
+                "mp": 0,
+                "attack": 4,
+                "defense": 3,
+                "speed": 4,
+                "recovery": 0,
+                "mp_recovery": 0
+              },
+              "party_size_bonus": 0,
+              "skills": []
+            },
+            {
+              "upgrade_id": "reinforced_forge",
+              "name": "强化锻造",
+              "description": "",
+              "gold_cost": 350,
+              "stats": {
+                "hp": 0,
+                "mp": 0,
+                "attack": 7,
+                "defense": 5,
+                "speed": 0,
+                "recovery": 0,
+                "mp_recovery": 0
+              },
+              "party_size_bonus": 0,
+              "skills": []
+            },
+            {
+              "upgrade_id": "meditation_hall",
+              "name": "精神修炼堂",
+              "description": "",
+              "gold_cost": 260,
+              "stats": {
+                "hp": 0,
+                "mp": 8,
+                "attack": 0,
+                "defense": 0,
+                "speed": 3,
+                "recovery": 6,
+                "mp_recovery": 6
+              },
+              "party_size_bonus": 0,
+              "skills": []
+            }
+          ],
+          "rank_score_curve": [
+            {
+              "turn": 1,
+              "rank_score": 50.2654
+            },
+            {
+              "turn": 2,
+              "rank_score": 97.6858
+            },
+            {
+              "turn": 3,
+              "rank_score": 174.2265
+            },
+            {
+              "turn": 4,
+              "rank_score": 232.6602
+            },
+            {
+              "turn": 5,
+              "rank_score": 244.0454
+            },
+            {
+              "turn": 6,
+              "rank_score": 305.9473
+            },
+            {
+              "turn": 7,
+              "rank_score": 430.8421
+            },
+            {
+              "turn": 8,
+              "rank_score": 515.3695
+            },
+            {
+              "turn": 9,
+              "rank_score": 584.843
+            },
+            {
+              "turn": 10,
+              "rank_score": 644.7732
+            },
+            {
+              "turn": 11,
+              "rank_score": 655.1052
+            },
+            {
+              "turn": 12,
+              "rank_score": 674.8037
+            },
+            {
+              "turn": 13,
+              "rank_score": 677.7934
+            },
+            {
+              "turn": 14,
+              "rank_score": 744.3942
+            },
+            {
+              "turn": 15,
+              "rank_score": 744.3942
+            },
+            {
+              "turn": 16,
+              "rank_score": 797.9682
+            },
+            {
+              "turn": 17,
+              "rank_score": 1089.6547
+            },
+            {
+              "turn": 18,
+              "rank_score": 1105.3144
+            },
+            {
+              "turn": 19,
+              "rank_score": 1220.0889
+            },
+            {
+              "turn": 20,
+              "rank_score": 1293.1836
+            },
+            {
+              "turn": 21,
+              "rank_score": 1485.1982
+            },
+            {
+              "turn": 22,
+              "rank_score": 1485.1982
+            },
+            {
+              "turn": 23,
+              "rank_score": 1571.1364
+            },
+            {
+              "turn": 24,
+              "rank_score": 1571.1364
+            },
+            {
+              "turn": 25,
+              "rank_score": 1866.6083
+            },
+            {
+              "turn": 26,
+              "rank_score": 1998.4757
+            },
+            {
+              "turn": 27,
+              "rank_score": 2047.5514
+            },
+            {
+              "turn": 28,
+              "rank_score": 2234.1881
+            },
+            {
+              "turn": 29,
+              "rank_score": 2425.0695
+            },
+            {
+              "turn": 30,
+              "rank_score": 2427.7876
+            },
+            {
+              "turn": 31,
+              "rank_score": 2854.8099
+            },
+            {
+              "turn": 32,
+              "rank_score": 2889.4729
+            },
+            {
+              "turn": 33,
+              "rank_score": 2928.1143
+            },
+            {
+              "turn": 34,
+              "rank_score": 2994.6474
+            },
+            {
+              "turn": 35,
+              "rank_score": 3059.1662
+            }
+          ],
+          "token_usage": {
+            "input_tokens": 3065341,
+            "output_tokens": 352419
+          },
+          "timing": {
+            "total_seconds": 11696.6
+          },
+          "tool_calls": {
+            "total": 339,
+            "successful": 333,
+            "failed": 6,
+            "by_name": {
+              "get_recruitment": 5,
+              "get_crafting": 35,
+              "get_upgrades": 20,
+              "recruit_adventurer": 4,
+              "craft_equipment": 43,
+              "equip_item": 40,
+              "preview_battle": 43,
+              "write_memo": 31,
+              "end_turn": 36,
+              "get_inventory": 24,
+              "allocate_experience": 45,
+              "purchase_upgrade": 11,
+              "unequip_item": 1,
+              "preview_team_power": 1
+            },
+            "by_name_detail": {
+              "get_recruitment": {
+                "total": 5,
+                "successful": 5,
+                "failed": 0
+              },
+              "get_crafting": {
+                "total": 35,
+                "successful": 35,
+                "failed": 0
+              },
+              "get_upgrades": {
+                "total": 20,
+                "successful": 20,
+                "failed": 0
+              },
+              "recruit_adventurer": {
+                "total": 4,
+                "successful": 4,
+                "failed": 0
+              },
+              "craft_equipment": {
+                "total": 43,
+                "successful": 38,
+                "failed": 5
+              },
+              "equip_item": {
+                "total": 40,
+                "successful": 40,
+                "failed": 0
+              },
+              "preview_battle": {
+                "total": 43,
+                "successful": 43,
+                "failed": 0
+              },
+              "write_memo": {
+                "total": 31,
+                "successful": 31,
+                "failed": 0
+              },
+              "end_turn": {
+                "total": 36,
+                "successful": 35,
+                "failed": 1
+              },
+              "get_inventory": {
+                "total": 24,
+                "successful": 24,
+                "failed": 0
+              },
+              "allocate_experience": {
+                "total": 45,
+                "successful": 45,
+                "failed": 0
+              },
+              "purchase_upgrade": {
+                "total": 11,
+                "successful": 11,
+                "failed": 0
+              },
+              "unequip_item": {
+                "total": 1,
+                "successful": 1,
+                "failed": 0
+              },
+              "preview_team_power": {
+                "total": 1,
+                "successful": 1,
+                "failed": 0
+              }
+            }
+          },
+          "game_actions": {
+            "battles_total": 112,
+            "battles_won": 109,
+            "battles_lost": 3,
+            "total_gold_earned": 3774,
+            "total_experience_earned": 8416,
+            "total_equipment_crafted": 38,
+            "total_upgrades_purchased": 11,
+            "total_recruits": 4,
+            "total_dismissals": 0,
+            "total_experience_allocated": 45,
+            "total_equips": 40,
+            "total_unequips": 1,
+            "economy_curve": [
+              {
+                "turn": 1,
+                "gold_earned": 81,
+                "experience_earned": 183,
+                "cumulative_gold_earned": 81,
+                "cumulative_experience_earned": 183
+              },
+              {
+                "turn": 2,
+                "gold_earned": 42,
+                "experience_earned": 95,
+                "cumulative_gold_earned": 123,
+                "cumulative_experience_earned": 278
+              },
+              {
+                "turn": 3,
+                "gold_earned": 48,
+                "experience_earned": 109,
+                "cumulative_gold_earned": 171,
+                "cumulative_experience_earned": 387
+              },
+              {
+                "turn": 4,
+                "gold_earned": 46,
+                "experience_earned": 104,
+                "cumulative_gold_earned": 217,
+                "cumulative_experience_earned": 491
+              },
+              {
+                "turn": 5,
+                "gold_earned": 87,
+                "experience_earned": 203,
+                "cumulative_gold_earned": 304,
+                "cumulative_experience_earned": 694
+              },
+              {
+                "turn": 6,
+                "gold_earned": 79,
+                "experience_earned": 182,
+                "cumulative_gold_earned": 383,
+                "cumulative_experience_earned": 876
+              },
+              {
+                "turn": 7,
+                "gold_earned": 93,
+                "experience_earned": 213,
+                "cumulative_gold_earned": 476,
+                "cumulative_experience_earned": 1089
+              },
+              {
+                "turn": 8,
+                "gold_earned": 133,
+                "experience_earned": 295,
+                "cumulative_gold_earned": 609,
+                "cumulative_experience_earned": 1384
+              },
+              {
+                "turn": 9,
+                "gold_earned": 55,
+                "experience_earned": 123,
+                "cumulative_gold_earned": 664,
+                "cumulative_experience_earned": 1507
+              },
+              {
+                "turn": 10,
+                "gold_earned": 81,
+                "experience_earned": 183,
+                "cumulative_gold_earned": 745,
+                "cumulative_experience_earned": 1690
+              },
+              {
+                "turn": 11,
+                "gold_earned": 77,
+                "experience_earned": 176,
+                "cumulative_gold_earned": 822,
+                "cumulative_experience_earned": 1866
+              },
+              {
+                "turn": 12,
+                "gold_earned": 91,
+                "experience_earned": 203,
+                "cumulative_gold_earned": 913,
+                "cumulative_experience_earned": 2069
+              },
+              {
+                "turn": 13,
+                "gold_earned": 99,
+                "experience_earned": 225,
+                "cumulative_gold_earned": 1012,
+                "cumulative_experience_earned": 2294
+              },
+              {
+                "turn": 14,
+                "gold_earned": 95,
+                "experience_earned": 211,
+                "cumulative_gold_earned": 1107,
+                "cumulative_experience_earned": 2505
+              },
+              {
+                "turn": 15,
+                "gold_earned": 30,
+                "experience_earned": 68,
+                "cumulative_gold_earned": 1137,
+                "cumulative_experience_earned": 2573
+              },
+              {
+                "turn": 16,
+                "gold_earned": 141,
+                "experience_earned": 315,
+                "cumulative_gold_earned": 1278,
+                "cumulative_experience_earned": 2888
+              },
+              {
+                "turn": 17,
+                "gold_earned": 88,
+                "experience_earned": 194,
+                "cumulative_gold_earned": 1366,
+                "cumulative_experience_earned": 3082
+              },
+              {
+                "turn": 18,
+                "gold_earned": 149,
+                "experience_earned": 333,
+                "cumulative_gold_earned": 1515,
+                "cumulative_experience_earned": 3415
+              },
+              {
+                "turn": 19,
+                "gold_earned": 168,
+                "experience_earned": 390,
+                "cumulative_gold_earned": 1683,
+                "cumulative_experience_earned": 3805
+              },
+              {
+                "turn": 20,
+                "gold_earned": 143,
+                "experience_earned": 334,
+                "cumulative_gold_earned": 1826,
+                "cumulative_experience_earned": 4139
+              },
+              {
+                "turn": 21,
+                "gold_earned": 79,
+                "experience_earned": 181,
+                "cumulative_gold_earned": 1905,
+                "cumulative_experience_earned": 4320
+              },
+              {
+                "turn": 22,
+                "gold_earned": 112,
+                "experience_earned": 252,
+                "cumulative_gold_earned": 2017,
+                "cumulative_experience_earned": 4572
+              },
+              {
+                "turn": 23,
+                "gold_earned": 65,
+                "experience_earned": 142,
+                "cumulative_gold_earned": 2082,
+                "cumulative_experience_earned": 4714
+              },
+              {
+                "turn": 24,
+                "gold_earned": 67,
+                "experience_earned": 148,
+                "cumulative_gold_earned": 2149,
+                "cumulative_experience_earned": 4862
+              },
+              {
+                "turn": 25,
+                "gold_earned": 93,
+                "experience_earned": 205,
+                "cumulative_gold_earned": 2242,
+                "cumulative_experience_earned": 5067
+              },
+              {
+                "turn": 26,
+                "gold_earned": 114,
+                "experience_earned": 262,
+                "cumulative_gold_earned": 2356,
+                "cumulative_experience_earned": 5329
+              },
+              {
+                "turn": 27,
+                "gold_earned": 139,
+                "experience_earned": 312,
+                "cumulative_gold_earned": 2495,
+                "cumulative_experience_earned": 5641
+              },
+              {
+                "turn": 28,
+                "gold_earned": 120,
+                "experience_earned": 261,
+                "cumulative_gold_earned": 2615,
+                "cumulative_experience_earned": 5902
+              },
+              {
+                "turn": 29,
+                "gold_earned": 118,
+                "experience_earned": 260,
+                "cumulative_gold_earned": 2733,
+                "cumulative_experience_earned": 6162
+              },
+              {
+                "turn": 30,
+                "gold_earned": 186,
+                "experience_earned": 419,
+                "cumulative_gold_earned": 2919,
+                "cumulative_experience_earned": 6581
+              },
+              {
+                "turn": 31,
+                "gold_earned": 155,
+                "experience_earned": 327,
+                "cumulative_gold_earned": 3074,
+                "cumulative_experience_earned": 6908
+              },
+              {
+                "turn": 32,
+                "gold_earned": 137,
+                "experience_earned": 302,
+                "cumulative_gold_earned": 3211,
+                "cumulative_experience_earned": 7210
+              },
+              {
+                "turn": 33,
+                "gold_earned": 190,
+                "experience_earned": 406,
+                "cumulative_gold_earned": 3401,
+                "cumulative_experience_earned": 7616
+              },
+              {
+                "turn": 34,
+                "gold_earned": 216,
+                "experience_earned": 470,
+                "cumulative_gold_earned": 3617,
+                "cumulative_experience_earned": 8086
+              },
+              {
+                "turn": 35,
+                "gold_earned": 157,
+                "experience_earned": 330,
+                "cumulative_gold_earned": 3774,
+                "cumulative_experience_earned": 8416
+              }
+            ],
+            "adventurer_stats": [
+              {
+                "adventurer_id": "recruit_0001",
+                "adventurer_name": "林地射手·迟钝",
+                "cumulative_battles_total": 34,
+                "cumulative_battles_won": 34,
+                "cumulative_battles_lost": 0,
+                "cumulative_gold_earned": 1235,
+                "cumulative_experience_earned": 2762
+              },
+              {
+                "adventurer_id": "recruit_0002",
+                "adventurer_name": "佣兵战士·脆弱",
+                "cumulative_battles_total": 32,
+                "cumulative_battles_won": 32,
+                "cumulative_battles_lost": 0,
+                "cumulative_gold_earned": 1010,
+                "cumulative_experience_earned": 2260
+              },
+              {
+                "adventurer_id": "recruit_0003",
+                "adventurer_name": "炮手·坚壁",
+                "cumulative_battles_total": 30,
+                "cumulative_battles_won": 27,
+                "cumulative_battles_lost": 3,
+                "cumulative_gold_earned": 992,
+                "cumulative_experience_earned": 2201
+              },
+              {
+                "adventurer_id": "recruit_0004",
+                "adventurer_name": "魔弹法师",
+                "cumulative_battles_total": 16,
+                "cumulative_battles_won": 16,
+                "cumulative_battles_lost": 0,
+                "cumulative_gold_earned": 537,
+                "cumulative_experience_earned": 1193
+              }
+            ],
+            "strongest_defeated_enemy": {
+              "turn": 35,
+              "monster_id": "turn_35_monster_10",
+              "name": "地狱犬",
+              "power": 3213.4226,
+              "tier": "normal",
+              "archetype_id": "hellhound",
+              "stats": {
+                "hp": 402,
+                "mp": 0,
+                "attack": 159,
+                "defense": 33,
+                "speed": 18,
+                "recovery": 0,
+                "mp_recovery": 0
+              },
+              "reward": {
+                "gold": 48,
+                "experience": 101
+              }
+            }
+          }
+        }
+      ],
+      "model": "glm-5.3-flash",
+      "rank": 36
+    },
+    {
+      "runs": 1,
+      "is_baseline": false,
+      "score": {
         "best": 64.7043,
         "mean": 64.7,
         "median": 64.7
@@ -97877,7 +100064,7 @@
         }
       ],
       "model": "gemini-3.5-flash",
-      "rank": 36
+      "rank": 37
     },
     {
       "runs": 1,
@@ -100027,7 +102214,7 @@
         }
       ],
       "model": "gemma-4-31b-it-q8-0",
-      "rank": 37
+      "rank": 38
     },
     {
       "runs": 1,
@@ -102235,7 +104422,7 @@
         }
       ],
       "model": "gpt-5.6-terra-medium",
-      "rank": 38
+      "rank": 39
     },
     {
       "runs": 1,
@@ -104714,7 +106901,7 @@
         }
       ],
       "model": "qwen-3-8-27b-mtp-ud-q4-k-xl",
-      "rank": 39
+      "rank": 40
     },
     {
       "runs": 1,
@@ -106694,7 +108881,7 @@
         }
       ],
       "model": "qwen-3-6-27b-mtp-ud-q8-k-xl:preserve_thinking",
-      "rank": 40
+      "rank": 41
     },
     {
       "runs": 1,
@@ -109153,7 +111340,7 @@
         }
       ],
       "model": "qwen-agentworld-35b-a3b-ud-q8-k-xl:think",
-      "rank": 41
+      "rank": 42
     },
     {
       "runs": 1,
@@ -111923,7 +114110,7 @@
         }
       ],
       "model": "gpt-5.6-terra-max",
-      "rank": 42
+      "rank": 43
     },
     {
       "runs": 1,
@@ -114025,7 +116212,7 @@
         }
       ],
       "model": "gemma-4-26b-a4b-it-q8-0",
-      "rank": 43
+      "rank": 44
     },
     {
       "runs": 1,
@@ -116192,7 +118379,7 @@
         }
       ],
       "model": "gpt-5.6-terra-high",
-      "rank": 44
+      "rank": 45
     },
     {
       "runs": 1,
@@ -118051,7 +120238,7 @@
         }
       ],
       "model": "step-3-7-flash-iq4-xs",
-      "rank": 45
+      "rank": 46
     },
     {
       "runs": 1,
@@ -119961,7 +122148,7 @@
         }
       ],
       "model": "Ling-3.0-flash",
-      "rank": 46
+      "rank": 47
     },
     {
       "runs": 1,
@@ -121834,7 +124021,7 @@
         }
       ],
       "model": "muse-glimmer-30b-kquant-17gb",
-      "rank": 47
+      "rank": 48
     },
     {
       "runs": 1,
@@ -123694,7 +125881,7 @@
         }
       ],
       "model": "nemotron-3-ultra-free",
-      "rank": 48
+      "rank": 49
     },
     {
       "runs": 1,
@@ -125540,7 +127727,7 @@
         }
       ],
       "model": "gemma-4-26b-a4b-it-qat-ud-q4-k-xl",
-      "rank": 49
+      "rank": 50
     },
     {
       "runs": 3,
@@ -131350,7 +133537,7 @@
         }
       ],
       "model": "qwen-3-6-35b-a3b-ud-q8-k-xl:preserve_thinking",
-      "rank": 50
+      "rank": 51
     },
     {
       "runs": 1,
@@ -133259,7 +135446,7 @@
         }
       ],
       "model": "LongCat-2.0",
-      "rank": 51
+      "rank": 52
     },
     {
       "runs": 1,
@@ -135060,7 +137247,7 @@
         }
       ],
       "model": "gpt-5.6-luna-low",
-      "rank": 52
+      "rank": 53
     },
     {
       "runs": 1,
@@ -136920,7 +139107,7 @@
         }
       ],
       "model": "openpangu-2-0-flash-base-q4-k-m",
-      "rank": 53
+      "rank": 54
     },
     {
       "runs": 1,
@@ -138771,7 +140958,7 @@
         }
       ],
       "model": "gpt-5.6-terra-xhigh",
-      "rank": 54
+      "rank": 55
     },
     {
       "runs": 1,
@@ -139705,7 +141892,7 @@
         }
       ],
       "model": "Baseline · Search",
-      "rank": 55
+      "rank": 56
     },
     {
       "runs": 1,
@@ -141482,7 +143669,7 @@
         }
       ],
       "model": "gemma-4-26b-a4b-it-qat-google-q4-0",
-      "rank": 56
+      "rank": 57
     },
     {
       "runs": 1,
@@ -143169,7 +145356,7 @@
         }
       ],
       "model": "qwen-3-6-35b-a3b-ud-q8-k-xl:think",
-      "rank": 57
+      "rank": 58
     },
     {
       "runs": 1,
@@ -144935,7 +147122,7 @@
         }
       ],
       "model": "gpt-5.6-terra-low",
-      "rank": 58
+      "rank": 59
     },
     {
       "runs": 1,
@@ -146677,7 +148864,7 @@
         }
       ],
       "model": "gpt-5.6-sol-low",
-      "rank": 59
+      "rank": 60
     },
     {
       "runs": 1,
@@ -148238,7 +150425,7 @@
         }
       ],
       "model": "minimax-m2.7-highspeed",
-      "rank": 60
+      "rank": 61
     },
     {
       "runs": 1,
@@ -149816,7 +152003,7 @@
         }
       ],
       "model": "hy3-preview",
-      "rank": 61
+      "rank": 62
     }
   ]
 }
