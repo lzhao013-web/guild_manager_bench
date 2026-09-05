@@ -16,7 +16,7 @@ const $$ = (sel) => document.querySelectorAll(sel);
 const _escEl = document.createElement('div');
 function esc(str) {
   _escEl.textContent = str;
-  return _escEl.innerHTML;
+  return _escEl.innerHTML.replaceAll('"', '&quot;');
 }
 
 // ============================================================================
@@ -64,14 +64,15 @@ function renderModelNote(modelName) {
 
 function fmtDuration(seconds) {
   if (seconds == null) return null;
-  if (seconds < 60) return `${Math.round(seconds)}s`;
-  const m = Math.floor(seconds / 60);
-  const s = Math.round(seconds % 60);
-  return `${m}m${s}s`;
+  const total = Math.round(seconds);
+  if (total < 60) return total + 's';
+  if (total >= 3600) return Math.floor(total / 3600) + 'h ' + Math.floor(total % 3600 / 60) + 'm';
+  return Math.floor(total / 60) + 'm ' + total % 60 + 's';
 }
 
 function fmtTokens(n) {
   if (n == null) return null;
+  if (n >= 1000000) return (n / 1000000).toFixed(2) + 'M';
   if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
   return String(n);
 }
@@ -181,6 +182,12 @@ let _chartJsPromise = null;  // Chart.js 懒加载 Promise（失败时重置以�
 let _adventurerTooltipSeq = 0;
 let _adventurerTooltipHideTimer = null;
 let _leaderboardSearchQuery = '';
+let _leaderboardFilter = 'all';
+let _leaderboardSort = 'rank';
+let _activeTab = 'leaderboard';
+let _comparisonModels = new Set();
+let _expandedModels = new Set();
+let _modelBadges = new Map();
 let _adventurerTooltipRaf = null; // scroll/resize 重定位的 rAF 节流句柄
 const _adventurerTooltipDetails = new Map();
 
@@ -206,21 +213,9 @@ function ensureChartJs() {
 }
 
 // Palette for curve lines — distinct colors readable on dark background
-const CURVE_COLORS = [
-  '#f59e0b', // amber (accent)
-  '#22d3ee', // cyan
-  '#a78bfa', // purple
-  '#22c55e', // green
-  '#f87171', // red
-  '#60a5fa', // blue
-  '#fb923c', // orange
-  '#e879f9', // fuchsia
-  '#34d399', // emerald
-  '#fbbf24', // yellow
-];
-
-function curveColor(index) {
-  return CURVE_COLORS[index % CURVE_COLORS.length];
+const CURVE_COLORS = ['#91adf2', '#d7b779', '#86cbb2', '#b8a0da'];
+function curveColor(modelName) {
+  return CURVE_COLORS[[..._comparisonModels].indexOf(modelName) % CURVE_COLORS.length];
 }
 
 const CURVE_METRICS = {
@@ -282,34 +277,65 @@ function setMainVisible(el, visible) {
   el.hidden = !visible;
 }
 
-function initTabs() {
-  const tabs = $$('.tab-btn');
-  tabs.forEach((btn) => {
-    btn.addEventListener('click', () => {
-      tabs.forEach((t) => t.classList.remove('active'));
-      btn.classList.add('active');
-      const tab = btn.dataset.tab;
-      setMainVisible($('#leaderboardMain'), tab === 'leaderboard');
-      setMainVisible($('#curvesMain'), tab === 'curves');
-      if (tab === 'curves' && _leaderboardData) {
-        renderCurvePanel();
-      }
-    });
-  });
-
-  // 支持 ?tab=curves 直接进入曲线对比（便于截图/分享）
-  const params = new URLSearchParams(window.location.search);
-  if (params.get('tab') === 'curves') {
-    const btn = $('#tabCurves');
-    if (btn) btn.click();
+function syncViewUrl() {
+  const url = new URL(window.location.href);
+  const values = { q: _leaderboardSearchQuery, type: _leaderboardFilter === 'all' ? '' : _leaderboardFilter,
+    sort: _leaderboardSort === 'rank' ? '' : _leaderboardSort, tab: _activeTab === 'curves' ? 'curves' : '' };
+  for (const [key, value] of Object.entries(values)) {
+    if (value) url.searchParams.set(key, value);
+    else url.searchParams.delete(key);
   }
-  // ?expand=N 自动展开第 N 张卡（开发用）— 展开即触发详情懒渲染
-  const expandIdx = parseInt(params.get('expand') || '', 10);
-  if (!Number.isNaN(expandIdx) && expandIdx > 0) {
-    setTimeout(() => {
-      const card = $$('.model-card')[expandIdx - 1];
-      if (card) toggleCardExpanded(card, true);
-    }, 100);
+  url.searchParams.delete('compare');
+  for (const name of _comparisonModels) url.searchParams.append('compare', name);
+  window.history.replaceState(null, '', url);
+}
+
+function restoreView() {
+  const params = new URLSearchParams(window.location.search);
+  _leaderboardSearchQuery = params.get('q') || '';
+  _leaderboardFilter = ['all', 'models', 'reference'].includes(params.get('type')) ? params.get('type') : 'all';
+  _leaderboardSort = ['rank', 'output', 'duration', 'runs'].includes(params.get('sort')) ? params.get('sort') : 'rank';
+  const names = new Set(_leaderboardData.models.map(m => m.model));
+  _comparisonModels = new Set(params.getAll('compare').filter(name => names.has(name)).slice(0, 4));
+  $('#leaderboardSort').value = _leaderboardSort;
+  updateFilterButtons();
+}
+
+function setActiveTab(name, { scroll = true } = {}) {
+  _activeTab = name;
+  $('.skip-link').href = name === 'curves' ? '#curvesMain' : '#leaderboardMain';
+  $$('.tab-btn').forEach(btn => {
+    const active = btn.dataset.tab === name;
+    btn.classList.toggle('active', active);
+    if (active) btn.setAttribute('aria-current', 'page');
+    else btn.removeAttribute('aria-current');
+  });
+  setMainVisible($('#leaderboardMain'), name === 'leaderboard');
+  setMainVisible($('#curvesMain'), name === 'curves');
+  if (name === 'curves') {
+    if (!_comparisonModels.size) {
+      _leaderboardData.models.filter(m => !isExcludedFromBadges(m)).slice(0, 3)
+        .forEach(m => _comparisonModels.add(m.model));
+    }
+    renderCurvePanel();
+  }
+  updateComparisonTray();
+  syncViewUrl();
+  if (scroll) window.scrollTo({ top: 0 });
+}
+
+function initTabs() {
+  $$('.tab-btn').forEach(btn => btn.addEventListener('click', () => setActiveTab(btn.dataset.tab)));
+  $('#backToLeaderboard').addEventListener('click', () => {
+    setActiveTab('leaderboard');
+    $('#leaderboardSearchInput').focus({ preventScroll: true });
+  });
+  const params = new URLSearchParams(window.location.search);
+  setActiveTab(params.get('tab') === 'curves' ? 'curves' : 'leaderboard', { scroll: false });
+  const expandIdx = Number(params.get('expand'));
+  if (Number.isInteger(expandIdx) && expandIdx > 0) {
+    const card = $$('.model-card')[expandIdx - 1];
+    if (card) toggleCardExpanded(card, true);
   }
 }
 
@@ -319,27 +345,58 @@ function initTabs() {
 
 /**
  * Collect all runs across all models that have the selected metric curve.
- * Returns [{model, run, key, colorIndex}]
+ * Returns [{model, run, key, curve, runNumber}].
  */
 function allCurveRuns(data) {
   const runs = [];
-  let idx = 0;
   const metric = currentCurveMetric();
   for (const m of data.models) {
-    for (const run of (m.run_details || [])) {
-      const curve = metric.curve(run).filter((pt) => metric.value(pt) != null);
-      if (curve.length > 0) {
-        runs.push({
-          model: m.model,
-          run,
-          key: `${m.model}::${run.run_id || run.session_id}`,
-          colorIndex: idx++,
-          curve,
-        });
-      }
-    }
+    (m.run_details || []).forEach((run, index) => {
+      const curve = metric.curve(run).filter(pt => metric.value(pt) != null);
+      if (curve.length) runs.push({ model: m.model, run, key: m.model + '::' + (run.run_id || run.session_id), curve, runNumber: index + 1 });
+    });
   }
   return runs;
+}
+
+function comparisonCurveRuns(data) {
+  return getCurveRuns(data).filter(r => _comparisonModels.has(r.model));
+}
+
+function renderComparisonSummary() {
+  const models = [..._comparisonModels].map(name => _leaderboardData.models.find(m => m.model === name));
+  if (!models.length) {
+    $('#comparisonSummary').innerHTML = '<div class="empty-state"><h2>还没有可对比的模型</h2><p>返回排行榜选择模型后，再查看指标与成长曲线。</p></div>';
+    return;
+  }
+  const metrics = [
+    { label: '平均段位积分', value: m => m.rank_score?.mean, format: fmtRankScore, direction: 'max' },
+    { label: '运行次数', value: m => m.runs, format: fmtInt },
+    { label: '输入 Tokens', value: m => m.efficiency?.input_tokens?.mean, format: fmtTokens },
+    { label: '输出 Tokens', value: m => m.efficiency?.output_tokens?.mean, format: fmtTokens },
+    { label: '平均耗时', value: m => m.efficiency?.duration_seconds?.mean, format: fmtDuration },
+    { label: '平均工具调用', value: m => m.efficiency?.tool_calls?.mean, format: fmtInt },
+    { label: '战斗胜率', value: m => m.game_quality?.battle_win_rate, format: fmtPct },
+  ];
+  $('#comparisonSummary').innerHTML = '<div class="comparison-table-wrap"><table class="comparison-table"><caption class="sr-only">所选模型的聚合指标对比</caption><thead><tr><th scope="col">表现概览<span class="comparison-unit">每次运行的聚合结果</span></th>' +
+    models.map(m => '<th scope="col"><span class="comparison-model"><span class="curve-color-dot" style="background:' + curveColor(m.model) + '"></span>' + esc(m.model) +
+    '</span><span class="comparison-unit">全榜 #' + m.rank + ' · ' + (m.runs === 1 ? '单次结果' : m.runs + ' 次运行') + '</span></th>').join('') + '</tr></thead><tbody>' +
+    metrics.map(metric => {
+      const values = models.map(metric.value).filter(v => v != null);
+      const best = metric.direction === 'max' && values.length ? Math.max(...values) : null;
+      return '<tr><th scope="row">' + metric.label + '</th>' +
+        models.map(m => {
+          const value = metric.value(m);
+          return '<td' + (best != null && value === best ? ' class="comparison-best"' : '') + '>' + (metric.format(value) ?? '—') + '</td>';
+        }).join('') + '</tr>';
+    }).join('') + '</tbody></table></div>';
+}
+
+function filterCurveLegend() {
+  const query = normalizeSearchText($('#curveSearch').value.trim());
+  $$('.curve-legend-item').forEach(item => { item.hidden = !normalizeSearchText(item.textContent).includes(query); });
+  const items = $$('.curve-legend-item');
+  $('#curveLegendEmpty').hidden = !items.length || [...items].some(item => !item.hidden);
 }
 
 // 按指标缓存 allCurveRuns 结果 — checkbox/全选/清除反复走缓存，
@@ -373,7 +430,7 @@ function setCurveChartStatus(state) {
         <div class="spinner"></div>
         <span>正在加载图表组件…</span>
       </div>`;
-  } else {
+  } else if (state === 'error') {
     el.innerHTML = `
       <span>图表组件加载失败，请检查网络后重试</span>
       <button class="curve-btn" type="button" id="curveRetry">重试</button>`;
@@ -383,130 +440,75 @@ function setCurveChartStatus(state) {
 
 async function renderCurvePanel() {
   const data = _leaderboardData;
-  if (!data) return;
-
+  renderComparisonSummary();
   const metricSelect = $('#curveMetricSelect');
-  if (metricSelect) {
-    metricSelect.value = _curveMetric;
-    metricSelect.onchange = () => {
-      _curveMetric = metricSelect.value;
-      renderCurvePanel();
-    };
-  }
-
-  // Chart.js 懒加载：加载期间显示占位，失败显示可重试的错误提示
+  metricSelect.value = _curveMetric;
+  metricSelect.onchange = () => { _curveMetric = metricSelect.value; renderCurvePanel(); };
+  const runs = comparisonCurveRuns(data);
+  const metric = currentCurveMetric();
+  runs.forEach(r => {
+    if (!Object.prototype.hasOwnProperty.call(_curveRunSelection, r.key)) _curveRunSelection[r.key] = true;
+  });
+  $('#curveLegend').innerHTML = runs.map(r => {
+    const checked = _curveRunSelection[r.key] ? ' checked' : '';
+    return '<label class="curve-legend-item"><input type="checkbox" data-curve-key="' + esc(r.key) + '"' + checked + '>' +
+      '<span class="curve-color-dot" style="background:' + curveColor(r.model) + '"></span><span class="curve-legend-content"><span class="curve-legend-model">' +
+      esc(r.model) + '</span><span class="curve-legend-meta">Run ' + r.runNumber + ' · ' + esc(fmtTimestamp(r.run.created_at).slice(0, 10)) + '</span></span></label>';
+  }).join('') + (runs.length ? '' : '<p class="curve-legend-placeholder">' + metric.empty + '</p>') +
+    '<p id="curveLegendEmpty" class="curve-legend-placeholder" hidden>没有匹配的运行</p>';
+  filterCurveLegend();
+  $('#curveLegend').querySelectorAll('input').forEach(cb => cb.addEventListener('change', () => {
+    _curveRunSelection[cb.dataset.curveKey] = cb.checked;
+    if (window.Chart) updateCurveChart(data);
+  }));
+  const selectRuns = checked => {
+    runs.forEach(r => { _curveRunSelection[r.key] = checked; });
+    $('#curveLegend').querySelectorAll('input').forEach(cb => { cb.checked = checked; });
+    if (window.Chart) updateCurveChart(data);
+  };
+  $('#curveSelectAll').onclick = () => selectRuns(true);
+  $('#curveDeselectAll').onclick = () => selectRuns(false);
   if (!window.Chart) {
     setCurveChartStatus('loading');
-    try {
-      await ensureChartJs();
-    } catch (e) {
-      setCurveChartStatus('error');
-      return;
-    }
-    // 加载完成后若用户已切走 tab，仍完成渲染（隐藏状态下无碍）
-    setCurveChartStatus(null);
+    try { await ensureChartJs(); }
+    catch (e) { setCurveChartStatus('error'); return; }
   }
-
-  const runs = getCurveRuns(data);
-  const legend = $('#curveLegend');
-  const metric = currentCurveMetric();
-
-  if (!runs.length) {
-    legend.innerHTML = `<div class="curve-legend-placeholder">${esc(metric.empty)}</div>`;
-    if (_curveChart) { _curveChart.destroy(); _curveChart = null; }
-    return;
-  }
-
-  // Default: select all runs on first render
-  if (Object.keys(_curveRunSelection).length === 0) {
-    runs.forEach((r) => { _curveRunSelection[r.key] = true; });
-  } else {
-    runs.forEach((r) => {
-      if (!Object.prototype.hasOwnProperty.call(_curveRunSelection, r.key)) {
-        _curveRunSelection[r.key] = true;
-      }
-    });
-  }
-
-  // Build legend items
-  const items = runs.map((r) => {
-    const checked = _curveRunSelection[r.key] ? 'checked' : '';
-    const color = curveColor(r.colorIndex);
-    const rs = r.run.rank_score;
-    const rsLabel = rs != null ? fmtRankScore(rs) : '—';
-    const timeLabel = fmtTimestamp(r.run.created_at);
-    const finalValue = r.curve.length ? metric.value(r.curve[r.curve.length - 1]) : null;
-    const metricLabel = finalValue != null ? fmtInt(finalValue) : rsLabel;
-    // 短时间格式 + 短日期，给模型名让位
-    const shortTime = (() => {
-      const m = timeLabel.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/);
-      return m ? `${m[2]}-${m[3]} ${m[4]}:${m[5]}` : timeLabel;
-    })();
-    return `
-      <label class="curve-legend-item">
-        <input type="checkbox" data-curve-key="${esc(r.key)}" ${checked} />
-        <span class="curve-color-dot" style="background:${color}"></span>
-        <div class="curve-legend-content">
-          <span class="curve-legend-model">${esc(r.model)}</span>
-          <span class="curve-legend-meta">${esc(shortTime)} · ${esc(metricLabel)}</span>
-        </div>
-      </label>`;
-  }).join('');
-
-  legend.innerHTML = items;
-
-  // Bind checkbox events
-  legend.querySelectorAll('input[type=checkbox]').forEach((cb) => {
-    cb.addEventListener('change', () => {
-      _curveRunSelection[cb.dataset.curveKey] = cb.checked;
-      updateCurveChart(data);
-    });
-  });
-
-  // Bind select all / deselect all
-  $('#curveSelectAll').onclick = () => {
-    runs.forEach((r) => { _curveRunSelection[r.key] = true; });
-    legend.querySelectorAll('input[type=checkbox]').forEach((cb) => { cb.checked = true; });
-    updateCurveChart(data);
-  };
-  $('#curveDeselectAll').onclick = () => {
-    runs.forEach((r) => { _curveRunSelection[r.key] = false; });
-    legend.querySelectorAll('input[type=checkbox]').forEach((cb) => { cb.checked = false; });
-    updateCurveChart(data);
-  };
-
   updateCurveChart(data);
 }
 
 function updateCurveChart(data) {
-  const runs = getCurveRuns(data);
+  const runs = comparisonCurveRuns(data);
   const selected = runs.filter((r) => _curveRunSelection[r.key]);
 
+  $('#curveSelectionStatus').textContent = '已显示 ' + selected.length + ' / ' + runs.length + ' 条运行曲线';
   if (!selected.length) {
     if (_curveChart) {
-      _curveChart.data.labels = [];
-      _curveChart.data.datasets = [];
-      _curveChart.update();
+      _curveChart.destroy();
+      _curveChart = null;
     }
+    setCurveChartStatus('empty');
+    $('.curve-chart-status').textContent = runs.length ? '选择运行，查看成长曲线。' : currentCurveMetric().empty;
     return;
   }
+  setCurveChartStatus(null);
 
   const metric = currentCurveMetric();
 
   // Build datasets — curve is already filtered to points for the selected metric.
   const datasets = selected.map((r) => {
-    const color = curveColor(r.colorIndex);
+    const color = curveColor(r.model);
     const points = r.curve.map((pt) => ({ x: pt.turn, y: metric.value(pt) }));
     return {
-      label: r.model,
+      label: r.model + ' · Run ' + r.runNumber,
       data: points,
       borderColor: color,
-      backgroundColor: color + '18',
+      backgroundColor: color,
       pointBackgroundColor: color,
-      pointRadius: 3,
-      pointHoverRadius: 5,
+      pointRadius: 0,
+      pointHoverRadius: 4,
       borderWidth: 2,
-      tension: 0.15,
+      borderDash: r.runNumber === 1 ? [] : r.runNumber === 2 ? [6, 4] : [2, 4],
+      tension: 0.1,
       fill: false,
     };
   });
@@ -526,17 +528,19 @@ function updateCurveChart(data) {
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        animation: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? false : { duration: 180 },
         showLine: true,
         interaction: {
           mode: 'nearest',
+          axis: 'x',
           intersect: false,
         },
         plugins: {
           legend: { display: false },
           tooltip: {
-            backgroundColor: 'rgba(13, 17, 32, 0.95)',
+            backgroundColor: '#1e2025',
             titleColor: '#e8ecf4',
-            bodyColor: '#9aa3be',
+            bodyColor: '#bdc0c9',
             borderColor: 'rgba(255,255,255,0.1)',
             borderWidth: 1,
             padding: 12,
@@ -559,21 +563,21 @@ function updateCurveChart(data) {
             title: {
               display: true,
               text: '回合',
-              color: '#5c6585',
+              color: '#93959d',
               font: { family: 'Inter', size: 12 },
             },
-            ticks: { color: '#5c6585', font: { family: 'JetBrains Mono', size: 11 }, stepSize: 5 },
-            grid: { color: 'rgba(255,255,255,0.04)' },
+            ticks: { color: '#93959d', font: { family: 'JetBrains Mono', size: 11 }, stepSize: 5 },
+            grid: { color: 'rgba(255,255,255,0.05)' },
           },
           y: {
             title: {
               display: true,
               text: metric.label,
-              color: '#5c6585',
+              color: '#93959d',
               font: { family: 'Inter', size: 12 },
             },
             ticks: {
-              color: '#5c6585',
+              color: '#93959d',
               font: { family: 'JetBrains Mono', size: 11 },
               callback: (val) => val.toLocaleString('en-US', { maximumFractionDigits: 0 }),
             },
@@ -590,31 +594,14 @@ function updateCurveChart(data) {
 // Rendering — Leaderboard Cards
 // ============================================================================
 function renderLeaderboard(data) {
-  const meta = $('#topMeta');
-  const container = $('#cardListContainer');
-  _curveRunsCache = null; // 数据重载 → 曲线缓存失效
+  _curveRunsCache = null;
   _curveRunsCacheMetric = null;
-
-  // Top bar meta
-  const genTime = data.generated_at ? data.generated_at.replace('T', ' ') : '—';
-  meta.innerHTML = `<span>${esc(data.total_runs)} 次运行 · ${data.models.length} 个模型 · 更新于 ${esc(genTime)}</span>`;
-
-  if (!data.models.length) {
-    container.innerHTML = `
-      <div class="empty-state">
-        <h2>暂无数据</h2>
-        <p>暂无排行榜数据，请稍后再来查看。</p>
-      </div>`;
-    updateLeaderboardSearchState(0, 0);
-    return;
-  }
-
-  // Stats banner metrics
+  _modelBadges = computeModelBadges(data.models);
+  const generated = data.generated_at ? data.generated_at.slice(0, 10) : '—';
+  $('#topMeta').textContent = '数据更新于 ' + generated;
+  $('#modelCount').textContent = data.models.length;
   renderStatsBanner(data);
-
-  const searchInput = $('#leaderboardSearchInput');
-  if (searchInput) searchInput.disabled = false;
-
+  $('#leaderboardSearchInput').disabled = false;
   renderLeaderboardCards(data);
 }
 
@@ -633,71 +620,50 @@ function modelMatchesSearch(model, query) {
 
 function updateLeaderboardSearchState(visibleCount, totalCount) {
   const input = $('#leaderboardSearchInput');
-  const clear = $('#leaderboardSearchClear');
-  const status = $('#leaderboardSearchStatus');
-  const hasQuery = Boolean(_leaderboardSearchQuery);
-
-  if (input && input.value !== _leaderboardSearchQuery) {
-    input.value = _leaderboardSearchQuery;
-  }
-  if (clear) clear.hidden = !hasQuery;
-  if (status) {
-    status.textContent = hasQuery
-      ? `找到 ${visibleCount} / ${totalCount} 个模型`
-      : `共 ${totalCount} 个模型`;
-  }
+  if (input.value !== _leaderboardSearchQuery) input.value = _leaderboardSearchQuery;
+  $('#leaderboardSearchClear').hidden = !_leaderboardSearchQuery;
+  $('#leaderboardSearchStatus').textContent = '显示 ' + visibleCount + ' / ' + totalCount + ' 个参赛条目';
 }
 
 function renderLeaderboardCards(data) {
-  const container = $('#cardListContainer');
-  const models = data.models || [];
-  const normalizedQuery = normalizeSearchText(_leaderboardSearchQuery.trim());
-  const visibleModels = models.filter((model) => modelMatchesSearch(model, normalizedQuery));
-
-  // 详情按当前可见卡片索引懒加载；搜索过滤后必须同步索引来源。
-  _cardModels = visibleModels;
+  const query = normalizeSearchText(_leaderboardSearchQuery.trim());
+  const visible = data.models.filter(m => modelMatchesSearch(m, query) &&
+    (_leaderboardFilter === 'all' || (_leaderboardFilter === 'reference') === isExcludedFromBadges(m)));
+  const value = m => {
+    if (_leaderboardSort === 'output') return m.efficiency?.output_tokens?.mean;
+    if (_leaderboardSort === 'duration') return m.efficiency?.duration_seconds?.mean;
+    if (_leaderboardSort === 'runs') return -m.runs;
+    return m.rank;
+  };
+  visible.sort((a, b) => {
+    const av = value(a), bv = value(b);
+    if (av == null && bv == null) return a.rank - b.rank;
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    return av - bv || a.rank - b.rank;
+  });
+  _cardModels = visible;
+  hideAdventurerTooltip();
   _adventurerTooltipDetails.clear();
   _adventurerTooltipSeq = 0;
-  updateLeaderboardSearchState(visibleModels.length, models.length);
-
-  if (!visibleModels.length) {
-    container.innerHTML = `
-      <div class="empty-state search-empty-state">
-        <h2>未找到匹配模型</h2>
-        <p>请尝试其他模型名称或备注关键词。</p>
-        <button class="search-empty-clear" type="button" data-action="clear-leaderboard-search">清除搜索</button>
-      </div>`;
+  updateLeaderboardSearchState(visible.length, data.models.length);
+  const container = $('#cardListContainer');
+  if (!visible.length) {
+    container.innerHTML = '<div class="empty-state"><span class="empty-symbol" aria-hidden="true">⌕</span><h3>' +
+      (data.models.length ? '没有找到匹配的模型' : '还没有评测结果') +
+      '</h3><p>试试其他名称，或重置筛选条件。</p><button class="button" data-action="reset-filters" type="button">重置筛选</button></div>';
     return;
   }
-
-  // 预计算多口径徽标（避免每个 card 内重算）
-  const allBadges = computeModelBadges(models);
-
-  // Build cards with staggered animation delay
-  const topScore = models
-    .map((m) => (m.rank_score && m.rank_score.mean) || 0)
-    .reduce((a, b) => Math.max(a, b), 0);
-  const avgScore = models
-    .map((m) => (m.rank_score && m.rank_score.mean) || 0)
-    .filter((v) => v > 0);
-  const avgVal = avgScore.length
-    ? avgScore.reduce((a, b) => a + b, 0) / avgScore.length
-    : null;
-  const total = models.length;
-
-  const cards = visibleModels.map((m, i) => {
-    const badges = allBadges.get(m.model) || [];
-    const html = renderCard(m, { topScore, avgVal, total, badges, index: i });
-    return html.replace(
-      'class="model-card',
-      `style="animation-delay:${i * 80}ms" class="model-card`
-    );
-  }).join('');
-
-  container.innerHTML = `<div class="card-list">${cards}</div>`;
-
-  // 卡片展开 + 冒险者 tooltip 均走容器级事件委托（绑定一次，重渲染不失效）
-  initCardInteractions();
+  const topScore = Math.max(...data.models.map(m => m.rank_score?.mean ?? 0));
+  container.innerHTML = '<table class="ranking-table"><caption class="sr-only">模型表现排行榜，默认按平均段位积分排序</caption>' +
+    '<colgroup><col class="col-select"><col class="col-rank"><col class="col-model"><col class="col-score"><col class="col-runs"><col class="col-output"><col class="col-duration"><col class="col-expand"></colgroup>' +
+    '<thead><tr><th scope="col"><span class="sr-only">选择对比</span></th><th scope="col">排名</th><th scope="col">模型 / 备注</th>' +
+    '<th scope="col" class="numeric">平均段位积分</th><th scope="col" class="numeric">运行</th><th scope="col" class="numeric">输出 Tokens</th><th scope="col" class="numeric">耗时</th><th scope="col"><span class="sr-only">详情</span></th></tr></thead>' +
+    '<tbody>' + visible.map((m, index) => renderCard(m, { topScore, index })).join('') + '</tbody></table>';
+  $$('.model-card').forEach(card => {
+    if (_expandedModels.has(_cardModels[Number(card.dataset.cardIdx)].model)) toggleCardExpanded(card, true);
+  });
+  updateComparisonTray();
 }
 
 // ============================================================================
@@ -708,20 +674,20 @@ function renderLeaderboardCards(data) {
 // 冒险者 tooltip 数据（_adventurerTooltipDetails）也在此时注册
 function ensureCardDetailRendered(card) {
   if (card.dataset.detailLoaded === 'true') return;
-  const idx = parseInt(card.dataset.cardIdx || '', 10);
-  const m = _cardModels[idx];
-  const detailEl = card.querySelector('.card-detail');
-  if (!m || !detailEl) return;
-  detailEl.innerHTML = renderCardDetail(m);
+  const m = _cardModels[Number(card.dataset.cardIdx)];
+  card.nextElementSibling.querySelector('.card-detail').innerHTML = renderCardDetail(m);
   card.dataset.detailLoaded = 'true';
 }
 
-// 展开/收起统一入口 — 同步 .expanded 与 aria-expanded，展开前保证详情已注入
 function toggleCardExpanded(card, force) {
   const expand = force != null ? force : !card.classList.contains('expanded');
-  if (expand) ensureCardDetailRendered(card);
+  const m = _cardModels[Number(card.dataset.cardIdx)];
+  if (expand) { ensureCardDetailRendered(card); _expandedModels.add(m.model); }
+  else { _expandedModels.delete(m.model); hideAdventurerTooltip(); }
   card.classList.toggle('expanded', expand);
-  card.setAttribute('aria-expanded', String(expand));
+  card.nextElementSibling.hidden = !expand;
+  card.querySelectorAll('[data-action="toggle-detail"]').forEach(btn => btn.setAttribute('aria-expanded', String(expand)));
+  card.querySelector('.expand-button').setAttribute('aria-label', (expand ? '收起 ' : '展开 ') + m.model + ' 详情');
 }
 
 let _cardInteractionsBound = false;
@@ -731,25 +697,37 @@ function initCardInteractions() {
   const container = $('#cardListContainer');
   if (!container) return;
 
-  // 卡片 click 展开 — 单层委托；点击 a/button 不触发
-  container.addEventListener('click', (e) => {
-    const card = e.target.closest('.model-card');
-    if (!card || !container.contains(card)) return;
-    if (e.target.closest('a, button')) return;
-    toggleCardExpanded(card);
-  });
-
-  // 键盘可达：卡片聚焦时 Enter/Space 触发展开；Escape 关闭冒险者 tooltip
-  container.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-      hideAdventurerTooltip();
+  container.addEventListener('click', e => {
+    const adventurer = e.target.closest('[data-adventurer-tooltip]');
+    if (adventurer) { showAdventurerTooltip(adventurer); return; }
+    if (e.target.closest('[data-action="reset-filters"]')) {
+      _leaderboardSearchQuery = '';
+      _leaderboardFilter = 'all';
+      _leaderboardSort = 'rank';
+      $('#leaderboardSort').value = 'rank';
+      updateFilterButtons();
+      renderLeaderboardCards(_leaderboardData);
+      syncViewUrl();
+      $('#leaderboardSearchInput').focus();
       return;
     }
-    if (e.key !== 'Enter' && e.key !== ' ') return;
-    const card = e.target.closest('.model-card');
-    if (!card || e.target !== card) return;
-    e.preventDefault();
-    toggleCardExpanded(card);
+    const toggle = e.target.closest('[data-action="toggle-detail"]');
+    if (toggle) toggleCardExpanded(toggle.closest('.model-card'));
+  });
+  container.addEventListener('change', e => {
+    const checkbox = e.target.closest('[data-compare-model]');
+    if (!checkbox) return;
+    const name = checkbox.dataset.compareModel;
+    if (checkbox.checked) _comparisonModels.add(name);
+    else _comparisonModels.delete(name);
+    updateComparisonTray();
+    syncViewUrl();
+  });
+  container.addEventListener('keydown', e => {
+    if (e.key === 'Escape') hideAdventurerTooltip();
+  });
+  document.addEventListener('pointerdown', e => {
+    if (!e.target.closest('[data-adventurer-tooltip], .adventurer-tooltip')) hideAdventurerTooltip();
   });
 
   // 冒险者 tooltip — 委托 mouseover/mouseout + focusin/focusout
@@ -792,173 +770,110 @@ function scheduleAdventurerTooltipReposition() {
   });
 }
 
-function clearLeaderboardSearch({ focus = true } = {}) {
-  if (!_leaderboardSearchQuery && !$('#leaderboardSearchInput')?.value) return;
+function updateFilterButtons() {
+  $$('[data-filter]').forEach(btn => {
+    const active = btn.dataset.filter === _leaderboardFilter;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-pressed', String(active));
+  });
+}
+
+function clearLeaderboardSearch() {
   _leaderboardSearchQuery = '';
-  const input = $('#leaderboardSearchInput');
-  if (input) input.value = '';
-  if (_leaderboardData) renderLeaderboardCards(_leaderboardData);
-  if (focus) input?.focus();
+  renderLeaderboardCards(_leaderboardData);
+  syncViewUrl();
+  $('#leaderboardSearchInput').focus();
 }
 
 function initLeaderboardSearch() {
   const input = $('#leaderboardSearchInput');
-  const clear = $('#leaderboardSearchClear');
-  if (!input || !clear) return;
-
   input.addEventListener('input', () => {
-    _leaderboardSearchQuery = input.value.trim();
-    if (_leaderboardData) renderLeaderboardCards(_leaderboardData);
+    _leaderboardSearchQuery = input.value;
+    renderLeaderboardCards(_leaderboardData);
+    syncViewUrl();
   });
-
-  input.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && input.value) {
-      event.preventDefault();
-      clearLeaderboardSearch();
-    }
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && input.value) clearLeaderboardSearch();
   });
+  $('#leaderboardSearchClear').addEventListener('click', clearLeaderboardSearch);
+  $$('[data-filter]').forEach(btn => btn.addEventListener('click', () => {
+    _leaderboardFilter = btn.dataset.filter;
+    updateFilterButtons();
+    renderLeaderboardCards(_leaderboardData);
+    syncViewUrl();
+  }));
+  $('#leaderboardSort').addEventListener('change', e => {
+    _leaderboardSort = e.target.value;
+    renderLeaderboardCards(_leaderboardData);
+    syncViewUrl();
+  });
+  $('#clearComparison').addEventListener('click', () => {
+    _comparisonModels.clear();
+    updateComparisonTray();
+    syncViewUrl();
+    $('#leaderboardSearchInput').focus({ preventScroll: true });
+  });
+  $('#startComparison').addEventListener('click', () => {
+    setActiveTab('curves');
+    $('#backToLeaderboard').focus({ preventScroll: true });
+  });
+  $('#curveSearch').addEventListener('input', filterCurveLegend);
+}
 
-  clear.addEventListener('click', () => clearLeaderboardSearch());
-  $('#cardListContainer')?.addEventListener('click', (event) => {
-    if (event.target.closest('[data-action="clear-leaderboard-search"]')) {
-      clearLeaderboardSearch();
-    }
+function updateComparisonTray() {
+  const count = _comparisonModels.size;
+  $('#compareTray').hidden = count === 0 || _activeTab !== 'leaderboard';
+  document.body.classList.toggle('has-comparison', count > 0 && _activeTab === 'leaderboard');
+  $('#compareCount').textContent = '已选 ' + count + ' / 4';
+  $('#compareNames').textContent = [..._comparisonModels].join(' · ');
+  $('#startComparison').disabled = count < 2;
+  $('#selectionMessage').textContent = count === 4 ? '已选择 4 项。取消一项后可选择其他模型。' : '';
+  $$('[data-compare-model]').forEach(checkbox => {
+    checkbox.checked = _comparisonModels.has(checkbox.dataset.compareModel);
+    checkbox.disabled = count >= 4 && !checkbox.checked;
+    checkbox.closest('.model-card').classList.toggle('selected', checkbox.checked);
   });
 }
 
 function renderStatsBanner(data) {
-  const el = $('#statsBannerMetrics');
-  if (!el) return;
-
-  const models = data.models || [];
-  const totalRuns = data.total_runs || 0;
-  const validBestScores = models
-    .map((m) => (m.rank_score && m.rank_score.best) || 0)
-    .filter((v) => v > 0);
-  // 排行榜按模型的 mean Rank Score 排序，概览“平均分”沿用同一口径，
-  // 不能拿每个模型的 best 再平均，否则多次运行的模型会被高估。
-  const validMeanScores = models
-    .map((m) => (m.rank_score && m.rank_score.mean) || 0)
-    .filter((v) => v > 0);
-
-  const topScore = validBestScores.length ? Math.max(...validBestScores) : 0;
-  const avgScore = validMeanScores.length
-    ? validMeanScores.reduce((a, b) => a + b, 0) / validMeanScores.length
-    : 0;
-  const lastUpdated = data.generated_at
-    ? data.generated_at.slice(0, 10)  // YYYY-MM-DD
-    : '—';
-
-  // 计算 seed 信息
-  const seeds = new Set();
-  const scoringSeeds = new Set();
-  for (const m of models) {
-    for (const r of m.run_details || []) {
-      if (r.game_seed != null) seeds.add(r.game_seed);
-      if (r.scoring_seed != null) scoringSeeds.add(r.scoring_seed);
-    }
-  }
-  const seedList = Array.from(seeds).sort((a, b) => a - b);
-  const scoreSeedList = Array.from(scoringSeeds).sort((a, b) => a - b);
-  const seedLabel = seedList.length === 1 ? `seed ${seedList[0]}` : '—';
-  const scoreSeedLabel = scoreSeedList.length === 1 ? `score ${scoreSeedList[0]}` : '—';
-
-  // 把指标分两档：primary (最高分 / 平均分) 和 secondary
-  // primary 显示为大字号,secondary 显示为小字号 — 拉开权重
+  const models = data.models;
+  const scores = models.map(m => m.rank_score?.mean).filter(v => v != null);
+  const best = models.map(m => m.rank_score?.best).filter(v => v != null);
   const items = [
-    { label: '最高分', value: fmtRankScore(topScore) || '—', unit: 'Rank Score', tier: 'primary' },
-    { label: '平均分', value: fmtRankScore(Math.round(avgScore)) || '—', unit: 'Rank Score', tier: 'primary' },
-    { label: '参赛模型', value: models.length, unit: '个', tier: 'secondary' },
-    { label: '累计运行', value: totalRuns, unit: '次', tier: 'secondary' },
-    { label: '游戏种子', value: seedLabel, unit: '复现', tier: 'secondary' },
-    { label: '评分种子', value: scoreSeedLabel, unit: '复现', tier: 'secondary' },
+    ['参赛条目', String(models.length), '模型与参考基线'],
+    ['完成运行', String(data.total_runs), '已归档的评测结果'],
+    ['单次最高分', best.length ? fmtRankScore(Math.max(...best)) : '—', 'Rank Score'],
+    ['全榜平均分', scores.length ? fmtRankScore(scores.reduce((a,b) => a+b, 0) / scores.length) : '—', '各条目均分的平均值']
   ];
-
-  el.innerHTML = items
-    .map(
-      (it) => `
-      <div class="stats-banner-cell tier-${it.tier}">
-        <dt class="stats-banner-label">${esc(it.label)}</dt>
-        <dd class="stats-banner-value">${esc(String(it.value))}</dd>
-        <span class="stats-banner-unit">${esc(it.unit || '')}</span>
-      </div>`
-    )
-    .join('');
+  $('#statsBannerMetrics').innerHTML = items.map((it, i) => '<div class="overview-stat"><dt>' + it[0] +
+    '</dt><dd' + (i === 2 ? ' class="gold-value"' : '') + '>' + it[1] + '</dd><span>' + it[2] + '</span></div>').join('');
+  const runs = models.flatMap(m => m.run_details || []);
+  const seeds = [...new Set(runs.map(r => r.game_seed).filter(v => v != null))].join(', ');
+  const scoring = [...new Set(runs.map(r => r.scoring_seed).filter(v => v != null))].join(', ');
+  $('#seedSummary').textContent = 'Game seed: ' + (seeds || '—') + ' / Scoring seed: ' + (scoring || '—');
 }
 
 function renderCard(m, ctx = {}) {
-  const rank = m.rank;
-  const rankCls = rank <= 3 ? ` rank-${rank}` : '';
-  const runDetails = Array.isArray(m.run_details) ? m.run_details : [];
-  const latestRun = runDetails[0] || {};
-  const badges = ctx.badges || [];
-
-  // Primary stat: rank_score
-  const rs = m.rank_score;
-  const rankScoreVal = rs ? esc(fmtRankScore(rs.mean)) : '—';
-
-  // Efficiency stats
-  const eff = m.efficiency || {};
-  const hasEff = eff && (eff.input_tokens || eff.output_tokens || eff.duration_seconds || eff.tool_calls);
-
-  // Game quality stats
-  const gq = m.game_quality || {};
-  const hasGq = gq && (gq.gold_earned || gq.exp_earned || gq.battle_win_rate != null || gq.dismissals != null);
-
-  // Aggregate dismiss count across all runs
-  let dismissTotal = 0;
-  for (const run of runDetails) {
-    const tc = run.tool_calls || {};
-    const bnd = tc.by_name_detail || {};
-    if (bnd.dismiss_adventurer) {
-      dismissTotal += bnd.dismiss_adventurer.total || 0;
-    } else {
-      const bn = tc.by_name || {};
-      dismissTotal += bn.dismiss_adventurer || 0;
-    }
-  }
-  if (dismissTotal > 0) {
-    gq.dismissals = dismissTotal;
-  }
-
-  // 详情区域（聚合指标 + 运行明细）改为懒渲染 — 首屏只留空占位，
-  // 首次展开时由 ensureCardDetailRendered 注入 renderCardDetail(m) 的结果
-  return `
-    <div class="model-card${rankCls}" data-rank="${rank}" data-card-idx="${ctx.index}" tabindex="0" role="button" aria-expanded="false" aria-label="${esc(m.model)} 详情，按 Enter 展开">
-      <div class="card-header">
-        <div class="rank-badge">${rank}</div>
-        <div class="model-info">
-          <div class="model-name" title="${esc(m.model)}">${esc(m.model)}${renderModelNote(m.model)}</div>
-          ${renderBadges(badges)}
-          <div class="model-meta">
-            <span>${m.runs} 次运行</span>
-            ${latestRun.preset ? `<span>${esc(latestRun.preset)}</span>` : ''}
-            ${m.last_run ? `<span>${esc(fmtTimestamp(m.last_run))}</span>` : ''}
-          </div>
-        </div>
-        <div class="card-stats">
-          <div class="stat-block primary-stat">
-            <div class="stat-label">Rank Score<button class="rs-help-btn" data-action="show-rs-help" title="Rank Score 释义">?</button></div>
-            <div class="stat-value rank-val">${rankScoreVal}</div>
-          </div>
-        </div>
-        <div class="expand-chevron" aria-hidden="true">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M3.5 5.25L7 8.75L10.5 5.25"/>
-          </svg>
-        </div>
-      </div>
-
-      ${(hasEff || hasGq) ? `
-      <div class="metrics-row">
-        ${hasEff ? renderEfficiencySection(eff) : ''}
-        ${hasGq ? renderGameQualitySection(gq) : ''}
-      </div>` : ''}
-
-      <div class="card-detail-wrap">
-        <div class="card-detail"></div>
-      </div>
-    </div>`;
+  const score = m.rank_score?.mean;
+  const note = _modelNotes[m.model] || '';
+  const kind = m.model === '✋ 手动操作' ? '人工参考' : isExcludedFromBadges(m) ? '自动基线' : '';
+  const detailId = 'model-detail-' + ctx.index;
+  const out = m.efficiency?.output_tokens?.mean;
+  const duration = m.efficiency?.duration_seconds?.mean;
+  const percent = ctx.topScore > 0 && score != null ? Math.max(0, score / ctx.topScore * 100) : 0;
+  const kindMarkup = kind ? '<span class="reference-badge">' + kind + '</span>' : '';
+  return '<tr class="model-card' + (m.rank <= 3 ? ' rank-' + m.rank : '') + '" data-rank="' + m.rank + '" data-card-idx="' + ctx.index + '">' +
+    '<td class="select-cell"><label class="compare-check"><input type="checkbox" data-compare-model="' + esc(m.model) + '" aria-label="对比 ' + esc(m.model) + '"></label></td>' +
+    '<td class="rank-cell"><span class="rank-badge">' + String(m.rank).padStart(2, '0') + '</span></td>' +
+    '<th scope="row" class="model-cell"><button class="model-name" data-action="toggle-detail" aria-expanded="false" aria-controls="' + detailId + '" type="button">' + esc(m.model) + '</button>' +
+    '<div class="model-subline">' + kindMarkup + '<span class="model-note">' + esc(note || (kind ? '参考表现' : 'LLM Agent')) + '</span></div></th>' +
+    '<td class="score-cell numeric"><span class="mobile-label">平均段位积分</span><strong>' + (fmtRankScore(score) ?? '—') + '</strong>' +
+    '<span class="score-track" aria-hidden="true"><span style="width:' + percent.toFixed(2) + '%"></span></span></td>' +
+    '<td class="runs-cell numeric"><span class="run-count">' + m.runs + '<span class="mobile-label"> 次运行</span></span><span class="sample-note">' + (m.runs === 1 ? '单次结果' : '多次均值') + '</span></td>' +
+    '<td class="output-cell numeric"><span class="mobile-label">输出</span>' + (fmtTokens(out) ?? '—') + '</td>' +
+    '<td class="duration-cell numeric"><span class="mobile-label">耗时</span>' + (fmtDuration(duration) ?? '—') + '</td>' +
+    '<td class="expand-cell"><button class="expand-button" data-action="toggle-detail" aria-expanded="false" aria-controls="' + detailId + '" aria-label="展开 ' + esc(m.model) + ' 详情" type="button"><span aria-hidden="true">⌄</span></button></td></tr>' +
+    '<tr class="model-detail-row" id="' + detailId + '" hidden><td colspan="8"><div class="card-detail"></div></td></tr>';
 }
 
 // 卡片详情（懒渲染）：聚合指标 + 运行明细，首次展开时才调用
@@ -966,6 +881,8 @@ function renderCardDetail(m) {
   const runDetails = Array.isArray(m.run_details) ? m.run_details : [];
   const latestRun = runDetails[0] || {};
   const rs = m.rank_score;
+  const dismissals = runDetails.reduce((sum, run) => sum + (run.tool_calls?.by_name_detail?.dismiss_adventurer?.total ?? run.tool_calls?.by_name?.dismiss_adventurer ?? 0), 0);
+  const quality = dismissals > 0 ? { ...m.game_quality, dismissals } : m.game_quality || {};
 
   // Detail rows（结构化数据，传给 renderAggregateList 分组渲染）
   const details = [];
@@ -991,6 +908,9 @@ function renderCardDetail(m) {
   }
 
   return `
+    <div class="detail-model-heading"><h3>${esc(m.model)}</h3>${renderBadges(_modelBadges.get(m.model))}</div>
+    ${_modelNotes[m.model] ? `<p class="detail-note">${esc(_modelNotes[m.model])}</p>` : ''}
+    <div class="metrics-row">${renderEfficiencySection(m.efficiency || {})}${renderGameQualitySection(quality)}</div>
     <div class="detail-section">
       <div class="detail-title">
         <span>聚合指标</span>
@@ -1005,40 +925,40 @@ function renderEfficiencySection(eff) {
   const cells = [];
   if (eff.input_tokens != null) {
     const v = typeof eff.input_tokens === 'object' ? eff.input_tokens.mean : eff.input_tokens;
-    cells.push(metricCell('Input', fmtInt(v) + ' tok'));
+    cells.push(metricCell('输入 Tokens', fmtInt(v) + ' tok'));
   }
   if (eff.output_tokens != null) {
     const v = typeof eff.output_tokens === 'object' ? eff.output_tokens.mean : eff.output_tokens;
-    cells.push(metricCell('Output', fmtInt(v) + ' tok'));
+    cells.push(metricCell('输出 Tokens', fmtInt(v) + ' tok'));
   }
   if (eff.duration_seconds != null) {
     const v = typeof eff.duration_seconds === 'object' ? eff.duration_seconds.mean : eff.duration_seconds;
-    cells.push(metricCell('Duration', fmtDuration(v)));
+    cells.push(metricCell('耗时', fmtDuration(v)));
   }
   if (eff.tool_calls != null) {
     const v = typeof eff.tool_calls === 'object' ? eff.tool_calls.mean : eff.tool_calls;
-    cells.push(metricCell('Tool Calls', fmtInt(v)));
+    cells.push(metricCell('工具调用', fmtInt(v)));
   }
   if (!cells.length) return '';
   return `
     <div class="metric-group">
-      <div class="metric-group-title">Efficiency</div>
-      <div class="metric-group-cells">${cells.join('')}</div>
+      <div class="metric-group-title">运行效率</div>
+      <dl class="metric-group-cells">${cells.join('')}</dl>
     </div>`;
 }
 
 function renderGameQualitySection(gq) {
   const cells = [];
   if (gq.battle_win_rate != null) {
-    cells.push(metricCell('Battle Win', (gq.battle_win_rate * 100).toFixed(1) + '%'));
+    cells.push(metricCell('战斗胜率', (gq.battle_win_rate * 100).toFixed(1) + '%'));
   }
   if (gq.gold_earned != null) {
     const v = typeof gq.gold_earned === 'object' ? gq.gold_earned.mean : gq.gold_earned;
-    cells.push(metricCell('Gold', fmtInt(v)));
+    cells.push(metricCell('累计金币', fmtInt(v)));
   }
   if (gq.exp_earned != null) {
     const v = typeof gq.exp_earned === 'object' ? gq.exp_earned.mean : gq.exp_earned;
-    cells.push(metricCell('EXP', fmtInt(v)));
+    cells.push(metricCell('累计经验', fmtInt(v)));
   }
   if (gq.dismissals != null) {
     cells.push(metricCell('遣散', fmtInt(gq.dismissals)));
@@ -1046,8 +966,8 @@ function renderGameQualitySection(gq) {
   if (!cells.length) return '';
   return `
     <div class="metric-group">
-      <div class="metric-group-title">Game</div>
-      <div class="metric-group-cells">${cells.join('')}</div>
+      <div class="metric-group-title">经营表现</div>
+      <dl class="metric-group-cells">${cells.join('')}</dl>
     </div>`;
 }
 
@@ -1646,11 +1566,10 @@ function showError(msg) {
 // Init
 // ============================================================================
 async function init() {
-  initLeaderboardSearch();
   try {
     const [res, notesRes] = await Promise.all([
-      fetch('leaderboard_data.json'),
-      fetch('model_notes.json'),
+      fetch('leaderboard_data.json', { cache: 'no-cache' }),
+      fetch('model_notes.json', { cache: 'no-cache' }),
     ]);
     if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     const data = await res.json();
@@ -1659,96 +1578,26 @@ async function init() {
       try { _modelNotes = await notesRes.json(); } catch (_) { /* ignore malformed notes */ }
     }
     $('#loadingState')?.remove();
+    restoreView();
+    initLeaderboardSearch();
+    initCardInteractions();
     renderLeaderboard(data);
     initTabs();
-    initIntroToggle();
     initRankScoreHelp();
   } catch (e) {
     showError(`无法加载 leaderboard_data.json: ${e.message}`);
   }
 }
 
-// ============================================================================
-// Intro Card Toggle
-// ============================================================================
-function initIntroToggle() {
-  const card = $('#introCard');
-  const btn = $('#introToggle');
-  if (!card || !btn) return;
-  btn.addEventListener('click', () => {
-    card.classList.toggle('collapsed');
-    const collapsed = card.classList.contains('collapsed');
-    btn.textContent = collapsed ? '展开' : '收起';
-    btn.setAttribute('aria-expanded', String(!collapsed));
-  });
-}
-
-// ============================================================================
-// Rank Score Help Popover
-// ============================================================================
 function initRankScoreHelp() {
-  const popover = $('#rsPopover');
-  const backdrop = $('#rsBackdrop');
-
-  function openPopover(anchor) {
-    popover.setAttribute('aria-hidden', 'false');
-    backdrop.setAttribute('aria-hidden', 'false');
-
-    // Position above/below the anchor button, centered
-    const rect = anchor.getBoundingClientRect();
-    const popW = popover.offsetWidth;
-    let left = rect.left + rect.width / 2 - popW / 2;
-    left = Math.max(8, Math.min(left, window.innerWidth - popW - 8));
-    popover.style.left = left + 'px';
-
-    // Place below with a small gap, flip above if too close to bottom
-    const gap = 10;
-    const popH = popover.offsetHeight;
-    if (rect.bottom + gap + popH > window.innerHeight - 16) {
-      popover.style.top = (rect.top - popH - gap) + 'px';
-      popover.style.bottom = 'auto';
-    } else {
-      popover.style.top = (rect.bottom + gap) + 'px';
-      popover.style.bottom = 'auto';
-    }
-  }
-
-  function closePopover() {
-    popover.setAttribute('aria-hidden', 'true');
-    backdrop.setAttribute('aria-hidden', 'true');
-  }
-
-  // Event delegation: open on help button click
-  document.addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-action="show-rs-help"]');
-    if (btn) {
-      e.stopPropagation();
-      if (popover.getAttribute('aria-hidden') === 'false') {
-        closePopover();
-      } else {
-        openPopover(btn);
-      }
-      return;
-    }
-    // Close button inside popover
-    if (e.target.closest('.rs-popover-close')) {
-      closePopover();
-      return;
-    }
-    // Click outside popover closes it
-    if (!e.target.closest('.rs-popover') && !e.target.closest('[data-action="show-rs-help"]')) {
-      closePopover();
-    }
+  const dialog = $('#rsPopover');
+  document.addEventListener('click', e => {
+    if (e.target.closest('[data-action="show-rs-help"]')) dialog.showModal();
   });
-
-  // Backdrop click closes
-  backdrop.addEventListener('click', closePopover);
-
-  // Escape key closes
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && popover.getAttribute('aria-hidden') === 'false') {
-      closePopover();
-    }
+  dialog.querySelector('.rs-popover-close').addEventListener('click', () => dialog.close());
+  dialog.addEventListener('click', e => {
+    const r = dialog.getBoundingClientRect();
+    if (e.target === dialog && (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom)) dialog.close();
   });
 }
 

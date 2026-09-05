@@ -3,232 +3,90 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="Guild Manager Bench — LLM Agent 长程决策基准排行榜：统一游戏种子、多难度竞技场扫描、可复现的模型经营能力对比。" />
-  <meta name="theme-color" content="#000000" />
-  <title>Guild Manager Bench · Leaderboard</title>
+  <meta name="description" content="Guild Manager Bench — 在可复现的公会经营环境中，评测 LLM Agent 的长期规划、资源分配与工具调用能力。" />
+  <meta name="theme-color" content="#101113" />
+  <title>Guild Manager Bench · 模型排行榜</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css?v=20260905.4" />
+  <script src="app.js?v=20260905.5" defer></script>
 </head>
 <body>
-
-  <!-- ===== Header ===== -->
+  <a class="skip-link" href="#leaderboardMain">跳到主要内容</a>
   <header class="header">
     <div class="header-inner">
-      <div class="header-brand">
-        <h1 class="header-title">Guild Manager Bench</h1>
-        <span class="header-subtitle">模型排行榜</span>
-      </div>
-      <div class="header-actions">
-        <button class="tab-btn active" data-tab="leaderboard" id="tabLeaderboard">排行榜</button>
-        <button class="tab-btn" data-tab="curves" id="tabCurves">曲线对比</button>
-      </div>
-      <div class="header-meta" id="topMeta">
-        <div class="spinner-wrap">
-          <div class="spinner"></div>
-          <span>加载数据中…</span>
-        </div>
-      </div>
+      <a class="header-brand" href="./" aria-label="Guild Manager Bench 首页">
+        <svg class="brand-mark" width="32" height="36" viewBox="0 0 32 36" fill="none" aria-hidden="true"><path d="M16 2 29 7v12c0 6-6 11-13 15C9 30 3 25 3 19V7L16 2Z" stroke="currentColor" stroke-width="1.5"/><path d="m10 13 6-4 6 4v9l-6 4-6-4v-9Z" stroke="currentColor" stroke-width="1.5"/><path d="M16 15v11m0-11 6-2m-6 2-6-2" stroke="currentColor" stroke-width="1.5"/></svg>
+        <span>Guild Manager <strong>Bench</strong></span><span class="version">v1.0</span>
+      </a>
+      <nav class="header-actions" aria-label="页面导航">
+        <button class="tab-btn active" data-tab="leaderboard" id="tabLeaderboard" aria-current="page" type="button">排行榜</button>
+        <button class="tab-btn" data-tab="curves" id="tabCurves" type="button">模型对比 <span aria-hidden="true">↗</span></button>
+      </nav>
+      <a class="header-link" href="leaderboard_data.json" download>下载数据 <span aria-hidden="true">↓</span></a>
     </div>
   </header>
 
-  <!-- ===== Leaderboard Content ===== -->
-  <main class="main" id="leaderboardMain">
-    <!-- Stats Banner (去重头部 — 标题已在 header 出现) -->
-    <section class="stats-banner" id="statsBanner" aria-label="基准统计概览">
-      <div class="stats-banner-head">
-        <div class="stats-banner-title-block">
-          <div class="stats-banner-sub">LLM Agent 长程决策基准<span class="v-chip">v1.0.0</span></div>
-        </div>
-        <div class="stats-banner-meta">
-          <span>同一游戏种子</span>
-          <span class="stats-banner-sep">·</span>
-          <span>多难度竞技场扫描</span>
-          <span class="stats-banner-sep">·</span>
-          <span>可复现</span>
-        </div>
+  <main class="main" id="leaderboardMain" tabindex="-1">
+    <section class="hero" aria-labelledby="heroTitle">
+      <div class="hero-copy">
+        <p class="eyebrow"><span class="status-dot"></span> LLM AGENT BENCHMARK</p>
+        <h1 id="heroTitle">长期决策，<span>实力见分晓。</span></h1>
+        <p class="hero-description">让模型独立经营一座公会。用每一次招募、培养与战斗，检验规划能走多远。</p>
+        <div class="hero-links"><a href="#methodology">了解评测方法 <span aria-hidden="true">↗</span></a><span>固定种子 · 多难度评估 · 可复现</span></div>
       </div>
-      <dl class="stats-banner-metrics" id="statsBannerMetrics">
-        <!-- 由 JS 渲染 -->
-      </dl>
-    </section>
-
-    <section class="intro-card" id="introCard" aria-labelledby="introTitle">
-      <div class="intro-header">
-        <h2 class="intro-title" id="introTitle">Bench 如何运作</h2>
-        <button class="intro-toggle" id="introToggle" type="button" aria-expanded="true" aria-controls="introBody">收起</button>
-      </div>
-      <div class="intro-body" id="introBody">
-        <p class="intro-text">
-          Guild Manager Bench 让模型在统一、可复现的回合制环境中独立经营公会，考察其
-          <strong>长期规划、资源分配与工具调用</strong>能力。
-        </p>
-        <div class="intro-grid">
-          <div>
-            <h3 class="intro-col-title">运行流程</h3>
-            <ul class="intro-list">
-              <li><strong>统一开局：</strong>模型使用相同的游戏 preset 与随机种子，从相同资源和规则开始。</li>
-              <li><strong>逐回合决策：</strong>模型在工具调用预算内查询信息、招募与培养冒险者、制作装备、购买升级，并提交讨伐目标。</li>
-              <li><strong>有限回合经营：</strong>每回合结束后世界刷新；模型持续积累资源并提升队伍终局战力。</li>
-            </ul>
-          </div>
-          <div>
-            <h3 class="intro-col-title">评分与排名</h3>
-            <ul class="intro-list">
-              <li><strong>终局评分：</strong>系统固定评分种子，在多个竞技场难度下自动模拟最终队伍的战斗表现。</li>
-              <li><strong>Rank Score：</strong>各难度贡献相加得到段位积分，高难度下表现更好的队伍得分更高。</li>
-              <li><strong>榜单聚合：</strong>同一模型的完成运行会被聚合，排行榜按平均 Rank Score 从高到低排序。</li>
-            </ul>
-          </div>
-        </div>
+      <div class="hero-protocol" aria-label="评测流程">
+        <span class="protocol-label">THE GUILD CHALLENGE</span>
+        <div class="protocol-steps"><span><b>01</b>经营公会</span><i aria-hidden="true">→</i><span><b>02</b>培养队伍</span><i aria-hidden="true">→</i><span><b>03</b>竞技场评估</span></div>
+        <p>从相同开局，到各自的终局。</p>
       </div>
     </section>
-
-    <div class="tab-section active" id="tab-leaderboard">
-      <section class="leaderboard-toolbar" aria-label="排行榜搜索">
-        <div class="leaderboard-search">
-          <svg class="leaderboard-search-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
-            <circle cx="7" cy="7" r="4.5"></circle>
-            <path d="M10.5 10.5L14 14"></path>
-          </svg>
-          <label class="sr-only" for="leaderboardSearchInput">搜索模型</label>
-          <input
-            id="leaderboardSearchInput"
-            type="search"
-            placeholder="搜索模型名称或备注…"
-            autocomplete="off"
-            spellcheck="false"
-            disabled
-          />
-          <button class="leaderboard-search-clear" id="leaderboardSearchClear" type="button" aria-label="清除搜索" hidden>×</button>
+    <section class="stats-banner" aria-label="基准统计概览">
+      <dl id="statsBannerMetrics" class="stats-banner-metrics"><div class="stat-placeholder">正在读取评测结果…</div></dl>
+      <div class="header-meta" id="topMeta" role="status">正在加载数据</div>
+    </section>
+    <section id="leaderboardSection" aria-labelledby="leaderboardTitle">
+      <div class="section-heading"><div><p class="eyebrow">THE LEADERBOARD</p><h2 id="leaderboardTitle">模型排行榜 <span id="modelCount" class="count-badge">—</span></h2></div><p class="section-description">按平均段位积分排名 <button class="rs-help-btn" data-action="show-rs-help" type="button" aria-label="了解段位积分">?</button></p></div>
+      <div class="leaderboard-toolbar">
+        <div class="filter-tabs" role="group" aria-label="参赛类型">
+          <button class="filter-btn active" data-filter="all" aria-pressed="true" type="button">全部</button>
+          <button class="filter-btn" data-filter="models" aria-pressed="false" type="button">语言模型</button>
+          <button class="filter-btn" data-filter="reference" aria-pressed="false" type="button">人工 / 基线</button>
         </div>
-        <span class="leaderboard-search-status" id="leaderboardSearchStatus" role="status" aria-live="polite">正在加载模型…</span>
-      </section>
-      <div id="cardListContainer">
-        <!-- 骨架屏加载态：3 张 shimmer 骨架卡，模拟 徽标+标题行+指标行 -->
-        <div class="skeleton-wrap" id="loadingState" role="status" aria-label="正在加载排行榜数据">
-          <div class="skeleton-card">
-            <div class="skeleton-head">
-              <span class="skeleton-block skeleton-rank"></span>
-              <div class="skeleton-head-lines">
-                <span class="skeleton-block skeleton-line" style="width: 38%"></span>
-                <span class="skeleton-block skeleton-line" style="width: 62%"></span>
-              </div>
-              <span class="skeleton-block skeleton-score"></span>
-            </div>
-            <div class="skeleton-metrics">
-              <span class="skeleton-block skeleton-line" style="width: 18%"></span>
-              <span class="skeleton-block skeleton-line" style="width: 18%"></span>
-              <span class="skeleton-block skeleton-line" style="width: 18%"></span>
-              <span class="skeleton-block skeleton-line" style="width: 18%"></span>
-            </div>
+        <div class="toolbar-fields">
+          <div class="leaderboard-search">
+            <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5"/><path d="m13 13 4 4"/></svg>
+            <label class="sr-only" for="leaderboardSearchInput">搜索模型</label><input id="leaderboardSearchInput" type="search" placeholder="搜索模型或备注…" autocomplete="off" spellcheck="false" disabled />
+            <button id="leaderboardSearchClear" type="button" aria-label="清除搜索" hidden>×</button>
           </div>
-          <div class="skeleton-card">
-            <div class="skeleton-head">
-              <span class="skeleton-block skeleton-rank"></span>
-              <div class="skeleton-head-lines">
-                <span class="skeleton-block skeleton-line" style="width: 46%"></span>
-                <span class="skeleton-block skeleton-line" style="width: 55%"></span>
-              </div>
-              <span class="skeleton-block skeleton-score"></span>
-            </div>
-            <div class="skeleton-metrics">
-              <span class="skeleton-block skeleton-line" style="width: 18%"></span>
-              <span class="skeleton-block skeleton-line" style="width: 18%"></span>
-              <span class="skeleton-block skeleton-line" style="width: 18%"></span>
-              <span class="skeleton-block skeleton-line" style="width: 18%"></span>
-            </div>
-          </div>
-          <div class="skeleton-card">
-            <div class="skeleton-head">
-              <span class="skeleton-block skeleton-rank"></span>
-              <div class="skeleton-head-lines">
-                <span class="skeleton-block skeleton-line" style="width: 42%"></span>
-                <span class="skeleton-block skeleton-line" style="width: 58%"></span>
-              </div>
-              <span class="skeleton-block skeleton-score"></span>
-            </div>
-            <div class="skeleton-metrics">
-              <span class="skeleton-block skeleton-line" style="width: 18%"></span>
-              <span class="skeleton-block skeleton-line" style="width: 18%"></span>
-              <span class="skeleton-block skeleton-line" style="width: 18%"></span>
-              <span class="skeleton-block skeleton-line" style="width: 18%"></span>
-            </div>
-          </div>
+          <label class="sr-only" for="leaderboardSort">排序方式</label><select id="leaderboardSort" class="select-control"><option value="rank">积分从高到低</option><option value="output">输出 Tokens 从少到多</option><option value="duration">耗时从短到长</option><option value="runs">运行次数从多到少</option></select>
         </div>
       </div>
-    </div>
+      <div class="list-caption"><span id="leaderboardSearchStatus" role="status" aria-live="polite">正在加载参赛条目…</span><span>勾选 2–4 项，开始对比</span></div>
+      <div id="cardListContainer"><div class="skeleton-wrap" id="loadingState" role="status" aria-label="正在加载排行榜数据"><div class="skeleton-row"></div><div class="skeleton-row"></div><div class="skeleton-row"></div><div class="skeleton-row"></div></div></div>
+      <div class="table-footnote"><span>排名保留全榜顺序 · 分数条相对于全榜最高均分</span><span>Tokens 与耗时均为每次运行的平均值</span></div>
+    </section>
+    <section class="methodology" id="methodology" aria-labelledby="methodologyTitle">
+      <div class="section-heading"><div><p class="eyebrow">BEHIND THE SCORE</p><h2 id="methodologyTitle">每一分，都有依据。</h2></div><span class="method-version">评测方法 / v1.0.0</span></div>
+      <div class="method-grid"><article><span class="method-number">01 / ENVIRONMENT</span><h3>可复现的开局</h3><p>模型在统一的游戏规则与随机种子下开始经营，在有限回合和工具调用预算内管理资源、组建队伍。</p></article><article><span class="method-number">02 / EVALUATION</span><h3>多难度的终局考验</h3><p>固定评分种子，在多个竞技场难度下模拟最终队伍的战斗表现。高难度下的战力贡献获得更高权重。</p></article><article><span class="method-number">03 / AGGREGATION</span><h3>用均值排名，用样本理解</h3><p>同一模型的完成运行按平均段位积分排名。单次结果仅代表该次表现；展开详情可查看各次成绩与配置。</p></article></div>
+      <details class="protocol-details"><summary>评分公式与复现配置 <span aria-hidden="true">＋</span></summary><div><p><strong>段位积分 = Σ（战斗评分 ÷ 100 × 难度系数）</strong></p><p>人工操作与自动基线作为参考条目展示，具体 preset、游戏种子、评分种子与数据哈希以各次运行详情为准。</p><div id="seedSummary" class="seed-summary"></div></div></details>
+    </section>
   </main>
 
-  <!-- ===== Curve Comparison ===== -->
-  <main class="main main-hidden" id="curvesMain" hidden>
-    <div class="curve-panel">
-      <div class="curve-toolbar">
-        <div class="curve-toolbar-left">
-          <span class="curve-toolbar-label">指标：</span>
-          <select class="curve-select" id="curveMetricSelect" aria-label="选择曲线指标">
-            <option value="rank_score">段位积分</option>
-            <option value="gold">累计金币收入</option>
-            <option value="experience">累计经验收入</option>
-          </select>
-          <span class="curve-toolbar-label">选择运行：</span>
-          <button class="curve-btn" id="curveSelectAll">全选</button>
-          <button class="curve-btn" id="curveDeselectAll">清除</button>
-        </div>
-      </div>
-      <div class="curve-body">
-        <div class="curve-chart-wrap">
-          <canvas id="curveChart"></canvas>
-        </div>
-        <div class="curve-legend" id="curveLegend">
-          <div class="curve-legend-placeholder">加载数据后可在此选择运行的曲线</div>
-        </div>
-      </div>
-    </div>
+  <main class="main main-hidden" id="curvesMain" tabindex="-1" hidden>
+    <div class="comparison-heading"><div><p class="eyebrow">SIDE BY SIDE</p><h1>看见差距，也看见过程。</h1><p>对照终局表现，追踪每一回合的成长。</p></div><button class="button" id="backToLeaderboard" type="button">← 返回选模型</button></div>
+    <section id="comparisonSummary" aria-label="模型指标对比"></section>
+    <section class="curve-panel" aria-labelledby="curveTitle">
+      <div class="curve-toolbar"><div><h2 id="curveTitle">成长曲线</h2><p id="curveSelectionStatus" role="status" aria-live="polite"></p></div><label class="curve-metric-label">指标<select class="select-control" id="curveMetricSelect"><option value="rank_score">段位积分</option><option value="gold">累计金币收入</option><option value="experience">累计经验收入</option></select></label></div>
+      <div class="curve-body"><div class="curve-chart-wrap"><canvas id="curveChart" role="img" aria-label="所选运行的回合成长曲线">各次运行的分数和资源详情可在排行榜中展开查看。</canvas></div><aside class="curve-sidebar" aria-label="选择曲线"><div class="legend-heading"><span>运行记录</span><div><button class="text-button" id="curveSelectAll" type="button">全选</button><button class="text-button" id="curveDeselectAll" type="button">清除</button></div></div><label class="sr-only" for="curveSearch">搜索曲线模型</label><input class="text-input" id="curveSearch" type="search" placeholder="搜索模型…" /><div class="curve-legend" id="curveLegend"></div></aside></div>
+    </section>
+    <p class="comparison-note">每条曲线代表一次运行。同一模型的多次运行使用相同颜色，并以线型区分。</p>
   </main>
 
-  <!-- ===== Footer ===== -->
-  <footer class="footer">
-    <div class="footer-inner">
-      <div class="footer-meta">
-        <span>Guild Manager Bench · LLM Agent 长程决策基准</span>
-        <span class="footer-sep">·</span>
-        <span>所有模型在 <code>game seed 42</code> / <code>scoring seed 20260529</code> 下评估</span>
-        <span class="footer-sep">·</span>
-        <span>数据可复现</span>
-      </div>
-      <div class="footer-credits">
-        <span>灵感来自 <a href="https://store.steampowered.com/app/2824000/Backpacker_Guild/" target="_blank" rel="noopener">Backpacker Guild</a></span>
-        <span class="footer-sep">·</span>
-        <span>感谢 <a href="https://github.com/Orion-zhen" target="_blank" rel="noopener">Orion-zhen</a> 与 <a href="https://github.com/Orion-zhen/stacklands-bench" target="_blank" rel="noopener">stacklands-bench</a>&nbsp;🔒 对本 bench 设计思路的贡献</span>
-      </div>
-    </div>
-  </footer>
-
-  <!-- Chart.js 不再同步加载：首次进入「曲线对比」时由 app.js 动态注入（ensureChartJs） -->
-  <script src="app.js" defer></script>
-
-  <!-- Rank Score 释义浮窗 -->
-  <div class="rs-popover" id="rsPopover" aria-hidden="true">
-    <div class="rs-popover-content">
-      <button class="rs-popover-close" aria-label="关闭">×</button>
-      <h3 class="rs-popover-title">Rank Score（段位积分）</h3>
-      <p class="rs-popover-text">
-        Rank Score 衡量冒险者队伍的<strong>综合战力</strong>。系统在从低到高的多个难度等级上模拟竞技场战斗：
-      </p>
-      <p class="rs-popover-formula">
-        单项贡献 = (战斗评分 ÷ 100) × 难度系数
-      </p>
-      <p class="rs-popover-text">
-        最终得分 = <strong>各难度等级贡献之和</strong>。队伍在<em>高难度</em>下表现越好，Rank Score 越高。
-        每位冒险者的贡献值和占比可在展开卡片后查看。
-      </p>
-      <p class="rs-popover-text rs-popover-sub">
-        曲线对比面板展示每回合的 Rank Score 变化，反映队伍战力随培养进程的成长轨迹。
-      </p>
-    </div>
-  </div>
-  <div class="rs-popover-backdrop" id="rsBackdrop" aria-hidden="true"></div>
+  <aside class="compare-tray" id="compareTray" aria-label="已选对比模型" hidden><div class="compare-tray-inner"><div class="compare-tray-copy"><strong id="compareCount" role="status" aria-live="polite"></strong><span id="compareNames"></span></div><div class="compare-tray-actions"><button class="text-button" id="clearComparison" type="button">清空</button><button class="button button-primary" id="startComparison" type="button" disabled>对比模型 <span aria-hidden="true">↗</span></button></div></div></aside>
+  <div id="selectionMessage" class="sr-only" role="status" aria-live="polite"></div>
+  <footer class="footer"><div class="footer-inner"><div><span class="footer-brand">Guild Manager Bench</span><span>持续探索 Agent 的长期决策能力。</span></div><div class="footer-credits">灵感来自 <a href="https://store.steampowered.com/app/2824000/Backpacker_Guild/" target="_blank" rel="noopener">Backpacker Guild ↗</a><span>感谢 <a href="https://github.com/Orion-zhen" target="_blank" rel="noopener">Orion-zhen</a> 与 <a href="https://github.com/Orion-zhen/stacklands-bench" target="_blank" rel="noopener">stacklands-bench</a></span></div></div></footer>
+  <dialog class="rs-popover" id="rsPopover" aria-labelledby="rsTitle"><button class="rs-popover-close" type="button" aria-label="关闭积分说明">×</button><p class="eyebrow">UNDERSTANDING THE SCORE</p><h2 id="rsTitle">段位积分 · Rank Score</h2><p>衡量最终队伍的综合战力。系统在多个难度等级上模拟竞技场战斗，将各难度的贡献相加。</p><p class="rs-popover-formula">单项贡献 = 战斗评分 ÷ 100 × 难度系数</p><p>高难度下表现越好，积分越高。排行榜展示同一模型的<strong>平均积分</strong>，展开详情可查看最佳值、中位数及每次运行。</p></dialog>
 </body>
 </html>
