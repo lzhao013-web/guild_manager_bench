@@ -56,5 +56,7 @@
   "gemma-4-26b-a4b-it-qat-google-q4-0": "本地部署",
   "gpt-6-astra-xhigh": "推理强度 xhigh",
   "gpt-6-astra-max": "推理强度 max",
-  "muse-spark-1.3-contributor": "推理强度 xhigh"
+  "muse-spark-1.3-contributor": "推理强度 xhigh",
+  "gpt-6-astra-high": "推理强度 high",
+  "gpt-6-astra-medium": "推理强度 medium"
 }
