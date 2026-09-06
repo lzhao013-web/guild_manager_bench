@@ -58,5 +58,6 @@
   "gpt-6-astra-max": "推理强度 max",
   "muse-spark-1.3-contributor": "推理强度 xhigh",
   "gpt-6-astra-high": "推理强度 high",
-  "gpt-6-astra-medium": "推理强度 medium"
+  "gpt-6-astra-medium": "推理强度 medium",
+  "gpt-6-astra-low": "推理强度 low"
 }
