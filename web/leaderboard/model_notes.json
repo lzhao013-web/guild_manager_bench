@@ -60,5 +60,6 @@
   "gpt-6-astra-high": "推理强度 high",
   "gpt-6-astra-medium": "推理强度 medium",
   "gpt-6-astra-low": "推理强度 low",
-  "deepseek-v4.1-flash-expires-on-0910": "官方api"
+  "deepseek-v4.1-flash-expires-on-0910": "官方api",
+  "step-5-preview": "官方 step plan"
 }
