@@ -63,5 +63,10 @@
   "deepseek-v4.1-flash-expires-on-0910": "官方api",
   "step-5-preview": "官方 step plan",
   "mimo-v2.6-flash": "官方api",
-  "mimo-v2.6-pro": "官方api"
+  "mimo-v2.6-pro": "官方api",
+  "gpt-6-sol-xhigh": "推理强度 xhigh",
+  "gpt-6-sol-max": "推理强度 max",
+  "gpt-6-sol-medium": "推理强度 medium",
+  "gpt-6-sol-high": "推理强度 high",
+  "gpt-6-sol-low": "推理强度 low"
 }
