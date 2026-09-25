@@ -179,7 +179,17 @@ def run_llm_game(
             definition,
         )
 
+    _emit(
+        emit,
+        "run_started",
+        session_id=session_id,
+        config=_config_to_dict(config),
+        data=data_source,
+        observation=initial_observation,
+    )
+
     if archive_writer is not None:
+        initial_stats = current_run_stats(initial_observation)
         if resume is None:
             _emit(emit, "run_archived", archive=archive_writer.archive.to_dict())
         else:
@@ -190,14 +200,20 @@ def run_llm_game(
                 session_id=session_id,
                 restored_turns=len(traces),
                 restored_observation=initial_observation,
+                stats=initial_stats,
+                last_rank_score=next(
+                    (t.rank_score for t in reversed(traces) if t.rank_score is not None),
+                    None,
+                ),
             )
         _write_replay(
             archive_writer,
+            event_sink=event_sink,
             status="running",
             traces=traces,
             final_observation=initial_observation,
             fatal=False,
-            stats=current_run_stats(initial_observation),
+            stats=initial_stats,
         )
 
     active_turn_trace: TurnTrace | None = None
@@ -211,6 +227,7 @@ def run_llm_game(
         final_observation = tools.get_observation(session_id)["observation"]
         _write_replay(
             archive_writer,
+            event_sink=event_sink,
             status="running",
             traces=traces,
             active_turn=active_turn,
@@ -218,13 +235,6 @@ def run_llm_game(
             fatal=False,
             stats=current_run_stats(final_observation),
         )
-
-    _emit(
-        emit,
-        "run_started",
-        session_id=session_id,
-        config=_config_to_dict(config),
-    )
 
     system_prompt = build_system_prompt(
         objective=config.objective,
@@ -238,6 +248,7 @@ def run_llm_game(
             while True:
                 observation = tools.get_observation(session_id)["observation"]
                 if observation["finished"]:
+                    _emit(emit, "scoring_started", scope="final")
                     score = _score_final_state(tools, session_id)
                     run = LlmGameRun(
                         status="completed",
@@ -253,6 +264,7 @@ def run_llm_game(
                     )
                     _write_replay(
                         archive_writer,
+                        event_sink=event_sink,
                         status="completed",
                         traces=traces,
                         final_observation=observation,
@@ -294,10 +306,19 @@ def run_llm_game(
 
                 traces.append(turn_trace)
                 if turn_trace.status == "completed":
+                    _emit(emit, "scoring_started", scope="turn", turn=turn_trace.turn)
+                    scoring_started = perf_counter()
                     turn_trace.rank_score = compute_rank_score(
                         tools.definition,
                         tools.get_state(session_id),
                         executor=rank_executor,
+                    )
+                    _emit(
+                        emit,
+                        "turn_scored",
+                        turn=turn_trace.turn,
+                        rank_score=turn_trace.rank_score,
+                        duration_ms=round((perf_counter() - scoring_started) * 1000, 3),
                     )
                     turn_retry_count = 0
                 active_turn_trace = None
@@ -318,6 +339,7 @@ def run_llm_game(
                     )
                     _write_replay(
                         archive_writer,
+                        event_sink=event_sink,
                         status="failed",
                         traces=traces,
                         final_observation=final_observation,
@@ -326,12 +348,13 @@ def run_llm_game(
                     )
                     _emit(emit, "run_failed", run=_run_summary(run))
                     return run
-    except Exception as exc:
+    except (Exception, KeyboardInterrupt) as exc:
         if archive_writer is not None:
             try:
                 interrupted_observation = tools.get_observation(session_id)["observation"]
                 _write_replay(
                     archive_writer,
+                    event_sink=event_sink,
                     status="interrupted",
                     traces=traces,
                     active_turn=active_turn_trace,
@@ -1966,12 +1989,14 @@ def _write_replay(
     score: Mapping[str, Any] | None = None,
     stats: Mapping[str, Any] | None = None,
     fatal: bool = True,
+    event_sink: EventSink | None = None,
 ) -> None:
     if archive_writer is None:
         return
     turns = [t for t in traces if t.status is not None]
     if active_turn is not None and active_turn.status is not None and active_turn not in turns:
         turns.append(active_turn)
+    _emit(event_sink, "checkpoint_started")
     try:
         archive_writer.write_replay(
             status=status,
@@ -1981,10 +2006,13 @@ def _write_replay(
             score=score,
             stats=stats,
         )
-    except PermissionError:
+    except PermissionError as exc:
         # running 状态的 replay 写入不应崩溃游戏
         if fatal:
             raise
+        _emit(event_sink, "checkpoint_failed", error=str(exc))
+    else:
+        _emit(event_sink, "checkpoint_completed")
 
 
 def _definition_for_config(

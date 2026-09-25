@@ -205,6 +205,38 @@ def test_budget_exhaustion_without_end_turn_retries() -> None:
     assert run.failure_reason == "model_step_limit"
 
 
+def test_run_events_expose_effective_config_and_scores_after_settlement() -> None:
+    events = []
+    agent = StaticAgent(
+        LlmAgentResponse(tool_calls=(LlmToolCall("end_turn", {"hunts": []}),))
+    )
+    run = run_llm_game(
+        agent,
+        data_dir=_data_dir(),
+        config=LlmRunConfig(archive_dir=None, game_seed=11, scoring_seed=22),
+        event_sink=events.append,
+    )
+
+    started = next(e for e in events if e["type"] == "run_started")
+    assert started["data"]["game_seed"] == 11
+    assert started["data"]["scoring_seed"] == 22
+    assert started["observation"]["max_turns"] == run.final_observation["max_turns"]
+    scored = [e for e in events if e["type"] == "turn_scored"]
+    assert [e["rank_score"] for e in scored] == [t.rank_score for t in run.turns]
+    for event in scored:
+        completed_index = next(
+            i for i, e in enumerate(events)
+            if e["type"] == "turn_completed" and e["trace"]["turn"] == event["turn"]
+        )
+        scoring_index = next(
+            i for i, e in enumerate(events)
+            if e["type"] == "scoring_started" and e.get("turn") == event["turn"]
+        )
+        assert completed_index < scoring_index < events.index(event)
+        assert event["duration_ms"] >= 0
+    assert any(e["type"] == "scoring_started" and e["scope"] == "final" for e in events)
+
+
 def test_run_llm_turn_emits_debug_events() -> None:
     tools = GuildManagerTools.from_data_dir(_data_dir())
     session_id = tools.start_session("debug-events")["session_id"]

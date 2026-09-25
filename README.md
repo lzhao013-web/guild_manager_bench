@@ -98,6 +98,69 @@ uv run guild-manager run --preset default --resume runs/llm/RUN_DIRECTORY
 uv run guild-manager run --help
 ```
 
+### 命令行观战与诊断
+
+默认输出是公会经营战报，不需要添加选项：
+
+- 启动面板显示模型、实际生效的随机种子、数据 preset、推理设置和工具预算。
+- 交互终端底部显示等待模型、接收输出、执行工具、评分和写入存档的阶段与耗时。历史战报保留在滚动区。
+- 经营操作显示角色和装备名称、资源消耗与属性变化。讨伐战报显示实际对阵、胜负和奖励。
+- 回合结算显示金币与经验池的净变化，以及评分计算完成后的 Rank Score 和分数变化。
+- 最终报告包含阵容、评分贡献、逐回合评分、实际讨伐与终局 Arena 表现、经营收支、模型用量和存档位置。
+
+按需展开信息：
+
+```powershell
+# 展开每回合队伍、讨伐目标、工具参数与工具返回
+uv run guild-manager run --preset full --verbose
+
+# 展示模型实际返回的正文，不推断或补写决策理由
+uv run guild-manager run --show-model-text
+
+# 展示 API 实际提供的推理文本或摘要，未提供时不显示
+uv run guild-manager run --show-reasoning
+
+# 展开请求、响应、工具事件与异常堆栈，不逐个打印流式片段
+uv run guild-manager run --debug
+
+# 只显示最终报告
+uv run guild-manager run --quiet
+
+# stdout 只输出一个 JSON 对象，适合脚本和文件保存
+uv run guild-manager run --json > run-summary.json
+
+# 禁用颜色和文字样式，也支持设置 NO_COLOR 环境变量
+uv run guild-manager run --no-color
+```
+
+`--verbose`、`--debug`、`--quiet` 和 `--json` 互斥。模型文本展示选项不能与
+`--quiet` 或 `--json` 同时使用。默认模式和 `--verbose` 都不展示模型正文或推理文本，
+除非显式开启。`--debug` 包含完整请求和响应内容，日志可能包含敏感提示词或模型数据，分享前请检查。
+输出重定向到文件时自动禁用动画和 ANSI 样式。`--no-stream` 只控制 API 请求方式，不控制展示详细程度。
+
+统计口径：
+
+- 工具预算只计算非 `end_turn` 调用，工具调用总数包含 `end_turn`。失败的回合尝试不算已完成回合。
+- 游戏中的实际讨伐胜率与终局 Arena 模拟评分胜率分开展示。
+- Token 以 API 返回的 usage 为准，并显示提供 usage 的响应数。缺失用量不标成测得的零。
+  缓存用量仅在 API 提供时显示，不跨 provider 推算缓存命中率。
+- 续跑后的模型、Token 和游戏统计包含已恢复的历史记录。进程耗时与重试通知数只属于本次执行。
+  重试通知不包含 provider 内部的 HTTP 重试。
+- 金币支出和经验分配量来自操作前后的状态快照。旧存档缺少快照时显示无法统计，不推算支出。
+
+运行失败或按 `Ctrl+C` 中断时，会显示失败阶段和已创建的存档位置。
+存在成功写入的存档时，还会提供续跑命令。继续运行时须保留原 API 凭证，
+含认证信息的服务地址不会写入续跑命令，需要通过原环境变量重新提供。
+成功退出码为 `0`，运行失败为 `1`，命令参数错误为 `2`，中断为 `130`。
+`--json` 模式下，运行失败和中断也输出 JSON，不混入人类可读报告。
+
+JSON 包含 `schema_version`、`status`、`score`、`stats`、`final_observation`、
+`score_history`、`usage_coverage`、`cache_usage` 和 `invocation` 等字段。
+`invocation` 标明本次进程耗时和续跑信息，`stats` 是累计统计。
+JSON 不包含完整模型调用链，排查请求细节请使用 `--debug` 或存档中的 `trace.jsonl`。
+
+### 运行存档
+
 每次运行默认存档到 `runs/llm/<timestamp>_<session_id>/`：
 
 - `trace.jsonl`：模型请求、响应、工具调用和工具返回的完整调用链
