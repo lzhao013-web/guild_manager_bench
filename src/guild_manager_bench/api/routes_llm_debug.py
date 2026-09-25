@@ -12,6 +12,8 @@ from guild_manager_bench.bench.llm import (
     LlmRunConfig,
     OpenAIChatCompletionsAgent,
     OpenAIChatCompletionsConfig,
+    OpenAIResponsesAgent,
+    OpenAIResponsesConfig,
     run_llm_game,
 )
 from guild_manager_bench.bench.llm.prompts import DEFAULT_OBJECTIVE
@@ -88,7 +90,7 @@ def llm_debug_router(
 
 def _debug_agent(
     payload: Mapping[str, Any],
-) -> OpenAIChatCompletionsAgent | AnthropicMessagesAgent:
+) -> OpenAIChatCompletionsAgent | OpenAIResponsesAgent | AnthropicMessagesAgent:
     provider = _string_value(payload, "provider", "openai").lower()
     common = {
         "model": _optional_string(payload, "model"),
@@ -109,6 +111,13 @@ def _debug_agent(
     if provider == "openai":
         return OpenAIChatCompletionsAgent(
             OpenAIChatCompletionsConfig.from_env(
+                **common,
+                reasoning_effort=_optional_string(payload, "reasoning_effort"),
+            )
+        )
+    if provider == "openai-responses":
+        return OpenAIResponsesAgent(
+            OpenAIResponsesConfig.from_env(
                 **common,
                 reasoning_effort=_optional_string(payload, "reasoning_effort"),
             )

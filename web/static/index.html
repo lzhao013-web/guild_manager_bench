@@ -176,7 +176,8 @@
                 <label class="sr-only" for="llmPresetSelect">模型预设</label>
                 <select id="llmPresetSelect">
                   <option value="">快速预设…</option>
-                  <option value="openai">OpenAI · gpt-4o-mini</option>
+                  <option value="openai">OpenAI Chat Completions · gpt-4o-mini</option>
+                  <option value="openai-responses">OpenAI Responses · gpt-5-mini</option>
                   <option value="deepseek">DeepSeek · deepseek-chat</option>
                   <option value="anthropic">Anthropic · claude-3.5-sonnet</option>
                   <option value="custom">自定义</option>
@@ -190,7 +191,8 @@
                 <label>
                   <span>Provider</span>
                   <select id="llmProvider">
-                    <option value="openai">OpenAI-compatible</option>
+                    <option value="openai">OpenAI-compatible Chat Completions</option>
+                    <option value="openai-responses">OpenAI Responses</option>
                     <option value="anthropic">Anthropic Messages</option>
                   </select>
                 </label>
@@ -364,6 +366,6 @@
 
     <div id="equipPopup" class="equip-popup" hidden></div>
     <div id="toast" class="toast" hidden></div>
-    <script src="/app.js?v=20260606-anthropic-thinking"></script>
+    <script src="/app.js?v=20260819-openai-responses"></script>
   </body>
 </html>

@@ -2300,6 +2300,11 @@ const LLM_PRESETS = {
     base_url: "https://api.openai.com/v1",
     model: "gpt-4o-mini",
   },
+  "openai-responses": {
+    provider: "openai-responses",
+    base_url: "https://api.openai.com/v1",
+    model: "gpt-5-mini",
+  },
   deepseek: {
     provider: "openai",
     base_url: "https://api.deepseek.com/v1",

@@ -19,6 +19,11 @@ from guild_manager_bench.bench.llm.openai_compat import (
     OpenAICompatibleError,
     load_dotenv_values,
 )
+from guild_manager_bench.bench.llm.openai_responses import (
+    OpenAIResponsesAgent,
+    OpenAIResponsesConfig,
+    OpenAIResponsesError,
+)
 from guild_manager_bench.bench.llm.prompts import (
     DEFAULT_OBJECTIVE,
     build_endgame_system_prompt,
@@ -57,6 +62,9 @@ __all__ = [
     "OpenAIChatCompletionsAgent",
     "OpenAIChatCompletionsConfig",
     "OpenAICompatibleError",
+    "OpenAIResponsesAgent",
+    "OpenAIResponsesConfig",
+    "OpenAIResponsesError",
     "ToolBudget",
     "ToolCallError",
     "TurnToolHarness",

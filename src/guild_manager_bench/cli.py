@@ -94,7 +94,12 @@ def main() -> None:
 
     # ── run ──
     run_parser = subparsers.add_parser("run", help="运行 LLM agent benchmark")
-    run_parser.add_argument("--provider", default="openai", choices=["openai", "anthropic"], help="LLM provider (默认: openai)")
+    run_parser.add_argument(
+        "--provider",
+        default="openai",
+        choices=["openai", "openai-responses", "anthropic"],
+        help="LLM provider：OpenAI-compatible Chat Completions、OpenAI Responses 或 Anthropic (默认: openai)",
+    )
     run_parser.add_argument("--model", default=None, help="模型名称 (也可通过 OPENAI_MODEL / ANTHROPIC_MODEL 环境变量设置)")
     run_parser.add_argument("--api-key", default=None, help="API Key (也可通过 OPENAI_API_KEY 环境变量设置)")
     run_parser.add_argument("--base-url", default=None, help="API Base URL (也可通过 OPENAI_BASE_URL 环境变量设置)")
@@ -161,6 +166,16 @@ def _run(args: argparse.Namespace) -> None:
             thinking=args.thinking,
             effort=args.thinking_effort,
         )
+    elif args.provider == "openai-responses":
+        from guild_manager_bench.bench.llm import OpenAIResponsesAgent
+
+        agent = OpenAIResponsesAgent.from_env(
+            model=args.model,
+            api_key=args.api_key,
+            base_url=args.base_url,
+            reasoning_effort=args.reasoning_effort,
+            timeout=args.timeout,
+        )
     else:
         agent = OpenAIChatCompletionsAgent.from_env(
             model=args.model,
@@ -170,9 +185,9 @@ def _run(args: argparse.Namespace) -> None:
             timeout=args.timeout,
         )
 
-    # 禁用流式：移除 respond_stream 使 runner 回退到 respond
+    # 禁用流式：在实例上遮蔽类方法，使 runner 回退到 respond。
     if args.no_stream and hasattr(agent, "respond_stream"):
-        delattr(agent, "respond_stream")
+        agent.respond_stream = None
 
     data_preset = resolve_data_source(args.data_dir, args.preset)
 

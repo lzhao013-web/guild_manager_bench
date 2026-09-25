@@ -8,7 +8,7 @@
 
 - YAML 驱动的确定性游戏规则和数据 preset
 - 招募、成长、装备、合成、升级与自动战斗系统
-- 适配OpenAI-compatible 和 Anthropic 模型
+- 适配 OpenAI-compatible Chat Completions、OpenAI Responses API 和 Anthropic Messages API
 - 面向 LLM 的强类型工具协议与每回合工具预算
 - 完整调用链存档、运行续跑、回放与终局评分
 - FastAPI 接口、WebSocket 和可视化页面
@@ -51,11 +51,23 @@ OPENAI_API_KEY=your-api-key
 OPENAI_BASE_URL=https://api.openai.com/v1
 ```
 
-运行一局：
+运行一局（默认使用 OpenAI-compatible Chat Completions）：
 
 ```powershell
 uv run guild-manager run --preset full
 ```
+
+使用 OpenAI Responses API（调用 `/v1/responses`，支持函数调用、流式事件和 reasoning 配置）：
+
+```powershell
+uv run guild-manager run --provider openai-responses --preset full
+uv run guild-manager run --provider openai-responses --reasoning-effort high --preset full
+```
+
+Responses 适配器优先读取 `OPENAI_RESPONSES_MODEL`、`OPENAI_RESPONSES_API_KEY`、
+`OPENAI_RESPONSES_BASE_URL`，未设置时回退到上面的 `OPENAI_*` 变量。
+还可使用 `OPENAI_RESPONSES_MAX_OUTPUT_TOKENS` 和
+`OPENAI_RESPONSES_REASONING_SUMMARY`。
 
 使用 Anthropic Messages API：
 

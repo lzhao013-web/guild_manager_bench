@@ -1,6 +1,7 @@
 from guild_manager_bench.bench.llm import (
     AnthropicMessagesAgent,
     OpenAIChatCompletionsAgent,
+    OpenAIResponsesAgent,
 )
 from guild_manager_bench.api.routes_llm_debug import (
     DEFAULT_LLM_DEBUG_TIMEOUT,
@@ -37,6 +38,19 @@ def test_llm_debug_defaults_to_openai_agent() -> None:
     agent = _debug_agent({"model": "test-model"})
 
     assert isinstance(agent, OpenAIChatCompletionsAgent)
+
+
+def test_llm_debug_builds_openai_responses_agent() -> None:
+    agent = _debug_agent(
+        {
+            "provider": "openai-responses",
+            "model": "gpt-5-mini",
+            "reasoning_effort": "high",
+        }
+    )
+
+    assert isinstance(agent, OpenAIResponsesAgent)
+    assert agent.config.reasoning_effort == "high"
 
 
 def test_llm_debug_optional_bool_is_tristate() -> None:

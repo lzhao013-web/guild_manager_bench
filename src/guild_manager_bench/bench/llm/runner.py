@@ -2051,7 +2051,10 @@ def _agent_metadata(agent: LlmTurnAgent) -> dict[str, Any]:
         "temperature",
         "top_p",
         "max_tokens",
+        "max_output_tokens",
         "tool_choice",
+        "reasoning_effort",
+        "reasoning_summary",
         "extra_body",
     )
     metadata["config"] = {
