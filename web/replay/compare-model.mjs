@@ -84,7 +84,7 @@ function actionDescription(name, args, resolve) {
   const title = [label, subjects.map(s => s.name).join(' / '), detail].filter(Boolean).join(' · ');
   const signature = subjects.length && subjects.every(s => s.key !== null)
     ? canonical([name, subjects.map(s => s.key), args.amount ?? null, args.slot ?? null]) : null;
-  return { title, signature };
+  return { title, signature, subjects };
 }
 
 function changesBetween(before, after) {
@@ -158,6 +158,7 @@ function normalizeAttempt(turn, index) {
     const action = {
       name, index: stepIndex, success, ...actionDescription(name, args, resolve),
       changes: success === true ? changesBetween(current, snapshot) : [],
+      beforeObservation: current, afterObservation: snapshot,
       arguments: args, content: typeof step.content === 'string' ? step.content : JSON.stringify(step.content ?? ''),
       error: String(result?.error || step.error || ''), economic: Object.hasOwn(ACTION_LABELS, name),
     };

@@ -1,4 +1,5 @@
 import { ACTION_LABELS, normalizeReplay, compareReplays, numeric } from './compare-model.mjs';
+import { ProfileView } from './profile-view.mjs';
 
 const $ = id => document.getElementById(id);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -8,6 +9,21 @@ const statuses = { completed: '已完成', failed: '失败', interrupted: '已�
 const slots = Object.fromEntries(['A', 'B'].map(side => [side, { model: null, runId: null, ticket: 0, busy: false }]));
 const state = { comparison: null, turn: null, listTicket: 0 };
 const initialParams = new URLSearchParams(window.location.search);
+const profileView = new ProfileView($('comparisonProfile'));
+$('roundContent').addEventListener('click', event => {
+  const button = event.target.closest('button[data-profile-side]');
+  if (!button) return;
+  const side = button.dataset.profileSide, slot = slots[side];
+  profileView.show(slot.model, { runId: slot.runId, turn: state.turn });
+  $('profileDialogTitle').textContent = `${side} 侧 · 本局经营画像`;
+  $('profileDialog').showModal();
+  $('profileDialog').scrollTop = 0;
+});
+$('profileClose').addEventListener('click', () => $('profileDialog').close());
+$('profileDialog').addEventListener('close', () => {
+  // close 事件异步派发，重新打开后不能再清空当前画像。
+  if (!$('profileDialog').open) profileView.clear();
+});
 
 function errorMessage(error) { return error instanceof Error ? error.message : String(error); }
 async function getJSON(url) {
@@ -242,7 +258,7 @@ function renderParty(attempt) {
 function renderSide(side, round, turnNumber) {
   const slot = slots[side];
   const header = `<div class="side-heading"><span class="side-mark">${side}</span><h2>${esc(slot.model.meta.model)}</h2></div>`;
-  if (!round) return `<article class="side-panel side-${side.toLowerCase()}">${header}<div class="blank-side">这局没有第 ${turnNumber} 回合的记录。<br>不沿用其他回合的状态或分数。</div></article>`;
+  if (!round) return `<article class="side-panel side-${side.toLowerCase()}">${header}<div class="side-subheading"><button type="button" class="text-button" data-profile-side="${side}">查看 ${side} 经营画像</button></div><div class="blank-side">这局没有第 ${turnNumber} 回合的记录。<br>不沿用其他回合的状态或分数。</div></article>`;
   const attempt = round.selected;
   const mainActions = attempt.actions.filter(a => a.economic || a.success === false);
   const otherActions = attempt.actions.filter(a => !a.economic && a.success !== false);
@@ -250,7 +266,7 @@ function renderSide(side, round, turnNumber) {
   const selectedIndex = round.attempts.indexOf(attempt) + 1;
   const playerLink = slot.runId ? `/replay/?turn=${turnNumber}#run=${encodeURIComponent(slot.runId)}` : null;
   return `<article class="side-panel side-${side.toLowerCase()}" aria-label="${side} 侧回合详情">${header}
-    <div class="side-subheading"><span class="status-tag ${attempt.completed ? 'completed' : attempt.status === 'failed' ? 'failed' : 'incomplete'}">${esc(statuses[attempt.status] || attempt.status)}</span><span>主记录：第 ${selectedIndex} / ${round.attempts.length} 次尝试</span>${playerLink ? `<a href="${esc(playerLink)}" target="_blank" rel="noopener">打开单局播放器 ↗</a>` : ''}</div>
+    <div class="side-subheading"><span class="status-tag ${attempt.completed ? 'completed' : attempt.status === 'failed' ? 'failed' : 'incomplete'}">${esc(statuses[attempt.status] || attempt.status)}</span><span>主记录：第 ${selectedIndex} / ${round.attempts.length} 次尝试</span><button type="button" class="text-button" data-profile-side="${side}">查看 ${side} 经营画像</button>${playerLink ? `<a href="${esc(playerLink)}" target="_blank" rel="noopener">打开单局播放器 ↗</a>` : ''}</div>
     ${attempt.failureReason ? `<div class="side-section"><p class="compare-alert">${esc(attempt.failureReason)}</p></div>` : ''}
     <section class="side-section"><h3>经营操作 · ${mainActions.length} 条记录</h3>${attempt.hasSteps ? renderActions(mainActions) : '<p class="small-note">缺少操作记录。</p>'}</section>
     <section class="side-section"><h3>实际讨伐 · ${attempt.battles === null ? '记录不完整' : `${attempt.battles.length} 场`}</h3>${renderBattles(attempt)}</section>
@@ -280,7 +296,7 @@ for (const container of ['highlights', 'roundList']) {
   });
 }
 document.addEventListener('keydown', event => {
-  if (!state.comparison || event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
+  if ($('profileDialog').open || !state.comparison || event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
   if (event.target.closest('input, select, textarea, button, a, summary, [contenteditable]')) return;
   if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
     event.preventDefault();

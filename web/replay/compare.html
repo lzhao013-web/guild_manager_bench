@@ -6,11 +6,13 @@
   <title>行动级对照复盘 · Guild Manager Bench</title>
   <link rel="stylesheet" href="/replay/styles.css" />
   <link rel="stylesheet" href="/replay/compare.css" />
+  <link rel="stylesheet" href="/replay/profile.css" />
 </head>
 <body class="compare-page">
   <header class="topbar">
     <div class="topbar-brand"><h1>Guild Manager Bench</h1><span class="brand-badge">对照复盘</span></div>
     <nav class="topbar-actions" aria-label="页面导航">
+      <a class="btn btn-ghost" href="/replay/profile.html">经营画像</a>
       <a class="btn btn-ghost" href="/replay/">单局回放</a>
       <a class="btn btn-ghost" href="/">操作面板</a>
     </nav>
@@ -67,6 +69,7 @@
       <p class="comparison-footnote">差异来自已确认成功的经营操作与实际讨伐记录，不比较查询顺序，不推断模型动机，也不将分数变化归因于某个动作。缺失数据保持未知。</p>
     </section>
   </main>
+  <dialog id="profileDialog" class="profile-dialog" aria-labelledby="profileDialogTitle"><header><h2 id="profileDialogTitle">本局经营画像</h2><button id="profileClose" type="button" class="btn btn-ghost">关闭</button></header><div id="comparisonProfile"></div></dialog>
   <script type="module" src="/replay/compare.mjs"></script>
 </body>
 </html>

@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>模型经营画像 · Guild Manager Bench</title>
+  <link rel="stylesheet" href="/replay/styles.css" />
+  <link rel="stylesheet" href="/replay/compare.css" />
+  <link rel="stylesheet" href="/replay/profile.css" />
+</head>
+<body class="compare-page">
+  <header class="topbar">
+    <div class="topbar-brand"><h1>Guild Manager Bench</h1><span class="brand-badge">经营画像</span></div>
+    <nav class="topbar-actions" aria-label="页面导航"><a class="btn btn-ghost" href="/replay/compare.html">对照复盘</a><a class="btn btn-ghost" href="/replay/">单局回放</a><a class="btn btn-ghost" href="/">操作面板</a></nav>
+  </header>
+  <main class="compare-main">
+    <section class="compare-intro"><div><p class="eyebrow">OBSERVED PLAYSTYLE</p><h2>它是怎样经营这局公会的？</h2><p>从培养、投资、装备、行动和资源五个角度归纳真实记录，点击结论即可核查。</p></div><span class="readonly-note">不调用模型 · 不另造能力评分</span></section>
+    <details id="profileSource" class="source-picker profile-source" open>
+      <summary><strong id="profileSourceTitle">选择一局生成经营画像</strong><span>选择 / 更换跑局</span></summary>
+      <article class="source-card side-a">
+        <label for="profileRun" class="sr-only">画像服务端存档</label>
+        <div class="source-controls"><select id="profileRun" class="run-select"><option value="">选择服务端存档…</option></select><button id="profileLoad" class="btn btn-primary" type="button">生成画像</button></div>
+        <label class="file-button">或打开本地 replay.json<input id="profileFile" type="file" accept=".json,application/json" aria-label="画像本地 replay.json" /></label>
+        <p id="profileLoadStatus" class="source-status" role="status">本地文件只在浏览器读取，不上传。</p>
+      </article>
+      <div class="archive-list-note"><span id="profileListStatus" role="status">正在读取存档列表…</span><button id="profileRefresh" type="button" class="text-button">刷新列表</button></div>
+    </details>
+    <p id="profileError" class="compare-alert" role="alert" hidden></p>
+    <section id="profileEmpty" class="compare-empty"><span class="empty-symbol" aria-hidden="true">行为 → 依据</span><h2>从成绩之外，看见经营习惯</h2><p>不猜动机，不贴能力标签。每项结论都指向具体回合或操作。</p><div class="empty-steps"><span>培养路线</span><span>投资节奏</span><span>装备使用</span><span>行动习惯</span><span>资源利用</span></div></section>
+    <div id="profileView"></div>
+  </main>
+  <script type="module" src="/replay/profile.mjs"></script>
+</body>
+</html>

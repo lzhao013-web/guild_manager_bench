@@ -44,14 +44,17 @@ jobs:
           node --check web/replay/app.js
           node --check web/replay/compare.mjs
           node --check web/replay/compare-model.mjs
+          node --check web/replay/profile.mjs
+          node --check web/replay/profile-model.mjs
+          node --check web/replay/profile-view.mjs
 
-      - name: Test replay comparison
-        run: node --test tests/frontend/compare-model.test.mjs
+      - name: Test replay analysis
+        run: node --test tests/frontend/*.test.mjs
 
-      - name: Install browser for replay comparison
+      - name: Install browser for replay analysis
         if: matrix.python-version == '3.12'
         run: uv run --with playwright==1.63.0 python -m playwright install --with-deps chromium
 
-      - name: Smoke test replay comparison in browser
+      - name: Smoke test replay comparison and profile in browser
         if: matrix.python-version == '3.12'
         run: uv run --with playwright==1.63.0 python tests/frontend/smoke_compare.py

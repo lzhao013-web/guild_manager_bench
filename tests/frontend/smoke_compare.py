@@ -12,6 +12,8 @@ from urllib.parse import urlsplit
 
 from playwright.sync_api import expect, sync_playwright
 
+from profile_browser import check_profile
+
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -163,6 +165,7 @@ def main() -> None:
             expect(page.locator("#roundContent")).to_contain_text(f"招募 · {recruited_name}")
             expect(page.locator("#roundContent")).to_contain_text("未找到装备实例")
             expect(page.locator(".score-gap")).to_have_text("分数差未知")
+            check_profile(page, base, data, requests, args.screenshots)
             assert all(method == "GET" for method, _ in requests), requests
             assert not errors, errors
             browser.close()

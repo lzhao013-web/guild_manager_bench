@@ -164,6 +164,7 @@ async function loadReplay(runId, requestedTurn = null) {
     DOM.btnRankChart.disabled = !hasRankData;
     window.location.hash = `#run=${runId}`;
     document.getElementById('compareLink').href = `/replay/compare.html?left=${encodeURIComponent(runId)}`;
+    document.getElementById('profileLink').href = `/replay/profile.html?run=${encodeURIComponent(runId)}`;
     updateAll(); setStatus(`已加载: ${runId}`);
     DOM.runMeta.innerHTML = `<span>${replay.session_id||runId}</span>`;
   } catch(e) { setStatus(`错误: ${e.message}`, true); console.error(e); }
