@@ -81,7 +81,7 @@ async function init() {
     const runId = decodeURIComponent(hash.slice(5));
     if (runIds.has(runId)) {
       DOM.runSelector.value = runId;
-      await loadReplay(runId);
+      await loadReplay(runId, Number(new URLSearchParams(window.location.search).get('turn')));
     } else {
       window.history.replaceState(null, '', window.location.pathname + window.location.search);
       setStatus(`找不到跑局: ${runId}`, true);
@@ -137,7 +137,7 @@ async function loadRunList() {
   return runIds;
 }
 
-async function loadReplay(runId) {
+async function loadReplay(runId, requestedTurn = null) {
   setStatus('加载中...');
   try {
     let resp = await fetch(`/api/llm/runs/${encodeURIComponent(runId)}/replay`);
@@ -154,12 +154,16 @@ async function loadReplay(runId) {
       if (!resp.ok) throw new Error(await responseErrorMessage(resp, '补分失败'));
       replay = await resp.json();
     }
-    S.replay = replay; S.currentTurnIdx = firstCompleted(); S.currentStepIdx = -1;
+    S.replay = replay;
+    let requestedIndex = replay.turns.findLastIndex(turn => turn.turn === requestedTurn && turn.status === 'completed');
+    if (requestedIndex < 0) requestedIndex = replay.turns.findLastIndex(turn => turn.turn === requestedTurn && isCompleteTurn(turn));
+    S.currentTurnIdx = requestedIndex >= 0 ? requestedIndex : firstCompleted(); S.currentStepIdx = -1;
     stopPlayback(); hideBattleOverlay();
     // Enable rank chart button if any turn has rank_score
     const hasRankData = (replay.turns||[]).some(t => t.rank_score != null);
     DOM.btnRankChart.disabled = !hasRankData;
     window.location.hash = `#run=${runId}`;
+    document.getElementById('compareLink').href = `/replay/compare.html?left=${encodeURIComponent(runId)}`;
     updateAll(); setStatus(`已加载: ${runId}`);
     DOM.runMeta.innerHTML = `<span>${replay.session_id||runId}</span>`;
   } catch(e) { setStatus(`错误: ${e.message}`, true); console.error(e); }

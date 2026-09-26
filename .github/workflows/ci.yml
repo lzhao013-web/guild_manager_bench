@@ -38,5 +38,20 @@ jobs:
       - name: Run tests
         run: uv run pytest tests -q
 
-      - name: Check frontend script
-        run: node --check web/static/app.js
+      - name: Check frontend scripts
+        run: |
+          node --check web/static/app.js
+          node --check web/replay/app.js
+          node --check web/replay/compare.mjs
+          node --check web/replay/compare-model.mjs
+
+      - name: Test replay comparison
+        run: node --test tests/frontend/compare-model.test.mjs
+
+      - name: Install browser for replay comparison
+        if: matrix.python-version == '3.12'
+        run: uv run --with playwright==1.63.0 python -m playwright install --with-deps chromium
+
+      - name: Smoke test replay comparison in browser
+        if: matrix.python-version == '3.12'
+        run: uv run --with playwright==1.63.0 python tests/frontend/smoke_compare.py

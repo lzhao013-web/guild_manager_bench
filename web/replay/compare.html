@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>行动级对照复盘 · Guild Manager Bench</title>
+  <link rel="stylesheet" href="/replay/styles.css" />
+  <link rel="stylesheet" href="/replay/compare.css" />
+</head>
+<body class="compare-page">
+  <header class="topbar">
+    <div class="topbar-brand"><h1>Guild Manager Bench</h1><span class="brand-badge">对照复盘</span></div>
+    <nav class="topbar-actions" aria-label="页面导航">
+      <a class="btn btn-ghost" href="/replay/">单局回放</a>
+      <a class="btn btn-ghost" href="/">操作面板</a>
+    </nav>
+  </header>
+  <main class="compare-main">
+    <section class="compare-intro">
+      <div><p class="eyebrow">ACTION COMPARISON</p><h2>同一回合，不同的选择。</h2>
+        <p>把两局经营过程放在一起，看清资源投向、培养路线与讨伐安排的不同。</p></div>
+      <span class="readonly-note">只读分析 · 不重建存档 · 不重新评分</span>
+    </section>
+
+    <details id="sourcePicker" class="source-picker" open>
+      <summary><strong id="sourceSummary">选择两局进行对照</strong><span>选择 / 更换跑局</span></summary>
+    <section class="source-grid" aria-label="选择两局进行对照">
+      <article class="source-card side-a">
+        <div class="source-heading"><span class="side-mark">A</span><h3>左侧跑局</h3></div>
+        <label for="runA" class="sr-only">A 服务端存档</label>
+        <div class="source-controls"><select id="runA" class="run-select"><option value="">选择服务端存档…</option></select><button id="loadA" class="btn btn-primary" type="button">加载</button></div>
+        <label class="file-button">或打开本地 replay.json<input id="fileA" type="file" accept=".json,application/json" aria-label="A 本地 replay.json" /></label>
+        <p id="sourceA" class="source-status" role="status">尚未选择跑局</p>
+      </article>
+      <article class="source-card side-b">
+        <div class="source-heading"><span class="side-mark">B</span><h3>右侧跑局</h3></div>
+        <label for="runB" class="sr-only">B 服务端存档</label>
+        <div class="source-controls"><select id="runB" class="run-select"><option value="">选择服务端存档…</option></select><button id="loadB" class="btn btn-primary" type="button">加载</button></div>
+        <label class="file-button">或打开本地 replay.json<input id="fileB" type="file" accept=".json,application/json" aria-label="B 本地 replay.json" /></label>
+        <p id="sourceB" class="source-status" role="status">尚未选择跑局</p>
+      </article>
+    </section>
+    <div class="archive-list-note"><span id="listStatus" role="status">正在读取存档列表…</span><button id="refreshRuns" class="text-button" type="button">刷新列表</button></div>
+    </details>
+    <p id="loadError" class="compare-alert" role="alert" hidden></p>
+
+    <section id="emptyState" class="compare-empty">
+      <span class="empty-symbol" aria-hidden="true">A ↔ B</span>
+      <h2>选择两局，开始看懂行动差异</h2>
+      <p>支持服务端存档与本地文件混合选择。本地文件仅在浏览器内读取，不上传。</p>
+      <div class="empty-steps"><span>01 · 选择两局</span><span>02 · 对齐回合</span><span>03 · 找到分歧</span></div>
+    </section>
+
+    <section id="workspace" hidden>
+      <div id="conditions" aria-label="实验条件核对"></div>
+      <section id="highlights" class="highlights" aria-label="关键回合跳转"></section>
+      <section class="turn-toolbar" aria-label="回合导航">
+        <button id="prevRound" class="btn btn-ghost" type="button" aria-label="上一回合">← 上一回合</button>
+        <div class="turn-position"><strong id="turnTitle" aria-live="polite">第 — 回合</strong><span id="turnCount"></span></div>
+        <label class="sr-only" for="turnSelect">跳转回合</label><select id="turnSelect" class="run-select"></select>
+        <button id="nextRound" class="btn btn-ghost" type="button" aria-label="下一回合">下一回合 →</button>
+      </section>
+      <div class="comparison-layout">
+        <aside class="round-rail"><h3>回合目录</h3><div id="roundList" class="round-list" aria-label="回合目录"></div></aside>
+        <div class="round-content" id="roundContent"></div>
+      </div>
+      <p class="comparison-footnote">差异来自已确认成功的经营操作与实际讨伐记录，不比较查询顺序，不推断模型动机，也不将分数变化归因于某个动作。缺失数据保持未知。</p>
+    </section>
+  </main>
+  <script type="module" src="/replay/compare.mjs"></script>
+</body>
+</html>

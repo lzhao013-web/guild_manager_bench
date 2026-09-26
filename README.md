@@ -190,6 +190,36 @@ skills.yaml             技能定义
 
 启动主服务后，可以在 `/replay/` 加载本地 `replay.json`，或浏览 `runs/llm` 下的运行存档。
 
+### 行动级对照复盘
+
+运行 `uv run guild-manager serve` 后，点击操作面板或回放页面中的“对照复盘”，
+也可直接访问 <http://127.0.0.1:8000/replay/compare.html>。
+
+1. 在 A、B 两侧各选择一份服务端存档，或打开本地 `replay.json`。支持混合选择，本地文件不上传。
+2. 按真实回合编号同步查看经营操作、金币与经验池变化、队伍人数、实际讨伐和 Rank Score。
+3. 使用“分差扩大最多”“首个行动分歧”“首个失败节点”跳转，或使用回合目录、下拉框和左右方向键导航。
+4. 展开操作条目查看原始参数与返回。查询、预览、备忘、模型正文和 API 推理文本另行折叠展示。
+
+对照规则：
+
+- 仅支持 `llm_replay`，不接受 CLI 的统计 JSON、手动回放或基线摘要。
+- 同一回合的多次尝试放在一起，主记录优先选最后一次已完成尝试，否则选最后一次未完成记录。
+  其他尝试可以展开查看，不重复计入主记录的经营操作统计。
+- 行动分歧比较已确认成功的操作类别、对象和数量，以及实际讨伐安排。
+  不比较查询顺序，不推断模型动机，也不将评分变化归因于某个操作。
+- “分差扩大最多”比较相邻两个真实回合的绝对分差增量，不跨越评分缺失的回合。
+- 数据哈希、种子、评分配置、回合数、工具预算或经营目标不同会提示条件差异，并停用分差扩大推荐。
+  未记录的条件显示未知，不视为相同。
+- 缺少评分、战斗结果或状态快照时保持未知，不填零，不沿用其他回合的分数。
+- 对照页只读取记录，不调用模型，不重建存档，也不补算或写回评分。
+
+服务端存档可通过 URL 恢复选择，例如：
+`/replay/compare.html?left=RUN_A&right=RUN_B&turn=6`。
+本地文件不能通过 URL 传递，刷新后需重新选择。
+“打开单局播放器”会在新页面定位到对应回合，单局播放器沿用原有的加载与数据补全行为。
+
+### 排行榜
+
 将待统计的 replay JSON 放入 `web/leaderboard/data/`，然后构建并查看排行榜：
 
 ```powershell
@@ -210,6 +240,23 @@ save_eval_results(
 ```
 
 排行榜默认地址为 <http://127.0.0.1:8080/>。
+
+## 前端验证
+
+对照复盘的数据投影和回合对齐测试使用 Node.js 22+ 自带的测试运行器：
+
+```powershell
+node --test tests/frontend/compare-model.test.mjs
+```
+
+浏览器冒烟测试使用构造的记录和本地测试服务，不访问真实存档或模型 API：
+
+```powershell
+uv run --with playwright==1.63.0 python -m playwright install chromium
+uv run --with playwright==1.63.0 python tests/frontend/smoke_compare.py
+# Windows 已安装 Edge 时，也可直接指定浏览器
+uv run --with playwright==1.63.0 python tests/frontend/smoke_compare.py --channel msedge
+```
 
 ## 项目结构
 
