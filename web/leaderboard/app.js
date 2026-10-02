@@ -324,6 +324,13 @@ function setActiveTab(name, { scroll = true } = {}) {
   if (scroll) window.scrollTo({ top: 0 });
 }
 
+function initStickyHeader() {
+  const header = $('.header');
+  const updateOffset = () => document.documentElement.style.setProperty('--header-height', `${header.getBoundingClientRect().height}px`);
+  updateOffset();
+  new ResizeObserver(updateOffset).observe(header);
+}
+
 function initTabs() {
   $$('.tab-btn').forEach(btn => btn.addEventListener('click', () => setActiveTab(btn.dataset.tab)));
   $('#backToLeaderboard').addEventListener('click', () => {
@@ -675,19 +682,23 @@ function renderLeaderboardCards(data) {
 function ensureCardDetailRendered(card) {
   if (card.dataset.detailLoaded === 'true') return;
   const m = _cardModels[Number(card.dataset.cardIdx)];
-  card.nextElementSibling.querySelector('.card-detail').innerHTML = renderCardDetail(m);
+  const detail = card.nextElementSibling;
+  detail.querySelector('.card-detail').innerHTML = renderCardDetail(m, detail.id);
   card.dataset.detailLoaded = 'true';
 }
 
 function toggleCardExpanded(card, force) {
   const expand = force != null ? force : !card.classList.contains('expanded');
   const m = _cardModels[Number(card.dataset.cardIdx)];
+  const detail = card.nextElementSibling;
   if (expand) { ensureCardDetailRendered(card); _expandedModels.add(m.model); }
   else { _expandedModels.delete(m.model); hideAdventurerTooltip(); }
   card.classList.toggle('expanded', expand);
-  card.nextElementSibling.hidden = !expand;
+  detail.hidden = !expand;
   card.querySelectorAll('[data-action="toggle-detail"]').forEach(btn => btn.setAttribute('aria-expanded', String(expand)));
-  card.querySelector('.expand-button').setAttribute('aria-label', (expand ? '收起 ' : '展开 ') + m.model + ' 详情');
+  const button = card.querySelector('.expand-button');
+  button.setAttribute('aria-label', (expand ? '收起 ' : '展开 ') + m.model + ' 详情');
+  button.querySelector('.expand-label').textContent = expand ? '收起' : '展开';
 }
 
 let _cardInteractionsBound = false;
@@ -709,6 +720,14 @@ function initCardInteractions() {
       renderLeaderboardCards(_leaderboardData);
       syncViewUrl();
       $('#leaderboardSearchInput').focus();
+      return;
+    }
+    const collapse = e.target.closest('[data-action="collapse-detail"]');
+    if (collapse) {
+      const card = collapse.closest('.model-detail-row').previousElementSibling;
+      toggleCardExpanded(card, false);
+      card.querySelector('.expand-button').focus({ preventScroll: true });
+      card.scrollIntoView({ block: 'nearest', behavior: 'instant' });
       return;
     }
     const toggle = e.target.closest('[data-action="toggle-detail"]');
@@ -872,12 +891,13 @@ function renderCard(m, ctx = {}) {
     '<td class="runs-cell numeric"><span class="run-count">' + m.runs + '<span class="mobile-label"> 次运行</span></span><span class="sample-note">' + (m.runs === 1 ? '单次结果' : '多次均值') + '</span></td>' +
     '<td class="output-cell numeric"><span class="mobile-label">输出</span>' + (fmtTokens(out) ?? '—') + '</td>' +
     '<td class="duration-cell numeric"><span class="mobile-label">耗时</span>' + (fmtDuration(duration) ?? '—') + '</td>' +
-    '<td class="expand-cell"><button class="expand-button" data-action="toggle-detail" aria-expanded="false" aria-controls="' + detailId + '" aria-label="展开 ' + esc(m.model) + ' 详情" type="button"><span aria-hidden="true">⌄</span></button></td></tr>' +
+    '<td class="expand-cell"><button class="expand-button" data-action="toggle-detail" aria-expanded="false" aria-controls="' + detailId + '" aria-label="展开 ' + esc(m.model) + ' 详情" type="button"><span class="expand-label" aria-hidden="true">展开</span><span class="expand-chevron" aria-hidden="true">⌄</span></button></td></tr>' +
     '<tr class="model-detail-row" id="' + detailId + '" hidden><td colspan="8"><div class="card-detail"></div></td></tr>';
 }
 
 // 卡片详情（懒渲染）：聚合指标 + 运行明细，首次展开时才调用
-function renderCardDetail(m) {
+function renderCardDetail(m, detailId) {
+  const collapseButton = `<button class="text-button detail-collapse" data-action="collapse-detail" type="button" aria-controls="${esc(detailId)}" aria-label="收起 ${esc(m.model)} 详情">收起详情 <span aria-hidden="true">⌃</span></button>`;
   const runDetails = Array.isArray(m.run_details) ? m.run_details : [];
   const latestRun = runDetails[0] || {};
   const rs = m.rank_score;
@@ -908,7 +928,7 @@ function renderCardDetail(m) {
   }
 
   return `
-    <div class="detail-model-heading"><h3>${esc(m.model)}</h3>${renderBadges(_modelBadges.get(m.model))}</div>
+    <div class="detail-model-heading"><h3>${esc(m.model)}</h3>${renderBadges(_modelBadges.get(m.model))}${collapseButton}</div>
     ${_modelNotes[m.model] ? `<p class="detail-note">${esc(_modelNotes[m.model])}</p>` : ''}
     <div class="metrics-row">${renderEfficiencySection(m.efficiency || {})}${renderGameQualitySection(quality)}</div>
     <div class="detail-section">
@@ -918,7 +938,8 @@ function renderCardDetail(m) {
       </div>
       ${renderAggregateList(details)}
     </div>
-    ${renderRunDetails(runDetails)}`;
+    ${renderRunDetails(runDetails)}
+    <div class="detail-actions">${collapseButton}</div>`;
 }
 
 function renderEfficiencySection(eff) {
@@ -1566,6 +1587,7 @@ function showError(msg) {
 // Init
 // ============================================================================
 async function init() {
+  initStickyHeader();
   try {
     const [res, notesRes] = await Promise.all([
       fetch('leaderboard_data.json', { cache: 'no-cache' }),
