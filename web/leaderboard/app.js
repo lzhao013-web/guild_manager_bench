@@ -342,7 +342,7 @@ function initTabs() {
   const expandIdx = Number(params.get('expand'));
   if (Number.isInteger(expandIdx) && expandIdx > 0) {
     const card = $$('.model-card')[expandIdx - 1];
-    if (card) toggleCardExpanded(card, true);
+    if (card) toggleCardExpanded(card, true, { animate: false });
   }
 }
 
@@ -668,7 +668,7 @@ function renderLeaderboardCards(data) {
     '<th scope="col" class="numeric">平均段位积分</th><th scope="col" class="numeric">运行</th><th scope="col" class="numeric">输出 Tokens</th><th scope="col" class="numeric">耗时</th><th scope="col"><span class="sr-only">详情</span></th></tr></thead>' +
     '<tbody>' + visible.map((m, index) => renderCard(m, { topScore, index })).join('') + '</tbody></table>';
   $$('.model-card').forEach(card => {
-    if (_expandedModels.has(_cardModels[Number(card.dataset.cardIdx)].model)) toggleCardExpanded(card, true);
+    if (_expandedModels.has(_cardModels[Number(card.dataset.cardIdx)].model)) toggleCardExpanded(card, true, { animate: false });
   });
   updateComparisonTray();
 }
@@ -682,23 +682,52 @@ function renderLeaderboardCards(data) {
 function ensureCardDetailRendered(card) {
   if (card.dataset.detailLoaded === 'true') return;
   const m = _cardModels[Number(card.dataset.cardIdx)];
-  const detail = card.nextElementSibling;
-  detail.querySelector('.card-detail').innerHTML = renderCardDetail(m, detail.id);
+  card.nextElementSibling.querySelector('.card-detail').innerHTML = renderCardDetail(m);
   card.dataset.detailLoaded = 'true';
 }
 
-function toggleCardExpanded(card, force) {
+const _cardDetailAnimations = new WeakMap();
+
+function animateCardDetail(detail, expand, animate) {
+  const viewport = detail.querySelector('.card-detail-viewport');
+  const previous = _cardDetailAnimations.get(detail);
+  // 快速反向点击时, 从当前画面接续, 而不是跳回动画起点.
+  const startHeight = detail.hidden ? 0 : viewport.getBoundingClientRect().height;
+  const startOpacity = detail.hidden ? 0 : getComputedStyle(viewport).opacity;
+  if (previous) {
+    previous.onfinish = null;
+    previous.cancel();
+    _cardDetailAnimations.delete(detail);
+  }
+  detail.inert = !expand;
+  if (!animate || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    detail.hidden = !expand;
+    return;
+  }
+  detail.hidden = false;
+  const animation = viewport.animate([
+    { height: `${startHeight}px`, opacity: startOpacity },
+    { height: `${expand ? viewport.scrollHeight : 0}px`, opacity: expand ? 1 : 0 },
+  ], { duration: 240, easing: 'cubic-bezier(.2, .7, .2, 1)', fill: 'both' });
+  _cardDetailAnimations.set(detail, animation);
+  animation.onfinish = () => {
+    detail.hidden = !expand;
+    animation.cancel();
+    _cardDetailAnimations.delete(detail);
+  };
+}
+
+function toggleCardExpanded(card, force, { animate = true } = {}) {
   const expand = force != null ? force : !card.classList.contains('expanded');
   const m = _cardModels[Number(card.dataset.cardIdx)];
   const detail = card.nextElementSibling;
   if (expand) { ensureCardDetailRendered(card); _expandedModels.add(m.model); }
   else { _expandedModels.delete(m.model); hideAdventurerTooltip(); }
   card.classList.toggle('expanded', expand);
-  detail.hidden = !expand;
+  animateCardDetail(detail, expand, animate);
   card.querySelectorAll('[data-action="toggle-detail"]').forEach(btn => btn.setAttribute('aria-expanded', String(expand)));
   const button = card.querySelector('.expand-button');
   button.setAttribute('aria-label', (expand ? '收起 ' : '展开 ') + m.model + ' 详情');
-  button.querySelector('.expand-label').textContent = expand ? '收起' : '展开';
 }
 
 let _cardInteractionsBound = false;
@@ -720,14 +749,6 @@ function initCardInteractions() {
       renderLeaderboardCards(_leaderboardData);
       syncViewUrl();
       $('#leaderboardSearchInput').focus();
-      return;
-    }
-    const collapse = e.target.closest('[data-action="collapse-detail"]');
-    if (collapse) {
-      const card = collapse.closest('.model-detail-row').previousElementSibling;
-      toggleCardExpanded(card, false);
-      card.querySelector('.expand-button').focus({ preventScroll: true });
-      card.scrollIntoView({ block: 'nearest', behavior: 'instant' });
       return;
     }
     const toggle = e.target.closest('[data-action="toggle-detail"]');
@@ -891,13 +912,12 @@ function renderCard(m, ctx = {}) {
     '<td class="runs-cell numeric"><span class="run-count">' + m.runs + '<span class="mobile-label"> 次运行</span></span><span class="sample-note">' + (m.runs === 1 ? '单次结果' : '多次均值') + '</span></td>' +
     '<td class="output-cell numeric"><span class="mobile-label">输出</span>' + (fmtTokens(out) ?? '—') + '</td>' +
     '<td class="duration-cell numeric"><span class="mobile-label">耗时</span>' + (fmtDuration(duration) ?? '—') + '</td>' +
-    '<td class="expand-cell"><button class="expand-button" data-action="toggle-detail" aria-expanded="false" aria-controls="' + detailId + '" aria-label="展开 ' + esc(m.model) + ' 详情" type="button"><span class="expand-label" aria-hidden="true">展开</span><span class="expand-chevron" aria-hidden="true">⌄</span></button></td></tr>' +
-    '<tr class="model-detail-row" id="' + detailId + '" hidden><td colspan="8"><div class="card-detail"></div></td></tr>';
+    '<td class="expand-cell"><button class="expand-button" data-action="toggle-detail" aria-expanded="false" aria-controls="' + detailId + '" aria-label="展开 ' + esc(m.model) + ' 详情" type="button"><span class="expand-chevron" aria-hidden="true">⌄</span></button></td></tr>' +
+    '<tr class="model-detail-row" id="' + detailId + '" hidden><td colspan="8"><div class="card-detail-viewport"><div class="card-detail"></div></div></td></tr>';
 }
 
 // 卡片详情（懒渲染）：聚合指标 + 运行明细，首次展开时才调用
-function renderCardDetail(m, detailId) {
-  const collapseButton = `<button class="text-button detail-collapse" data-action="collapse-detail" type="button" aria-controls="${esc(detailId)}" aria-label="收起 ${esc(m.model)} 详情">收起详情 <span aria-hidden="true">⌃</span></button>`;
+function renderCardDetail(m) {
   const runDetails = Array.isArray(m.run_details) ? m.run_details : [];
   const latestRun = runDetails[0] || {};
   const rs = m.rank_score;
@@ -928,7 +948,7 @@ function renderCardDetail(m, detailId) {
   }
 
   return `
-    <div class="detail-model-heading"><h3>${esc(m.model)}</h3>${renderBadges(_modelBadges.get(m.model))}${collapseButton}</div>
+    <div class="detail-model-heading"><h3>${esc(m.model)}</h3>${renderBadges(_modelBadges.get(m.model))}</div>
     ${_modelNotes[m.model] ? `<p class="detail-note">${esc(_modelNotes[m.model])}</p>` : ''}
     <div class="metrics-row">${renderEfficiencySection(m.efficiency || {})}${renderGameQualitySection(quality)}</div>
     <div class="detail-section">
@@ -938,8 +958,7 @@ function renderCardDetail(m, detailId) {
       </div>
       ${renderAggregateList(details)}
     </div>
-    ${renderRunDetails(runDetails)}
-    <div class="detail-actions">${collapseButton}</div>`;
+    ${renderRunDetails(runDetails)}`;
 }
 
 function renderEfficiencySection(eff) {

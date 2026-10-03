@@ -90,6 +90,7 @@ def check_interactions(page, base: str, width: int, screenshots: Path | None) ->
         row.locator(".expand-button").focus()
         row.locator(".expand-button").press(key)
         expect(detail).to_be_visible()
+        assert detail.locator(".card-detail-viewport").evaluate("el => el.getAnimations().length") == 0
         expect(row.locator(".expand-button")).to_have_attribute("aria-expanded", "true")
         expect(row.locator(".model-name")).to_have_attribute("aria-expanded", "true")
         expect(other.locator(".expand-button")).to_have_attribute("aria-expanded", "false")
@@ -104,31 +105,21 @@ def check_interactions(page, base: str, width: int, screenshots: Path | None) ->
 
     row.locator(".expand-button").click()
     assert page.evaluate("window.savedDetail === document.querySelector('#model-detail-4 .card-detail').firstElementChild")
-    # 长详情底部收起后, 焦点回到当前条目, 不重新创建榜单或请求数据.
-    bottom = detail.locator('[data-action="collapse-detail"]').last
-    bottom.scroll_into_view_if_needed()
+    expect(detail.locator('[data-action="collapse-detail"]')).to_have_count(0)
+    expect(row.locator(".expand-label")).to_have_count(0)
+    detail.locator(".run-card").last.scroll_into_view_if_needed()
     if width > 640:
         assert_sticky_header(page)
     if screenshots:
         page.screenshot(path=str(screenshots / f"leaderboard-detail-{width}.png"))
-    bottom.click()
+    position_row(page, row)
+    row.locator(".expand-button").click()
     expect(detail).to_be_hidden()
-    expect(row.locator(".expand-button")).to_be_focused()
-    row_box = row.bounding_box()
-    header_box = page.locator(".header").bounding_box()
-    min_top = header_box["height"]
-    if width > 640:
-        min_top += page.locator(".ranking-table thead").bounding_box()["height"]
-    assert row_box["y"] >= min_top - 1, (row_box, min_top)
-    assert row_box["y"] + row_box["height"] <= page.viewport_size["height"]
     assert page.evaluate("""() => window.savedTable === document.querySelector('.ranking-table') &&
         window.savedHero === document.querySelector('.hero') &&
         window.savedRows.every((row, index) => row === document.querySelectorAll('.model-card')[index])""")
     assert requests == requests_before, requests
 
-    row.locator(".expand-button").click()
-    detail.locator('[data-action="collapse-detail"]').first.click()
-    expect(detail).to_be_hidden()
     row.locator(".expand-button").click()
     other.locator(".expand-button").click()
     expect(detail).to_be_visible()
@@ -166,6 +157,99 @@ def check_interactions(page, base: str, width: int, screenshots: Path | None) ->
         assert_sticky_header(page)
 
 
+def check_animations(page, base: str, width: int) -> None:
+    page.emulate_media(reduced_motion="no-preference")
+    page.set_viewport_size({"width": width, "height": 900})
+    errors, requests = [], []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.on("request", lambda request: requests.append(request.url))
+    page.goto(base + "?expand=5")
+    row = page.locator('.model-card[data-rank="5"]')
+    detail = page.locator("#model-detail-4")
+    expect(detail).to_be_visible()
+    viewport = detail.locator(".card-detail-viewport")
+    # 恢复链接中的展开状态时不播放入场动画.
+    assert viewport.evaluate("el => el.getAnimations().length") == 0
+    position_row(page, row)
+    requests_before = list(requests)
+    page.evaluate("""() => {
+        window.savedTable = document.querySelector('.ranking-table');
+        window.savedDetail = document.querySelector('#model-detail-4 .card-detail');
+    }""")
+
+    def toggle_at(progress: float) -> dict:
+        # 暂停在指定进度, 验证真实布局的中间帧, 不依赖固定等待时间.
+        return row.evaluate("""(row, progress) => {
+            const viewport = row.nextElementSibling.querySelector('.card-detail-viewport');
+            const before = viewport.getBoundingClientRect().height;
+            row.querySelector('.expand-button').click();
+            const animation = viewport.getAnimations()[0];
+            animation.pause();
+            animation.currentTime = 0;
+            const start = viewport.getBoundingClientRect().height;
+            animation.currentTime = animation.effect.getTiming().duration * progress;
+            return {before, start, height: viewport.getBoundingClientRect().height,
+                full: viewport.scrollHeight, opacity: Number(getComputedStyle(viewport).opacity),
+                inert: row.nextElementSibling.inert, scrollY};
+        }""", progress)
+
+    def finish() -> None:
+        viewport.evaluate("el => el.getAnimations().forEach(animation => animation.finish())")
+        page.wait_for_function("document.querySelector('#model-detail-4 .card-detail-viewport').getAnimations().length === 0")
+
+    scroll_y = page.evaluate("scrollY")
+    closing = toggle_at(.5)
+    assert 0 < closing["height"] < closing["full"], closing
+    assert 0 < closing["opacity"] < 1 and closing["inert"], closing
+    assert abs(closing["start"] - closing["before"]) <= 1, closing
+    assert abs(closing["scrollY"] - scroll_y) <= 1, closing
+    expect(detail).to_be_visible()
+    expect(row.locator(".expand-button")).to_have_attribute("aria-expanded", "false")
+
+    reopening = toggle_at(.5)
+    assert abs(reopening["start"] - closing["height"]) <= 1, reopening
+    assert closing["height"] < reopening["height"] < reopening["full"], reopening
+    assert closing["opacity"] < reopening["opacity"] < 1 and not reopening["inert"], reopening
+    finish()
+    expect(detail).to_be_visible()
+    expect(row.locator(".model-name")).to_have_attribute("aria-expanded", "true")
+
+    toggle_at(.5)
+    finish()
+    expect(detail).to_be_hidden()
+    opening = toggle_at(.5)
+    assert opening["start"] == 0 and 0 < opening["height"] < opening["full"], opening
+    assert 0 < opening["opacity"] < 1, opening
+    reversed_close = toggle_at(.5)
+    assert abs(reversed_close["start"] - opening["height"]) <= 1, reversed_close
+    assert 0 < reversed_close["height"] < opening["height"], reversed_close
+    finish()
+    expect(detail).to_be_hidden()
+    assert abs(page.evaluate("scrollY") - scroll_y) <= 1
+    assert page.evaluate("window.savedTable === document.querySelector('.ranking-table') && window.savedDetail === document.querySelector('#model-detail-4 .card-detail')")
+    assert requests == requests_before, requests
+
+    # 自然播放结束后恢复内容高度, 缩放窗口不能截断详情.
+    row.locator(".expand-button").click()
+    page.wait_for_function("document.querySelector('#model-detail-4 .card-detail-viewport').getAnimations().length === 0")
+    page.set_viewport_size({"width": 390 if width > 640 else 1440, "height": 900})
+    assert viewport.evaluate("el => Math.abs(el.getBoundingClientRect().height - el.scrollHeight) <= 1")
+    assert viewport.evaluate("el => el.style.height") == ""
+
+    # 动画途中筛选重绘, 新节点应恢复目标状态, 不继承旧动画.
+    position_row(page, row)
+    toggle_at(.5)
+    row.evaluate("el => el.querySelector('.expand-button').click()")
+    page.locator("#leaderboardSearchInput").fill("测试模型 05")
+    expect(page.locator(".model-card")).to_have_count(1)
+    restored = page.locator(".model-detail-row")
+    expect(restored).to_be_visible()
+    assert restored.locator(".card-detail-viewport").evaluate("el => el.getAnimations().length") == 0
+    page.locator(".model-card .expand-button").click()
+    expect(restored).to_be_hidden()
+    assert not errors, errors
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--channel", default=None)
@@ -191,14 +275,18 @@ def main() -> None:
             context.route("**/model_notes.json", lambda route: route.fulfill(json={}))
             for width in (1440, 768, 390):
                 page = context.new_page()
-                check_interactions(page, f"http://127.0.0.1:{server.server_port}/", width, args.screenshots)
+                base = f"http://127.0.0.1:{server.server_port}/"
+                check_interactions(page, base, width, args.screenshots)
+                page.close()
+                page = context.new_page()
+                check_animations(page, base, width)
                 page.close()
             browser.close()
     finally:
         server.shutdown()
         server.server_close()
         thread.join()
-    print("Leaderboard smoke passed: toggles, keyboard, local updates, scroll position, sticky header, filters, selection, mobile.")
+    print("Leaderboard smoke passed: animated toggles, rapid reversal, reduced motion, keyboard, local updates, sticky header, filters, selection, mobile.")
 
 
 if __name__ == "__main__":

@@ -117,7 +117,7 @@ input::placeholder { color: var(--muted-soft); }
 .select-control { max-width: 100%; min-width: 0; height: 38px; border: 1px solid var(--line); border-radius: 7px; background: var(--bg-subtle); color: var(--text-secondary); padding: 0 28px 0 11px; font-size: 12px; }
 .list-caption { display: flex; justify-content: space-between; gap: 10px; padding: 15px 0 10px; color: var(--muted); font-size: 10px; }
 .ranking-table { width: 100%; border-spacing: 0; table-layout: fixed; border: 1px solid var(--line); border-radius: 10px; background: var(--bg-subtle); }
-.col-select { width: 44px; }.col-rank { width: 60px; }.col-score { width: 174px; }.col-runs { width: 88px; }.col-output { width: 125px; }.col-duration { width: 118px; }.col-expand { width: 92px; }
+.col-select { width: 44px; }.col-rank { width: 60px; }.col-score { width: 174px; }.col-runs { width: 88px; }.col-output { width: 125px; }.col-duration { width: 118px; }.col-expand { width: 48px; }
 .ranking-table thead { position: sticky; top: var(--header-height, 73px); z-index: 40; }
 .ranking-table thead th:first-child { border-top-left-radius: 9px; }
 .ranking-table thead th:last-child { border-top-right-radius: 9px; }
@@ -147,8 +147,8 @@ input::placeholder { color: var(--muted-soft); }
 .run-count { font: 12px var(--font-mono); color: var(--text-secondary); }
 .sample-note { display: block; margin-top: 4px; color: var(--muted); font-size: 9px; }
 .output-cell, .duration-cell { color: var(--text-secondary); font: 12px var(--font-mono); white-space: nowrap; }
-.expand-button { display: flex; align-items: center; justify-content: center; gap: 5px; border: 0; background: none; color: var(--muted); min-width: 26px; height: 30px; padding: 0; font-size: 18px; border-radius: 5px; }
-.expand-label { font-size: 10px; white-space: nowrap; }
+.expand-button { display: grid; place-items: center; border: 0; background: none; color: var(--muted); width: 26px; height: 30px; padding: 0; font-size: 18px; border-radius: 5px; }
+.expand-chevron { transition: transform 240ms cubic-bezier(.2, .7, .2, 1); }
 .expand-button:hover { background: var(--surface-hover); color: var(--text); }
 .expand-button[aria-expanded="true"] .expand-chevron { transform: rotate(180deg); }
 .compare-check { display: flex; align-items: center; width: 22px; min-height: 28px; cursor: pointer; }
@@ -244,11 +244,10 @@ input[type="checkbox"]:disabled { opacity: .3; cursor: not-allowed; }
 
 /* Expandable run evidence, shared by desktop and mobile. */
 .ranking-table .model-detail-row > td { padding: 0; }
+.card-detail-viewport { overflow: hidden; }
 .card-detail { padding: 25px 30px 30px; background: #15171b; }
 .detail-model-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .detail-model-heading h3 { overflow-wrap: anywhere; }
-.detail-collapse { flex-shrink: 0; white-space: nowrap; color: var(--accent); }
-.detail-actions { display: flex; justify-content: flex-end; margin-top: 24px; padding-top: 14px; border-top: 1px solid var(--line); }
 .detail-note { margin-top: 8px; color: var(--text-secondary); font-size: 12px; }
 .model-badges { display: flex; gap: 6px; flex-wrap: wrap; }
 .badge-tag { font-size: 10px; padding: 2px 7px; border: 1px solid var(--line); border-radius: 4px; color: var(--text-secondary); }
@@ -323,7 +322,6 @@ input[type="checkbox"]:disabled { opacity: .3; cursor: not-allowed; }
 .adventurer-tooltip-item-skill span, .adventurer-tooltip-empty { color: var(--muted); font-size: 11px; }
 
 @media (max-width: 1050px) {
-  .expand-label { display: none; }
   .hero { grid-template-columns: 1fr 280px; gap: 30px; }
   .hero-protocol { padding-left: 22px; }
   .protocol-steps { gap: 8px; }
@@ -422,9 +420,7 @@ input[type="checkbox"]:disabled { opacity: .3; cursor: not-allowed; }
   .run-count .mobile-label { font-family: var(--font-sans); font-size: 10px; }
   .ranking-table .model-detail-row, .ranking-table .model-detail-row > td { display: block; }
   .card-detail { padding: 20px 14px; }
-  .detail-model-heading { flex-wrap: wrap; gap: 10px; }
-  .detail-model-heading h3 { flex: 1; }
-  .detail-model-heading .model-badges { order: 1; flex-basis: 100%; margin-top: 0; }
+  .detail-model-heading { display: block; }
   .model-badges { margin-top: 10px; }
   .run-card-header { flex-wrap: wrap; gap: 6px 12px; }
   .run-id { flex-basis: 100%; margin-left: 0; font-size: 9px; }
