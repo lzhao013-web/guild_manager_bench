@@ -75,5 +75,7 @@
   "gpt-6-luna-max": "推理强度 max",
   "gpt-6-luna-high": "推理强度 high",
   "gpt-6-luna-medium": "推理强度 medium",
-  "gpt-6-luna-low": "推理强度 low"
+  "gpt-6-luna-low": "推理强度 low",
+  "gpt-oss-120b": "本地部署",
+  "glm-4-5-air-ud-q5-k-xl:think": "本地部署"
 }
