@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-10-14T08:25:52",
+  "generated_at": "2026-10-14T08:30:20",
   "total_runs": 97,
   "models": [
     {
@@ -120718,7 +120718,7 @@
           }
         }
       ],
-      "model": "coder390-q2-128k-q8-mtp4",
+      "model": "qwen3.8-27b-coder390-Q2LynnStyle-Q8Mtp",
       "rank": 38
     },
     {
