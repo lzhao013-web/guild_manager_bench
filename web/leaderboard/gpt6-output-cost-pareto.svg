@@ -1,0 +1,180 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1520 1140" width="1520" height="1140" style="width:100%;height:auto;display:block" role="img" aria-labelledby="chartTitle chartDesc">
+<title id="chartTitle">GPT-6 Astra 与 Sol：输出成本与性能的帕累托前沿</title>
+<desc id="chartDesc">10 个配置，10 次运行。横轴是美元输出费用，采用对数刻度。纵轴是段位积分，从 3000 起显示。菱形表示 Astra，圆形表示 Sol。实心标记表示全部候选点中的非支配解，空心标记表示被支配的配置。每档仅 1 次运行，结果不代表统计显著差异。</desc>
+<style>
+  :root {
+    color-scheme: light dark;
+    --paper: #fbfcfd; --ink: #202c3b; --muted: #566575;
+    --grid: #e3e9ef; --rule: #cbd5df; --soft: #f0f4f8;
+    --astra: #355cc9; --sol: #b75730; --frontier: #72849a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #131b25; --ink: #e6edf5; --muted: #a9b7c8;
+      --grid: #2a3544; --rule: #3d4b5d; --soft: #1b2735;
+      --astra: #91b0ff; --sol: #efab87; --frontier: #94a7c0;
+    }
+  }
+  text { font-family: "Segoe UI", "Microsoft YaHei", "Noto Sans SC", sans-serif; fill: var(--ink); }
+  .brand { font-size: 16px; font-weight: 600; }
+  .meta { font-size: 14px; fill: var(--muted); }
+  .title { font-size: 43px; font-weight: 650; letter-spacing: -1.5px; }
+  .subtitle { font-size: 21px; fill: var(--muted); }
+  .price { font-size: 34px; font-weight: 650; letter-spacing: -1px; }
+  .label { font-size: 16px; font-weight: 600; }
+  .axis { font-size: 15px; fill: var(--muted); }
+  .tick { font-size: 14px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+  .mono { font-family: "Cascadia Code", Consolas, monospace; font-variant-numeric: tabular-nums; }
+  .astra { fill: var(--astra); } .sol { fill: var(--sol); }
+  .point-name { font-size: 17px; font-weight: 650; }
+  .point-value { font-size: 14px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+  .halo { paint-order: stroke; stroke: var(--paper); stroke-width: 6px; stroke-linejoin: round; }
+  .section { font-size: 18px; font-weight: 650; }
+  .cost { font-size: 25px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .foot { font-size: 13px; fill: var(--muted); }
+  .link { fill: var(--astra); text-decoration: underline; }
+</style>
+<rect width="1520" height="1140" fill="var(--paper)"/>
+<text x="64.00" y="52.00" class="brand" text-anchor="start">Guild Manager Bench</text>
+<text x="1456.00" y="52.00" class="meta" text-anchor="end">10 个配置 / 10 次运行</text>
+<text x="64.00" y="121.00" class="title" text-anchor="start">GPT-6 Astra 与 Sol</text>
+<text x="64.00" y="163.00" class="subtitle" text-anchor="start">输出成本与性能的帕累托前沿</text>
+<text x="1056.00" y="95.00" class="label astra" text-anchor="start">ASTRA</text>
+<text x="1056.00" y="138.00" class="price astra" text-anchor="start">$50</text>
+<text x="1272.00" y="95.00" class="label sol" text-anchor="start">SOL</text>
+<text x="1272.00" y="138.00" class="price sol" text-anchor="start">$10</text>
+<text x="1056.00" y="163.00" class="meta" text-anchor="start">每百万输出 Tokens</text>
+<text x="1272.00" y="163.00" class="meta" text-anchor="start">每百万输出 Tokens</text>
+<line x1="64" y1="198" x2="1456" y2="198" stroke="var(--rule)"/>
+<path d="M73,226 L80,233 L73,240 L66,233 Z" fill="var(--astra)" stroke="var(--astra)" stroke-width="2.5"/>
+<text x="92.00" y="239.00" class="label" text-anchor="start">GPT-6 Astra</text>
+<circle cx="260" cy="233" r="7" fill="var(--sol)" stroke="var(--sol)" stroke-width="2.5"/>
+<text x="279.00" y="239.00" class="label" text-anchor="start">GPT-6 Sol</text>
+<line x1="445" y1="233" x2="481" y2="233" stroke="var(--frontier)" stroke-width="2" stroke-dasharray="5 5"/>
+<text x="494.00" y="239.00" class="axis" text-anchor="start">帕累托前沿</text>
+<text x="1456.00" y="239.00" class="axis" text-anchor="end">实心：前沿配置    空心：被支配配置</text>
+<text x="64.00" y="284.00" class="label" text-anchor="start">段位积分 ↑</text>
+<text x="1456.00" y="284.00" class="meta" text-anchor="end">越靠左上，输出成本越低、表现越好</text>
+
+<line x1="132.00" y1="308" x2="132.00" y2="746" stroke="var(--grid)" stroke-dasharray="2 6"/>
+<text x="132.00" y="775.00" class="tick mono" text-anchor="middle">$0.1</text>
+<line x1="296.31" y1="308" x2="296.31" y2="746" stroke="var(--grid)" stroke-dasharray="2 6"/>
+<text x="296.31" y="775.00" class="tick mono" text-anchor="middle">$0.2</text>
+<line x1="513.53" y1="308" x2="513.53" y2="746" stroke="var(--grid)" stroke-dasharray="2 6"/>
+<text x="513.53" y="775.00" class="tick mono" text-anchor="middle">$0.5</text>
+<line x1="677.84" y1="308" x2="677.84" y2="746" stroke="var(--grid)" stroke-dasharray="2 6"/>
+<text x="677.84" y="775.00" class="tick mono" text-anchor="middle">$1</text>
+<line x1="842.16" y1="308" x2="842.16" y2="746" stroke="var(--grid)" stroke-dasharray="2 6"/>
+<text x="842.16" y="775.00" class="tick mono" text-anchor="middle">$2</text>
+<line x1="1059.37" y1="308" x2="1059.37" y2="746" stroke="var(--grid)" stroke-dasharray="2 6"/>
+<text x="1059.37" y="775.00" class="tick mono" text-anchor="middle">$5</text>
+<line x1="1223.69" y1="308" x2="1223.69" y2="746" stroke="var(--grid)" stroke-dasharray="2 6"/>
+<text x="1223.69" y="775.00" class="tick mono" text-anchor="middle">$10</text>
+<line x1="1388.00" y1="308" x2="1388.00" y2="746" stroke="var(--grid)" stroke-dasharray="2 6"/>
+<text x="1388.00" y="775.00" class="tick mono" text-anchor="middle">$20</text>
+<line x1="132" y1="746.00" x2="1388" y2="746.00" stroke="var(--grid)"/>
+<text x="114.00" y="751.00" class="tick mono" text-anchor="end">3,000</text>
+<line x1="132" y1="648.67" x2="1388" y2="648.67" stroke="var(--grid)"/>
+<text x="114.00" y="653.67" class="tick mono" text-anchor="end">4,000</text>
+<line x1="132" y1="551.33" x2="1388" y2="551.33" stroke="var(--grid)"/>
+<text x="114.00" y="556.33" class="tick mono" text-anchor="end">5,000</text>
+<line x1="132" y1="454.00" x2="1388" y2="454.00" stroke="var(--grid)"/>
+<text x="114.00" y="459.00" class="tick mono" text-anchor="end">6,000</text>
+<line x1="132" y1="356.67" x2="1388" y2="356.67" stroke="var(--grid)"/>
+<text x="114.00" y="361.67" class="tick mono" text-anchor="end">7,000</text>
+<line x1="132" y1="746" x2="1388" y2="746" stroke="var(--rule)"/>
+<text x="760.00" y="821.00" class="label" text-anchor="middle">单次运行输出费用（美元）</text>
+<text x="760.00" y="848.00" class="meta" text-anchor="middle">对数刻度：等距表示费用按倍数增长</text>
+<path id="pareto-frontier" d="M243.76,706.23 L705.16,476.90 L762.57,464.06 L794.69,432.90 L948.85,400.91 L1275.52,351.59" fill="none" stroke="var(--frontier)" stroke-width="2" stroke-dasharray="5 5"/>
+<g aria-label="gpt-6-sol-low：输出费用 $0.16023，段位积分 3,408.55，帕累托前沿" data-model="gpt-6-sol-low" data-frontier="true" data-cost="0.16023" data-score="3408.55" data-x="243.76" data-y="706.23">
+<title>gpt-6-sol-low / 16,023 输出 Tokens / $0.16023 / 3,408.55 分 / 帕累托前沿</title>
+<circle cx="243.76" cy="706.23" r="15" fill="var(--sol)" opacity="0.10"/>
+<circle cx="243.75788857238575" cy="706.2344666666667" r="7.5" fill="var(--sol)" stroke="var(--sol)" stroke-width="2.5"/>
+<text x="261.76" y="681.23" class="point-name halo sol" text-anchor="start">Sol low</text>
+<text x="261.76" y="703.23" class="point-value halo" text-anchor="start">$0.16 / 3,409 分</text>
+</g>
+<g aria-label="gpt-6-sol-high：输出费用 $1.84223，段位积分 4,732.78，被其他候选点支配" data-model="gpt-6-sol-high" data-frontier="false" data-cost="1.84223" data-score="4732.78" data-x="822.68" data-y="577.34">
+<title>gpt-6-sol-high / 184,223 输出 Tokens / $1.84223 / 4,732.78 分 / 被其他候选点支配</title>
+<circle cx="822.678469652685" cy="577.3427466666667" r="7.5" fill="var(--paper)" stroke="var(--sol)" stroke-width="2.5"/>
+<text x="802.68" y="610.34" class="point-name halo sol" text-anchor="end">Sol high</text>
+<text x="802.68" y="632.34" class="point-value halo" text-anchor="end">$1.84 / 4,733 分</text>
+</g>
+<g aria-label="gpt-6-sol-max：输出费用 $4.90655，段位积分 5,187.12，被其他候选点支配" data-model="gpt-6-sol-max" data-frontier="false" data-cost="4.90655" data-score="5187.12" data-x="1054.90" data-y="533.12">
+<title>gpt-6-sol-max / 490,655 输出 Tokens / $4.90655 / 5,187.12 分 / 被其他候选点支配</title>
+<circle cx="1054.8975491212257" cy="533.12032" r="7.5" fill="var(--paper)" stroke="var(--sol)" stroke-width="2.5"/>
+<text x="1074.90" y="560.12" class="point-name halo sol" text-anchor="start">Sol max</text>
+<text x="1074.90" y="582.12" class="point-value halo" text-anchor="start">$4.91 / 5,187 分</text>
+</g>
+<g aria-label="gpt-6-sol-xhigh：输出费用 $2.58243，段位积分 5,214.36，被其他候选点支配" data-model="gpt-6-sol-xhigh" data-frontier="false" data-cost="2.58243" data-score="5214.36" data-x="902.75" data-y="530.47">
+<title>gpt-6-sol-xhigh / 258,243 输出 Tokens / $2.58243 / 5,214.36 分 / 被其他候选点支配</title>
+<circle cx="902.7452195367163" cy="530.46896" r="7.5" fill="var(--paper)" stroke="var(--sol)" stroke-width="2.5"/>
+<text x="924.75" y="517.47" class="point-name halo sol" text-anchor="start">Sol xhigh</text>
+<text x="924.75" y="539.47" class="point-value halo" text-anchor="start">$2.58 / 5,214 分</text>
+</g>
+<g aria-label="gpt-6-sol-medium：输出费用 $1.12215，段位积分 5,764.68，帕累托前沿" data-model="gpt-6-sol-medium" data-frontier="true" data-cost="1.12215" data-score="5764.68" data-x="705.16" data-y="476.90">
+<title>gpt-6-sol-medium / 112,215 输出 Tokens / $1.12215 / 5,764.68 分 / 帕累托前沿</title>
+<circle cx="705.16" cy="476.90" r="15" fill="var(--sol)" opacity="0.10"/>
+<circle cx="705.1624317009471" cy="476.90448" r="7.5" fill="var(--sol)" stroke="var(--sol)" stroke-width="2.5"/>
+<text x="683.16" y="511.90" class="point-name halo sol" text-anchor="end">Sol medium</text>
+<text x="683.16" y="533.90" class="point-value halo" text-anchor="end">$1.12 / 5,765 分</text>
+</g>
+<g aria-label="gpt-6-astra-low：输出费用 $1.42965，段位积分 5,896.60，帕累托前沿" data-model="gpt-6-astra-low" data-frontier="true" data-cost="1.42965" data-score="5896.6" data-x="762.57" data-y="464.06">
+<title>gpt-6-astra-low / 28,593 输出 Tokens / $1.42965 / 5,896.60 分 / 帕累托前沿</title>
+<circle cx="762.57" cy="464.06" r="15" fill="var(--astra)" opacity="0.10"/>
+<path d="M762.5735005014742,456.56426666666664 L770.0735005014742,464.06426666666664 L762.5735005014742,471.56426666666664 L755.0735005014742,464.06426666666664 Z" fill="var(--astra)" stroke="var(--astra)" stroke-width="2.5"/>
+<text x="785.57" y="498.06" class="point-name halo astra" text-anchor="start">Astra low</text>
+<text x="785.57" y="520.06" class="point-value halo" text-anchor="start">$1.43 / 5,897 分</text>
+</g>
+<g aria-label="gpt-6-astra-medium：输出费用 $1.63705，段位积分 6,216.74，帕累托前沿" data-model="gpt-6-astra-medium" data-frontier="true" data-cost="1.63705" data-score="6216.74" data-x="794.69" data-y="432.90">
+<title>gpt-6-astra-medium / 32,741 输出 Tokens / $1.63705 / 6,216.74 分 / 帕累托前沿</title>
+<circle cx="794.69" cy="432.90" r="15" fill="var(--astra)" opacity="0.10"/>
+<path d="M794.6866250063275,425.40397333333334 L802.1866250063275,432.90397333333334 L794.6866250063275,440.40397333333334 L787.1866250063275,432.90397333333334 Z" fill="var(--astra)" stroke="var(--astra)" stroke-width="2.5"/>
+<text x="773.69" y="396.90" class="point-name halo astra" text-anchor="end">Astra medium</text>
+<text x="773.69" y="418.90" class="point-value halo" text-anchor="end">$1.64 / 6,217 分</text>
+</g>
+<g aria-label="gpt-6-astra-xhigh：输出费用 $14.66185，段位积分 6,301.70，被其他候选点支配" data-model="gpt-6-astra-xhigh" data-frontier="false" data-cost="14.66185" data-score="6301.7" data-x="1314.40" data-y="424.63">
+<title>gpt-6-astra-xhigh / 293,237 输出 Tokens / $14.66185 / 6,301.70 分 / 被其他候选点支配</title>
+<path d="M1314.3979273917867,417.13453333333337 L1321.8979273917867,424.63453333333337 L1314.3979273917867,432.13453333333337 L1306.8979273917867,424.63453333333337 Z" fill="var(--paper)" stroke="var(--astra)" stroke-width="2.5"/>
+<text x="1294.40" y="457.63" class="point-name halo astra" text-anchor="end">Astra xhigh</text>
+<text x="1294.40" y="479.63" class="point-value halo" text-anchor="end">$14.66 / 6,302 分</text>
+</g>
+<g aria-label="gpt-6-astra-high：输出费用 $3.13690，段位积分 6,545.48，帕累托前沿" data-model="gpt-6-astra-high" data-frontier="true" data-cost="3.1369" data-score="6545.48" data-x="948.85" data-y="400.91">
+<title>gpt-6-astra-high / 62,738 输出 Tokens / $3.13690 / 6,545.48 分 / 帕累托前沿</title>
+<circle cx="948.85" cy="400.91" r="15" fill="var(--astra)" opacity="0.10"/>
+<path d="M948.8536917626953,393.4066133333334 L956.3536917626953,400.9066133333334 L948.8536917626953,408.4066133333334 L941.3536917626953,400.9066133333334 Z" fill="var(--astra)" stroke="var(--astra)" stroke-width="2.5"/>
+<text x="970.85" y="369.91" class="point-name halo astra" text-anchor="start">Astra high</text>
+<text x="970.85" y="391.91" class="point-value halo" text-anchor="start">$3.14 / 6,545 分</text>
+</g>
+<g aria-label="gpt-6-astra-max：输出费用 $12.44395，段位积分 7,052.14，帕累托前沿" data-model="gpt-6-astra-max" data-frontier="true" data-cost="12.44395" data-score="7052.14" data-x="1275.52" data-y="351.59">
+<title>gpt-6-astra-max / 248,879 输出 Tokens / $12.44395 / 7,052.14 分 / 帕累托前沿</title>
+<circle cx="1275.52" cy="351.59" r="15" fill="var(--astra)" opacity="0.10"/>
+<path d="M1275.5172841292829,344.09170666666665 L1283.0172841292829,351.59170666666665 L1275.5172841292829,359.09170666666665 L1268.0172841292829,351.59170666666665 Z" fill="var(--astra)" stroke="var(--astra)" stroke-width="2.5"/>
+<text x="1255.52" y="318.59" class="point-name halo astra" text-anchor="end">Astra max</text>
+<text x="1255.52" y="340.59" class="point-value halo" text-anchor="end">$12.44 / 7,052 分</text>
+</g>
+<rect x="64" y="882" width="1392" height="133" rx="12" fill="var(--soft)"/>
+<text x="88.00" y="913.00" class="section" text-anchor="start">前沿配置  /  6 个</text>
+<text x="1432.00" y="913.00" class="foot" text-anchor="end">不存在费用不高于它、积分不低于它，且至少一项严格更优的其他配置</text>
+<text x="88.00" y="946.00" class="label sol" text-anchor="start">Sol low</text>
+<text x="88.00" y="982.00" class="cost" text-anchor="start">$0.16</text>
+<text x="192.00" y="981.00" class="meta" text-anchor="start">3,409 分</text>
+<text x="312.00" y="946.00" class="label sol" text-anchor="start">Sol medium</text>
+<text x="312.00" y="982.00" class="cost" text-anchor="start">$1.12</text>
+<text x="416.00" y="981.00" class="meta" text-anchor="start">5,765 分</text>
+<text x="536.00" y="946.00" class="label astra" text-anchor="start">Astra low</text>
+<text x="536.00" y="982.00" class="cost" text-anchor="start">$1.43</text>
+<text x="640.00" y="981.00" class="meta" text-anchor="start">5,897 分</text>
+<text x="760.00" y="946.00" class="label astra" text-anchor="start">Astra medium</text>
+<text x="760.00" y="982.00" class="cost" text-anchor="start">$1.64</text>
+<text x="864.00" y="981.00" class="meta" text-anchor="start">6,217 分</text>
+<text x="984.00" y="946.00" class="label astra" text-anchor="start">Astra high</text>
+<text x="984.00" y="982.00" class="cost" text-anchor="start">$3.14</text>
+<text x="1088.00" y="981.00" class="meta" text-anchor="start">6,545 分</text>
+<text x="1208.00" y="946.00" class="label astra" text-anchor="start">Astra max</text>
+<text x="1208.00" y="982.00" class="cost" text-anchor="start">$12.44</text>
+<text x="1312.00" y="981.00" class="meta" text-anchor="start">7,052 分</text>
+<text x="64.00" y="1051.00" class="foot" text-anchor="start">计费：输出 Tokens ÷ 100 万 × 官方 Standard 短上下文输出单价。价格查询：2026-09-23。</text>
+<text x="64.00" y="1076.00" class="foot" text-anchor="start">仅估算输出费用，不含输入、工具调用及代理加价，不等于实际账单。每档仅 1 次运行，结果不代表统计显著差异。</text>
+<text x="64.00" y="1101.00" class="foot" text-anchor="start">数据来源：本项目排行榜。前沿仅比较图中配置，连线不代表插值。</text>
+<a href="https://developers.openai.com/api/docs/pricing" target="_blank" rel="noopener noreferrer"><text x="1456.00" y="1101.00" class="foot link" text-anchor="end">OpenAI 官方定价 ↗</text></a>
+</svg>
