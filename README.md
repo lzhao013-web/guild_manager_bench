@@ -4,13 +4,19 @@
 
 模型需要在有限回合内招募冒险者、分配经验、打造装备、购买升级并安排战斗，最终根据队伍的终局战斗力获得评分。项目提供人工操作页面、LLM benchmark runner、运行存档、回放和排行榜。
 
+开发版 `advanced` 的后期挑战、特殊核心和终极技能规则见 [固定挑战与终极印记](docs/endgame-challenges.md)。T30出现固定挑战，T35仅用于最终整备，冻结 `full v1` 不受影响。
+
+开发版还支持[手动刷新怪物](docs/monster-refresh.md)：可锁定目标、免费预览下一候选，再支付金币刷新。基础价格配置在preset中，同回合每次实刷翻倍，不影响未来自然刷新。
+
 ## 核心能力
 
 - YAML 驱动的确定性游戏规则和数据 preset
 - 招募、成长、装备、合成、升级与自动战斗系统
-- 适配 OpenAI-compatible Chat Completions、OpenAI Responses API 和 Anthropic Messages API
+- 适配 OpenAI-compatible Chat Completions、OpenAI Responses API、Anthropic Messages API 和 Google Gemini 原生 API
 - 面向 LLM 的强类型工具协议与每回合工具预算
 - 完整调用链存档、运行续跑、回放与终局评分
+- 多 run 工作台：批次参数组合、独立进程并行、排队、观战、检查点续跑
+- API 配置复用、系统凭证库、命令历史导入与模型目录查询
 - FastAPI 接口、WebSocket 和可视化页面
 
 ## 快速开始
@@ -19,6 +25,7 @@
 
 - Python 3.11+
 - [uv](https://docs.astral.sh/uv/)
+- Node.js 22.20+（构建 Web 工作台，纯 CLI 运行不需要）
 
 安装依赖并运行测试：
 
@@ -27,18 +34,23 @@ uv sync --all-groups
 uv run pytest tests -q
 ```
 
-启动可视化服务：
+构建工作台并启动可视化服务：
 
 ```powershell
+npm ci
+npm run build
 uv run guild-manager serve --preset full
 ```
 
 服务启动后可访问：
 
-- 游戏页面：<http://127.0.0.1:8000/>
+- 运行工作台：<http://127.0.0.1:8000/>
+- 人工操作：<http://127.0.0.1:8000/legacy/?mode=manual>
 - API 文档：<http://127.0.0.1:8000/docs>
 - 回放页面：<http://127.0.0.1:8000/replay/>
 - 排行榜：<http://127.0.0.1:8000/leaderboard/>
+
+工作台支持总览、最多四路观战、专注详情、批次与无凭证模板。关页或刷新不停止任务，关闭服务后需手动续跑。使用方法、停止语义和开发命令见 [运行工作台](docs/workbench.md)。常用连接、密钥保存和模型查询见 [API 配置与模型目录](docs/api-profiles.md)。服务仅用于可信本机环境，不应直接暴露到公网。
 
 ## 运行 LLM Benchmark
 
@@ -78,12 +90,68 @@ ANTHROPIC_BASE_URL=https://api.anthropic.com
 # 可选：启用 adaptive thinking，并设置思考强度
 ANTHROPIC_THINKING=true
 ANTHROPIC_EFFORT=high
+# 可选：单次响应输出上限，不设置时为 65536
+ANTHROPIC_MAX_TOKENS=65536
 ```
 
 ```powershell
 uv run guild-manager run --provider anthropic --preset full
-uv run guild-manager run --provider anthropic --thinking --thinking-effort high --preset full
+uv run guild-manager run --provider anthropic --thinking --reasoning-effort high --preset full
+uv run guild-manager run --provider anthropic --thinking --reasoning-effort high --max-tokens 32768 --preset full
 ```
+
+使用 Google Gemini 原生 API（支持工具调用、流式响应及原生思考签名回传，无需 Node 或额外 SDK）：
+
+```dotenv
+GOOGLE_MODEL=gemini-2.5-flash
+GOOGLE_API_KEY=your-api-key
+GOOGLE_BASE_URL=https://generativelanguage.googleapis.com/v1beta
+# 可选：单次响应输出上限和超时秒数
+GOOGLE_MAX_TOKENS=32768
+GOOGLE_TIMEOUT=180
+```
+
+```powershell
+uv run guild-manager run --provider google --preset full
+uv run guild-manager run --provider google --model gemini-2.5-flash --no-stream --preset full
+```
+
+API Key 也可通过 `GEMINI_API_KEY` 或 `GOOGLE_GENERATIVE_AI_API_KEY` 提供。
+配置按显式参数、进程环境变量、`.env` 文件的顺序读取。
+`GOOGLE_BASE_URL` 应包含版本路径（默认 `/v1beta`），不要使用 OpenAI-compatible 的 `/openai` 路径。
+网页调试页也提供 Google Gemini 选项和快速预设。
+Gemini 的输出 Token 统计包含 API 返回的响应 Token 和思考 Token，原生用量保留在响应记录中。
+
+### 统一推理强度
+
+所有 provider 使用 `--reasoning-effort`，网页也使用同一个 `reasoning_effort` 字段。
+不设置时沿用 provider 对应的环境配置，均未设置则不下发强度。
+
+| Provider | 可选级别 | API 字段 |
+| --- | --- | --- |
+| `openai` | `none / minimal / low / medium / high / xhigh / ultra / max` | `reasoning_effort` |
+| `openai-responses` | 同上 | `reasoning.effort` |
+| `anthropic` | `low / medium / high / max` | `output_config.effort` |
+| `google` | `minimal / low / medium / high` | `generationConfig.thinkingConfig.thinkingLevel`，发送大写枚举 |
+
+具体支持的级别仍取决于模型。Google 的等级模式用于 Gemini 3 或更新模型，不自动转换为旧模型的 Token 预算。
+Google 还可通过 `GOOGLE_REASONING_EFFORT` 设置，Anthropic 继续读取 `ANTHROPIC_EFFORT` / `ANTHROPIC_REASONING_EFFORT`。
+旧的 `--thinking-effort` 保留为兼容别名，不能与 `--reasoning-effort` 同时使用。续跑命令统一输出 `--reasoning-effort`。
+`--thinking` / `--no-thinking` 仍只控制 Anthropic adaptive thinking，不与推理强度绑定。
+
+完全使用命令行运行 OpenCode Go 的 Gemini 示例，不需要配置环境变量：
+
+```powershell
+uv run guild-manager run --provider google --base-url https://opencode.ai/inference/go/v1 --model gemini-4-argon-contributor --api-key "YOUR_GO_API_KEY" --reasoning-effort high --preset full
+```
+
+Go 的模型 ID 与权限以账户实际可用项为准，该网关尚未实连验证。Go 主要面向编码代理，请确认服务规则允许你的评测流量。
+明文 API Key 会进入终端历史，注意保管。
+
+`--max-tokens` 对四个 provider 通用（`openai-responses` 映射为 `max_output_tokens`，`google` 映射为 `maxOutputTokens`），
+未通过参数或环境变量设置时，Anthropic 使用 65536，其他 provider 不下发该字段。注意 Anthropic 的 `thinking`
+与 `tool_use` 共用这一份输出预算：预算过小时思考会挤掉工具调用，表现为
+`stop_reason=max_tokens` 的空响应和 `empty_response` 重试，思考强度越高反而越容易丢动作。
 
 常用选项：
 
@@ -138,6 +206,51 @@ uv run guild-manager run --no-color
 除非显式开启。`--debug` 包含完整请求和响应内容，日志可能包含敏感提示词或模型数据，分享前请检查。
 输出重定向到文件时自动禁用动画和 ANSI 样式。`--no-stream` 只控制 API 请求方式，不控制展示详细程度。
 
+三档并行批次的监控：
+
+```powershell
+# 替换为实际批次目录
+$batch = "runs/你的批次目录"
+
+# 三局总览和详情卡片
+uv run python -X utf8 scripts/run_gpt61_advanced.py watch "$batch"
+
+# 保留总览，展开 high 的装备、最近5条操作、实战和评分变化
+uv run python -X utf8 scripts/run_gpt61_advanced.py watch "$batch" --effort high
+
+# 原有简表，不读取详情日志
+uv run python -X utf8 scripts/run_gpt61_advanced.py watch "$batch" --compact
+
+# 静态输出完整详情，适合小窗口滚动查看或重定向到文件
+uv run python -X utf8 scripts/run_gpt61_advanced.py watch "$batch" --effort medium --once
+```
+
+增强监控显示当前回合、工具预算、最近评分变化、队伍HP/MP与装备概况、材料、最近操作、新工具使用次数、实战奖励和失败重试。默认不展示模型正文、推理或备忘录内容。窄窗口建议使用 `--effort`，被终端高度截断时可用 `--once` 静态输出查看完整内容。`--effort` 与 `--compact` 互斥。
+
+监控只读已有进度文件并增量读取 `trace.jsonl`，不重新调用模型或模拟战斗，不修改工作进程及源码快照。正在运行的批次无需重开，只需重新打开监控。日志尚未读完或暂不可读时会明确标注，已读记录不会重复累计。详情统计以已记录的工具结果为准，包含失败调用，`end_turn` 计入工具总数但不占调用预算。实战的“未胜”可能包括平局，重试通知不包含 provider 内部的HTTP重试。
+
+### 批次曲线比较
+
+```powershell
+# 实时比较三局的战力、金币余额和未分配经验池，约每2秒刷新
+uv run python -X utf8 scripts/run_gpt61_advanced.py curves "$batch"
+
+# 只展开战力曲线，单次输出便于滚动查看
+uv run python -X utf8 scripts/run_gpt61_advanced.py curves "$batch" --metric power --once
+
+# 改为累计讨伐金币、经验收入，避免把已投入培养的资源误读为收益较低
+uv run python -X utf8 scripts/run_gpt61_advanced.py curves "$batch" --resource-mode income
+
+# 导出当前三项曲线的SVG，可用浏览器打开并悬停查看每回合数值
+uv run python -X utf8 scripts/run_gpt61_advanced.py curves "$batch" --resource-mode income --output "$batch/curves-income.svg"
+```
+
+`--metric` 可选 `all`、`power`、`gold` 或 `experience`，默认三项。`--resource-mode balance` 为默认口径，使用每回合 `end_turn` 结算及恢复后的金币余额和未分配经验池。`income` 为累计实际讨伐奖励，含当时已生效的天赋加成，不扣除购买或培养支出，也不把解雇返还的经验计作收入。
+
+横轴按游戏回合对齐，同一指标下所有run共用纵轴。终端以 `m`、`h`、`x` 区分三档，同格交叠显示 `*`。SVG使用颜色区分，悬停实测点可查看准确数值。SVG是导出时的静态快照，`--output` 写完即退出，不持续更新。
+
+曲线只读取正式 `replay.json` 中已完成回合。战力直接使用已记录的 `rank_score`，不重新评分。正在执行的回合及续跑时被回滚的操作不入图，缺失值保持空缺且断线，不补零、不外推。续跑重写历史时可能缺少结算快照，此时使用下一回合准备前的初始快照，两者资源余额相同。两类快照均缺失时余额未知，不用回合中途的最新资源代替。缺少奖励明细或缺少中间回合时，后续累计收入未知。回放暂不可读时保留上次成功读取的曲线并显示警告。查询与导出不修改运行进程、游戏快照或原始存档。
+
 统计口径：
 
 - 工具预算只计算非 `end_turn` 调用，工具调用总数包含 `end_turn`。失败的回合尝试不算已完成回合。
@@ -168,10 +281,22 @@ JSON 不包含完整模型调用链，排查请求细节请使用 `--debug` 或�
 
 ## 数据 Preset
 
-项目内置两个 preset：
+项目内置三个 preset：
 
 - `default`：8 回合，适合快速调试和比较
-- `full`：35 回合，适合完整 benchmark
+- `full`：35 回合，正式 LLM 运行固定使用独立的 `full/v1` 评测包
+- `advanced`：35 回合，进阶天赋树。25 个节点消耗金币、材料和公共经验，三种终阶专精互斥，并提供制作折扣和经验投资路线
+
+运行进阶版：
+
+```powershell
+uv run guild-manager run --preset advanced --archive-dir runs/advanced
+uv run guild-manager serve --preset advanced
+```
+
+完整节点、成本和结算规则见 [Advanced 天赋树](docs/talent-tree.md)。full 的提示词、工具、引擎、评分器和数据已冻结，advanced 的后续改动不会改变 full 正式运行。新的存档记录协议与配置指纹，排行榜按 preset 与版本分组。缺少协议证据的旧存档标记为 `legacy-*`，不自动归入 `v1`。续跑必须使用相同协议，旧局请使用其原始代码快照。详见 [评测协议与版本](docs/benchmark-protocols.md)。
+
+advanced 还提供按需查询的[战斗记录与未来刷新工具](docs/information-tools.md)，以及[战力方案试算与技能配置](docs/tactical-tools.md)。查询使用普通工具调用额度，不自动把完整日志或未来刷新表加入回合提示词。
 
 游戏数据位于 `data/presets/<preset_name>/`，主要包含：
 
@@ -187,6 +312,15 @@ skills.yaml             技能定义
 ```
 
 ## 回放与排行榜
+
+```powershell
+uv run guild-manager build-leaderboard
+# 可重复指定 --run-dir，将独立目录中的已完成正式运行纳入发布。
+uv run guild-manager build-leaderboard --run-dir runs/advanced-model-comparison/20261004-122921
+uv run guild-manager serve-leaderboard
+```
+
+排行榜顶部选择 preset 和评测版本，排名、均值、运行明细和曲线只使用当前分组。URL 保留选择，便于分享。构建保留已发布但源文件不在目录中的历史运行，不自动重算旧分数。`--full-rebuild` 只禁用解析缓存，不删除历史明细。
 
 启动主服务后，可以在 `/replay/` 加载本地 `replay.json`，或浏览 `runs/llm` 下的运行存档。
 
