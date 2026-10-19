@@ -1,0 +1,656 @@
+/* 单局保留运行状态和观看控制；内容由总览与展开模块承载。多路面板保持轻量浏览。 */
+.spectator.run-detail {
+    container-type: inline-size;
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    min-height: 590px;
+    border: 1px solid var(--gray-6);
+    border-radius: 10px;
+    background: var(--gray-2);
+    overflow: hidden;
+}
+.spectator-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px 20px 10px;
+}
+.spectator-title {
+    min-width: 0;
+}
+.spectator-title h2 {
+    font-size: 17px;
+    margin: 4px 0;
+    overflow-wrap: anywhere;
+}
+.spectator-title > .muted {
+    font-size: 11px;
+    overflow-wrap: anywhere;
+}
+.spectator-runtime {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 14px;
+    padding: 0 20px 12px;
+    font-size: 11px;
+    color: var(--gray-11);
+}
+.runtime-budget {
+    margin-left: auto;
+    font-family: ui-monospace, Consolas, monospace;
+}
+.spectator-error {
+    padding: 12px 20px;
+    background: var(--red-3);
+    color: var(--red-11);
+    font-size: 12px;
+}
+.spectator-error button {
+    background: transparent;
+    border: 0;
+    color: inherit;
+    text-decoration: underline;
+    margin-left: 8px;
+}
+.spectator-loading {
+    padding: 24px;
+    min-height: 260px;
+}
+.spectator-viewpoint {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    padding: 8px 20px;
+    font-size: 11px;
+    background: var(--accent-3);
+    color: var(--accent-11);
+    border-block: 1px solid var(--accent-6);
+}
+.spectator-viewpoint.is-history {
+    background: var(--amber-3);
+    color: var(--amber-11);
+    border-color: var(--amber-6);
+}
+.spectator-viewpoint .viewpoint-action {
+    margin-left: auto;
+}
+.spectator-resources {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+    padding: 12px 20px 8px;
+}
+.spectator-resources > div {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.spectator-resources span {
+    color: var(--gray-11);
+    font-size: 11px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+.spectator-resources b {
+    font:
+        500 18px/1.4 ui-monospace,
+        Consolas,
+        monospace;
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+}
+.spectator-resources .spectator-materials {
+    grid-column: 1/-1;
+    gap: 12px;
+}
+.spectator-materials b {
+    font-size: 11px;
+    font-weight: 400;
+}
+.spectator-changes {
+    min-height: 27px;
+    padding: 0 20px 9px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 10px;
+}
+.spectator-changes > span:not(.muted) {
+    color: var(--accent-11);
+    background: var(--accent-3);
+    border-radius: 4px;
+    padding: 2px 7px;
+}
+.spectator-notice {
+    font-size: 11px;
+    color: var(--amber-11);
+    padding: 0 20px 8px;
+}
+.spectator-columns {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 270px;
+    border-block: 1px solid var(--border);
+    min-height: 240px;
+    flex: 1;
+    overflow: hidden;
+}
+.spectator-columns > section {
+    min-width: 0;
+    min-height: 0;
+}
+.spectator-scene {
+    overflow: hidden;
+}
+.spectator-review {
+    min-width: 0;
+    min-height: 0;
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    background: var(--gray-2);
+}
+.spectator-review-tabs,
+.spectator-pane-tabs {
+    display: flex;
+    flex-shrink: 0;
+    gap: 3px;
+    padding: 0 10px;
+    overflow-x: auto;
+    border-bottom: 1px solid var(--border);
+}
+.spectator-review-tabs button,
+.spectator-pane-tabs button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 12px 9px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    background: none;
+    color: var(--gray-11);
+    font-size: 11px;
+    white-space: nowrap;
+}
+.spectator-review-tabs button.active,
+.spectator-pane-tabs button.active {
+    color: var(--accent-11);
+    border-bottom-color: var(--accent-9);
+}
+.spectator-review [hidden] {
+    display: none !important;
+}
+.spectator-column-title {
+    min-height: 37px;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border-bottom: 1px solid var(--border);
+}
+.spectator-column-title h3 {
+    font-size: 12px;
+    font-weight: 600;
+}
+.spectator-column-title > span {
+    font-size: 10px;
+    color: var(--gray-11);
+}
+.spectator-timeline,
+.spectator-models {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    flex: 1;
+}
+.spectator-timeline-scroll {
+    overflow: auto;
+    scrollbar-width: thin;
+    padding: 7px;
+    flex: 1;
+    min-height: 0;
+}
+.spectator-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    width: 100%;
+    text-align: left;
+    padding: 10px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--gray-12);
+    border-radius: 5px;
+}
+.spectator-step:hover {
+    background: var(--gray-3);
+}
+.spectator-step.selected {
+    background: var(--accent-3);
+    border-color: var(--accent-6);
+}
+.spectator-step.failed {
+    color: var(--red-11);
+}
+.spectator-step .step-index {
+    font-size: 10px;
+    color: var(--gray-11);
+    min-width: 15px;
+    padding-top: 2px;
+}
+.spectator-step > span:last-child {
+    display: grid;
+    gap: 5px;
+    min-width: 0;
+}
+.spectator-step strong {
+    font-size: 11px;
+    font-weight: 500;
+}
+.spectator-step small {
+    font-size: 10px;
+    color: var(--gray-11);
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+}
+.spectator-model-content {
+    padding: 13px 14px 20px;
+    overflow: auto;
+    scrollbar-width: thin;
+    min-height: 0;
+}
+.spectator-model-content > .muted {
+    font-size: 10px;
+    margin: 10px 0;
+}
+.spectator-models > .scene-empty {
+    padding-inline: 16px;
+}
+.watch-model-text {
+    font-size: 12px;
+    line-height: 1.9;
+    font-family: inherit;
+    margin: 12px 0;
+    white-space: pre-wrap;
+}
+.model-usage {
+    color: var(--gray-11);
+    font-size: 10px;
+    padding: 10px 0;
+    border-top: 1px solid var(--border);
+}
+.spectator-selected-action {
+    padding: 9px 20px;
+    font-size: 11px;
+    max-height: 120px;
+    overflow: auto;
+    flex-shrink: 0;
+}
+.spectator-selected-action > div:first-child {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px 12px;
+    align-items: baseline;
+}
+.spectator-selected-action > div:first-child > .muted {
+    overflow-wrap: anywhere;
+}
+.spectator-selected-action > .json-details {
+    margin-top: 3px;
+}
+.spectator-scrubber {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    padding: 9px 20px;
+    border-top: 1px solid var(--border);
+    background: var(--gray-3);
+    flex-shrink: 0;
+}
+.spectator-scrubber > label {
+    min-width: 0;
+    width: min(300px, 45%);
+}
+.spectator-scrubber select {
+    min-height: 32px;
+    font-size: 11px;
+}
+.scrubber-label {
+    display: block;
+    font-size: 10px;
+    color: var(--gray-11);
+    margin-bottom: 4px;
+}
+.spectator-step-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    font-size: 10px;
+    color: var(--gray-11);
+}
+.spectator-step-controls button {
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--gray-7);
+    background: var(--color-surface);
+    border-radius: 4px;
+    color: var(--gray-12);
+    width: 30px;
+    height: 30px;
+}
+.watch-follow {
+    border: 1px solid var(--accent-7);
+    background: var(--accent-3);
+    color: var(--accent-11);
+    border-radius: 5px;
+    padding: 7px 10px;
+    display: flex;
+    gap: 5px;
+    align-items: center;
+    white-space: nowrap;
+    margin-left: auto;
+    font-size: 11px;
+}
+.watch-follow.active {
+    border-color: var(--gray-7);
+    background: var(--color-surface);
+    color: var(--gray-12);
+}
+.spectator-footer .text-button {
+    font-size: 10px;
+    color: var(--gray-11);
+}
+.spectator-footer-note {
+    margin-left: auto;
+    font-size: 10px;
+    color: var(--gray-11);
+}
+.spectator-utility {
+    padding: 10px 20px 20px;
+    font-size: 11px;
+    border-top: 1px solid var(--border);
+    max-height: 350px;
+    overflow: auto;
+}
+.spectator-utility p {
+    color: var(--gray-11);
+    margin-top: 12px;
+}
+.spectator-utility .spectator-column-title {
+    padding-inline: 0;
+}
+.watch-battles {
+    margin-top: 12px;
+    display: block !important;
+}
+.watch-battles h3 {
+    margin-bottom: 8px;
+}
+.watch-battles > details {
+    padding: 10px 0;
+    border-top: 1px solid var(--border);
+}
+.watch-battles > details > summary {
+    cursor: pointer;
+}
+.watch-battles > details > summary > strong {
+    float: right;
+    color: var(--accent-11);
+    font-weight: 500;
+}
+.watch-battles p {
+    color: var(--gray-11);
+    margin-top: 8px;
+}
+.workspace-main:has(.focus-workspace, .watch-workspace) .summary-strip {
+    display: none;
+}
+.workspace-main:has(.focus-workspace, .watch-workspace) .workspace-heading {
+    padding-top: 15px;
+    padding-bottom: 14px;
+}
+.workspace-main:has(.focus-workspace, .watch-workspace) .workspace-heading p {
+    display: none;
+}
+.focus-workspace > .spectator.run-detail {
+    max-width: none;
+    height: calc(100dvh - 150px);
+    min-height: 650px;
+}
+.workspace-main:has(.focus-workspace) .workspace-heading {
+    display: none;
+}
+.spectator-full .spectator-title > .subtle-label {
+    display: none;
+}
+.spectator-full .spectator-title h2 {
+    margin-top: 0;
+}
+.spectator-full .spectator-changes:has(> .muted) {
+    display: none;
+}
+.spectator-full .spectator-selected-action {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+}
+.spectator-full .spectator-selected-action > div:first-child {
+    flex: 1;
+}
+.spectator-full .spectator-selected-action:has(details[open]),
+.spectator-full .spectator-selected-action:has(.watch-battles) {
+    display: block;
+}
+.focus-workspace > .spectator:has(.spectator-utility) {
+    height: auto;
+}
+.watch-grid .spectator.run-detail {
+    height: calc(100dvh - 225px);
+    min-height: 480px;
+}
+.spectator-compact .spectator-columns {
+    display: block;
+    min-height: 0;
+    overflow: auto;
+}
+.spectator-compact .spectator-review {
+    display: none;
+    border: 0;
+    height: 100%;
+}
+.spectator-compact .spectator-columns > .spectator-scene {
+    display: none;
+    height: 100%;
+}
+.spectator-compact .pane-scene > .spectator-scene {
+    display: block;
+}
+.spectator-compact .pane-actions > .spectator-review,
+.spectator-compact .pane-models > .spectator-review {
+    display: flex;
+}
+.spectator-compact .spectator-resources {
+    padding-top: 10px;
+    gap: 9px;
+}
+.spectator-compact .spectator-resources > div {
+    display: grid;
+    gap: 4px;
+}
+.spectator-compact .spectator-resources b {
+    font-size: 15px;
+}
+.spectator-compact .spectator-resources .spectator-materials {
+    display: flex;
+}
+.spectator-compact .spectator-materials b {
+    font-size: 10px;
+}
+.spectator-compact .spectator-selected-action {
+    max-height: 90px;
+}
+.spectator-compact .spectator-title h2 {
+    font-size: 13px;
+}
+.spectator-compact .spectator-footer {
+    padding-block: 8px;
+}
+.spectator-compact .spectator-selected-action .watch-battles,
+.spectator-compact .spectator-selected-action > .json-details {
+    display: none !important;
+}
+.watch-count-3 .spectator.run-detail,
+.watch-count-4 .spectator.run-detail {
+    height: max(380px, calc((100dvh - 250px) / 2));
+    min-height: 0;
+}
+.watch-count-3 .spectator-title > .subtle-label,
+.watch-count-4 .spectator-title > .subtle-label,
+.watch-count-3 .spectator-title > .muted,
+.watch-count-4 .spectator-title > .muted {
+    display: none;
+}
+.watch-count-3 .spectator-header,
+.watch-count-4 .spectator-header {
+    padding: 10px 14px 5px;
+}
+.watch-count-3 .spectator-title h2,
+.watch-count-4 .spectator-title h2 {
+    margin: 0;
+    font-size: 12px;
+}
+.watch-count-3 .spectator-runtime,
+.watch-count-4 .spectator-runtime {
+    padding: 0 14px 7px;
+    font-size: 10px;
+    gap: 5px 8px;
+}
+.watch-count-3 .spectator-viewpoint,
+.watch-count-4 .spectator-viewpoint {
+    padding: 6px 14px;
+    font-size: 10px;
+}
+.watch-count-3 .spectator-resources,
+.watch-count-4 .spectator-resources {
+    padding: 9px 14px 7px;
+    gap: 5px;
+}
+.watch-count-3 .spectator-materials,
+.watch-count-4 .spectator-materials,
+.watch-count-3 .spectator-changes,
+.watch-count-4 .spectator-changes,
+.watch-count-3 .spectator-selected-action,
+.watch-count-4 .spectator-selected-action {
+    display: none;
+}
+.watch-count-3 .spectator-pane-tabs button,
+.watch-count-4 .spectator-pane-tabs button {
+    padding: 8px 7px;
+}
+.watch-count-3 .spectator-scrubber,
+.watch-count-4 .spectator-scrubber {
+    padding: 7px 12px;
+    gap: 8px;
+}
+.watch-count-3 .spectator-footer,
+.watch-count-4 .spectator-footer {
+    padding: 7px 12px;
+}
+@container (max-width:900px) {
+    .spectator-full .spectator-columns {
+        grid-template-columns: minmax(0, 1fr);
+        overflow: auto;
+    }
+    .spectator-full .spectator-scene {
+        min-height: 440px;
+    }
+    .spectator-full .spectator-review {
+        border-left: 0;
+        border-top: 1px solid var(--border);
+        max-height: 360px;
+        min-height: 240px;
+    }
+}
+@container (max-width:560px) {
+    .spectator-header,
+    .spectator-runtime {
+        padding-inline: 14px;
+    }
+    .spectator-runtime {
+        font-size: 10px;
+        gap: 7px;
+    }
+    .runtime-budget {
+        width: 100%;
+        margin-left: 0;
+    }
+    .spectator-viewpoint {
+        padding-inline: 14px;
+        font-size: 10px;
+        gap: 6px;
+    }
+    .spectator-viewpoint .viewpoint-action {
+        margin-left: 0;
+    }
+    .spectator-resources {
+        padding-inline: 14px;
+        gap: 10px;
+    }
+    .spectator-resources > div {
+        display: grid;
+        gap: 4px;
+    }
+    .spectator-resources b {
+        font-size: 15px;
+    }
+    .spectator-resources .spectator-materials b {
+        font-size: 10px;
+    }
+    .spectator-changes,
+    .spectator-notice {
+        padding-inline: 14px;
+    }
+    .spectator-scrubber {
+        flex-wrap: wrap;
+        padding-inline: 12px;
+        gap: 8px;
+    }
+    .spectator-scrubber > label {
+        width: 100%;
+    }
+    .spectator-footer-note {
+        width: 100%;
+        margin-left: 0;
+    }
+}
+@media (max-width: 1100px) {
+    .focus-workspace > .spectator.run-detail {
+        height: auto;
+        min-height: 580px;
+    }
+    .spectator-full .spectator-columns {
+        overflow: visible;
+    }
+}
+@media (max-width: 900px) {
+    .watch-grid .spectator.run-detail {
+        height: 650px;
+        min-height: 0;
+    }
+}
+@media (max-width: 767px) {
+    .watch-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .watch-grid .spectator.run-detail {
+        height: 680px;
+    }
+    .spectator-utility .artifact-links {
+        flex-wrap: wrap;
+    }
+}

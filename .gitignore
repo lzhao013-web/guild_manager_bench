@@ -12,6 +12,9 @@ htmlcov/
 build/
 dist/
 
+# Frontend dependencies
+node_modules/
+
 # Virtual environments
 .venv/
 venv/

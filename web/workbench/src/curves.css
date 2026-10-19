@@ -1,0 +1,72 @@
+.workspace-main.is-curve-mode .workspace-header { min-height: 46px; padding-block: 7px; }
+.workspace-main.is-curve-mode .workspace-heading { padding: 12px 24px 10px; }
+.workspace-main.is-curve-mode .workspace-heading h1 { font-size: 17px; margin: 0; }
+.workspace-main.is-curve-mode .workspace-heading > div { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; }
+.workspace-main.is-curve-mode .workspace-heading p { font-size: 11px; margin: 0; }
+.workspace-main.is-curve-mode .workspace-footer { display: none; }
+.curve-board { margin: 0 24px 18px; min-width: 0; }
+.curve-selection-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.curve-selection-bar > select { flex: 1; min-width: 0; max-width: 600px; font-size: 12px; }
+.curve-back { display: inline-flex; gap: 5px; align-items: center; white-space: nowrap; }
+.curve-legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; margin-bottom: 10px; }
+.curve-legend > div { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 8px 10px; border: 1px solid var(--border); background: var(--gray-2); border-radius: 6px; }
+.curve-legend i, .curve-values th i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.curve-legend > div > span { flex: 1; min-width: 0; }
+.curve-legend strong { display: block; font-size: 12px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.curve-legend small { display: block; color: var(--gray-11); font-size: 10px; margin-top: 3px; }
+.curve-legend button { display: grid; place-items: center; color: var(--gray-11); background: none; border: 0; padding: 5px; }
+.curve-warning { font-size: 11px; line-height: 1.7; padding: 8px 12px; border: 1px solid var(--amber-6); background: var(--amber-3); color: var(--amber-11); border-radius: 5px; }
+.curve-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11px; margin: 8px 0; color: var(--gray-11); }
+.curve-controls label, .curve-values header label { display: inline-flex; gap: 8px; align-items: center; white-space: nowrap; flex-shrink: 0; }
+.curve-board .curve-controls input[type="number"], .curve-board .curve-values input[type="number"] { width: 80px; flex: 0 0 80px; min-height: 29px; padding: 4px 7px; font-size: 11px; }
+.curve-mode { display: flex; border: 1px solid var(--border); border-radius: 5px; padding: 2px; margin-right: auto; }
+.curve-mode button { color: var(--gray-11); background: none; border: 0; border-radius: 3px; padding: 6px 10px; font-size: 11px; }
+.curve-mode button[aria-pressed="true"] { color: var(--accent-11); background: var(--accent-3); }
+.curve-charts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.curve-chart { min-width: 0; border: 1px solid var(--border); border-radius: 7px; background: var(--gray-2); }
+.curve-chart header { display: flex; align-items: baseline; flex-wrap: wrap; gap: 5px 10px; padding: 10px 12px 0; }
+.curve-chart h2 { margin: 0; font-size: 13px; }
+.curve-chart header span { font-size: 10px; color: var(--gray-11); }
+.curve-plot { height: clamp(140px, 22vh, 240px); }
+.curve-plot svg { display: block; width: 100%; height: 100%; border-radius: 0 0 7px 7px; touch-action: pan-y; }
+.curve-grid-line { stroke: var(--gray-6); stroke-width: 1; }
+.curve-axis { fill: var(--gray-11); font-size: 10px; }
+.curve-cursor { stroke: var(--gray-10); stroke-dasharray: 3 4; }
+.curve-values { border: 1px solid var(--border); border-radius: 7px; margin-top: 12px; background: var(--gray-2); overflow: hidden; }
+.curve-values > header { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 11px; }
+.curve-values h2 { margin: 0 auto 0 0; font-size: 12px; }
+.curve-values header > span { font-size: 10px; color: var(--gray-11); }
+.curve-values table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 12px; }
+.curve-values th, .curve-values td { padding: 8px 12px; text-align: right; border-bottom: 1px solid var(--border); }
+.curve-values thead th { font-weight: 400; font-size: 10px; color: var(--gray-11); }
+.curve-values th:first-child { width: 34%; text-align: left; }
+.curve-values tbody th { font-weight: 400; overflow-wrap: anywhere; }
+.curve-values tbody th i { margin-right: 8px; vertical-align: middle; }
+.curve-run-label { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.curve-run-label > strong { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 400; }
+.curve-values .curve-run-label i { margin: 0; }
+.curve-values .curve-run-label small { flex-shrink: 0; margin: 0; white-space: nowrap; }
+.curve-values small { display: block; font-weight: 400; font-size: 10px; color: var(--gray-11); margin-top: 3px; }
+.curve-values td small { display: inline; margin: 0 0 0 9px; white-space: nowrap; }
+.curve-values td strong { font-family: ui-monospace, Consolas, monospace; font-weight: 500; }
+.curve-values tr:last-child th, .curve-values tr:last-child td { border-bottom: 0; }
+.curve-note { font-size: 10px; color: var(--gray-11); line-height: 1.8; margin: 10px 0 0; }
+@media (max-width: 900px) {
+    .curve-charts { grid-template-columns: 1fr; }
+    .curve-values td small { display: block; margin: 3px 0 0; }
+}
+@media (max-width: 600px) {
+    .curve-board { margin: 0 12px 18px; }
+    .curve-selection-bar { flex-wrap: wrap; }
+    .curve-selection-bar > select { min-width: 180px; }
+    .curve-legend { grid-template-columns: 1fr; }
+    .curve-mode { width: 100%; margin-right: 0; }
+    .curve-mode button { flex: 1; }
+    .curve-values thead { display: none; }
+    .curve-values table, .curve-values tbody { display: block; }
+    .curve-values tr { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-bottom: 1px solid var(--border); }
+    .curve-values th:first-child { grid-column: 1/-1; width: auto; }
+    .curve-values td { min-width: 0; padding: 8px; text-align: left; }
+    .curve-values td::before { content: attr(data-label); display: block; color: var(--gray-11); font-size: 10px; margin-bottom: 5px; }
+    .curve-values th, .curve-values td { border-bottom: 0; }
+}
