@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import random
 from dataclasses import dataclass, replace
 from typing import Any, Iterable, Mapping
@@ -7,6 +8,7 @@ from typing import Any, Iterable, Mapping
 from guild_manager_bench.game.actions import (
     AllocateExperienceAction,
     CraftAction,
+    ConfigureTacticsAction,
     DismissAction,
     EndTurnAction,
     EquipAction,
@@ -14,6 +16,7 @@ from guild_manager_bench.game.actions import (
     PreparationAction,
     PurchaseUpgradeAction,
     RecruitAction,
+    RefreshMonstersAction,
     TurnAction,
     UnequipAction,
 )
@@ -169,6 +172,14 @@ def apply_preparation_action(
     if is_finished(state):
         raise GameError("游戏已结束")
 
+    if isinstance(action, RefreshMonstersAction):
+        monsters = preview_monster_refresh(definition, state, action.locked_monster_ids)
+        cost = monster_refresh_cost(definition, state)
+        if state.gold < cost:
+            raise GameError(f"金币不足：刷新需要{cost}金币，当前{state.gold}")
+        return replace(state, gold=state.gold - cost, current_monsters=monsters,
+                       monster_refresh_count=state.monster_refresh_count + 1)
+
     if isinstance(action, CraftAction):
         state, _ = _apply_craft_action(definition, state, action.recipe_id)
         return state
@@ -193,6 +204,19 @@ def apply_preparation_action(
     if isinstance(action, EquipAction):
         return _apply_equip_action(definition, state, action)
 
+    if isinstance(action, ConfigureTacticsAction):
+        adventurer = _adventurer_by_id(state, action.adventurer_id)
+        available = {
+            skill.skill_id for skill in available_adventurer_skills(definition, state, adventurer)
+            if skill.kind == "active"
+        }
+        for skill_id in (*action.skill_priority, *action.disabled_skills):
+            if skill_id not in available:
+                raise GameError(f"不是该角色当前拥有的主动技能: {skill_id}")
+        return _replace_adventurer(state, replace(
+            adventurer, skill_priority=action.skill_priority, disabled_skills=action.disabled_skills,
+        ))
+
     raise TypeError("action must be a preparation action")
 
 
@@ -210,6 +234,8 @@ def end_turn(
     if is_finished(state):
         raise GameError("游戏已结束")
 
+    if definition.rules.final_preparation_only and state.turn == state.max_turns and action.hunts:
+        raise GameError("最后回合仅用于最终整备，请提交空讨伐列表")
     battles: list[BattleSettlement] = []
 
     _validate_hunt_actions(action.hunts)
@@ -221,7 +247,7 @@ def end_turn(
 
     next_turn = state.turn + 1
     next_monsters = (
-        spawn_monsters(definition, next_turn)
+        spawn_monsters(definition, next_turn, defeated_challenge_ids=state.defeated_challenge_ids)
         if next_turn <= state.max_turns
         else ()
     )
@@ -235,6 +261,7 @@ def end_turn(
         turn=next_turn,
         current_monsters=next_monsters,
         recruit_candidates=next_candidates,
+        monster_refresh_count=0,
     )
 
     return TurnResult(
@@ -267,22 +294,23 @@ def preview_battle(
     return battle
 
 
-def spawn_monsters(definition: GameDefinition, turn: int) -> tuple[SpawnedMonster, ...]:
-    """刷新指定回合的怪物。"""
+def spawn_monsters(
+    definition: GameDefinition, turn: int, *, defeated_challenge_ids: frozenset[str] = frozenset(),
+) -> tuple[SpawnedMonster, ...]:
+    """刷新普通怪物，并附加尚未击败的固定挑战。两者不共享随机抽样。"""
 
     _validate_definition(definition)
-    if turn > definition.rules.max_turns:
+    if turn > definition.rules.max_turns or (
+        definition.rules.final_preparation_only and turn == definition.rules.max_turns
+    ):
         return ()
     spawn_rules = definition.rules.monster_spawn
     count = int(spawn_rules.count_curve.value_at(turn))
-    if count == 0:
-        return ()
     stat_factor = spawn_rules.stat_growth_curve.value_at(turn)
     reward_factor = spawn_rules.reward_growth_curve.value_at(turn)
     rng = random.Random(definition.rules.seed * 1_000_003 + turn)
-    eligible_archetypes = _eligible_monster_archetypes(
-        definition.content.monster_archetypes,
-        turn,
+    eligible_archetypes = (
+        _eligible_monster_archetypes(definition.content.monster_archetypes, turn) if count else ()
     )
     monsters: list[SpawnedMonster] = []
 
@@ -292,6 +320,66 @@ def spawn_monsters(definition: GameDefinition, turn: int) -> tuple[SpawnedMonste
         tc = _tier_config(spawn_rules, tier)
         bonus_skills = _sample_bonus_skills(rng, spawn_rules.bonus_skill_themes, tc.bonus_skill_count if tc else 0)
         monsters.append(_spawn_monster(archetype, turn, index + 1, stat_factor, reward_factor, tier, tc, bonus_skills))
+    monsters.extend(
+        SpawnedMonster(
+            monster_id=f"challenge_{challenge.archetype_id}",
+            archetype_id=challenge.archetype_id, name=f"【挑战】{challenge.name}",
+            stats=challenge.base_stats, reward=challenge.base_reward,
+            tier="challenge", skills=challenge.skills,
+        )
+        for challenge in definition.content.challenge_archetypes
+        if challenge.min_turn <= turn and challenge.archetype_id not in defeated_challenge_ids
+    )
+    return tuple(monsters)
+
+
+def monster_refresh_cost(definition: GameDefinition, state: GameState) -> int:
+    """读取 preset 基础价，按本回合实刷次数翻倍。"""
+    if not definition.rules.monster_refresh.enabled:
+        raise GameError("手动刷新未启用")
+    if is_finished(state) or (definition.rules.final_preparation_only and state.turn == state.max_turns):
+        raise GameError("当前回合不能刷新怪物")
+    return definition.rules.monster_refresh.base_price(state.turn) * 2 ** state.monster_refresh_count
+
+
+def preview_monster_refresh(
+    definition: GameDefinition, state: GameState,
+    locked_monster_ids: tuple[str, ...] = (),
+) -> tuple[SpawnedMonster, ...]:
+    """预览下一次手动刷新，不扣费、不推进次数。锁定名单不参与随机抽样。"""
+    monster_refresh_cost(definition, state)
+    # 动作构造器同时是公开预览参数的校验边界。
+    action = RefreshMonstersAction(locked_monster_ids)
+    locked = set(action.locked_monster_ids)
+    by_id = {m.monster_id: m for m in state.current_monsters}
+    for monster_id in locked:
+        if monster_id not in by_id:
+            raise GameError(f"当前怪物不存在：{monster_id}")
+        if by_id[monster_id].tier == "challenge":
+            raise GameError("固定挑战自动保留，无需锁定")
+    if not any(m.tier != "challenge" and m.monster_id not in locked for m in state.current_monsters):
+        raise GameError("至少需要刷新一个普通怪物位置")
+    rules = definition.rules.monster_spawn
+    eligible = _eligible_monster_archetypes(definition.content.monster_archetypes, state.turn)
+    refresh_index = state.monster_refresh_count + 1
+    monsters = []
+    for index, current in enumerate(state.current_monsters):
+        if current.tier == "challenge" or current.monster_id in locked:
+            monsters.append(current)
+            continue
+        # 每个位置使用独立随机源。预览次数、锁定组合及未来自然刷新互不影响。
+        key = f"monster-refresh-v1:{definition.rules.seed}:{state.turn}:{refresh_index}:{index}"
+        seed = int.from_bytes(hashlib.sha256(key.encode("ascii")).digest()[:16], "big")
+        rng = random.Random(seed)
+        archetype = _select_monster_archetype(rng, eligible)
+        tier = _roll_tier(rng, rules)
+        tc = _tier_config(rules, tier)
+        bonus = _sample_bonus_skills(rng, rules.bonus_skill_themes, tc.bonus_skill_count if tc else 0)
+        monster = _spawn_monster(archetype, state.turn, index + 1,
+            rules.stat_growth_curve.value_at(state.turn), rules.reward_growth_curve.value_at(state.turn),
+            tier, tc, bonus)
+        monsters.append(replace(monster,
+            monster_id=f"turn_{state.turn}_refresh_{refresh_index}_monster_{index + 1}"))
     return tuple(monsters)
 
 
@@ -377,7 +465,32 @@ def effective_adventurer_skills(
     state: GameState,
     adventurer: AdventurerState,
 ) -> tuple[Skill, ...]:
-    """合并冒险者当前可用技能。"""
+    """应用角色配置，所有战斗和评分共用这一技能列表。"""
+
+    skills = available_adventurer_skills(definition, state, adventurer)
+    if not adventurer.skill_priority and not adventurer.disabled_skills:
+        return skills
+    disabled = set(adventurer.disabled_skills)
+    # 只提升显式排序的技能，其他主动技能继续按原优先级和 ID 排序。
+    base_priority = max((skill.priority for skill in skills), default=0)
+    priorities = {
+        skill_id: base_priority + len(adventurer.skill_priority) - index
+        for index, skill_id in enumerate(adventurer.skill_priority)
+    }
+    return tuple(
+        replace(skill, priority=priorities[skill.skill_id])
+        if skill.kind == "active" and skill.skill_id in priorities else skill
+        for skill in skills
+        if skill.kind != "active" or skill.skill_id not in disabled
+    )
+
+
+def available_adventurer_skills(
+    definition: GameDefinition,
+    state: GameState,
+    adventurer: AdventurerState,
+) -> tuple[Skill, ...]:
+    """合并所有技能来源，保留停用技能以便重新配置。"""
 
     skills = combine_equipment_skills(
         adventurer.skills + _unlocked_level_skills(adventurer),
@@ -399,12 +512,30 @@ def party_size_limit(definition: GameDefinition, state: GameState) -> int:
     )
 
 
+def effective_crafting_recipe(
+    definition: GameDefinition, state: GameState, recipe: CraftingRecipe,
+) -> CraftingRecipe:
+    """返回应用经营天赋后的配方，金币费用向上取整。"""
+
+    discount = sum(u.craft_gold_discount_percent for u in _unlocked_upgrades(definition, state))
+    return replace(recipe, gold_cost=(recipe.gold_cost * (100 - discount) + 99) // 100)
+
+
+def effective_hunt_reward(
+    definition: GameDefinition, state: GameState, reward: RewardBundle,
+) -> RewardBundle:
+    """返回胜利讨伐奖励，经验加成逐场向下取整。"""
+
+    bonus = sum(u.hunt_experience_bonus_percent for u in _unlocked_upgrades(definition, state))
+    return replace(reward, experience=reward.experience * (100 + bonus) // 100)
+
+
 def _apply_craft_action(
     definition: GameDefinition,
     state: GameState,
     recipe_id: str,
 ) -> tuple[GameState, str]:
-    recipe = _recipe_by_id(definition, recipe_id)
+    recipe = effective_crafting_recipe(definition, state, _recipe_by_id(definition, recipe_id))
     instance_id = f"eq_{state.next_equipment_instance_number:04d}"
     result = craft_equipment(
         recipe,
@@ -437,12 +568,16 @@ def _apply_purchase_action(
         upgrade,
         UpgradeInventory(
             gold=state.gold,
+            experience_pool=state.experience_pool,
+            materials=state.materials,
             unlocked_upgrade_ids=state.unlocked_upgrade_ids,
         ),
     )
     return replace(
         state,
         gold=result.inventory.gold,
+        experience_pool=result.inventory.experience_pool,
+        materials=result.inventory.materials,
         unlocked_upgrade_ids=result.inventory.unlocked_upgrade_ids,
     )
 
@@ -610,11 +745,17 @@ def _apply_hunt_action(
         ),
     )
     won = combat_result.outcome == "left_win"
-    reward = monster.reward if won else RewardBundle()
+    reward = effective_hunt_reward(definition, state, monster.reward) if won else RewardBundle()
     updated_adventurer = replace(adventurer, resources=combat_result.left_resources)
     state = _replace_adventurer(state, updated_adventurer)
     if won:
         state = _apply_reward(state, reward)
+        if monster.tier == "challenge":
+            state = replace(
+                state,
+                defeated_challenge_ids=state.defeated_challenge_ids | {monster.archetype_id},
+                current_monsters=tuple(m for m in state.current_monsters if m.monster_id != monster.monster_id),
+            )
 
     return (
         state,

@@ -9,7 +9,7 @@ from guild_manager_bench.game.equipment import EquipmentInstance, EquipmentLoado
 from guild_manager_bench.game.models import CombatResources, CombatStatModifier, CombatStats
 from guild_manager_bench.game.progression import ExperienceRules
 from guild_manager_bench.game.skills import Skill
-from guild_manager_bench.game.upgrades import GlobalUpgrade
+from guild_manager_bench.game.upgrades import GlobalUpgrade, validate_upgrade_tree
 
 
 MATERIAL_NAMES: dict[str, str] = {
@@ -27,6 +27,9 @@ MATERIAL_NAMES: dict[str, str] = {
     "demon_core": "恶魔核心",
     "soul_shard": "灵魂碎片",
     "dragon_blood": "龙血",
+    "siege_core": "破城核心",
+    "aegis_core": "不屈核心",
+    "renewal_core": "轮回核心",
 }
 
 
@@ -192,6 +195,48 @@ class MonsterSpawnRules:
 
 
 @dataclass(frozen=True, slots=True)
+class MonsterRefreshPrice:
+    """从指定回合起生效的手动刷新基础金币费用。"""
+
+    from_turn: int
+    gold: int
+
+    def __post_init__(self) -> None:
+        for name in ("from_turn", "gold"):
+            value = getattr(self, name)
+            if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+                raise ValueError(f"monster_refresh.{name} 必须为正整数")
+
+
+@dataclass(frozen=True, slots=True)
+class MonsterRefreshRules:
+    """空价格表表示关闭手动刷新。同回合每次实刷费用翻倍。"""
+
+    base_prices: tuple[MonsterRefreshPrice, ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "base_prices", tuple(self.base_prices))
+        previous = 0
+        for price in self.base_prices:
+            if not isinstance(price, MonsterRefreshPrice):
+                raise TypeError("base_prices 必须包含 MonsterRefreshPrice")
+            if price.from_turn <= previous:
+                raise ValueError("刷新价格的 from_turn 必须严格递增且不能重复")
+            previous = price.from_turn
+        if self.base_prices and self.base_prices[0].from_turn != 1:
+            raise ValueError("刷新价格表必须从第1回合开始")
+
+    @property
+    def enabled(self) -> bool:
+        return bool(self.base_prices)
+
+    def base_price(self, turn: int) -> int:
+        if not self.enabled:
+            raise ValueError("手动刷新未启用")
+        return next(p.gold for p in reversed(self.base_prices) if p.from_turn <= turn)
+
+
+@dataclass(frozen=True, slots=True)
 class TurnRecoveryRules:
     """回合结束后的冒险者恢复规则。"""
 
@@ -341,10 +386,14 @@ class AdventurerState:
     experience: int = 0
     equipment: EquipmentLoadout = field(default_factory=EquipmentLoadout)
     template_id: str = ""
+    skill_priority: tuple[str, ...] = ()
+    disabled_skills: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         _require_non_empty("adventurer_id", self.adventurer_id)
         _require_non_empty("name", self.name)
+        object.__setattr__(self, "skill_priority", tuple(self.skill_priority))
+        object.__setattr__(self, "disabled_skills", tuple(self.disabled_skills))
         _require_at_least("level", self.level, 1)
         _require_at_least("experience", self.experience, 0)
         if not isinstance(self.base_stats, CombatStats):
@@ -458,10 +507,25 @@ class GameContent:
     global_upgrades: tuple[GlobalUpgrade, ...] = ()
     recruitable_adventurers: tuple[RecruitableAdventurerTemplate, ...] = ()
     experience_rules: ExperienceRules = field(default_factory=ExperienceRules)
+    challenge_archetypes: tuple[MonsterArchetype, ...] = ()
+
+    @property
+    def has_talent_tree(self) -> bool:
+        """是否需要展示多资源、互斥和经营天赋规则。"""
+        return any(
+            u.material_costs or u.experience_cost or u.exclusive_upgrade_ids
+            or u.craft_gold_discount_percent or u.hunt_experience_bonus_percent
+            for u in self.global_upgrades
+        )
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "adventurers", tuple(self.adventurers))
         object.__setattr__(self, "monster_archetypes", tuple(self.monster_archetypes))
+        object.__setattr__(self, "challenge_archetypes", tuple(self.challenge_archetypes))
+        _validate_unique_ids("challenge", (item.archetype_id for item in self.challenge_archetypes))
+        for challenge in self.challenge_archetypes:
+            if challenge.stat_growth != CombatStatModifier() or challenge.reward_growth != RewardBundle():
+                raise ValueError("challenge stats and rewards must be fixed")
         object.__setattr__(self, "equipment_templates", tuple(self.equipment_templates))
         object.__setattr__(self, "crafting_recipes", tuple(self.crafting_recipes))
         object.__setattr__(self, "global_upgrades", tuple(self.global_upgrades))
@@ -472,6 +536,7 @@ class GameContent:
         _validate_unique_ids("equipment template", (item.equipment_id for item in self.equipment_templates))
         _validate_unique_ids("crafting recipe", (item.recipe_id for item in self.crafting_recipes))
         _validate_unique_ids("global upgrade", (item.upgrade_id for item in self.global_upgrades))
+        validate_upgrade_tree(self.global_upgrades)
         _validate_unique_ids(
             "recruitable adventurer template",
             (item.template_id for item in self.recruitable_adventurers),
@@ -494,6 +559,8 @@ class GameRules:
     monster_spawn: MonsterSpawnRules
     turn_recovery: TurnRecoveryRules = field(default_factory=TurnRecoveryRules)
     recruitment: RecruitmentRules = field(default_factory=RecruitmentRules)
+    final_preparation_only: bool = False
+    monster_refresh: MonsterRefreshRules = field(default_factory=MonsterRefreshRules)
 
     def __post_init__(self) -> None:
         _require_at_least("max_turns", self.max_turns, 1)
@@ -505,6 +572,10 @@ class GameRules:
             raise TypeError("turn_recovery must be TurnRecoveryRules")
         if not isinstance(self.recruitment, RecruitmentRules):
             raise TypeError("recruitment must be RecruitmentRules")
+        if not isinstance(self.final_preparation_only, bool):
+            raise TypeError("final_preparation_only must be a bool")
+        if not isinstance(self.monster_refresh, MonsterRefreshRules):
+            raise TypeError("monster_refresh must be MonsterRefreshRules")
 
 
 @dataclass(frozen=True, slots=True)
@@ -512,10 +583,19 @@ class LlmToolRules:
     """LLM tool-use exposure switches for a data preset."""
 
     expose_battle_preview: bool = False
+    expose_tactics: bool = False
     max_battle_preview_per_turn: int = 3
     endgame_start_turn: int | None = None
+    expose_battle_log: bool = False
+    expose_forecast: bool = False
 
     def __post_init__(self) -> None:
+        if not isinstance(self.expose_battle_log, bool):
+            raise TypeError("expose_battle_log must be a bool")
+        if not isinstance(self.expose_forecast, bool):
+            raise TypeError("expose_forecast must be a bool")
+        if not isinstance(self.expose_tactics, bool):
+            raise TypeError("expose_tactics must be a bool")
         if not isinstance(self.expose_battle_preview, bool):
             raise TypeError("expose_battle_preview must be a bool")
         if (
@@ -635,6 +715,8 @@ class GameState:
     recruit_candidates: tuple[RecruitCandidate, ...] = ()
     next_equipment_instance_number: int = 1
     next_adventurer_number: int = 1
+    defeated_challenge_ids: frozenset[str] = frozenset()
+    monster_refresh_count: int = 0
 
     def __post_init__(self) -> None:
         _require_at_least("turn", self.turn, 1)
@@ -642,6 +724,8 @@ class GameState:
         if not isinstance(self.seed, int):
             raise TypeError("seed must be an int")
         _require_at_least("gold", self.gold, 0)
+        if not isinstance(self.monster_refresh_count, int) or isinstance(self.monster_refresh_count, bool) or self.monster_refresh_count < 0:
+            raise ValueError("monster_refresh_count 必须是非负整数")
         _require_at_least("experience_pool", self.experience_pool, 0)
         _require_at_least("next_equipment_instance_number", self.next_equipment_instance_number, 1)
         _require_at_least("next_adventurer_number", self.next_adventurer_number, 1)
@@ -651,6 +735,9 @@ class GameState:
         object.__setattr__(self, "current_monsters", tuple(self.current_monsters))
         object.__setattr__(self, "recruit_candidates", tuple(self.recruit_candidates))
         object.__setattr__(self, "unlocked_upgrade_ids", frozenset(self.unlocked_upgrade_ids))
+        object.__setattr__(self, "defeated_challenge_ids", frozenset(self.defeated_challenge_ids))
+        for challenge_id in self.defeated_challenge_ids:
+            _require_non_empty("defeated_challenge_id", challenge_id)
 
         _validate_unique_ids("adventurer", (item.adventurer_id for item in self.adventurers))
         _validate_unique_ids("equipment instance", (item.instance_id for item in self.equipment_inventory))

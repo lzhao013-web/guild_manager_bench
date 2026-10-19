@@ -15,7 +15,8 @@ from guild_manager_bench.bench.llm.archive import (
     resume_llm_run_archive,
     start_llm_run_archive,
 )
-from guild_manager_bench.bench.llm.formatting import skill_summary, skill_summary_lines
+from guild_manager_bench.bench.llm.formatting import skill_summary, skill_summary_lines, tactics_summary_lines
+from guild_manager_bench.bench.llm.information_formatting import battle_log_lines, forecast_lines
 from guild_manager_bench.bench.llm.harness import (
     MemoStore,
     TurnToolHarness,
@@ -274,6 +275,15 @@ def run_llm_game(
         max_tool_calls=config.max_tool_calls_per_turn,
         max_battle_preview_per_turn=tools.definition.llm_tools.max_battle_preview_per_turn,
         turn_recovery_rules=initial_observation.get("turn_recovery_rules"),
+        talent_tree_enabled=tools.definition.content.has_talent_tree,
+        tactics_enabled=tools.definition.llm_tools.expose_tactics,
+        battle_log_enabled=tools.definition.llm_tools.expose_battle_log,
+        forecast_enabled=tools.definition.llm_tools.expose_forecast,
+        monster_refresh_rules=initial_observation.get("monster_refresh"),
+        challenge_rules={
+            "start_turn": min(c.min_turn for c in tools.definition.content.challenge_archetypes),
+            "last_hunt_turn": tools.definition.rules.max_turns - 1,
+        } if tools.definition.content.challenge_archetypes else None,
     )
 
     try:
@@ -424,18 +434,24 @@ def run_llm_turn(
     memo_store = memo_store or MemoStore()
     observation = tools.get_observation(session_id)["observation"]
     previous_turn_event = _previous_turn_event(tools, session_id)
+    turn_harness = TurnToolHarness(
+        tools,
+        session_id,
+        max_tool_calls=config.max_tool_calls_per_turn,
+        max_battle_preview_per_turn=tools.definition.llm_tools.max_battle_preview_per_turn,
+        endgame_start_turn=tools.definition.llm_tools.endgame_start_turn,
+        memo_store=memo_store,
+    )
     prompt = build_turn_prompt(
         observation,
         previous_turn_event=previous_turn_event,
         memo_entries=memo_store.consume(),
         endgame_start_turn=tools.definition.llm_tools.endgame_start_turn,
+        turn_start_rank_score=turn_harness.turn_start_rank_score,
     )
     messages: list[dict[str, Any]] = []
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
-    endgame_system_prompt = _endgame_system_prompt_for_turn(tools, observation)
-    if endgame_system_prompt:
-        messages.append({"role": "system", "content": endgame_system_prompt})
     messages.append({"role": "user", "content": prompt})
     turn_trace = TurnTrace(
         turn=observation["turn"],
@@ -451,14 +467,6 @@ def run_llm_turn(
         observation=observation,
     )
     _notify_trace_update(trace_update, turn_trace)
-    turn_harness = TurnToolHarness(
-        tools,
-        session_id,
-        max_tool_calls=config.max_tool_calls_per_turn,
-        max_battle_preview_per_turn=tools.definition.llm_tools.max_battle_preview_per_turn,
-        endgame_start_turn=tools.definition.llm_tools.endgame_start_turn,
-        memo_store=memo_store,
-    )
 
     empty_responses = 0
     failed_end_turns = 0
@@ -551,7 +559,7 @@ def run_llm_turn(
             )
             result = turn_harness.call_tool(call.name, call.arguments)
             # Capture observation snapshot after successful write operations
-            if call.name in _STATE_MUTATING_TOOL_NAMES and result.get("ok") is True:
+            if _tool_mutates_state(call.name, call.arguments) and result.get("ok") is True:
                 obs_snapshot = tools.get_observation(session_id)["observation"]
                 result = dict(result)
                 result["_observation_after"] = obs_snapshot
@@ -687,6 +695,8 @@ def _replay_confirmed_tool_result(
         return
 
     arguments = _replay_tool_arguments(step)
+    if not _tool_mutates_state(name, arguments):
+        return
     replayed = harness.call_tool(str(name), arguments)
     if replayed.get("ok") is not True:
         raise ValueError(
@@ -897,6 +907,25 @@ def _format_tool_result_for_model(name: str, result: Mapping[str, Any]) -> str:
         _append_party_result_lines(lines, result, _result_refs(result))
     elif name == "get_monsters":
         _append_monsters_result_lines(lines, result, _result_refs(result))
+    elif name == "refresh_monsters" and result.get("simulation_only") is True:
+        lines[0] = f"成功 refresh_monsters：仅预览，刷新费用{result['gold_cost']}金币。"
+        lines.append("未扣费，怪池未变。refresh:编号不可用于操作。")
+        if not result["can_afford"]:
+            lines.append("金币不足，不能实际刷新。")
+        for monster in result["monsters"]:
+            stats = monster["stats"]
+            lines.append(
+                f"- {monster['refresh_ref']} {monster['name']} {'保留' if monster['preserved'] else '替换候选'} "
+                f"HP {stats['hp']} MP {stats['mp']} 攻击 {stats['attack']} 防御 {stats['defense']} 速度 {stats['speed']} "
+                f"奖励 {_reward_inline(monster['reward'])}"
+            )
+            _append_skill_lines(lines, monster.get("skills"), indent="  ")
+    elif name == "refresh_monsters":
+        event = result["event"]
+        lines[0] = f"成功 refresh_monsters：{event['summary']}"
+        _append_changes_lines(lines, event.get("changes"), _result_refs(result))
+        _append_monsters_result_lines(lines, result, _result_refs(result))
+        lines.append(f"下次刷新{result['monster_refresh']['next_gold_cost']}金币。")
     elif name == "get_crafting":
         _append_crafting_result_lines(lines, result, _result_refs(result))
     elif name == "get_inventory":
@@ -905,12 +934,16 @@ def _format_tool_result_for_model(name: str, result: Mapping[str, Any]) -> str:
         _append_upgrades_result_lines(lines, result, _result_refs(result))
     elif name == "get_recruitment":
         _append_recruitment_result_lines(lines, result, _result_refs(result))
+    elif name == "get_battle_log":
+        lines.extend(battle_log_lines(result))
+    elif name == "get_forecast":
+        lines.extend(forecast_lines(result))
     elif name == "get_events" and isinstance(result.get("events"), Sequence):
         _append_events_lines(lines, result["events"])
     elif name == "preview_battle" and isinstance(result.get("preview"), Mapping):
         _append_battle_preview_lines(lines, result["preview"], _result_refs(result))
     elif name == "preview_team_power" and result.get("ok") is True:
-        _append_team_power_preview_lines(lines, result, _result_refs(result))
+        _append_team_power_preview_lines(lines, result)
     elif name == "write_memo" and isinstance(result.get("memo"), Mapping):
         memo = result["memo"]
         lines[0] = (
@@ -1013,28 +1046,24 @@ def _append_battle_preview_lines(
         f"动作数 {preview.get('actions_taken')}; 耗时 {preview.get('time_elapsed')}"
     )
     lines.append(f"胜利奖励: {reward_text}")
+    if "battle_log_index" in preview:
+        lines.append(
+            f"预览记录已保存。可调用 get_battle_log(source=preview, battle_index={preview['battle_log_index']}) 查询统计或过程。"
+            "记录基于本次预览时的状态，不随后续调整更新。"
+        )
 
 
 def _append_team_power_preview_lines(
     lines: list[str],
     result: Mapping[str, Any],
-    refs: Mapping[str, Mapping[str, int]],
 ) -> None:
-    rank_score = result.get("rank_score", 0)
-    lines[0] = f"成功 preview_team_power：队伍终局战力评分 rank_score = {rank_score}"
-    per_adventurer = result.get("per_adventurer")
-    if isinstance(per_adventurer, list):
-        lines.append("冒险者贡献分解:")
-        for entry in per_adventurer:
-            if not isinstance(entry, Mapping):
-                continue
-            adv_id = entry.get("adventurer_id", "")
-            ref = display_ref(refs, "adventurer", adv_id)
-            score = entry.get("rank_score", 0)
-            share = entry.get("rank_score_share", 0)
-            lines.append(
-                f"  - {ref}: rank_score {score}, 贡献占比 {round(share * 100, 1)}%"
-            )
+    lines[0] = "成功 preview_team_power：仅完成试算，真实状态未改变，方案未执行。"
+    lines.extend([
+        f"当前真实战力：{result['current_rank_score']:.2f}",
+        f"假设执行后的战力：{result['projected_rank_score']:.2f}",
+        f"方案战力变化（相对调用前）：{result['rank_score_delta']:+.2f}",
+        f"采纳方案需要另行执行 {result['operation_count']} 次真实准备动作，受剩余调用额度限制。",
+    ])
 
 
 def _append_observation_lines(lines: list[str], observation: Mapping[str, Any]) -> None:
@@ -1076,6 +1105,7 @@ def _append_observation_lines(lines: list[str], observation: Mapping[str, Any]) 
                 f"装备 {equipment_text}"
             )
             _append_skill_lines(lines, adventurer.get("skills"), indent="  ")
+            lines.extend(f"  {line}" for line in tactics_summary_lines(adventurer.get("tactics")))
             lines.append(f"  升级可学会技能 {_level_skill_unlocks_inline(adventurer.get('level_skill_unlocks'))}")
 
     monsters = [
@@ -1155,16 +1185,12 @@ def _append_observation_lines(lines: list[str], observation: Mapping[str, Any]) 
         for upgrade in _sequence(observation.get("global_upgrades"))
         if isinstance(upgrade, Mapping)
     ]
-    if upgrades:
+    if upgrades and "branch" in upgrades[0]:
+        _append_upgrade_lines(lines, upgrades, refs)
+    elif upgrades:
         lines.append("全局升级:")
         for upgrade in upgrades:
-            state = (
-                "已解锁"
-                if upgrade.get("unlocked")
-                else "可购买"
-                if upgrade.get("can_purchase")
-                else "不可购买"
-            )
+            state = "已解锁" if upgrade.get("unlocked") else "可购买" if upgrade.get("can_purchase") else "不可购买"
             lines.append(
                 "- "
                 f"{display_ref(refs, 'upgrade', upgrade.get('upgrade_id'))} "
@@ -1230,7 +1256,13 @@ def _append_upgrades_result_lines(
     result: Mapping[str, Any],
     refs: Mapping[str, Mapping[str, int]],
 ) -> None:
-    lines.append(f"升级资源: 金币 {result.get('gold')}")
+    if "materials" in result:
+        lines.append(
+            f"升级资源: 金币 {result.get('gold')} 经验池 {result.get('experience_pool')} "
+            f"材料 {_mapping_inline(result.get('materials'))}"
+        )
+    else:
+        lines.append(f"升级资源: 金币 {result.get('gold')}")
     _append_upgrade_lines(lines, result.get("global_upgrades"), refs)
 
 
@@ -1288,6 +1320,7 @@ def _append_adventurer_lines(
             f"装备 {equipment_text}"
         )
         _append_skill_lines(lines, adventurer.get("skills"), indent="  ")
+        lines.extend(f"  {line}" for line in tactics_summary_lines(adventurer.get("tactics")))
         lines.append(f"  升级可学会技能 {_level_skill_unlocks_inline(adventurer.get('level_skill_unlocks'))}")
 
 
@@ -1438,6 +1471,13 @@ def _format_missing_zh(
         if key == "gold":
             if isinstance(value, (int, float)) and value:
                 parts.append(f"金币 {value}")
+        elif key == "experience":
+            parts.append(f"经验池 {value}")
+        elif key == "materials":
+            parts.append(f"材料 {_mapping_inline(value)}")
+        elif key == "exclusive_upgrade_ids":
+            conflicts = [display_ref(refs, "upgrade", uid) for uid in _sequence(value)]
+            parts.append(f"已选互斥天赋 {', '.join(conflicts)}")
         elif key == "already_unlocked":
             parts.append("已解锁")
         elif key == "required_upgrade_ids":
@@ -1488,34 +1528,48 @@ def _append_upgrade_lines(
         lines.append("全局升级: 无")
         return
     lines.append("全局升级:")
+    branch_names = {"common": "公共", "economy": "经营", "martial": "武备", "survival": "生存", "arcane": "奥术"}
     for upgrade in values:
-        if upgrade.get("unlocked"):
-            lines.append(
-                "- "
-                f"{display_ref(refs, 'upgrade', upgrade.get('upgrade_id'))} "
-                f"{upgrade.get('name')} 已完成"
-            )
-            continue
-        state = (
-            "可购买"
-            if upgrade.get("can_purchase")
-            else "不可购买"
-        )
+        state = "已完成" if upgrade.get("unlocked") else "可购买" if upgrade.get("can_purchase") else "不可购买"
         missing = upgrade.get("missing")
         missing_text = ""
-        if isinstance(missing, Mapping) and missing:
+        if not upgrade.get("unlocked") and isinstance(missing, Mapping) and missing:
             missing_str = _format_missing_zh(missing, refs)
             if missing_str:
                 missing_text = f"；缺少 {missing_str}"
+        if "branch" not in upgrade:
+            prefix = f"- {display_ref(refs, 'upgrade', upgrade.get('upgrade_id'))} {upgrade.get('name')} "
+            if upgrade.get("unlocked"):
+                lines.append(prefix + "已完成")
+            else:
+                lines.append(
+                    prefix + f"金币 {upgrade.get('gold_cost')} "
+                    f"属性 {_mapping_inline(upgrade.get('stats'))} "
+                    f"队伍上限+{upgrade.get('party_size_bonus', 0)} "
+                    f"{state}{missing_text}"
+                )
+                _append_skill_lines(lines, upgrade.get("skills"), indent="  ")
+            continue
         lines.append(
             "- "
             f"{display_ref(refs, 'upgrade', upgrade.get('upgrade_id'))} "
             f"{upgrade.get('name')} "
-            f"金币 {upgrade.get('gold_cost')} "
+            f"分支 {branch_names.get(upgrade.get('branch'), upgrade.get('branch', '公共'))} 阶层 {upgrade.get('tier', 1)} "
+            f"金币 {upgrade.get('gold_cost')} 经验 {upgrade.get('experience_cost', 0)} "
+            f"材料 {_mapping_inline(upgrade.get('material_costs'))} "
             f"属性 {_mapping_inline(upgrade.get('stats'))} "
             f"队伍上限+{upgrade.get('party_size_bonus', 0)} "
             f"{state}{missing_text}"
         )
+        parents = [display_ref(refs, "upgrade", uid) for uid in _sequence(upgrade.get("required_upgrade_ids"))]
+        excluded = [display_ref(refs, "upgrade", uid) for uid in _sequence(upgrade.get("exclusive_upgrade_ids"))]
+        lines.append(f"  前置全部满足: {', '.join(parents) or '无'}。互斥: {', '.join(excluded) or '无'}")
+        if upgrade.get("description"):
+            lines.append(f"  {upgrade['description']}")
+        if upgrade.get("craft_gold_discount_percent"):
+            lines.append(f"  后续制作金币费用降低 {upgrade['craft_gold_discount_percent']}%（向上取整，材料不变）")
+        if upgrade.get("hunt_experience_bonus_percent"):
+            lines.append(f"  后续胜利讨伐经验增加 {upgrade['hunt_experience_bonus_percent']}%（逐场向下取整）")
         _append_skill_lines(lines, upgrade.get("skills"), indent="  ")
 
 
@@ -1884,7 +1938,7 @@ def _agent_response(
 def _is_retryable(turn: TurnTrace) -> bool:
     """回合是否可安全重试：没有任何成功执行的改变游戏状态的工具调用。"""
     return not any(
-        call.name in _STATE_MUTATING_TOOL_NAMES and call.ok is True
+        _tool_mutates_state(call.name, call.arguments) and call.ok is True
         for call in turn.tool_calls
     )
 
@@ -1900,8 +1954,8 @@ def _retry_message_empty_response_urgent() -> dict[str, str]:
     return {
         "role": "user",
         "content": (
-            "你已经连续多次没有调用任何工具了。必须立刻调用工具（如 get_party、get_monsters 等查询工具），"
-            "然后调用 end_turn 提交讨伐列表结束本回合。否则本回合将失败。"
+            "你已经连续多次没有调用任何工具了。必须立刻调用工具（如查询工具、准备工具，或直接调用 end_turn 提交讨伐列表结束本回合），"
+            "否则本回合将直接判定失败。"
         ),
     }
 
@@ -3158,8 +3212,17 @@ _STATE_MUTATING_TOOL_NAMES = {
     "dismiss_adventurer",
     "equip_item",
     "unequip_item",
+    "configure_tactics",
+    "refresh_monsters",
     "end_turn",
 }
+
+
+def _tool_mutates_state(name: str, arguments: Mapping[str, Any]) -> bool:
+    """双模式刷新工具的预览不是写操作，不录制或重放写入快照。"""
+    return name in _STATE_MUTATING_TOOL_NAMES and not (
+        name == "refresh_monsters" and arguments.get("preview") is True
+    )
 
 
 def replay_observations_complete(replay: Mapping[str, Any]) -> bool:
@@ -3186,6 +3249,8 @@ def replay_observations_complete(replay: Mapping[str, Any]) -> bool:
             if step.get("name") not in _STATE_MUTATING_TOOL_NAMES:
                 continue
             if not _replay_tool_step_succeeded(step):
+                continue
+            if not _tool_mutates_state(step["name"], _replay_tool_arguments(step)):
                 continue
             if step.get("observation_after") is None:
                 return False
@@ -3240,6 +3305,8 @@ def rebuild_replay_observations(
             if not _replay_tool_step_succeeded(step):
                 continue
             arguments = _replay_tool_arguments(step)
+            if not _tool_mutates_state(name, arguments):
+                continue
             result = harness.call_tool(str(name), arguments)
             if result.get("ok") is not True:
                 raise ValueError(

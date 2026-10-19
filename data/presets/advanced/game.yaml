@@ -1,0 +1,83 @@
+rules:
+  max_turns: 35
+  final_preparation_only: true
+  seed: 42
+  monster_spawn:
+    count_curve:
+      base: 5.0
+      per_turn: 0.5
+      maximum: 10.0
+    stat_growth_curve:
+      base: 0
+      per_turn: 2
+    reward_growth_curve:
+      base: 0.0
+      per_turn: 0.15
+  monster_refresh:
+    base_prices:
+      - {from_turn: 1, gold: 15}
+      - {from_turn: 8, gold: 30}
+      - {from_turn: 18, gold: 50}
+      - {from_turn: 30, gold: 100}
+  recruitment:
+    candidate_count: 3
+    first_turn_candidate_count: 10
+    initial_party_size_limit: 3
+    maximum_party_size_limit: 6
+    variation:
+      price_factor_range: [0.8, 1.2]
+      stats_to_vary: 3
+      stat_variation_ratio: 0.15
+      hp_variation_ratio: 0.10
+      hp_min_variation: 5
+      stat_min_variation: 1
+      growth_to_vary: 2
+      growth_variation_amount: 1
+      price_stat_adjustment_ratio: 0.8
+      suffix_mapping:
+        hp: { positive: "·坚壁", negative: "·脆弱" }
+        mp: { positive: "·灵感", negative: "·枯竭" }
+        attack: { positive: "·锐利", negative: "·迟钝" }
+        defense: { positive: "·铁壁", negative: "·破绽" }
+        speed: { positive: "·疾风", negative: "·迟缓" }
+        recovery: { positive: "·生机", negative: "·萎靡" }
+  turn_recovery:
+    hp: 5
+    mp: 4
+    hp_percent: 0.08
+    mp_percent: 0.15
+    use_recovery_stat: true
+
+starting:
+  gold: 175
+  materials:
+    iron_ore: 2
+    bone: 2
+    herb: 2
+    beast_hide: 1
+    sharp_claw: 1
+
+experience:
+  base_required_experience: 100
+  required_experience_growth: 35
+  max_level: 12
+
+scoring:
+  mode: endgame_arena
+  seed: 20260529
+  waves: 1000
+  wave_size: 6
+  difficulty_factors: [30, 40, 50, 60, 70]
+  resource_mode: full
+  aggregation: best_assignment
+  elite_chance: 0.15
+  elite_stat_multiplier: 1.3
+  boss_chance: 0.05
+  boss_stat_multiplier: 1.5
+
+llm:
+  expose_battle_log: true
+  expose_forecast: true
+  expose_tactics: true
+  expose_battle_preview: true
+  endgame_start_turn: 31

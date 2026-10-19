@@ -1270,7 +1270,14 @@ function renderRecipes(recipes, refs) {
 }
 function renderUpgrades(upgrades, refs) {
   DOM.upgradeList.innerHTML = upgrades.length
-    ? upgrades.map(u=>{const rid=refId(refs,'upgrade',u.upgrade_id);const st=u.unlocked?'✅ 已解锁':u.can_purchase?'💰 可购买':'🔒 不可购买';const prereq=upgradePrereqText(upgrades, u.required_upgrade_ids);return`<div class="list-item" data-id="${esc(u.upgrade_id)}" style="opacity:${u.unlocked?1:u.can_purchase?0.8:0.5}"><div class="name">${rid?'['+rid+'] ':''}${esc(u.name)}</div><div class="detail">属性:${fmtMap(u.stats)} · 上限+${fmt(u.party_size_bonus)}${prereq?`<br>前置：${prereq}`:''}</div><div class="cost">${st} · 💰${fmt(u.gold_cost)}</div></div>`;}).join('')
+    ? upgrades.map(u=>{
+      const rid=refId(refs,'upgrade',u.upgrade_id);
+      const st=u.unlocked?'✅ 已解锁':u.missing?.exclusive_upgrade_ids?.length?'🔒 互斥锁定':u.can_purchase?'💰 可购买':'🔒 不可购买';
+      const prereq=upgradePrereqText(upgrades, u.required_upgrade_ids);
+      const branches={common:'公共',economy:'经营',martial:'武备',survival:'生存',arcane:'奥术'};
+      const extra=u.branch?`<div class="detail">${esc(branches[u.branch]||u.branch)} · 第${fmt(u.tier)}阶<br>${esc(u.description||'')}<br>材料:${fmtMap(u.material_costs)} · 公共经验:${fmt(u.experience_cost)}${u.exclusive_upgrade_ids?.length?`<br>互斥：${upgradePrereqText(upgrades,u.exclusive_upgrade_ids)}`:''}${u.skills?.length?`<br>${u.skills.map(sk=>`<span class="skill-chip" title="${esc(skillTip(sk))}">${esc(sk.name)}</span>`).join(' ')}`:''}</div>`:'';
+      return`<div class="list-item" data-id="${esc(u.upgrade_id)}" style="opacity:${u.unlocked?1:u.can_purchase?0.8:0.5}"><div class="name">${rid?'['+rid+'] ':''}${esc(u.name)}</div><div class="detail">属性:${fmtMap(u.stats)} · 上限+${fmt(u.party_size_bonus)}${prereq?`<br>前置：${prereq}`:''}</div>${extra}<div class="cost">${st} · 💰${fmt(u.gold_cost)}</div></div>`;
+    }).join('')
     : '<div class="muted" style="padding:8px">无升级</div>';
 }
 
@@ -1472,19 +1479,21 @@ const MATERIAL_LABELS = {
   beast_hide: '兽皮', sharp_claw: '利爪', arcane_dust: '奥术之尘',
   spider_silk: '蛛丝', mithril_shard: '秘银碎片', dragon_scale: '龙鳞',
   demon_core: '恶魔核心', soul_shard: '灵魂碎片', dragon_blood: '龙血',
+  siege_core: '破城核心', aegis_core: '不屈核心', renewal_core: '轮回核心',
 };
 const MATERIAL_ICONS = {
   iron_ore: '🪨', wood: '🪵', leather: '🟫', herb: '🌿', bone: '🦴',
   beast_hide: '🟫', sharp_claw: '🗡️', arcane_dust: '✨',
   spider_silk: '🕸️', mithril_shard: '💠', dragon_scale: '🐉',
   demon_core: '💜', soul_shard: '👻', dragon_blood: '🩸',
+  siege_core: '💥', aegis_core: '🛡️', renewal_core: '🌅',
 };
 function matLabel(k) { return MATERIAL_LABELS[k] || k; }
 function matIcon(k) { return MATERIAL_ICONS[k] || '📦'; }
 function upgradePrereqText(upgrades, ids) { if (!ids || !ids.length) return ''; return ids.map((id) => { const u = upgrades.find((g) => g.upgrade_id === id); return u ? u.name : id; }).join('、'); }
 function fmtRankScore(v) { return v == null ? '—' : Number(v).toLocaleString(undefined, { maximumFractionDigits: 1 }); }
 function fmtPct(v) { return v == null ? '—' : `${(Number(v) * 100).toFixed(1)}%`; }
-function slotIcon(s) { const m={main_hand:'⚔️',off_hand:'🛡️',two_hand:'🗡️',helmet:'⛑️',armor:'🛡️',boots:'👢',accessory:'💍'}; return m[s]||'?'; }
+function slotIcon(s) { const m={main_hand:'⚔️',off_hand:'🛡️',two_hand:'🗡️',helmet:'⛑️',armor:'🛡️',boots:'👢',accessory:'💍',ultimate:'🔱'}; return m[s]||'?'; }
 function fmtMap(o) {
   if(!o||!Object.keys(o).length) return '—';
   return Object.entries(o).map(([k,v]) => {

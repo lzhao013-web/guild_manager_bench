@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Sequence
 
+from guild_manager_bench.bench.llm.preparation_plan import PREPARATION_TOOLS
+
 
 RefMap = dict[str, dict[str, int]]
 
@@ -84,7 +86,7 @@ def resolve_tool_arguments_with_refs(
         _resolve_field(values, "recipe_id", "recipe", refs)
     elif name == "purchase_upgrade":
         _resolve_field(values, "upgrade_id", "upgrade", refs)
-    elif name == "allocate_experience":
+    elif name in {"allocate_experience", "configure_tactics"}:
         _resolve_field(values, "adventurer_id", "adventurer", refs)
     elif name == "recruit_adventurer":
         _resolve_field(values, "candidate_id", "recruit", refs)
@@ -102,6 +104,30 @@ def resolve_tool_arguments_with_refs(
                 _resolve_hunt(hunt, refs)
                 for hunt in hunts
             ]
+    elif name == "refresh_monsters":
+        locked = values.get("locked_monster_ids")
+        if isinstance(locked, (list, tuple)):
+            values["locked_monster_ids"] = [
+                _resolve_ref(value, "monster", "locked_monster_ids", refs) for value in locked
+            ]
+    elif name == "preview_team_power":
+        operations = values.get("operations")
+        if isinstance(operations, list):
+            resolved = []
+            for index, operation in enumerate(operations, start=1):
+                if isinstance(operation, Mapping) and isinstance(operation.get("arguments"), Mapping):
+                    operation = dict(operation)
+                    tool = operation.get("tool")
+                    # 仅准备动作可嵌套，不能递归解析预览或结束回合。
+                    if isinstance(tool, str) and tool in PREPARATION_TOOLS:
+                        try:
+                            operation["arguments"] = resolve_tool_arguments_with_refs(
+                                refs, tool, operation["arguments"],
+                            )
+                        except ValueError as exc:
+                            raise ValueError(f"方案第 {index} 步：{exc}") from exc
+                resolved.append(operation)
+            values["operations"] = resolved
     elif name == "preview_battle":
         _resolve_field(values, "adventurer_id", "adventurer", refs)
         _resolve_field(values, "monster_id", "monster", refs)

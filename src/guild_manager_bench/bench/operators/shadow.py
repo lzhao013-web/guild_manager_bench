@@ -38,6 +38,7 @@ class ShadowState:
     inventory: dict[str, dict[str, Any]]
     # adventurer_id -> adventurer dict from observation
     adventurers: dict[str, dict[str, Any]]
+    craft_gold_discount_percent: int = 0
 
     @classmethod
     def from_observation(cls, obs: dict[str, Any]) -> ShadowState:
@@ -96,6 +97,7 @@ class ShadowState:
             next_adv_num=max_adv + 1,
             inventory=inventory,
             adventurers=adventurers,
+            craft_gold_discount_percent=sum(u.get("craft_gold_discount_percent", 0) for u in obs["global_upgrades"] if u["unlocked"]),
         )
 
     def clone(self) -> ShadowState:
@@ -114,6 +116,7 @@ class ShadowState:
             next_adv_num=self.next_adv_num,
             inventory=deepcopy(self.inventory),
             adventurers=deepcopy(self.adventurers),
+            craft_gold_discount_percent=self.craft_gold_discount_percent,
         )
 
     # ── 查询方法 ──────────────────────────────────────────
@@ -133,9 +136,12 @@ class ShadowState:
     def is_recruited(self, candidate_id: str) -> bool:
         return candidate_id in self.recruited_ids
 
+    def craft_gold_cost(self, recipe: dict[str, Any]) -> int:
+        return (recipe.get("base_gold_cost", recipe["gold_cost"]) * (100 - self.craft_gold_discount_percent) + 99) // 100
+
     def can_craft_recipe(self, recipe: dict[str, Any]) -> bool:
         return (
-            self.can_afford(recipe["gold_cost"])
+            self.can_afford(self.craft_gold_cost(recipe))
             and self.has_materials(recipe["material_costs"])
         )
 
@@ -143,6 +149,10 @@ class ShadowState:
         if upgrade["upgrade_id"] in self.unlocked_upgrade_ids:
             return False
         if not self.can_afford(upgrade["gold_cost"]):
+            return False
+        if self.experience_pool < upgrade.get("experience_cost", 0) or not self.has_materials(upgrade.get("material_costs", {})):
+            return False
+        if self.unlocked_upgrade_ids.intersection(upgrade.get("exclusive_upgrade_ids", ())):
             return False
         return all(
             req in self.unlocked_upgrade_ids
@@ -188,7 +198,7 @@ class ShadowState:
     ) -> None:
         """记录合成动作的资源变化。"""
 
-        self.gold -= recipe["gold_cost"]
+        self.gold -= self.craft_gold_cost(recipe)
         for mat, qty in recipe["material_costs"].items():
             self.materials[mat] = self.materials.get(mat, 0) - qty
         # 新物品进入背包
@@ -243,6 +253,10 @@ class ShadowState:
         """记录购买升级的资源变化。"""
 
         self.gold -= upgrade["gold_cost"]
+        self.experience_pool -= upgrade.get("experience_cost", 0)
+        for material_id, quantity in upgrade.get("material_costs", {}).items():
+            self.materials[material_id] -= quantity
+        self.craft_gold_discount_percent += upgrade.get("craft_gold_discount_percent", 0)
         self.unlocked_upgrade_ids.add(upgrade["upgrade_id"])
         if upgrade["party_size_bonus"] > 0:
             self.party_size_limit += upgrade["party_size_bonus"]
@@ -250,6 +264,7 @@ class ShadowState:
         # 全局升级的属性修正应用于所有冒险者
         upgrade_stats = upgrade.get("stats", {})
         for adv in self.adventurers.values():
+            adv["skills"] = [*adv["skills"], *upgrade["skills"]]
             eff = dict(adv.get("effective_stats", adv.get("base_stats", {})))
             for key in ("hp", "mp", "attack", "defense", "speed", "recovery", "mp_recovery"):
                 eff[key] = eff.get(key, 0) + upgrade_stats.get(key, 0)

@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 from guild_manager_bench.game.crafting import CraftingInventory, missing_requirements
 from guild_manager_bench.game.engine import (
+    available_adventurer_skills,
     effective_adventurer_skills,
     effective_adventurer_stats,
+    effective_crafting_recipe,
+    effective_hunt_reward,
     is_finished,
+    monster_refresh_cost,
     party_size_limit,
 )
 from guild_manager_bench.game.models import CombatResources, CombatStatModifier, CombatStats
@@ -49,6 +54,13 @@ def build_observation(definition: GameDefinition, state: GameState) -> dict[str,
         "max_turns": state.max_turns,
         "seed": state.seed,
         "finished": is_finished(state),
+        **({
+            "defeated_challenge_ids": sorted(state.defeated_challenge_ids),
+            "final_preparation_only": definition.rules.final_preparation_only,
+            "challenge_start_turn": min(c.min_turn for c in definition.content.challenge_archetypes),
+        } if definition.content.challenge_archetypes else {}),
+        **({"monster_refresh": monster_refresh_info(definition, state)}
+           if definition.rules.monster_refresh.enabled else {}),
         "gold": state.gold,
         "materials": dict(state.materials),
         "experience_pool": state.experience_pool,
@@ -62,7 +74,7 @@ def build_observation(definition: GameDefinition, state: GameState) -> dict[str,
             for adventurer in state.adventurers
         ],
         "monsters": [
-            _monster_to_dict(monster)
+            _monster_to_dict(definition, state, monster)
             for monster in state.current_monsters
         ],
         "equipment_inventory": [
@@ -74,13 +86,29 @@ def build_observation(definition: GameDefinition, state: GameState) -> dict[str,
             for recipe in definition.content.crafting_recipes
         ],
         "global_upgrades": [
-            _upgrade_to_dict(state, upgrade)
+            _upgrade_to_dict(state, upgrade, talent_tree=definition.content.has_talent_tree)
             for upgrade in definition.content.global_upgrades
         ],
         "recruit_candidates": [
             _recruit_candidate_to_dict(state, candidate, size_limit)
             for candidate in state.recruit_candidates
         ],
+    }
+
+
+def monster_refresh_info(definition: GameDefinition, state: GameState) -> dict[str, Any]:
+    """当前可支付状态与 preset 价格表，不包含尚未执行的怪池。"""
+    rules = definition.rules.monster_refresh
+    available = rules.enabled and not is_finished(state) and not (
+        definition.rules.final_preparation_only and state.turn == state.max_turns
+    ) and any(m.tier != "challenge" for m in state.current_monsters)
+    cost = monster_refresh_cost(definition, state) if available else None
+    return {
+        "available": available,
+        "refreshes_used": state.monster_refresh_count,
+        "base_prices": [{"from_turn": p.from_turn, "gold": p.gold} for p in rules.base_prices],
+        "next_gold_cost": cost,
+        "can_afford": cost is not None and state.gold >= cost,
     }
 
 
@@ -105,6 +133,18 @@ def _adventurer_to_dict(
         "effective_stats": _stats_to_dict(effective_stats),
         "resources": _resources_to_dict(adventurer.resources),
         "skills": [_skill_to_dict(skill) for skill in effective_skills],
+        **({
+            "base_skills": [_skill_to_dict(skill) for skill in adventurer.skills],
+            "tactics": {
+                "skill_priority": list(adventurer.skill_priority),
+                "disabled_skills": list(adventurer.disabled_skills),
+                "available_active_skills": [
+                    _skill_to_dict(skill)
+                    for skill in available_adventurer_skills(definition, state, adventurer)
+                    if skill.kind == "active"
+                ],
+            },
+        } if definition.llm_tools.expose_tactics or adventurer.skill_priority or adventurer.disabled_skills else {}),
         "level_skill_unlocks": _level_skill_unlocks_to_dict(adventurer),
         "equipment": [
             {"slot": item.slot, "instance_id": item.instance_id}
@@ -115,14 +155,15 @@ def _adventurer_to_dict(
     }
 
 
-def _monster_to_dict(monster: SpawnedMonster) -> dict[str, Any]:
+def _monster_to_dict(definition: GameDefinition, state: GameState, monster: SpawnedMonster) -> dict[str, Any]:
     return {
         "monster_id": monster.monster_id,
         "archetype_id": monster.archetype_id,
         "name": monster.name,
         "tier": monster.tier,
         "stats": _stats_to_dict(monster.stats),
-        "reward": _reward_to_dict(monster.reward),
+        **({"base_reward": _reward_to_dict(monster.reward)} if definition.content.has_talent_tree else {}),
+        "reward": _reward_to_dict(effective_hunt_reward(definition, state, monster.reward)),
         "skills": [_skill_to_dict(skill) for skill in monster.skills],
     }
 
@@ -176,6 +217,8 @@ def _equipment_instance_to_dict(item, equipment_templates, equipped_by: str | No
 
 
 def _recipe_to_dict(definition, state, recipe, class_names: dict[str, str] | None = None) -> dict[str, Any]:
+    base_gold_cost = recipe.gold_cost
+    recipe = effective_crafting_recipe(definition, state, recipe)
     inventory = CraftingInventory(
         gold=state.gold,
         materials=state.materials,
@@ -196,6 +239,7 @@ def _recipe_to_dict(definition, state, recipe, class_names: dict[str, str] | Non
         "output_skills": [_skill_to_dict(skill) for skill in template.skills],
         "output_allowed_classes": allowed_classes,
         "output_allowed_class_names": [class_names.get(cid, cid) for cid in allowed_classes],
+        **({"base_gold_cost": base_gold_cost} if definition.content.has_talent_tree else {}),
         "gold_cost": recipe.gold_cost,
         "material_costs": {
             cost.material_id: cost.quantity
@@ -206,9 +250,11 @@ def _recipe_to_dict(definition, state, recipe, class_names: dict[str, str] | Non
     }
 
 
-def _upgrade_to_dict(state, upgrade) -> dict[str, Any]:
+def _upgrade_to_dict(state, upgrade, *, talent_tree: bool) -> dict[str, Any]:
     inventory = UpgradeInventory(
         gold=state.gold,
+        experience_pool=state.experience_pool,
+        materials=state.materials,
         unlocked_upgrade_ids=state.unlocked_upgrade_ids,
     )
     missing = missing_upgrade_requirements(upgrade, inventory)
@@ -217,6 +263,15 @@ def _upgrade_to_dict(state, upgrade) -> dict[str, Any]:
         "name": upgrade.name,
         "description": upgrade.description,
         "gold_cost": upgrade.gold_cost,
+        **({
+            "experience_cost": upgrade.experience_cost,
+            "material_costs": {cost.material_id: cost.quantity for cost in upgrade.material_costs},
+            "branch": upgrade.branch,
+            "tier": upgrade.tier,
+            "exclusive_upgrade_ids": list(upgrade.exclusive_upgrade_ids),
+            "craft_gold_discount_percent": upgrade.craft_gold_discount_percent,
+            "hunt_experience_bonus_percent": upgrade.hunt_experience_bonus_percent,
+        } if talent_tree else {}),
         "stats": _stat_modifier_to_dict(upgrade.stat_modifier),
         "party_size_bonus": upgrade.party_size_bonus,
         "skills": [_skill_to_dict(skill) for skill in upgrade.skills],
@@ -373,18 +428,7 @@ def _next_level_info(
         amount=state.experience_pool,
         rules=rules,
     )
-    preview_adventurer = AdventurerState(
-        adventurer_id=adventurer.adventurer_id,
-        name=adventurer.name,
-        base_stats=adventurer.base_stats,
-        resources=adventurer.resources,
-        skills=adventurer.skills,
-        level_skill_unlocks=adventurer.level_skill_unlocks,
-        stat_growth_per_level=adventurer.stat_growth_per_level,
-        level=preview_level,
-        experience=preview_experience,
-        equipment=adventurer.equipment,
-    )
+    preview_adventurer = replace(adventurer, level=preview_level, experience=preview_experience)
     return {
         "max_level": False,
         "required": required,
@@ -449,6 +493,7 @@ def _equipment_slots_to_dict(
         "helmet",
         "armor",
         "accessory",
+        *(("ultimate",) if any(t.slot == "ultimate" for t in templates.values()) else ()),
     ):
         instance_id = equipped.get(slot)
         item_data = None

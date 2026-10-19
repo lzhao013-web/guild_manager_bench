@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass, field
+from functools import cached_property
 from typing import Any, Mapping, Sequence
 
 from guild_manager_bench.bench.llm.refs import (
@@ -130,19 +131,30 @@ class TurnToolHarness:
         # 固化本回合的数字 ID 映射，避免并行动作导致列表变化后序号偏移
         observation = tools.get_observation(session_id)["observation"]
         self._turn = int(observation["turn"])
+        self._turn_start_state = tools.get_state(session_id)
         self._turn_refs = build_numeric_refs(observation)
         self._agent_tool_names = tuple(
             schema["name"]
             for schema in self.tool_schemas()
         )
 
+    @cached_property
+    def turn_start_rank_score(self) -> float | None:
+        """终局回合的固定基线，按需计算，避免恢复历史动作时重复评分。"""
+
+        if self.endgame_start_turn is None or self._turn < self.endgame_start_turn:
+            return None
+        from guild_manager_bench.bench.metrics import compute_rank_score
+
+        return round(compute_rank_score(self.tools.definition, self._turn_start_state), 2)
+
     def tool_schemas(self) -> list[dict[str, Any]]:
         """返回当前回合可注册给 LLM 的工具 schema。"""
 
         schemas = self.tools.list_tool_schemas()
         if self.endgame_start_turn is not None and self._turn >= self.endgame_start_turn:
-            from guild_manager_bench.bench.llm.tools import _TEAM_POWER_PREVIEW_SCHEMA
-            schemas.append(deepcopy(_TEAM_POWER_PREVIEW_SCHEMA))
+            from guild_manager_bench.bench.llm.tools import team_power_preview_schema
+            schemas.append(team_power_preview_schema(schemas))
         schemas.append(deepcopy(_WRITE_MEMO_SCHEMA))
         return schemas
 
@@ -253,10 +265,9 @@ class TurnToolHarness:
 _WRITE_MEMO_SCHEMA: dict[str, Any] = {
     "name": "write_memo",
     "description": (
-        "写入一条跨回合备忘录，以提醒下回合该如何操作。"
-        "重要：本回合的思考、计划和分析不会自动带到下回合——每个新回合你只会看到回合初始信息和备忘录。"
-        "如果你有跨回合的计划（如培养优先级、装备分配策略、长期目标），请务必写入备忘录，否则下回合将无法继续执行。"
-        "备忘录仅在下回合开始时出现在提示词中，之后自动消失；如需持续提醒，请在后续回合重新写入。"
+        "写入一条跨回合备忘录。本回合的对话与思考不会保留到下回合，下回合初你将只看到最新状态与本回合写入的备忘录"
+        "（备忘录展示一次后即清空，需跨多回合保留的信息请在下回合重新写入）。"
+        "同回合多次调用会追加记录，建议在结束回合前一次性汇总写入（如长期培养规划、目标配方材料缺口、未来刷新目标等）以节省工具预算。"
     ),
     "parameters": {
         "type": "object",
@@ -265,8 +276,8 @@ _WRITE_MEMO_SCHEMA: dict[str, Any] = {
             "content": {
                 "type": "string",
                 "minLength": 1,
-                "maxLength": 200,
-                "description": "要记录的文字，最多 200 字符。",
+                "maxLength": 500,
+                "description": "要记录的备忘内容，最多 500 字符。",
             },
         },
         "additionalProperties": False,

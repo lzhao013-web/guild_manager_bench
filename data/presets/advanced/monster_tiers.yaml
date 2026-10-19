@@ -1,0 +1,34 @@
+bonus_skill_themes:
+  - id: brute
+    name: 蛮力
+    skills: [ambush_strike, rage_charge, crushing_slam]
+  - id: venom
+    name: 毒素
+    skills: [venom_spit, shattering_claw, paralytic_bite]
+  - id: regen
+    name: 再生
+    skills: [iron_shell, regen_flesh, thick_hide]
+  - id: predator
+    name: 掠食
+    skills: [blood_fang, phantom_step, pounce]
+
+tiers:
+  elite:
+    chance: 0.15
+    stat_multiplier: 1.3
+    reward_multiplier: 1.5
+    name_prefix: "精英"
+    bonus_reward_growth:
+      gold: 2
+      experience: 5
+    bonus_skill_count: 1
+
+  boss:
+    chance: 0.05
+    stat_multiplier: 1.5
+    reward_multiplier: 2.5
+    name_prefix: "首领"
+    bonus_reward_growth:
+      gold: 5
+      experience: 12
+    bonus_skill_count: 2

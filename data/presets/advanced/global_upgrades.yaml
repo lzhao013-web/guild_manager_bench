@@ -1,0 +1,258 @@
+upgrades:
+  # 公共扩编独立于战斗专精。全部成本均为一次性支出。
+  - id: roster_expansion_1
+    name: 扩编 I
+    branch: common
+    tier: 1
+    gold: 350
+    experience: 200
+    materials: {iron_ore: 6, bone: 6}
+    description: 增加一个队伍位置，不是战斗分支的前置。
+    party_size_bonus: 1
+
+  - id: roster_expansion_2
+    name: 扩编 II
+    branch: common
+    tier: 2
+    gold: 600
+    experience: 450
+    materials: {iron_ore: 10, beast_hide: 4}
+    required: [roster_expansion_1]
+    party_size_bonus: 2
+
+  - id: craft_standardization
+    name: 工艺标准化
+    branch: economy
+    tier: 2
+    gold: 150
+    experience: 150
+    materials: {iron_ore: 4}
+    required: [blacksmith]
+    description: 后续制作装备的金币费用降低15%，向上取整。材料消耗不变，不返还历史支出。
+    craft_gold_discount_percent: 15
+
+  - id: training_manual
+    name: 训练教范
+    branch: economy
+    tier: 2
+    gold: 240
+    experience: 800
+    materials: {herb: 8, arcane_dust: 6}
+    required: [training_grounds]
+    description: 后续胜利讨伐的经验奖励增加15%，逐场向下取整。需要用未来收入收回研究成本。
+    hunt_experience_bonus_percent: 15
+
+  # 武备：短战斗与输出。突击、终结为可选旁支。
+  - id: training_grounds
+    name: 训练场
+    branch: martial
+    tier: 1
+    gold: 65
+    materials: {iron_ore: 2, bone: 2}
+    stats: {attack: 3, hp: 5}
+
+  - id: blacksmith
+    name: 铁匠铺
+    branch: martial
+    tier: 1
+    gold: 80
+    materials: {iron_ore: 3, bone: 2}
+    stats: {attack: 4, defense: 2}
+
+  - id: armory
+    name: 军械库
+    branch: martial
+    tier: 2
+    gold: 240
+    experience: 400
+    materials: {iron_ore: 6, mithril_shard: 4}
+    required: [blacksmith]
+    stats: {attack: 6, defense: 4, hp: 8}
+
+  - id: assault_doctrine
+    name: 突击战术
+    branch: martial
+    tier: 2
+    gold: 180
+    experience: 300
+    materials: {mithril_shard: 3, beast_hide: 3}
+    required: [training_grounds]
+    description: 全场双方合计前6次行动，攻击提高12%。
+    skills: [talent_assault]
+
+  - id: reinforced_forge
+    name: 强化锻造
+    branch: martial
+    tier: 3
+    gold: 350
+    experience: 650
+    materials: {mithril_shard: 8, sharp_claw: 10}
+    required: [armory]
+    stats: {attack: 7, defense: 5}
+
+  - id: execution_doctrine
+    name: 终结战术
+    branch: martial
+    tier: 3
+    gold: 360
+    experience: 550
+    materials: {sharp_claw: 12, soul_shard: 6}
+    required: [assault_doctrine]
+    description: 敌方HP不高于30%时，攻击提高18%。
+    skills: [talent_execution]
+
+  - id: elite_hunters
+    name: 精锐猎兵团
+    branch: martial
+    tier: 3
+    gold: 600
+    experience: 850
+    materials: {spider_silk: 6, mithril_shard: 6}
+    required: [armory]
+    stats: {attack: 9, speed: 5, hp: 12}
+
+  - id: war_academy
+    name: 战争学院
+    branch: martial
+    tier: 4
+    gold: 950
+    experience: 1500
+    materials: {dragon_scale: 18, demon_core: 6}
+    required: [reinforced_forge, elite_hunters]
+    excludes: [paladin_order, arcane_council]
+    description: 武备终阶专精，与圣殿骑士团、秘法结社互斥。不可洗点。
+    stats: {attack: 14, defense: 7, hp: 20, speed: 4}
+
+  # 生存：持续作战。应急救护不是终阶前置。
+  - id: herb_garden
+    name: 草药园
+    branch: survival
+    tier: 1
+    gold: 60
+    materials: {herb: 2, bone: 1}
+    stats: {hp: 6, mp: 4, recovery: 4, mp_recovery: 4}
+
+  - id: supply_post
+    name: 补给站
+    branch: survival
+    tier: 1
+    gold: 65
+    materials: {herb: 3, beast_hide: 2}
+    stats: {hp: 4, recovery: 6, mp_recovery: 6, defense: 1}
+
+  - id: field_hospital
+    name: 野战医院
+    branch: survival
+    tier: 2
+    gold: 220
+    experience: 400
+    materials: {herb: 10, spider_silk: 4}
+    required: [herb_garden, supply_post]
+    stats: {hp: 10, mp: 6, recovery: 8, mp_recovery: 8}
+
+  - id: emergency_care
+    name: 应急救护
+    branch: survival
+    tier: 2
+    gold: 240
+    experience: 400
+    materials: {herb: 8, arcane_dust: 4}
+    required: [herb_garden]
+    description: 每战一次，HP不高于30%且职业、装备主动技能均不可用时，恢复最大HP的12%并普通攻击。优先于法力回流，仍占用本次主动技能选择。
+    skills: [talent_emergency_care]
+
+  - id: endurance_doctrine
+    name: 持久战法
+    branch: survival
+    tier: 2
+    gold: 360
+    experience: 550
+    materials: {bone: 12, mithril_shard: 5}
+    required: [supply_post]
+    description: 全场双方合计第9次行动起，防御提高15%。
+    skills: [talent_endurance]
+
+  - id: veteran_command
+    name: 老兵指挥部
+    branch: survival
+    tier: 3
+    gold: 600
+    experience: 900
+    materials: {iron_ore: 10, mithril_shard: 8}
+    required: [field_hospital]
+    stats: {hp: 18, attack: 7, defense: 6, speed: 3}
+
+  - id: paladin_order
+    name: 圣殿骑士团
+    branch: survival
+    tier: 4
+    gold: 750
+    experience: 1500
+    materials: {dragon_scale: 18, soul_shard: 16}
+    required: [veteran_command, endurance_doctrine]
+    excludes: [war_academy, arcane_council]
+    description: 生存终阶专精，与战争学院、秘法结社互斥。提供战斗属性而非仅战后回复。
+    stats: {hp: 30, defense: 12, attack: 5, recovery: 10, mp_recovery: 10}
+
+  # 奥术：技能循环与机动。充盈施法、法力回流为可选旁支。
+  - id: scout_network
+    name: 侦查网
+    branch: arcane
+    tier: 1
+    gold: 70
+    materials: {sharp_claw: 3, beast_hide: 2}
+    stats: {speed: 3, attack: 2}
+
+  - id: meditation_hall
+    name: 精神修炼堂
+    branch: arcane
+    tier: 2
+    gold: 260
+    experience: 450
+    materials: {arcane_dust: 8, herb: 8}
+    required: [scout_network]
+    stats: {mp: 8, speed: 3, recovery: 6, mp_recovery: 6}
+
+  - id: tactics_academy
+    name: 战术学院
+    branch: arcane
+    tier: 2
+    gold: 300
+    experience: 500
+    materials: {spider_silk: 6, mithril_shard: 4}
+    required: [scout_network]
+    stats: {speed: 4, attack: 4, defense: 3}
+
+  - id: mana_abundance
+    name: 充盈施法
+    branch: arcane
+    tier: 2
+    gold: 220
+    experience: 350
+    materials: {arcane_dust: 5, spider_silk: 3}
+    required: [scout_network]
+    description: 自身MP不低于70%时，攻击提高10%。
+    skills: [talent_mana_abundance]
+
+  - id: mana_reflux
+    name: 法力回流
+    branch: arcane
+    tier: 3
+    gold: 400
+    experience: 650
+    materials: {arcane_dust: 12, soul_shard: 10}
+    required: [meditation_hall]
+    description: 每战一次，MP不高于25%且职业、装备主动技能及应急救护均不可用时，恢复12 MP并普通攻击。仍占用本次主动技能选择。
+    skills: [talent_mana_reflux]
+
+  - id: arcane_council
+    name: 秘法结社
+    branch: arcane
+    tier: 4
+    gold: 900
+    experience: 1500
+    materials: {demon_core: 6, dragon_blood: 18, soul_shard: 20}
+    required: [meditation_hall, tactics_academy]
+    excludes: [war_academy, paladin_order]
+    description: 奥术终阶专精，与战争学院、圣殿骑士团互斥。不可洗点。
+    stats: {mp: 16, attack: 10, speed: 6, hp: 12}

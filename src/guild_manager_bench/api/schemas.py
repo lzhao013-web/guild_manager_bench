@@ -17,6 +17,7 @@ class ActionRequest(BaseModel):
     slot: str | None = None
     amount: int | None = None
     hunts: list[dict[str, str]] = Field(default_factory=list)
+    locked_monster_ids: list[str] | None = None
 
     def to_payload(self) -> dict[str, Any]:
         """转成去掉空值的动作字典。"""

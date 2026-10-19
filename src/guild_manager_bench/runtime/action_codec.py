@@ -6,6 +6,7 @@ from typing import Any
 from guild_manager_bench.game.actions import (
     AllocateExperienceAction,
     CraftAction,
+    ConfigureTacticsAction,
     DismissAction,
     EndTurnAction,
     EquipAction,
@@ -13,6 +14,7 @@ from guild_manager_bench.game.actions import (
     PreparationAction,
     PurchaseUpgradeAction,
     RecruitAction,
+    RefreshMonstersAction,
     UnequipAction,
 )
 
@@ -25,6 +27,14 @@ def decode_preparation_action(payload: Mapping[str, Any]) -> PreparationAction:
     """把外部动作数据解析为回合内操作。"""
 
     action_type = _action_type(payload)
+    if action_type == "refresh_monsters":
+        return RefreshMonstersAction(locked_monster_ids=payload.get("locked_monster_ids", ()))
+    if action_type == "configure_tactics":
+        return ConfigureTacticsAction(
+            adventurer_id=_str(payload, "adventurer_id"),
+            skill_priority=payload.get("skill_priority"),
+            disabled_skills=payload.get("disabled_skills"),
+        )
     if action_type == "craft":
         return CraftAction(recipe_id=_str(payload, "recipe_id"))
     if action_type == "purchase_upgrade":
@@ -63,6 +73,15 @@ def decode_end_turn_action(payload: Mapping[str, Any]) -> EndTurnAction:
 def encode_preparation_action(action: PreparationAction) -> dict[str, Any]:
     """把回合内操作转成可写入日志的数据。"""
 
+    if isinstance(action, RefreshMonstersAction):
+        return {"type": "refresh_monsters", "locked_monster_ids": list(action.locked_monster_ids)}
+    if isinstance(action, ConfigureTacticsAction):
+        return {
+            "type": "configure_tactics",
+            "adventurer_id": action.adventurer_id,
+            "skill_priority": list(action.skill_priority),
+            "disabled_skills": list(action.disabled_skills),
+        }
     if isinstance(action, CraftAction):
         return {"type": "craft", "recipe_id": action.recipe_id}
     if isinstance(action, PurchaseUpgradeAction):

@@ -44,6 +44,7 @@ def test_load_game_definition_from_yaml_directory() -> None:
     assert definition.content.recruitable_adventurers[0].template_id == "guard"
     assert definition.content.recruitable_adventurers[0].recruit_gold == 30
     assert definition.content.recruitable_adventurers[0].stat_growth_per_level.defense == 2
+    assert definition.content.challenge_archetypes == ()
     assert definition.content.monster_archetypes[0].archetype_id == "slime"
     assert definition.content.monster_archetypes[0].spawn_weight == 7
     assert definition.content.monster_archetypes[0].min_turn == 1

@@ -420,18 +420,18 @@ def test_system_prompt_includes_static_rules() -> None:
     assert "你正在进行 Guild Manager Bench。" in prompt
     assert "目标：测试目标。" in prompt
     assert "回合流程：" in prompt
-    assert "战斗提示：" in prompt
-    assert "战斗机制：SPD 决定出手频率" in prompt
-    assert "普通攻击伤害 = max(1, ATK - DEF)" in prompt
-    assert "技能相关：" in prompt
-    assert "回复机制：" in prompt
+    assert "战斗形式：" in prompt
+    assert "速度（SPD）影响出手频率，不只是先后手" in prompt
+    assert "普攻伤害为 max(1, 攻击－防御)" in prompt
+    assert "技能选择：" in prompt
+    assert "回合末恢复公式" in prompt
     assert "HP回复 = " in prompt
     assert "MP回复 = " in prompt
     assert "刷新机制：" in prompt
     assert "每回合最多允许 7 次非 end_turn 工具调用" in prompt
     assert "preview_battle 最多 5 次/回合" in prompt
-    assert "调用工具使用的所有对象 id 都使用列表左侧的数字 id" in prompt
-    assert "工具会返回 成功/失败、预算 和结果摘要" in prompt
+    assert "所有工具参数的对象 id 均使用列表左侧的数字 id" in prompt
+    assert "每次调用均返回执行状态（成功/失败）、剩余预算及结果摘要" in prompt
 
     # Dynamic content should NOT be in system prompt
     assert "当前回合" not in prompt
@@ -475,6 +475,7 @@ def test_run_llm_turn_adds_endgame_system_prompt_only_after_start_turn() -> None
     ]
 
     assert early_system_messages == ["基础系统提示"]
+    assert "现在是终局阶段" not in early_trace.prompt
 
     endgame_trace = run_llm_turn(
         agent,
@@ -489,9 +490,9 @@ def test_run_llm_turn_adds_endgame_system_prompt_only_after_start_turn() -> None
         if message.get("role") == "system"
     ]
 
-    assert endgame_system_messages[0] == "基础系统提示"
-    assert "现在是终局阶段：当前回合 2/" in endgame_system_messages[1]
-    assert "preview_team_power" in endgame_system_messages[1]
+    assert endgame_system_messages == ["基础系统提示"]
+    assert "现在是终局阶段：当前回合 2/" in endgame_trace.prompt
+    assert "preview_team_power" in endgame_trace.prompt
 
 
 def test_turn_prompt_only_shows_endgame_warning_after_start_turn() -> None:
@@ -577,15 +578,15 @@ def test_skill_summary_formats_extended_conditions_and_effects() -> None:
         ]
     )
 
-    assert "触发条件：同时满足（自身MP不低于50%；行动序号不超过1）" in text
+    assert "触发条件：同时满足（自身MP不低于50%；双方累计行动序号不超过1）" in text
     assert "触发后替代普通攻击" in text
     assert "为自身恢复25%最大HP" in text
     assert "为自身恢复3点MP" in text
-    assert "在普通攻击伤害上额外+4" in text
+    assert "造成一段“普通攻击伤害＋4”的伤害" in text
     assert "造成5点无视防御伤害" in text
     assert "造成攻击力的50%作为无视防御伤害" in text
     assert "自身受到2点伤害" in text
-    assert "对目标施加状态：灼伤（负面状态，持续2次行动" in text
+    assert "对目标施加状态：灼伤（负面状态，持续状态持有者的2次行动" in text
     assert "状态持有者每次行动开始受到3点无视防御伤害" in text
     assert "优先级" not in text
 

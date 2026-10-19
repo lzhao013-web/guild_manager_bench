@@ -10,22 +10,27 @@ from guild_manager_bench.bench.metrics import rank_score_breakdown_from_final_ob
 from guild_manager_bench.game.actions import (
     AllocateExperienceAction,
     CraftAction,
+    ConfigureTacticsAction,
     DismissAction,
     EndTurnAction,
     EquipAction,
     PreparationAction,
     PurchaseUpgradeAction,
     RecruitAction,
+    RefreshMonstersAction,
     UnequipAction,
 )
-from guild_manager_bench.game.engine import TurnResult, apply_preparation_action, end_turn, new_game, preview_battle
+from guild_manager_bench.game.engine import (
+    TurnResult, apply_preparation_action, end_turn, new_game, preview_battle,
+    preview_monster_refresh, monster_refresh_cost,
+)
 from guild_manager_bench.game.state import GameDefinition, GameState
 from guild_manager_bench.runtime.action_codec import (
     encode_end_turn_action,
     encode_preparation_action,
 )
 from guild_manager_bench.runtime.events import SessionEvent, event_to_dict
-from guild_manager_bench.runtime.observation import build_observation
+from guild_manager_bench.runtime.observation import build_observation, _monster_to_dict
 
 
 @dataclass(slots=True)
@@ -145,6 +150,28 @@ class GameSession:
                     "actions_taken": result.actions_taken,
                     "time_elapsed": result.time_elapsed,
                 },
+            }
+
+    def preview_monster_refresh(self, locked_monster_ids: tuple[str, ...] = ()) -> dict[str, Any]:
+        """只返回刷新候选，引用不能用于真实操作，也不写入会话事件。"""
+        with self._lock:
+            assert self.state is not None
+            state = self.state
+            candidates = preview_monster_refresh(self.definition, state, locked_monster_ids)
+            cost = monster_refresh_cost(self.definition, state)
+            existing = {m.monster_id for m in state.current_monsters}
+            monsters = []
+            for index, monster in enumerate(candidates, start=1):
+                entry = _monster_to_dict(self.definition, state, monster)
+                del entry["monster_id"]
+                entry["refresh_ref"] = f"refresh:T{state.turn}:R{state.monster_refresh_count + 1}:slot{index}"
+                entry["preserved"] = monster.monster_id in existing
+                monsters.append(entry)
+            return {
+                "ok": True, "simulation_only": True, "turn": state.turn,
+                "refresh_number": state.monster_refresh_count + 1,
+                "gold_cost": cost, "can_afford": state.gold >= cost,
+                "monsters": monsters,
             }
 
     def export_replay(self) -> dict[str, Any]:
@@ -289,6 +316,13 @@ def _preparation_summary(
     observation: dict[str, Any],
     action: PreparationAction,
 ) -> str:
+    if isinstance(action, RefreshMonstersAction):
+        return f"付费刷新怪物，锁定{len(action.locked_monster_ids)}个普通目标，固定挑战自动保留"
+    if isinstance(action, ConfigureTacticsAction):
+        adventurer = _adventurer_by_id(observation, action.adventurer_id)
+        priority = ", ".join(action.skill_priority) or "默认顺序"
+        disabled = ", ".join(action.disabled_skills) or "无"
+        return f"{adventurer['name']} 配置主动技能：优先 {priority}，停用 {disabled}"
     if isinstance(action, CraftAction):
         recipe = _recipe_by_id(observation, action.recipe_id)
         return f"合成 {recipe['name']}"
@@ -360,6 +394,9 @@ def _observation_changes(
             after["materials"].get(material_id, 0),
         )
 
+    if "monster_refresh" in after:
+        _append_value_change(changes, "resource", "本回合刷新次数",
+                            before["monster_refresh"]["refreshes_used"], after["monster_refresh"]["refreshes_used"])
     _append_adventurer_changes(changes, before, after)
     _append_equipment_changes(changes, before, after)
     _append_upgrade_changes(changes, before, after)
@@ -552,6 +589,7 @@ def _slot_name(slot: str) -> str:
         "helmet": "头盔",
         "armor": "护甲",
         "accessory": "饰品",
+        "ultimate": "终极印记",
     }.get(slot, slot)
 
 
@@ -886,11 +924,15 @@ def _restore_from_observation(definition: GameDefinition, obs: dict[str, Any]) -
             if item:
                 equipped_items.append(EquippedItem(slot=sl.get("slot", "main_hand"), instance_id=item.get("instance_id", "")))
         growth = a.get("stat_growth_per_level")
-        # Filter effective skills to get only base skills
-        base_skills = tuple(
-            _skill(s) for s in (a.get("skills") or [])
-            if s.get("skill_id", "") not in excluded_ids
-        )
+        # 新存档保留原始技能，避免恢复时丢失停用技能或固化临时优先级。
+        if "base_skills" in a:
+            base_skills = tuple(_skill(s) for s in a["base_skills"])
+        else:
+            base_skills = tuple(
+                _skill(s) for s in (a.get("skills") or [])
+                if s.get("skill_id", "") not in excluded_ids
+            )
+        tactics = a.get("tactics", {})
         return AdventurerState(
             adventurer_id=a.get("adventurer_id", ""),
             name=a.get("name", ""),
@@ -909,6 +951,8 @@ def _restore_from_observation(definition: GameDefinition, obs: dict[str, Any]) -
             experience=a.get("experience", 0),
             equipment=EquipmentLoadout(items=tuple(equipped_items)),
             template_id=a.get("template_id", ""),
+            skill_priority=tuple(tactics.get("skill_priority", ())),
+            disabled_skills=tuple(tactics.get("disabled_skills", ())),
         )
 
     def _monster(m: dict) -> SpawnedMonster:
@@ -917,7 +961,7 @@ def _restore_from_observation(definition: GameDefinition, obs: dict[str, Any]) -
             archetype_id=m.get("archetype_id", ""),
             name=m.get("name", ""),
             stats=_stats(m.get("stats", {})),
-            reward=_reward(m.get("reward", {})),
+            reward=_reward(m.get("base_reward", m.get("reward", {}))),
             tier=m.get("tier", "normal"),
             skills=tuple(_skill(s) for s in (m.get("skills") or [])),
         )
@@ -995,6 +1039,8 @@ def _restore_from_observation(definition: GameDefinition, obs: dict[str, Any]) -
         recruit_candidates=tuple(_candidate(c) for c in (obs.get("recruit_candidates") or [])),
         next_equipment_instance_number=max_instance + 1,
         next_adventurer_number=max_adv + 1,
+        defeated_challenge_ids=frozenset(obs.get("defeated_challenge_ids", ())),
+        monster_refresh_count=obs.get("monster_refresh", {}).get("refreshes_used", 0),
     )
 
 

@@ -84,6 +84,45 @@ class UnequipAction:
 
 
 @dataclass(frozen=True, slots=True)
+class ConfigureTacticsAction:
+    """替换角色的主动技能优先顺序和停用列表。"""
+
+    adventurer_id: str
+    skill_priority: tuple[str, ...]
+    disabled_skills: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        _require_non_empty("adventurer_id", self.adventurer_id)
+        for name in ("skill_priority", "disabled_skills"):
+            values = getattr(self, name)
+            if not isinstance(values, (list, tuple)):
+                raise ValueError(f"{name} 必须是技能 ID 列表")
+            for value in values:
+                _require_non_empty(name, value)
+            if len(set(values)) != len(values):
+                raise ValueError(f"{name} 不能包含重复技能")
+            object.__setattr__(self, name, tuple(values))
+        if set(self.skill_priority) & set(self.disabled_skills):
+            raise ValueError("同一个技能不能同时排序和停用")
+
+
+@dataclass(frozen=True, slots=True)
+class RefreshMonstersAction:
+    """付费刷新本回合未锁定的普通怪物。"""
+
+    locked_monster_ids: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.locked_monster_ids, (list, tuple)):
+            raise ValueError("locked_monster_ids 必须是列表")
+        for monster_id in self.locked_monster_ids:
+            _require_non_empty("locked_monster_id", monster_id)
+        if len(set(self.locked_monster_ids)) != len(self.locked_monster_ids):
+            raise ValueError("锁定怪物不能重复")
+        object.__setattr__(self, "locked_monster_ids", tuple(self.locked_monster_ids))
+
+
+@dataclass(frozen=True, slots=True)
 class HuntAction:
     """指定一个冒险者与一个怪物交战。"""
 
@@ -103,6 +142,8 @@ PreparationAction: TypeAlias = (
     | DismissAction
     | UnequipAction
     | EquipAction
+    | ConfigureTacticsAction
+    | RefreshMonstersAction
 )
 PREPARATION_ACTION_TYPES = (
     CraftAction,
@@ -112,6 +153,8 @@ PREPARATION_ACTION_TYPES = (
     DismissAction,
     UnequipAction,
     EquipAction,
+    ConfigureTacticsAction,
+    RefreshMonstersAction,
 )
 
 

@@ -19,6 +19,7 @@ EquipmentSlot = Literal[
     "helmet",
     "armor",
     "accessory",
+    "ultimate",
 ]
 EQUIPMENT_SLOTS: set[EquipmentSlot] = {
     "main_hand",
@@ -28,6 +29,7 @@ EQUIPMENT_SLOTS: set[EquipmentSlot] = {
     "helmet",
     "armor",
     "accessory",
+    "ultimate",
 }
 
 

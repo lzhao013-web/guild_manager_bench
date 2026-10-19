@@ -60,6 +60,7 @@ const MONSTER_TIER_META = {
   normal: { name: "普通", color: "#a8b2cc" },
   elite:  { name: "精英", color: "#fbbf24" },
   boss:   { name: "首领", color: "#ef5b5b" },
+  challenge: { name: "固定挑战", color: "#c084fc" },
 };
 const DEFAULT_TIER_META = { name: "普通", color: "#a8b2cc" };
 
@@ -73,6 +74,7 @@ const SLOT_ICON = {
   helmet: "🪖",
   armor: "🥋",
   accessory: "💍",
+  ultimate: "🔱",
 };
 
 function classMeta(templateId) {
@@ -689,7 +691,7 @@ function renderCrafting(obs) {
     groups.get(key).push(recipe);
   }
   // 槽位显示顺序
-  const order = ["main_hand", "two_hand", "off_hand", "armor", "helmet", "boots", "accessory", "other"];
+  const order = ["main_hand", "two_hand", "off_hand", "armor", "helmet", "boots", "accessory", "ultimate", "other"];
   const sortedKeys = [...groups.keys()].sort((a, b) => {
     const ai = order.indexOf(a); const bi = order.indexOf(b);
     return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
@@ -751,7 +753,7 @@ function renderEquipment(obs) {
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(item);
   }
-  const order = ["main_hand", "two_hand", "off_hand", "armor", "helmet", "boots", "accessory", "other"];
+  const order = ["main_hand", "two_hand", "off_hand", "armor", "helmet", "boots", "accessory", "ultimate", "other"];
   const sortedKeys = [...groups.keys()].sort((a, b) => {
     const ai = order.indexOf(a); const bi = order.indexOf(b);
     return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
@@ -808,19 +810,24 @@ function renderUpgrades(obs) {
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(upgrade);
   }
-  const order = ["party", "recovery", "combat", "other"];
+  const order = ["common", "economy", "martial", "survival", "arcane", "party", "recovery", "combat", "other"];
   const sortedKeys = [...groups.keys()].sort((a, b) => {
     const ai = order.indexOf(a); const bi = order.indexOf(b);
     return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
   });
   const labels = {
+    common: { icon: "👥", text: "公共主干" },
+    economy: { icon: "⚒️", text: "经营支线" },
+    martial: { icon: "⚔️", text: "武备天赋" },
+    survival: { icon: "🛡️", text: "生存天赋" },
+    arcane: { icon: "✨", text: "奥术天赋" },
     party:   { icon: "👥", text: "队伍扩张" },
     recovery: { icon: "💚", text: "恢复支援" },
     combat:  { icon: "⚔️", text: "战斗强化" },
     other:   { icon: "✨", text: "其他" },
   };
   const html = sortedKeys.map((key) => {
-    const items = groups.get(key);
+    const items = groups.get(key).sort((a, b) => (a.tier || 1) - (b.tier || 1));
     const meta = labels[key] || labels.other;
     return renderGroupSection({
       id: `upgrade-${key}`,
@@ -835,6 +842,7 @@ function renderUpgrades(obs) {
 }
 
 function upgradeGroupKey(upgrade) {
+  if (upgrade.branch) return upgrade.branch;
   if ((upgrade.party_size_bonus || 0) > 0) return "party";
   const s = upgrade.stats || {};
   if ((s.recovery || 0) > 0 || (s.mp_recovery || 0) > 0 || (s.mp || 0) > 0) return "recovery";
@@ -851,6 +859,7 @@ function upgradeGroupSummary(items) {
 }
 
 function upgradeRowHtml(obs, upgrade) {
+  if (upgrade.branch) return talentRowHtml(obs, upgrade);
   const state = upgrade.unlocked ? "已解锁" : upgrade.can_purchase ? "可购买" : "不可购买";
   const stateClass = upgrade.unlocked || upgrade.can_purchase ? "ok" : "danger";
   return `
@@ -865,6 +874,26 @@ function upgradeRowHtml(obs, upgrade) {
       ${upgrade.unlocked ? "" : `<div class="upgrade-action"><button type="button" class="btn-primary" ${disabled(!upgrade.can_purchase)} onclick="purchaseUpgrade('${upgrade.upgrade_id}')">购买</button></div>`}
     </div>
   `;
+}
+
+function talentRowHtml(obs, upgrade) {
+  const conflict = upgrade.missing?.exclusive_upgrade_ids?.length > 0;
+  const status = upgrade.unlocked ? "已解锁" : conflict ? "互斥锁定" : upgrade.can_purchase ? "可研究" : "未满足条件";
+  const economy = [
+    upgrade.craft_gold_discount_percent ? `后续制作金币费用降低 ${upgrade.craft_gold_discount_percent}%` : "",
+    upgrade.hunt_experience_bonus_percent ? `后续胜利讨伐经验增加 ${upgrade.hunt_experience_bonus_percent}%` : "",
+  ].filter(Boolean).join(" · ");
+  return `<div class="row upgrade-row" data-talent-id="${escapeHtml(upgrade.upgrade_id)}">
+    <div class="row-title"><strong>${escapeHtml(upgrade.name)}</strong><span class="${upgrade.unlocked || upgrade.can_purchase ? 'ok' : 'danger'} small">第${upgrade.tier}阶 · ${status}</span></div>
+    <div class="small">消耗：金币 ${upgrade.gold_cost} · 公共经验 ${upgrade.experience_cost} · ${materialsText(upgrade.material_costs)}</div>
+    <div class="small">${statModifierText(upgrade.stats)}${upgrade.party_size_bonus ? ` · 队伍上限 +${upgrade.party_size_bonus}` : ""}${economy ? ` · ${economy}` : ""}</div>
+    ${upgrade.description ? `<div class="small muted">${escapeHtml(upgrade.description)}</div>` : ""}
+    <div class="small muted">前置全部满足：${upgradePrereqText(obs, upgrade.required_upgrade_ids)}</div>
+    ${upgrade.exclusive_upgrade_ids.length ? `<div class="small danger">互斥：${upgradePrereqText(obs, upgrade.exclusive_upgrade_ids)}（不可洗点）</div>` : ""}
+    ${upgrade.skills.length ? skillList(upgrade.skills, "天赋技能") : ""}
+    ${!upgrade.unlocked && !upgrade.can_purchase ? `<div class="small danger">未满足：${missingText(upgrade.missing)}</div>` : ""}
+    ${upgrade.unlocked ? "" : `<div class="upgrade-action"><button type="button" class="btn-primary" ${disabled(!upgrade.can_purchase)} onclick="purchaseUpgrade('${upgrade.upgrade_id}')">研究</button></div>`}
+  </div>`;
 }
 
 function renderGroupSection({ id, title, count, summary, items, defaultOpen = false }) {
@@ -1580,6 +1609,9 @@ function missingEntryText(key, value) {
     const limit = value.limit ?? "?";
     return `队伍已满（${current}/${limit}）`;
   }
+  if (key === "experience") return `公共经验 ${value}`;
+  if (key === "materials") return `材料 ${materialsText(value)}`;
+  if (key === "exclusive_upgrade_ids") return `已选择互斥天赋 ${value.map(upgradeName).join("、")}`;
   if (key === "required_upgrade_ids") {
     const values = Array.isArray(value) ? value : [value];
     return `前置升级 ${values.map(upgradeName).join("、")}`;
@@ -1609,6 +1641,9 @@ function materialName(key) {
     demon_core: "恶魔核心",
     soul_shard: "灵魂碎片",
     dragon_blood: "龙血",
+    siege_core: "破城核心",
+    aegis_core: "不屈核心",
+    renewal_core: "轮回核心",
   }[key] || key;
 }
 
@@ -1803,6 +1838,7 @@ function slotName(slot) {
     helmet: "头盔",
     armor: "护甲",
     accessory: "饰品",
+    ultimate: "终极印记",
   }[slot] || slot;
 }
 

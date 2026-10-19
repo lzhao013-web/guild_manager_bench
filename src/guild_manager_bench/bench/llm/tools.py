@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import asdict
 from pathlib import Path
 from threading import RLock
 from typing import Any, Callable, Mapping, Sequence
 from uuid import uuid4
 
+from guild_manager_bench.bench.llm.battle_log import BATTLE_LOG_SCHEMA, query_battle_log
+from guild_manager_bench.bench.llm.forecast import FORECAST_SCHEMA, query_forecast
+from guild_manager_bench.bench.llm.monster_refresh import REFRESH_SCHEMA
 from guild_manager_bench.game.engine import GameError, preview_battle as preview_battle_result
 from guild_manager_bench.game.loader import load_game_definition
 from guild_manager_bench.game.models import CombatResources
@@ -30,13 +34,37 @@ def create_toolbox(data_dir: str | Path = "data/presets/default") -> GuildManage
     return GuildManagerTools(load_game_definition(data_dir))
 
 
-def tool_schemas(*, expose_battle_preview: bool = False) -> list[dict[str, Any]]:
+def tool_schemas(*, expose_battle_preview: bool = False, talent_tree_enabled: bool = False,
+                 expose_tactics: bool = False, expose_battle_log: bool = False,
+                 expose_forecast: bool = False, expose_ultimates: bool = False,
+                 expose_monster_refresh: bool = False,
+                 max_battle_preview_per_turn: int = 3) -> list[dict[str, Any]]:
     """返回可注册到 LLM agent 框架的工具 JSON Schema。"""
 
     schemas = list(_BASE_TOOL_SCHEMAS)
     if expose_battle_preview:
-        schemas.append(_BATTLE_PREVIEW_SCHEMA)
-    return [_without_session_id(schema) for schema in schemas]
+        schemas.append(_battle_preview_schema(max_battle_preview_per_turn))
+    if expose_tactics:
+        schemas.append(_TACTICS_SCHEMA)
+    if expose_battle_log:
+        schemas.append(BATTLE_LOG_SCHEMA)
+    if expose_forecast:
+        schemas.append(FORECAST_SCHEMA)
+    if expose_monster_refresh:
+        schemas.append(REFRESH_SCHEMA)
+    schemas = [_without_session_id(schema) for schema in schemas]
+    if expose_ultimates:
+        unequip = next(s for s in schemas if s["name"] == "unequip_item")
+        unequip["parameters"]["properties"]["slot"]["enum"].append("ultimate")
+    if talent_tree_enabled:
+        descriptions = {
+            "get_upgrades": "读取完整全局天赋树的所有节点（含未满足前置的节点），包含各节点的资源成本、效果、前置与互斥条件。",
+            "purchase_upgrade": "按节点成本消耗金币、材料和经验池经验购买全局天赋。需满足全部前置条件，互斥节点不可兼得，购买后不可退款或洗点。",
+        }
+        for schema in schemas:
+            if schema["name"] in descriptions:
+                schema["description"] = descriptions[schema["name"]]
+    return schemas
 
 
 class GuildManagerTools:
@@ -50,6 +78,7 @@ class GuildManagerTools:
             raise TypeError("definition must be GameDefinition")
         self.definition = definition
         self._sessions: dict[str, GameSession] = {}
+        self._battle_previews: dict[str, tuple[int, list[dict[str, Any]]]] = {}
         self._lock = RLock()
 
     @classmethod
@@ -66,6 +95,13 @@ class GuildManagerTools:
 
         return tool_schemas(
             expose_battle_preview=self.definition.llm_tools.expose_battle_preview,
+            talent_tree_enabled=self.definition.content.has_talent_tree,
+            expose_tactics=self.definition.llm_tools.expose_tactics,
+            expose_battle_log=self.definition.llm_tools.expose_battle_log,
+            expose_forecast=self.definition.llm_tools.expose_forecast,
+            expose_monster_refresh=self.definition.rules.monster_refresh.enabled,
+            expose_ultimates=any(t.slot == "ultimate" for t in self.definition.content.equipment_templates),
+            max_battle_preview_per_turn=self.definition.llm_tools.max_battle_preview_per_turn,
         )
 
     def call_tool(
@@ -134,6 +170,7 @@ class GuildManagerTools:
                 "turn": observation["turn"],
                 "max_turns": observation["max_turns"],
                 "monsters": observation["monsters"],
+                **({"monster_refresh": observation["monster_refresh"]} if "monster_refresh" in observation else {}),
             }
 
     def get_crafting(self, session_id: str) -> dict[str, Any]:
@@ -161,7 +198,7 @@ class GuildManagerTools:
             }
 
     def get_upgrades(self, session_id: str) -> dict[str, Any]:
-        """读取金币和全局升级详细信息。"""
+        """读取资源、天赋成本、前置、互斥与效果。"""
 
         with self._lock:
             session = self._get_session(session_id)
@@ -169,6 +206,8 @@ class GuildManagerTools:
             return {
                 "session_id": session.session_id,
                 "gold": observation["gold"],
+                **({"experience_pool": observation["experience_pool"], "materials": observation["materials"]}
+                   if self.definition.content.has_talent_tree else {}),
                 "global_upgrades": observation["global_upgrades"],
             }
 
@@ -195,6 +234,28 @@ class GuildManagerTools:
             session = self._get_session(session_id)
             assert session.state is not None
             return session.state
+
+    def refresh_monsters(
+        self, session_id: str, locked_monster_ids: Sequence[str], preview: bool,
+    ) -> dict[str, Any]:
+        """同一入口选择只读预览或付费刷新，必须明确指定模式。"""
+        if not isinstance(preview, bool):
+            raise ToolCallError("preview 必须是布尔值：true仅预览，false实际刷新")
+        with self._lock:
+            if preview:
+                session = self._get_session(session_id)
+                try:
+                    return session.preview_monster_refresh(locked_monster_ids)
+                except (GameError, ValueError, TypeError) as exc:
+                    return {"ok": False, "error": str(exc)}
+            result = self._submit_preparation(session_id, {
+                "type": "refresh_monsters", "locked_monster_ids": locked_monster_ids,
+            })
+            if result["ok"]:
+                obs = self._get_session(session_id).observation()
+                result.update({"turn": obs["turn"], "monsters": obs["monsters"],
+                               "monster_refresh": obs["monster_refresh"]})
+            return result
 
     def craft_equipment(self, session_id: str, recipe_id: str) -> dict[str, Any]:
         """按配方合成一件装备。"""
@@ -301,6 +362,18 @@ class GuildManagerTools:
             },
         )
 
+    def configure_tactics(
+        self, session_id: str, adventurer_id: str,
+        skill_priority: Sequence[str], disabled_skills: Sequence[str],
+    ) -> dict[str, Any]:
+        """替换主动技能配置，两个空列表恢复默认行为。"""
+        if not self.definition.llm_tools.expose_tactics:
+            raise ToolCallError("configure_tactics 未启用")
+        return self._submit_preparation(session_id, {
+            "type": "configure_tactics", "adventurer_id": adventurer_id,
+            "skill_priority": skill_priority, "disabled_skills": disabled_skills,
+        })
+
     def end_turn(
         self,
         session_id: str,
@@ -320,6 +393,7 @@ class GuildManagerTools:
                 event = session.reject_action(payload, str(exc))
                 return _error_response(session, event, str(exc))
 
+            self._battle_previews.pop(session_id, None)
             return {
                 "ok": True,
                 "event": _compact_event(event),
@@ -379,44 +453,99 @@ class GuildManagerTools:
                 )
             except (GameError, ValueError, TypeError) as exc:
                 return {"ok": False, "error": str(exc)}
-            return {
-                "ok": True,
-                "preview": _battle_preview(
-                    session.state,
-                    battle,
-                ),
-            }
+            preview = _battle_preview(session.state, battle)
+            if self.definition.llm_tools.expose_battle_log:
+                turn, records = self._battle_previews.get(session_id, (session.state.turn, []))
+                if turn != session.state.turn:
+                    records = []
+                combat = battle.combat_result
+                records.append({
+                    "adventurer_name": preview["adventurer_name"],
+                    "monster_name": preview["monster_name"],
+                    "combat": {
+                        "outcome": combat.outcome, "reason": combat.reason,
+                        "actions_taken": combat.actions_taken, "time_elapsed": combat.time_elapsed,
+                        "events": [asdict(event) for event in combat.events],
+                    },
+                })
+                self._battle_previews[session_id] = (session.state.turn, records)
+                preview["battle_log_index"] = len(records)
+            return {"ok": True, "preview": preview}
 
-    def preview_team_power(self, session_id: str) -> dict[str, Any]:
-        """预览当前队伍的终局战力评分（rank_score），返回总分和每个冒险者的贡献分解。"""
+    def get_battle_log(
+        self, session_id: str, source: str, battle_index: int | None = None,
+        detail: str = "summary", action_start: int | None = None, action_end: int | None = None,
+        offset: int = 0, limit: int = 20,
+    ) -> dict[str, Any]:
+        """读取当轮预览或上轮实战。缓存和历史事件都保留原始战斗时的事实。"""
+        if not self.definition.llm_tools.expose_battle_log:
+            raise ToolCallError("get_battle_log 未启用")
+        with self._lock:
+            session = self._get_session(session_id)
+            assert session.state is not None
+            turn = session.state.turn if source == "preview" else session.state.turn - 1
+            records = []
+            if source == "preview":
+                cached_turn, cached = self._battle_previews.get(session_id, (turn, []))
+                if cached_turn == turn:
+                    records = cached
+            elif source == "actual":
+                for event in reversed(session.events):
+                    if event.event_type == "turn_ended" and event.turn == turn:
+                        records = event.payload["battles"]
+                        break
+            return query_battle_log(
+                records, source=source, turn=turn, battle_index=battle_index, detail=detail,
+                action_start=action_start, action_end=action_end, offset=offset, limit=limit,
+            )
+
+    def get_forecast(
+        self, session_id: str, kind: str, start_turn: int, end_turn: int | None = None,
+        name_contains: str | None = None, material: str | None = None,
+        tier: str | None = None, entry_index: int | None = None,
+        detail: str = "summary", offset: int = 0, limit: int = 3,
+    ) -> dict[str, Any]:
+        """查询独立于玩家操作的未来经营刷新，不创建真实对象编号。"""
+        if not self.definition.llm_tools.expose_forecast:
+            raise ToolCallError("get_forecast 未启用")
+        with self._lock:
+            session = self._get_session(session_id)
+            assert session.state is not None
+            return query_forecast(
+                self.definition, session.state, kind=kind, start_turn=start_turn, end_turn=end_turn,
+                name_contains=name_contains, material=material, tier=tier, entry_index=entry_index,
+                detail=detail, offset=offset, limit=limit,
+            )
+
+    def preview_team_power(self, session_id: str, operations: list[Mapping[str, Any]]) -> dict[str, Any]:
+        """只返回准备方案相对当前真实状态的战力变化，不写入会话。"""
+        from guild_manager_bench.bench.llm.preparation_plan import simulate_preparation_plan
+        from guild_manager_bench.bench.metrics import compute_rank_score
 
         with self._lock:
             session = self._get_session(session_id)
             assert session.state is not None
+            start = self.definition.llm_tools.endgame_start_turn
+            if start is None or session.state.turn < start:
+                return {"ok": False, "simulation_only": True, "error": "仅在终局阶段可预览战力"}
             try:
-                from guild_manager_bench.bench.metrics import compute_rank_score_breakdown
-
-                rank_result = compute_rank_score_breakdown(
-                    session.definition,
-                    session.state,
+                projected = simulate_preparation_plan(
+                    self.definition, session.state, operations, self.list_tool_schemas(),
                 )
-            except Exception as exc:
-                return {"ok": False, "error": str(exc)}
-            per_adventurer = [
-                {
-                    "adventurer_id": adv_id,
-                    "rank_score": round(score, 2),
-                    "rank_score_share": (
-                        round(score / rank_result.rank_score, 4)
-                        if rank_result.rank_score > 0 else 0.0
-                    ),
-                }
-                for adv_id, score in rank_result.per_adventurer_score.items()
-            ]
+            except ValueError as exc:
+                return {"ok": False, "simulation_only": True, "error": str(exc)}
+            current_score = round(compute_rank_score(self.definition, session.state), 2)
+            projected_score = (
+                current_score if projected is session.state
+                else round(compute_rank_score(self.definition, projected), 2)
+            )
             return {
                 "ok": True,
-                "rank_score": round(rank_result.rank_score, 2),
-                "per_adventurer": per_adventurer,
+                "simulation_only": True,
+                "current_rank_score": current_score,
+                "projected_rank_score": projected_score,
+                "rank_score_delta": round(projected_score - current_score, 2),
+                "operation_count": len(operations),
             }
 
     def _submit_preparation(
@@ -456,6 +585,14 @@ class GuildManagerTools:
         names = dict(_BASE_HANDLER_NAMES)
         if self.definition.llm_tools.expose_battle_preview:
             names["preview_battle"] = "preview_battle"
+        if self.definition.llm_tools.expose_tactics:
+            names["configure_tactics"] = "configure_tactics"
+        if self.definition.llm_tools.expose_battle_log:
+            names["get_battle_log"] = "get_battle_log"
+        if self.definition.llm_tools.expose_forecast:
+            names["get_forecast"] = "get_forecast"
+        if self.definition.rules.monster_refresh.enabled:
+            names["refresh_monsters"] = "refresh_monsters"
         if self.definition.llm_tools.endgame_start_turn is not None:
             names["preview_team_power"] = "preview_team_power"
         return names
@@ -613,12 +750,12 @@ _SESSION_ID = {
 _ADVENTURER_ID = {
     "type": "integer",
     "minimum": 1,
-    "description": "冒险者数字 id，使用提示词或 get_party 中“冒险者”列表左侧的数字。",
+    "description": "冒险者数字 id，使用回合提示词或工具返回中“冒险者”列表左侧的数字。",
 }
 _MONSTER_ID = {
     "type": "integer",
     "minimum": 1,
-    "description": "怪物数字 id，使用提示词或 get_monsters 中“怪物”列表左侧的数字。",
+    "description": "怪物数字 id，使用回合提示词中“当前怪物”列表左侧的数字。",
 }
 _RECIPE_ID = {
     "type": "integer",
@@ -675,7 +812,7 @@ _BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
     },
     {
         "name": "get_recruitment",
-        "description": "读取可招募的候选冒险者的详细信息。只有在确定要招募新的冒险者时才应调用此工具查看详情；如果只是想了解队伍人数上限，请查看回合概览。",
+        "description": "读取可招募的候选冒险者的详细信息。需要招募/替换冒险者时可调用此工具查看详情；如果只是想了解队伍人数上限，请查看回合概览。",
         "parameters": {
             "type": "object",
             "required": ["session_id"],
@@ -711,7 +848,7 @@ _BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
     },
     {
         "name": "allocate_experience",
-        "description": "把经验池中的指定数量经验分配给冒险者。",
+        "description": "从经验池中分配指定数量的经验给冒险者。若触发升级，最大HP/MP提升时保持已损失HP/MP差值不变（不会直接回满）。",
         "parameters": {
             "type": "object",
             "required": ["session_id", "adventurer_id", "amount"],
@@ -721,7 +858,7 @@ _BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
                 "amount": {
                     "type": "integer",
                     "minimum": 0,
-                    "description": "要分配的经验值，不能超过当前 experience_pool。",
+                    "description": "要分配的经验值，不能超过当前经验池（experience_pool）。",
                 },
             },
             "additionalProperties": False,
@@ -755,7 +892,10 @@ _BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
     },
     {
         "name": "equip_item",
-        "description": "把装备穿戴到冒险者身上；会自动替换同槽位已经装备的装备。",
+        "description": (
+            "把装备穿戴到指定冒险者身上。会自动卸下冲突槽位的已有装备（同槽位替换；穿戴 two_hand 双手武器会自动卸下 main_hand 和 off_hand，反之亦然）。"
+            "若该装备正穿在其他队友身上，会自动从原队友身上卸下并转移给目标冒险者，无需先调用 unequip_item。"
+        ),
         "parameters": {
             "type": "object",
             "required": ["session_id", "adventurer_id", "equipment_instance_id"],
@@ -819,7 +959,7 @@ _BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
     },
     {
         "name": "get_events",
-        "description": "读取会话事件日志；可只读取某个 sequence 之后的新事件。",
+        "description": "读取本局游戏的历史操作与回合结算流水账（简短摘要，不含具体战斗过程；如需查看战斗详情请使用 get_battle_log）。",
         "parameters": {
             "type": "object",
             "required": ["session_id"],
@@ -837,37 +977,80 @@ _BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
 )
 
 
-_BATTLE_PREVIEW_SCHEMA: dict[str, Any] = {
-    "name": "preview_battle",
+def _battle_preview_schema(max_battle_preview_per_turn: int = 3) -> dict[str, Any]:
+    limit_notice = (
+        f"注意：每回合最多调用 {max_battle_preview_per_turn} 次，请仅在胜负或战损存疑的关键对局中使用。"
+        if max_battle_preview_per_turn
+        else ""
+    )
+    return {
+        "name": "preview_battle",
+        "description": (
+            "预览一场 1v1 战斗的结果，不改变真实状态。"
+            "仅支持当前已在队伍中的冒险者（不可传入招募候选）与当前回合的怪物。"
+            f"{limit_notice}"
+        ),
+        "parameters": {
+            "type": "object",
+            "required": ["session_id", "adventurer_id", "monster_id"],
+            "properties": {
+                "session_id": _SESSION_ID,
+                "adventurer_id": _ADVENTURER_ID,
+                "monster_id": _MONSTER_ID,
+            },
+            "additionalProperties": False,
+        },
+    }
+
+
+_BATTLE_PREVIEW_SCHEMA: dict[str, Any] = _battle_preview_schema(3)
+
+_TACTICS_SCHEMA: dict[str, Any] = {
+    "name": "configure_tactics",
     "description": (
-        "预览一场单独的 1v1 战斗，不改变状态；每次只能传入一个冒险者和一个怪物。"
-        "只能传入已经招募成功的冒险者，传入招募候选中的冒险者会失败。"
-        "注意：每回合最多只能调用 3 次此工具，请仅在你认为存在悬念的关键战斗中使用，不要滥用。"
+        "覆盖设置指定冒险者的主动技能释放优先级（skill_priority）与停用列表（disabled_skills）。"
+        "仅可填入该角色当前拥有的主动技能字符串 ID（被动技能不可配置且不受影响）。"
+        "未列入 skill_priority 且未停用的主动技能排在后面，保持默认顺序；两个列表均传空数组 [] 时恢复默认配置。"
+        "装备卸下期间其附带技能不生效，重新穿戴后沿用已有配置。"
     ),
     "parameters": {
         "type": "object",
-        "required": ["session_id", "adventurer_id", "monster_id"],
+        "required": ["adventurer_id", "skill_priority", "disabled_skills"],
         "properties": {
-            "session_id": _SESSION_ID,
             "adventurer_id": _ADVENTURER_ID,
-            "monster_id": _MONSTER_ID,
+            "skill_priority": {
+                "type": "array", "uniqueItems": True,
+                "items": {"type": "string", "minLength": 1},
+                "description": "主动技能字符串 ID，按优先级从高到低排列，不可与停用列表重叠。",
+            },
+            "disabled_skills": {
+                "type": "array", "uniqueItems": True,
+                "items": {"type": "string", "minLength": 1},
+                "description": "停用的主动技能字符串 ID。",
+            },
         },
         "additionalProperties": False,
     },
 }
 
-_TEAM_POWER_PREVIEW_SCHEMA: dict[str, Any] = {
-    "name": "preview_team_power",
-    "description": (
-        "预览当前队伍的终局战力评分（rank_score），返回总分和每个冒险者的贡献分解。"
-    ),
-    "parameters": {
-        "type": "object",
-        "required": ["session_id"],
-        "properties": {"session_id": _SESSION_ID},
-        "additionalProperties": False,
-    },
-}
+
+def team_power_preview_schema(schemas: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    from guild_manager_bench.bench.llm.preparation_plan import plan_operations_schema
+
+    return {
+        "name": "preview_team_power",
+        "description": (
+            "在终局阶段无副作用地试算一组准备动作（最多 20 步）对全队终局战力评分（rank_score）的影响，真实状态不改变。"
+            "返回当前真实分数、假设执行方案后的分数及两者的差值（相对于调用前的真实状态，而非回合初状态）。"
+            "传入 operations=[] 可仅查询当前真实分数。仅支持准备类动作（不可包含查询、预览、write_memo 或 end_turn），"
+            "动作按顺序校验资源与前置条件。试算仅消耗 1 次工具调用预算，若决定采纳方案，仍需逐一调用真实工具执行。"
+        ),
+        "parameters": {
+            "type": "object", "required": ["operations"],
+            "properties": {"operations": plan_operations_schema(schemas)},
+            "additionalProperties": False,
+        },
+    }
 
 
 def _without_session_id(schema: Mapping[str, Any]) -> dict[str, Any]:

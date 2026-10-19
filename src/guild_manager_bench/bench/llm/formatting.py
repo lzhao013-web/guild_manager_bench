@@ -13,14 +13,33 @@ def skill_summary(skills: Any) -> str:
 
 
 def skill_summary_lines(skills: Any) -> tuple[str, ...]:
-    """Return one formatted line per skill for LLM-visible text."""
+    """主动技能按战斗检查顺序展示，被动技能按原顺序置后。"""
 
     values = [
         skill
         for skill in _sequence(skills)
         if isinstance(skill, Mapping)
     ]
-    return tuple(_skill_text(skill) for skill in values)
+    active_skills = sorted(
+        (skill for skill in values if skill.get("kind") != "passive"),
+        key=lambda skill: (-skill.get("priority", 0), skill.get("skill_id", "")),
+    )
+    passive_skills = [skill for skill in values if skill.get("kind") == "passive"]
+    return tuple(_skill_text(skill) for skill in (*active_skills, *passive_skills))
+
+
+def tactics_summary_lines(tactics: Any) -> tuple[str, ...]:
+    """展示可配置技能的字符串 ID，包含已停用技能。"""
+    if not isinstance(tactics, Mapping):
+        return ()
+    priority = ", ".join(tactics["skill_priority"]) or "默认顺序"
+    disabled = ", ".join(tactics["disabled_skills"]) or "无"
+    lines = [f"主动技能配置：优先 {priority}，停用 {disabled}"]
+    for skill in tactics["available_active_skills"]:
+        suffix = "（已停用）" if skill["skill_id"] in tactics["disabled_skills"] else ""
+        detail = _skill_text(skill) if suffix else skill["name"]
+        lines.append(f"可配置技能 ID {skill['skill_id']}{suffix}：{detail}")
+    return tuple(lines)
 
 
 def _skill_text(skill: Mapping[str, Any]) -> str:
@@ -39,6 +58,7 @@ def _skill_text(skill: Mapping[str, Any]) -> str:
 
     sentences = [
         f"{name}：{'即时主动技能' if skill.get('free') else '主动技能'}。"
+        f"技能ID {skill.get('skill_id', '')}。"
     ]
     limits: list[str] = []
     mp_cost = skill.get("mp_cost")
@@ -89,9 +109,9 @@ def _condition_text(value: Any) -> str:
     if condition_type == "target_mp_pct_gte":
         return f"目标MP不低于{_percent(value.get('value'))}"
     if condition_type == "action_index_lte":
-        return f"行动序号不超过{_number(value.get('value'))}"
+        return f"双方累计行动序号不超过{_number(value.get('value'))}"
     if condition_type == "action_index_gte":
-        return f"行动序号至少为{_number(value.get('value'))}"
+        return f"双方累计行动序号至少为{_number(value.get('value'))}"
     condition_value = value.get("value")
     return raw if condition_value is None else f"{raw}:{condition_value}"
 
@@ -117,7 +137,7 @@ def _effect_text(effect: Mapping[str, Any], *, status_context: bool = False) -> 
         if effect_type == "stat_multiplier":
             return f"{target_text}{stat_text}×{_number(value)}"
     if effect_type == "damage_multiplier":
-        return f"造成普通攻击伤害的{_number(value)}倍"
+        return f"造成一段“扣防后普攻伤害×{_number(value)}”的伤害，向下取整且最低1点"
     if effect_type == "heal":
         return f"为{target_text}恢复{_number(value)}点HP"
     if effect_type == "heal_percent":
@@ -125,7 +145,7 @@ def _effect_text(effect: Mapping[str, Any], *, status_context: bool = False) -> 
     if effect_type == "mp_restore":
         return f"为{target_text}恢复{_number(value)}点MP"
     if effect_type == "damage_bonus":
-        return f"在普通攻击伤害上额外+{_number(value)}"
+        return f"造成一段“普通攻击伤害＋{_number(value)}”的伤害"
     if effect_type == "true_damage":
         return f"造成{_number(value)}点无视防御伤害"
     if effect_type == "atk_ratio_damage":
@@ -161,7 +181,7 @@ def _status_text(status: Mapping[str, Any]) -> str:
     if polarity:
         parts.append(f"{polarity}状态")
     if isinstance(duration, int | float):
-        parts.append(f"持续{_number(duration)}次行动")
+        parts.append(f"持续状态持有者的{_number(duration)}次行动")
     if stack:
         parts.append(stack)
     if effect_text:

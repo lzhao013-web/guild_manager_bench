@@ -5,7 +5,7 @@ from typing import Any, Mapping
 
 import yaml
 
-from guild_manager_bench.game.crafting import CraftingRecipe
+from guild_manager_bench.game.crafting import CraftingRecipe, MaterialCost
 from guild_manager_bench.game.equipment import EquipmentTemplate
 from guild_manager_bench.game.models import CombatResources, CombatStatModifier, CombatStats
 from guild_manager_bench.game.progression import ExperienceRules
@@ -26,6 +26,8 @@ from guild_manager_bench.game.state import (
     LlmToolRules,
     MonsterArchetype,
     MonsterSpawnRules,
+    MonsterRefreshPrice,
+    MonsterRefreshRules,
     MonsterTierConfig,
     RecruitableAdventurerTemplate,
     RecruitVariationConfig,
@@ -99,6 +101,10 @@ def load_game_definition(data_dir: str | Path) -> GameDefinition:
             _list_section(adventurer_data, "recruitable_adventurers"), skill_registry
         ),
         monster_archetypes=_parse_monsters(_list_section(monster_data, "monsters"), skill_registry),
+        challenge_archetypes=(
+            _parse_monsters(_list_section(monster_data, "challenges"), skill_registry)
+            if isinstance(monster_data, Mapping) else ()
+        ),
         equipment_templates=_parse_equipment(_list_section(equipment_data, "equipment"), skill_registry),
         crafting_recipes=_parse_recipes(_list_section(recipe_data, "recipes")),
         global_upgrades=_parse_upgrades(_list_section(upgrade_data, "upgrades"), skill_registry),
@@ -255,6 +261,19 @@ def _parse_upgrades(values: list[Any], registry: dict[str, Skill]) -> tuple[Glob
                 name=_str(_required(data, "name"), f"upgrades[{index}].name"),
                 gold_cost=_int(data.get("gold", data.get("gold_cost", 0)), f"upgrades[{index}].gold"),
                 description=_opt_str(data.get("description"), f"upgrades[{index}].description"),
+                branch=_str(data.get("branch", "common"), f"upgrades[{index}].branch"),
+                tier=_int(data.get("tier", 1), f"upgrades[{index}].tier"),
+                experience_cost=_int(data.get("experience", 0), f"upgrades[{index}].experience"),
+                material_costs=tuple(
+                    MaterialCost(material_id, quantity)
+                    for material_id, quantity in _int_mapping(data.get("materials", {}), f"upgrades[{index}].materials").items()
+                ),
+                exclusive_upgrade_ids=tuple(
+                    _str(uid, f"upgrades[{index}].excludes")
+                    for uid in _list(data.get("excludes", ()), f"upgrades[{index}].excludes")
+                ),
+                craft_gold_discount_percent=_int(data.get("craft_gold_discount_percent", 0), f"upgrades[{index}].craft_gold_discount_percent"),
+                hunt_experience_bonus_percent=_int(data.get("hunt_experience_bonus_percent", 0), f"upgrades[{index}].hunt_experience_bonus_percent"),
                 stat_modifier=_parse_stat_modifier(
                     _mapping(_stat_modifier_data(data), f"upgrades[{index}].stats")
                 ),
@@ -280,6 +299,7 @@ def _parse_game_rules(
     spawn = _mapping(_required(data, "monster_spawn"), "rules.monster_spawn")
     return GameRules(
         max_turns=_int(_required(data, "max_turns"), "rules.max_turns"),
+        final_preparation_only=_bool(data.get("final_preparation_only", False), "rules.final_preparation_only"),
         seed=_int(data.get("seed", 0), "rules.seed"),
         monster_spawn=MonsterSpawnRules(
             count_curve=_parse_float_curve(_mapping(_required(spawn, "count_curve"), "rules.monster_spawn.count_curve")),
@@ -293,6 +313,9 @@ def _parse_game_rules(
             boss=tier_dict.get("boss", MonsterTierConfig()),
             bonus_skill_themes=themes,
         ),
+        monster_refresh=_parse_monster_refresh_rules(
+            _mapping(data.get("monster_refresh", {}), "rules.monster_refresh")
+        ),
         turn_recovery=_parse_turn_recovery(
             _mapping(data.get("turn_recovery", {}), "rules.turn_recovery")
         ),
@@ -300,6 +323,18 @@ def _parse_game_rules(
             _mapping(data.get("recruitment", {}), "rules.recruitment")
         ),
     )
+
+
+def _parse_monster_refresh_rules(data: Mapping[str, Any]) -> MonsterRefreshRules:
+    prices = []
+    for index, raw in enumerate(_list(data.get("base_prices", []), "rules.monster_refresh.base_prices")):
+        path = f"rules.monster_refresh.base_prices[{index}]"
+        price = _mapping(raw, path)
+        prices.append(MonsterRefreshPrice(
+            from_turn=_int(_required(price, "from_turn"), f"{path}.from_turn"),
+            gold=_int(_required(price, "gold"), f"{path}.gold"),
+        ))
+    return MonsterRefreshRules(base_prices=tuple(prices))
 
 
 def _parse_recruitment_rules(data: Mapping[str, Any]) -> RecruitmentRules:
@@ -368,6 +403,9 @@ def _parse_turn_recovery(data: Mapping[str, Any]) -> TurnRecoveryRules:
 def _parse_llm_tool_rules(data: Mapping[str, Any]) -> LlmToolRules:
     raw_endgame = data.get("endgame_start_turn")
     return LlmToolRules(
+        expose_battle_log=_bool(data.get("expose_battle_log", False), "llm.expose_battle_log"),
+        expose_forecast=_bool(data.get("expose_forecast", False), "llm.expose_forecast"),
+        expose_tactics=_bool(data.get("expose_tactics", False), "llm.expose_tactics"),
         expose_battle_preview=_bool(
             data.get("expose_battle_preview", False),
             "llm.expose_battle_preview",

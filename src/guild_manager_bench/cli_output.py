@@ -34,6 +34,7 @@ _TOOL_NAMES = {
     "recruit_adventurer": "招募冒险者", "dismiss_adventurer": "解散冒险者",
     "equip_item": "穿戴装备", "unequip_item": "卸下装备",
     "preview_battle": "模拟对战", "preview_team_power": "预览队伍评分",
+    "refresh_monsters": "刷新怪物",
     "write_memo": "保存备忘录", "end_turn": "安排讨伐并结束回合",
 }
 _FAILURES = {
@@ -417,6 +418,8 @@ class RunReporter:
             memo = result["memo"]
             content = memo["content"].replace("\n", " ")
             return f"备忘录已保存 · 共 {memo['count']} 条 · {content[:100]}{'…' if len(content) > 100 else ''}"
+        if name == "refresh_monsters" and result.get("simulation_only") is True:
+            return f"预览怪物刷新 · 第{result['refresh_number']}次 · 实刷需{result['gold_cost']}金币（未执行）"
         if name == "preview_battle":
             p = result["preview"]
             return f"模拟对战 · {p['adventurer_name']} → {p['monster_name']} · {'胜利' if p['won'] else '未获胜'}（非实际讨伐）"
