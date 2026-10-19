@@ -4,6 +4,9 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any, Callable
 
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
 from guild_manager_bench.api.routes_llm_archive import llm_archive_router
 from guild_manager_bench.game.actions import RecruitAction
 from guild_manager_bench.game.loader import load_game_definition
@@ -15,14 +18,13 @@ def test_get_replay_is_read_only(tmp_path: Path) -> None:
     replay_path = _write_replay(tmp_path, "run-a", _legacy_replay())
     before = replay_path.read_text(encoding="utf-8")
 
-    response = _call_route(
-        tmp_path,
-        "/api/llm/runs/{run_id}/replay",
-        "GET",
-        run_id="run-a",
-    )
+    app = FastAPI()
+    app.include_router(llm_archive_router(tmp_path))
+    with TestClient(app) as client:
+        response = client.get("/api/llm/runs/run-a/replay")
 
-    assert response["score"] == {"score": 12.34}
+    assert response.status_code == 200
+    assert response.json()["score"] == {"score": 12.34}
     assert replay_path.read_text(encoding="utf-8") == before
 
 

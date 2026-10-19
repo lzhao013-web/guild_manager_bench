@@ -75,18 +75,19 @@ const DOM = {
 // ============================================================================
 async function init() {
   bindEvents();
-  const runIds = await loadRunList();
   const hash = window.location.hash;
-  if (hash.startsWith('#run=')) {
-    const runId = decodeURIComponent(hash.slice(5));
-    if (runIds.has(runId)) {
-      DOM.runSelector.value = runId;
-      await loadReplay(runId, Number(new URLSearchParams(window.location.search).get('turn')));
-    } else {
-      window.history.replaceState(null, '', window.location.pathname + window.location.search);
-      setStatus(`找不到跑局: ${runId}`, true);
-    }
+  const runId = hash.startsWith('#run=') ? decodeURIComponent(hash.slice(5)) : null;
+  if (runId) {
+    const option = document.createElement('option');
+    option.value = runId; option.textContent = runId;
+    DOM.runSelector.appendChild(option);
+    DOM.runSelector.value = runId;
   }
+  const runList = loadRunList();
+  if (runId) {
+    await loadReplay(runId, Number(new URLSearchParams(window.location.search).get('turn')));
+  }
+  await runList;
 }
 
 function bindEvents() {
@@ -124,6 +125,7 @@ async function loadRunList() {
   const runIds = new Set();
   try {
     const r = await fetch('/api/llm/runs'); const d = await r.json();
+    const selected = DOM.runSelector.value;
     DOM.runSelector.innerHTML = '<option value="">— 选择 LLM 跑局 —</option>';
     (d.runs||[]).forEach(run => {
       const o = document.createElement('option'); o.value = run.run_id;
@@ -133,6 +135,12 @@ async function loadRunList() {
       o.textContent = `${(run.created_at||'').slice(0,15)}${model} · ${run.preset||'?'} · T${run.turns} · ${run.status}${rank}${run.has_observations?' 📷':''}`;
       DOM.runSelector.appendChild(o);
     });
+    if (selected && !runIds.has(selected)) {
+      const option = document.createElement('option');
+      option.value = selected; option.textContent = selected;
+      DOM.runSelector.appendChild(option);
+    }
+    DOM.runSelector.value = selected;
   } catch(e) { console.error(e); }
   return runIds;
 }

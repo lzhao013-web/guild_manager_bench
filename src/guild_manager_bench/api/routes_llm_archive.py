@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
+from threading import Lock
 from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import Response
+import msgspec
 
+from guild_manager_bench.api.archive_io import read_archive_json, read_archive_response_bytes
 from guild_manager_bench.bench.llm.runner import (
     rebuild_replay_observations,
     replay_observations_complete,
@@ -22,63 +27,24 @@ def llm_archive_router(base_dir: str | Path = "runs/llm") -> APIRouter:
 
     router = APIRouter(prefix="/api/llm/runs", tags=["llm"])
     archive_dir = Path(base_dir)
+    summaries = _RunSummaryCache(archive_dir)
 
     @router.get("")
     async def list_runs() -> dict[str, Any]:
-        if not archive_dir.exists():
-            return {"runs": []}
-        runs = []
-        for directory in sorted(
-            (path for path in archive_dir.iterdir() if path.is_dir()),
-            key=lambda path: path.name,
-            reverse=True,
-        ):
-            replay_path = directory / "replay.json"
-            if not replay_path.exists():
-                continue
-            replay = _read_json(replay_path)
-            if not isinstance(replay, dict):
-                continue
-            data = replay.get("data")
-            data = data if isinstance(data, dict) else {}
-            score = replay.get("score")
-            score = score if isinstance(score, dict) else {}
-            stats = replay.get("stats")
-            stats = stats if isinstance(stats, dict) else {}
-            game_actions = stats.get("game_actions")
-            game_actions = game_actions if isinstance(game_actions, dict) else {}
-            agent = replay.get("agent")
-            agent_config = (
-                agent.get("config")
-                if isinstance(agent, dict)
-                else None
-            ) or {}
-            runs.append(
-                {
-                    "run_id": directory.name,
-                    "created_at": replay.get("created_at"),
-                    "session_id": replay.get("session_id"),
-                    "status": replay.get("status"),
-                    "failure_reason": replay.get("failure_reason"),
-                    "turns": len(replay.get("turns", [])),
-                    "preset": data.get("preset")
-                    or _preset_from_data_dir(data.get("data_dir")),
-                    "model": agent_config.get("model"),
-                    "data_hash": data.get("data_hash"),
-                    "score": score.get("score"),
-                    "rank_score": score.get("rank_score"),
-                    "adventurer_stats": game_actions.get("adventurer_stats") or [],
-                    "has_observations": _replay_has_observations(replay),
-                }
-            )
-        return {"runs": runs}
+        return {"runs": await asyncio.to_thread(summaries.read)}
 
     @router.get("/{run_id}/replay")
-    async def get_replay(run_id: str) -> dict[str, Any]:
-        """读取 replay 文件，不做重建、重算或写回。"""
+    async def get_replay(run_id: str) -> Response:
+        """返回去除格式空白的 JSON 字节，不构建回放对象，也不写回。"""
 
         replay_path = _replay_path(archive_dir, run_id)
-        return _read_replay(replay_path)
+        try:
+            content = await asyncio.to_thread(read_archive_response_bytes, replay_path)
+        except msgspec.DecodeError as exc:
+            raise HTTPException(status_code=500, detail=f"invalid JSON: {replay_path.name}") from exc
+        if not content.startswith(b"{"):
+            raise HTTPException(status_code=500, detail="replay must be a JSON object")
+        return Response(content=content, media_type="application/json")
 
     @router.post("/{run_id}/rescore")
     async def rescore_replay(run_id: str) -> dict[str, Any]:
@@ -104,6 +70,72 @@ def llm_archive_router(base_dir: str | Path = "runs/llm") -> APIRouter:
         return _with_scores(result, save_path=replay_path)
 
     return router
+
+
+class _RunSummaryCache:
+    """每个路由实例只缓存摘要，文件变化时重新读取，删除时淘汰。"""
+
+    def __init__(self, root: Path) -> None:
+        self.root = root
+        self._lock = Lock()
+        self._cache: dict[Path, tuple[tuple[int, int], dict[str, Any] | None]] = {}
+
+    def read(self) -> list[dict[str, Any]]:
+        with self._lock:
+            current = {}
+            runs = []
+            if self.root.exists():
+                for directory in sorted(
+                    (path for path in self.root.iterdir() if path.is_dir()),
+                    key=lambda path: path.name,
+                    reverse=True,
+                ):
+                    path = directory / "replay.json"
+                    if not path.exists():
+                        continue
+                    stat = path.stat()
+                    signature = (stat.st_mtime_ns, stat.st_size)
+                    cached = self._cache.get(path)
+                    if cached is not None and cached[0] == signature:
+                        summary = cached[1]
+                    else:
+                        summary = _run_summary(path)
+                    current[path] = (signature, summary)
+                    if summary is not None:
+                        runs.append(summary)
+            self._cache = current
+            return runs
+
+
+def _run_summary(path: Path) -> dict[str, Any] | None:
+    replay = _read_json(path)
+    if not isinstance(replay, dict):
+        return None
+    data = replay.get("data")
+    data = data if isinstance(data, dict) else {}
+    score = replay.get("score")
+    score = score if isinstance(score, dict) else {}
+    stats = replay.get("stats")
+    stats = stats if isinstance(stats, dict) else {}
+    game_actions = stats.get("game_actions")
+    game_actions = game_actions if isinstance(game_actions, dict) else {}
+    agent = replay.get("agent")
+    agent_config = (agent.get("config") if isinstance(agent, dict) else None) or {}
+    return {
+        "run_id": path.parent.name,
+        "created_at": replay.get("created_at"),
+        "session_id": replay.get("session_id"),
+        "status": replay.get("status"),
+        "failure_reason": replay.get("failure_reason"),
+        "turns": len(replay.get("turns", [])),
+        "preset": data.get("preset") or _preset_from_data_dir(data.get("data_dir")),
+        "model": agent_config.get("model"),
+        "data_hash": data.get("data_hash"),
+        "score": score.get("score"),
+        "rank_score": score.get("rank_score"),
+        "adventurer_stats": game_actions.get("adventurer_stats") or [],
+        "has_observations": _replay_has_observations(replay),
+    }
 
 
 def _replay_path(base_dir: Path, run_id: str) -> Path:
@@ -194,6 +226,6 @@ def _write_json_atomic(path: Path, data: dict[str, Any]) -> None:
 
 def _read_json(path: Path) -> Any:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return read_archive_json(path)
     except json.JSONDecodeError as exc:
         raise HTTPException(status_code=500, detail=f"invalid JSON: {path.name}") from exc
