@@ -1,0 +1,522 @@
+monsters:
+  # ===== Early (min_turn: 1) =====
+  - id: goblin
+    name: 哥布林
+    spawn_weight: 15
+    min_turn: 1
+    base_stats:
+      hp: 65
+      mp: 0
+      attack: 20
+      defense: 4
+      speed: 9
+      recovery: 0
+      mp_recovery: 0
+    base_reward:
+      gold: 20
+      experience: 45
+      materials:
+        iron_ore: 1
+        bone: 1
+    stat_growth:
+      hp: 2.0
+      attack: 0.5
+      defense: 0.2
+    reward_growth:
+      gold: 1
+      experience: 2
+      materials:
+        bone: 1
+
+  - id: slime
+    name: 史莱姆
+    spawn_weight: 15
+    min_turn: 1
+    base_stats:
+      hp: 85
+      mp: 0
+      attack: 15
+      defense: 9
+      speed: 5
+      recovery: 0
+      mp_recovery: 0
+    base_reward:
+      gold: 18
+      experience: 40
+      materials:
+        herb: 1
+    stat_growth:
+      hp: 2.0
+      attack: 0.35
+      defense: 0.2
+    reward_growth:
+      gold: 1
+      experience: 2
+      materials:
+        herb: 1
+
+  - id: ogre
+    name: 食人魔
+    spawn_weight: 5
+    min_turn: 1
+    base_stats:
+      hp: 115
+      mp: 0
+      attack: 19
+      defense: 9
+      speed: 5
+      recovery: 0
+      mp_recovery: 0
+    base_reward:
+      gold: 34
+      experience: 78
+      materials:
+        iron_ore: 1
+        sharp_claw: 1
+    stat_growth:
+      hp: 3.0
+      attack: 0.6
+      defense: 0.3
+      speed: 0.1
+    reward_growth:
+      gold: 2
+      experience: 3
+      materials:
+        sharp_claw: 1
+    skills: [ogre_regen]
+
+  - id: orc_warrior
+    name: 兽人战士
+    spawn_weight: 10
+    min_turn: 1
+    base_stats:
+      hp: 84
+      mp: 0
+      attack: 23
+      defense: 6
+      speed: 10
+      recovery: 0
+      mp_recovery: 0
+    base_reward:
+      gold: 28
+      experience: 64
+      materials:
+        iron_ore: 1
+        sharp_claw: 1
+    stat_growth:
+      hp: 2.5
+      attack: 0.7
+      defense: 0.25
+    reward_growth:
+      gold: 1
+      experience: 2
+      materials:
+        iron_ore: 1
+
+  - id: warg
+    name: 座狼
+    spawn_weight: 10
+    min_turn: 1
+    base_stats:
+      hp: 66
+      mp: 0
+      attack: 25
+      defense: 3
+      speed: 12
+      recovery: 0
+      mp_recovery: 0
+    base_reward:
+      gold: 26
+      experience: 58
+      materials:
+        beast_hide: 1
+        sharp_claw: 1
+    stat_growth:
+      hp: 1.5
+      attack: 0.8
+      defense: 0.15
+    reward_growth:
+      gold: 1
+      experience: 2
+      materials:
+        sharp_claw: 1
+
+  - id: goblin_shaman
+    name: 哥布林萨满
+    spawn_weight: 10
+    min_turn: 1
+    base_stats:
+      hp: 48
+      mp: 18
+      attack: 13
+      defense: 3
+      speed: 8
+      recovery: 0
+      mp_recovery: 0
+    skills: [shaman_spark]
+    base_reward:
+      gold: 24
+      experience: 55
+      materials:
+        herb: 1
+        arcane_dust: 1
+    stat_growth:
+      hp: 0.5
+      attack: 0.4
+      defense: 0.15
+    reward_growth:
+      gold: 1
+      experience: 2
+      materials:
+        herb: 1
+
+  # ===== Mid (min_turn: 8) =====
+  - id: orc_captain
+    name: 兽人队长
+    spawn_weight: 15
+    min_turn: 8
+    base_stats:
+      hp: 150
+      mp: 0
+      attack: 30
+      defense: 12
+      speed: 8
+      recovery: 0
+      mp_recovery: 0
+    base_reward:
+      gold: 38
+      experience: 85
+      materials:
+        mithril_shard: 1
+        sharp_claw: 1
+    stat_growth:
+      hp: 4.5
+      attack: 1.5
+      defense: 0.4
+    reward_growth:
+      gold: 2
+      experience: 3
+      materials:
+        mithril_shard: 1
+    skills: [war_cry]
+
+  - id: dark_mage
+    name: 暗黑法师
+    spawn_weight: 15
+    min_turn: 8
+    base_stats:
+      hp: 110
+      mp: 30
+      attack: 26
+      defense: 7
+      speed: 13
+      recovery: 0
+      mp_recovery: 0
+    base_reward:
+      gold: 36
+      experience: 80
+      materials:
+        arcane_dust: 1
+        herb: 1
+    stat_growth:
+      hp: 3.5
+      attack: 1.6
+      defense: 0.4
+    reward_growth:
+      gold: 2
+      experience: 3
+      materials:
+        arcane_dust: 1
+    skills: [dark_bolt]
+
+  - id: giant_spider
+    name: 巨蛛
+    spawn_weight: 15
+    min_turn: 8
+    base_stats:
+      hp: 120
+      mp: 0
+      attack: 28
+      defense: 8
+      speed: 16
+      recovery: 0
+      mp_recovery: 0
+    base_reward:
+      gold: 34
+      experience: 76
+      materials:
+        spider_silk: 1
+        beast_hide: 1
+    stat_growth:
+      hp: 4.0
+      attack: 1.4
+      defense: 0.35
+    reward_growth:
+      gold: 2
+      experience: 3
+      materials:
+        spider_silk: 1
+    skills: [poison_spit]
+
+  - id: skeleton_knight
+    name: 骷髅骑士
+    spawn_weight: 15
+    min_turn: 8
+    base_stats:
+      hp: 160
+      mp: 0
+      attack: 32
+      defense: 12
+      speed: 9
+      recovery: 0
+      mp_recovery: 0
+    base_reward:
+      gold: 36
+      experience: 82
+      materials:
+        mithril_shard: 1
+        bone: 1
+    stat_growth:
+      hp: 5.0
+      attack: 1.8
+      defense: 0.5
+    reward_growth:
+      gold: 2
+      experience: 3
+      materials:
+        bone: 1
+    skills: [bone_armor]
+
+  - id: wraith
+    name: 怨灵
+    spawn_weight: 15
+    min_turn: 8
+    base_stats:
+      hp: 100
+      mp: 20
+      attack: 25
+      defense: 6
+      speed: 20
+      recovery: 0
+      mp_recovery: 0
+    skills: [life_siphon]
+    base_reward:
+      gold: 32
+      experience: 72
+      materials:
+        arcane_dust: 1
+        soul_shard: 1
+    stat_growth:
+      hp: 3.5
+      attack: 1.3
+      defense: 0.35
+    reward_growth:
+      gold: 2
+      experience: 3
+      materials:
+        soul_shard: 1
+
+  - id: hellhound
+    name: 地狱犬
+    spawn_weight: 15
+    min_turn: 8
+    base_stats:
+      hp: 130
+      mp: 0
+      attack: 30
+      defense: 6
+      speed: 18
+      recovery: 0
+      mp_recovery: 0
+    skills: [frenzy_howl]
+    base_reward:
+      gold: 38
+      experience: 86
+      materials:
+        beast_hide: 1
+        sharp_claw: 1
+    stat_growth:
+      hp: 4.0
+      attack: 1.9
+      defense: 0.4
+    reward_growth:
+      gold: 2
+      experience: 3
+      materials:
+        sharp_claw: 1
+
+  # ===== Late (min_turn: 16) =====
+  - id: gargoyle
+    name: 石像鬼
+    spawn_weight: 20
+    min_turn: 18
+    base_stats:
+      hp: 220
+      mp: 0
+      attack: 36
+      defense: 14
+      speed: 8
+      recovery: 0
+      mp_recovery: 0
+    base_reward:
+      gold: 48
+      experience: 108
+      materials:
+        dragon_scale: 1
+        mithril_shard: 1
+    stat_growth:
+      hp: 6
+      attack: 2
+      defense: 1.0
+    reward_growth:
+      gold: 2
+      experience: 4
+      materials:
+        dragon_scale: 1
+    skills: [stone_hide]
+
+  - id: wyvern
+    name: 双足飞龙
+    spawn_weight: 20
+    min_turn: 18
+    base_stats:
+      hp: 210
+      mp: 0
+      attack: 44
+      defense: 10
+      speed: 20
+      recovery: 0
+      mp_recovery: 0
+    base_reward:
+      gold: 52
+      experience: 115
+      materials:
+        dragon_scale: 1
+        dragon_blood: 1
+    stat_growth:
+      hp: 4
+      attack: 1.5
+      defense: 0.5
+    reward_growth:
+      gold: 2
+      experience: 4
+      materials:
+        dragon_blood: 1
+    skills: [dragon_breath]
+
+  - id: lich
+    name: 巫妖
+    spawn_weight: 20
+    min_turn: 18
+    base_stats:
+      hp: 205
+      mp: 50
+      attack: 38
+      defense: 12
+      speed: 16
+      recovery: 0
+      mp_recovery: 0
+    base_reward:
+      gold: 54
+      experience: 120
+      materials:
+        soul_shard: 1
+        arcane_dust: 1
+    stat_growth:
+      hp: 3.8
+      attack: 1.55
+      defense: 0.55
+    reward_growth:
+      gold: 2
+      experience: 4
+      materials:
+        soul_shard: 1
+    skills: [curse_touch, soul_reap]
+
+  - id: demon_guard
+    name: 恶魔卫士
+    spawn_weight: 20
+    min_turn: 18
+    base_stats:
+      hp: 280
+      mp: 0
+      attack: 42
+      defense: 16
+      speed: 12
+      recovery: 0
+      mp_recovery: 0
+    base_reward:
+      gold: 56
+      experience: 128
+      materials:
+        demon_core: 1
+        dragon_scale: 1
+    stat_growth:
+      hp: 6.5
+      attack: 1.5
+      defense: 0.9
+    reward_growth:
+      gold: 3
+      experience: 5
+      materials:
+        demon_core: 1
+    skills: [demon_slam]
+
+  - id: dragon
+    name: 巨龙
+    spawn_weight: 10
+    min_turn: 18
+    base_stats:
+      hp: 330
+      mp: 30
+      attack: 48
+      defense: 21
+      speed: 14
+      recovery: 0
+      mp_recovery: 0
+    skills: [dragon_fury, dragon_scales]
+    base_reward:
+      gold: 70
+      experience: 160
+      materials:
+        dragon_scale: 2
+        dragon_blood: 2
+    stat_growth:
+      hp: 6.0
+      attack: 1.5
+      defense: 0.95
+    reward_growth:
+      gold: 3
+      experience: 5
+      materials:
+        dragon_scale: 1
+        dragon_blood: 1
+
+  - id: death_knight
+    name: 死亡骑士
+    spawn_weight: 20
+    min_turn: 18
+    base_stats:
+      hp: 250
+      mp: 20
+      attack: 38
+      defense: 18
+      speed: 12
+      recovery: 0
+      mp_recovery: 0
+    skills: [death_strike, unholy_aura]
+    base_reward:
+      gold: 58
+      experience: 132
+      materials:
+        soul_shard: 1
+        mithril_shard: 1
+    stat_growth:
+      hp: 5.5
+      attack: 1.65
+      defense: 0.8
+    reward_growth:
+      gold: 3
+      experience: 5
+      materials:
+        soul_shard: 1

@@ -48,7 +48,8 @@ def with_rank_score_from_final_observation(
 
     try:
         definition = _definition_for_replay(result, project_root=project_root)
-        breakdown = rank_score_breakdown_from_final_observation(definition, observation)
+        breakdown_function, _ = _replay_scorers(result)
+        breakdown = breakdown_function(definition, observation)
     except (OSError, ValueError, TypeError, KeyError) as exc:
         if strict:
             raise
@@ -128,12 +129,38 @@ def _definition_for_replay(
     project_root: Path | None,
 ) -> GameDefinition:
     root = project_root or _PROJECT_ROOT
-    data_dir = _replay_data_dir(replay, project_root=root)
-    definition = _load_definition(str(data_dir.resolve()))
+    if _uses_frozen_full(replay):
+        from guild_manager_bench.bench.protocols import FULL_ROOT, full_runtime
+        definition = full_runtime().load_game_definition(FULL_ROOT / "data/presets/full")
+    else:
+        data_dir = _replay_data_dir(replay, project_root=root)
+        definition = _load_definition(str(data_dir.resolve()))
     scoring = _scoring_overrides(replay)
     if not scoring:
         return definition
     return replace(definition, scoring=replace(definition.scoring, **scoring))
+
+
+def _uses_frozen_full(replay: Mapping[str, Any]) -> bool:
+    from guild_manager_bench.bench.protocols import FULL_PROTOCOL_HASH
+    data = replay.get("data", {})
+    if data.get("preset") != "full" or not data.get("benchmark_version"):
+        return False
+    if data.get("protocol_hash") != FULL_PROTOCOL_HASH:
+        raise ValueError("full replay requires its original frozen scoring protocol")
+    return True
+
+
+def _replay_scorers(replay: Mapping[str, Any]):
+    if _uses_frozen_full(replay):
+        from guild_manager_bench.bench.protocols import full_runtime
+        full_runtime()
+        from guild_manager_bench._frozen.full_v1.bench.metrics import (
+            rank_score_breakdown_from_final_observation as breakdown,
+            rank_score_from_final_observation as rank,
+        )
+        return breakdown, rank
+    return rank_score_breakdown_from_final_observation, rank_score_from_final_observation
 
 
 def _replay_data_dir(replay: Mapping[str, Any], *, project_root: Path) -> Path:
@@ -273,7 +300,8 @@ def with_rank_score_curve(
         rank_score: float | None = None
         if isinstance(observation, Mapping):
             try:
-                rank_score = rank_score_from_final_observation(definition, observation)
+                _, rank_function = _replay_scorers(result)
+                rank_score = rank_function(definition, observation)
             except (ValueError, TypeError, KeyError):
                 pass
 

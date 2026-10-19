@@ -42,7 +42,7 @@ def test_replay_rank_fallback_adds_missing_rank_score() -> None:
     assert filled["score"]["per_adventurer"][0]["rank_score"] >= 0
 
 
-def test_leaderboard_uses_final_observation_rank_fallback(tmp_path: Path) -> None:
+def test_leaderboard_preserves_precomputed_rank_and_run_details(tmp_path: Path) -> None:
     definition = _small_scoring_definition()
     replay = _legacy_replay(definition)
     replay["agent"] = {"config": {"model": "test-model"}}
@@ -112,13 +112,13 @@ def test_leaderboard_uses_final_observation_rank_fallback(tmp_path: Path) -> Non
     }
     expected = with_rank_score_from_final_observation(replay, strict=True)
     replay_path = tmp_path / "replay.json"
-    replay_path.write_text(json.dumps(replay), encoding="utf-8")
+    replay_path.write_text(json.dumps(expected), encoding="utf-8")
     output = tmp_path / "leaderboard_data.json"
 
     build_leaderboard(tmp_path, output)
 
     data = json.loads(output.read_text(encoding="utf-8"))
-    model = data["models"][0]
+    model = data["boards"][0]["models"][0]
     assert model["model"] == "test-model"
     assert model["rank_score"]["best"] == expected["score"]["rank_score"]
     assert model["run_details"][0]["run_id"] == "replay"

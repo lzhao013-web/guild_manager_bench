@@ -1,0 +1,176 @@
+upgrades:
+  # === Roster Expansion (existing, kept as-is) ===
+  - id: roster_expansion_1
+    name: 扩编 I
+    gold: 350
+    description: 解锁中级全局加成的前置科技。
+    party_size_bonus: 1
+
+  - id: roster_expansion_2
+    name: 扩编 II
+    gold: 600
+    description: 解锁高级全局加成的前置科技。
+    required: 
+      - roster_expansion_1
+    party_size_bonus: 2
+
+  # === Early Game (5 upgrades, ~60-80g, no prerequisites) ===
+  - id: training_grounds
+    name: 训练场
+    gold: 65
+    stats:
+      attack: 3
+      hp: 5
+
+  - id: herb_garden
+    name: 草药园
+    gold: 60
+    stats:
+      hp: 6
+      mp: 4
+      recovery: 4
+      mp_recovery: 4
+  - id: blacksmith
+    name: 铁匠铺
+    gold: 80
+    stats:
+      attack: 4
+      defense: 2
+
+  - id: scout_network
+    name: 侦查网
+    gold: 70
+    stats:
+      speed: 3
+      attack: 2
+
+  - id: supply_post
+    name: 补给站
+    gold: 65
+    stats:
+      hp: 4
+      recovery: 6
+      mp_recovery: 6
+      defense: 1
+
+  # === Mid Game (5 upgrades, ~220-350g, require early upgrades) ===
+  - id: armory
+    name: 军械库
+    gold: 240
+    required:
+      - blacksmith
+      - roster_expansion_1
+    stats:
+      attack: 6
+      defense: 4
+      hp: 8
+
+  - id: field_hospital
+    name: 野战医院
+    gold: 220
+    required:
+      - herb_garden
+      - roster_expansion_1
+    stats:
+      hp: 10
+      mp: 6
+      recovery: 8
+      mp_recovery: 8
+  - id: tactics_academy
+    name: 战术学院
+    gold: 300
+    required:
+      - scout_network
+      - training_grounds
+      - roster_expansion_1
+    stats:
+      speed: 4
+      attack: 4
+      defense: 3
+
+  - id: reinforced_forge
+    name: 强化锻造
+    gold: 350
+    required:
+      - blacksmith
+      - training_grounds
+      - roster_expansion_1
+    stats:
+      attack: 7
+      defense: 5
+
+  - id: meditation_hall
+    name: 精神修炼堂
+    gold: 260
+    required:
+      - herb_garden
+      - supply_post
+      - roster_expansion_1
+    stats:
+      mp: 8
+      speed: 3
+      recovery: 6
+      mp_recovery: 6
+  # === Late Game (5 upgrades, ~600-850g, require multiple mid upgrades) ===
+  - id: veteran_command
+    name: 老兵指挥部
+    gold: 600
+    required:
+      - armory
+      - tactics_academy
+      - roster_expansion_2
+    stats:
+      hp: 18
+      attack: 7
+      defense: 6
+      speed: 3
+
+  - id: paladin_order
+    name: 圣殿骑士团
+    gold: 650
+    required:
+      - field_hospital
+      - armory
+      - roster_expansion_2
+    stats:
+      hp: 22
+      defense: 8
+      recovery: 10
+      mp_recovery: 10
+  - id: elite_hunters
+    name: 精锐猎兵团
+    gold: 700
+    required:
+      - reinforced_forge
+      - tactics_academy
+      - roster_expansion_2
+    stats:
+      attack: 9
+      speed: 5
+      hp: 12
+
+  - id: arcane_council
+    name: 秘法结社
+    gold: 600
+    required:
+      - meditation_hall
+      - reinforced_forge
+      - roster_expansion_2
+    stats:
+      mp: 10
+      attack: 5
+      speed: 4
+
+  - id: war_academy
+    name: 战争学院
+    gold: 850
+    required:
+      - veteran_command
+      - paladin_order
+      - roster_expansion_2
+    stats:
+      attack: 10
+      defense: 7
+      hp: 20
+      speed: 4
+      mp: 5

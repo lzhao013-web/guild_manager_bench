@@ -8,4 +8,5 @@
 *.js text eol=lf
 *.css text eol=lf
 *.html text eol=lf
+src/guild_manager_bench/_frozen/** text eol=lf
 

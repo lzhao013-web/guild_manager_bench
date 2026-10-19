@@ -348,7 +348,7 @@ def test_save_baseline_leaderboard_replays(tmp_path: Path) -> None:
     output = tmp_path / "leaderboard_data.json"
     build_leaderboard(replay_dir, output, incremental=False)
     leaderboard = json.loads(output.read_text(encoding="utf-8"))
-    model = leaderboard["models"][0]
+    model = leaderboard["boards"][0]["models"][0]
     assert model["model"] == "Baseline · RandomFull"
     assert model["is_baseline"] is True
     assert model["rank_score"]["best"] == results["RandomFull"].rank_scores[0]

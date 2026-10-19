@@ -148,14 +148,26 @@ def run_llm_game(
 ) -> LlmGameRun:
     """运行一整局 LLM agent benchmark。"""
 
+    from guild_manager_bench.bench.protocols import (
+        protocol_metadata, run_frozen_full, verify_resume_protocol,
+    )
+
     config = config or LlmRunConfig()
-    definition = _definition_for_config(data_dir, config)
     data_source = (
         dict(data_source)
         if data_source is not None
         else describe_data_source(data_dir)
     )
+    if data_source.get("preset") == "full":
+        return run_frozen_full(
+            agent, data_dir=data_dir, config=config, session_id=session_id,
+            event_sink=event_sink, resume_archive_dir=resume_archive_dir,
+        )
+    definition = _definition_for_config(data_dir, config)
     data_source = _data_source_with_effective_seeds(data_source, definition)
+    data_source.update(protocol_metadata(data_dir, definition, config))
+    if resume_archive_dir is not None:
+        verify_resume_protocol(resume_archive_dir, data_source)
     tools = GuildManagerTools(definition)
     resume = (
         None
