@@ -55,3 +55,6 @@ sim_*.py
 llm_bench_presentation.html
 presentation/
 
+# High-resolution art masters, generation history and delivery archives
+/output/imagegen/
+
