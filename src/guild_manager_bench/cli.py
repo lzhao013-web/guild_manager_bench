@@ -35,12 +35,17 @@ def main() -> None:
     run_parser = subparsers.add_parser("run", help="运行 LLM agent benchmark")
     run_parser.add_argument(
         "--provider", default="openai",
-        choices=["openai", "openai-responses", "anthropic"],
-        help="LLM provider：OpenAI-compatible Chat Completions、OpenAI Responses 或 Anthropic (默认: openai)",
+        choices=["openai", "openai-responses", "anthropic", "google"],
+        help="LLM provider：OpenAI-compatible Chat Completions、OpenAI Responses、Anthropic 或 Google Gemini (默认: openai)",
     )
-    run_parser.add_argument("--model", default=None, help="模型名称 (也可通过 OPENAI_MODEL / ANTHROPIC_MODEL 环境变量设置)")
-    run_parser.add_argument("--api-key", default=None, help="API Key (也可通过 OPENAI_API_KEY 环境变量设置)")
-    run_parser.add_argument("--base-url", default=None, help="API Base URL (也可通过 OPENAI_BASE_URL 环境变量设置)")
+    run_parser.add_argument("--model", default=None, help="模型名称 (也可通过 OPENAI_MODEL / ANTHROPIC_MODEL / GOOGLE_MODEL 环境变量设置)")
+    run_parser.add_argument("--api-key", default=None, help="API Key (也可通过 provider 对应的 OPENAI_API_KEY / ANTHROPIC_API_KEY / GOOGLE_API_KEY 环境变量设置)")
+    run_parser.add_argument("--base-url", default=None, help="API Base URL (也可通过 provider 对应的 OPENAI_BASE_URL / ANTHROPIC_BASE_URL / GOOGLE_BASE_URL 环境变量设置)")
+    run_parser.add_argument(
+        "--session-id", default=None,
+        help="会话路由 ID，对应 OpenCode Go 等网关要求的 x-opencode-session 请求头 "
+             "(也可通过 OPENCODE_SESSION_ID 环境变量设置；缺省自动生成，续跑时自动复用本局游戏会话 id)",
+    )
     run_parser.add_argument("--data-dir", default="data", help="数据根目录或直接游戏数据目录 (默认: data)")
     run_parser.add_argument("--preset", default=None, help="数据 preset 名称 (默认: default)")
     run_parser.add_argument("--game-seed", type=int, default=None, help="游戏随机种子")
@@ -48,9 +53,19 @@ def main() -> None:
     run_parser.add_argument("--archive-dir", default="runs/llm", help="存档目录 (默认: runs/llm，设为 none 禁用存档)")
     run_parser.add_argument("--resume", default=None, help="从指定存档目录续跑 (传入 archive run 目录路径)")
     run_parser.add_argument("--max-tool-calls-per-turn", type=int, default=20, help="每回合最大非 end_turn 工具调用次数 (默认: 20)")
-    run_parser.add_argument("--reasoning-effort", default=None, choices=["none", "minimal", "low", "medium", "high", "xhigh", "ultra", "max"], help="OpenAI-compatible 推理强度，ultra/max 仅部分模型支持 (默认不传)")
+    reasoning = run_parser.add_mutually_exclusive_group()
+    reasoning.add_argument(
+        "--reasoning-effort", default=None,
+        choices=["none", "minimal", "low", "medium", "high", "xhigh", "ultra", "max"],
+        help="统一推理强度：Google 用 minimal/low/medium/high，Anthropic 用 low/medium/high/max，"
+             "OpenAI 按模型支持选择 (默认不传)",
+    )
+    reasoning.add_argument(
+        "--thinking-effort", dest="reasoning_effort",
+        choices=["low", "medium", "high", "max"], help=argparse.SUPPRESS,
+    )
     run_parser.add_argument("--thinking", action=argparse.BooleanOptionalAction, default=None, help="启用或禁用 Anthropic adaptive thinking (默认不传)")
-    run_parser.add_argument("--thinking-effort", default=None, choices=["low", "medium", "high", "max"], help="Anthropic 思考强度，max 仅部分模型支持 (默认不传)")
+    run_parser.add_argument("--max-tokens", type=int, default=None, metavar="N", help="单次响应输出上限，Anthropic 下与 thinking 共用预算 (不传时 anthropic 用 65536，其他 provider 不下发；也可通过 ANTHROPIC_MAX_TOKENS / OPENAI_RESPONSES_MAX_OUTPUT_TOKENS / GOOGLE_MAX_TOKENS 设置)")
     run_parser.add_argument("--timeout", type=float, default=None, help="API 请求超时秒数 (也可通过 provider 对应环境变量设置)")
     run_parser.add_argument("--no-stream", action="store_true", help="禁用 API 流式响应")
     display = run_parser.add_mutually_exclusive_group()
@@ -107,13 +122,23 @@ def _run(args: argparse.Namespace) -> None:
 
                 agent = AnthropicMessagesAgent.from_env(
                     model=args.model, api_key=args.api_key, base_url=args.base_url,
-                    timeout=args.timeout, thinking=args.thinking, effort=args.thinking_effort,
+                    session_id=args.session_id, max_tokens=args.max_tokens,
+                    timeout=args.timeout, thinking=args.thinking, effort=args.reasoning_effort,
+                )
+            elif args.provider == "google":
+                from guild_manager_bench.bench.llm import GoogleGenerateContentAgent
+
+                agent = GoogleGenerateContentAgent.from_env(
+                    model=args.model, api_key=args.api_key, base_url=args.base_url,
+                    session_id=args.session_id, max_tokens=args.max_tokens, timeout=args.timeout,
+                    reasoning_effort=args.reasoning_effort,
                 )
             elif args.provider == "openai-responses":
                 from guild_manager_bench.bench.llm import OpenAIResponsesAgent
 
                 agent = OpenAIResponsesAgent.from_env(
                     model=args.model, api_key=args.api_key, base_url=args.base_url,
+                    session_id=args.session_id, max_output_tokens=args.max_tokens,
                     reasoning_effort=args.reasoning_effort, timeout=args.timeout,
                 )
             else:
@@ -121,6 +146,7 @@ def _run(args: argparse.Namespace) -> None:
 
                 agent = OpenAIChatCompletionsAgent.from_env(
                     model=args.model, api_key=args.api_key, base_url=args.base_url,
+                    session_id=args.session_id, max_tokens=args.max_tokens,
                     reasoning_effort=args.reasoning_effort, timeout=args.timeout,
                 )
 

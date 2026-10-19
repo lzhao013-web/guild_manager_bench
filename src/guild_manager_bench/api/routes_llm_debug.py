@@ -9,6 +9,8 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from guild_manager_bench.bench.llm import (
     AnthropicMessagesAgent,
     AnthropicMessagesConfig,
+    GoogleGenerateContentAgent,
+    GoogleGenerateContentConfig,
     LlmRunConfig,
     OpenAIChatCompletionsAgent,
     OpenAIChatCompletionsConfig,
@@ -90,7 +92,7 @@ def llm_debug_router(
 
 def _debug_agent(
     payload: Mapping[str, Any],
-) -> OpenAIChatCompletionsAgent | OpenAIResponsesAgent | AnthropicMessagesAgent:
+) -> OpenAIChatCompletionsAgent | OpenAIResponsesAgent | AnthropicMessagesAgent | GoogleGenerateContentAgent:
     provider = _string_value(payload, "provider", "openai").lower()
     common = {
         "model": _optional_string(payload, "model"),
@@ -100,12 +102,19 @@ def _debug_agent(
         "temperature": _optional_float(payload, "temperature"),
         "max_tokens": _optional_int(payload, "max_tokens"),
     }
+    if provider == "google":
+        return GoogleGenerateContentAgent(GoogleGenerateContentConfig.from_env(
+            **common, reasoning_effort=_optional_string(payload, "reasoning_effort"),
+        ))
     if provider == "anthropic":
         return AnthropicMessagesAgent(
             AnthropicMessagesConfig.from_env(
                 **common,
                 thinking=_optional_bool(payload, "thinking"),
-                effort=_optional_string(payload, "thinking_effort"),
+                effort=(
+                    _optional_string(payload, "reasoning_effort")
+                    or _optional_string(payload, "thinking_effort")
+                ),
             )
         )
     if provider == "openai":

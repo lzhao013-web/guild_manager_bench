@@ -1,5 +1,8 @@
+import pytest
+
 from guild_manager_bench.bench.llm import (
     AnthropicMessagesAgent,
+    GoogleGenerateContentAgent,
     OpenAIChatCompletionsAgent,
     OpenAIResponsesAgent,
 )
@@ -51,6 +54,45 @@ def test_llm_debug_builds_openai_responses_agent() -> None:
 
     assert isinstance(agent, OpenAIResponsesAgent)
     assert agent.config.reasoning_effort == "high"
+
+
+def test_llm_debug_builds_google_agent_with_native_settings() -> None:
+    agent = _debug_agent({
+        "provider": "google", "model": "gemini-2.5-flash", "api_key": "test-key",
+        "base_url": "https://google-proxy.test/v1beta", "temperature": 0.4,
+        "max_tokens": 8192, "timeout": 60,
+    })
+
+    assert isinstance(agent, GoogleGenerateContentAgent)
+    assert agent.config.model == "gemini-2.5-flash"
+    assert agent.config.api_key == "test-key"
+    assert agent.config.base_url == "https://google-proxy.test/v1beta"
+    assert agent.config.temperature == 0.4
+    assert agent.config.max_tokens == 8192
+    assert agent.config.timeout == 60
+
+
+@pytest.mark.parametrize("provider, field", [
+    ("openai", "reasoning_effort"), ("openai-responses", "reasoning_effort"),
+    ("anthropic", "effort"), ("google", "reasoning_effort"),
+])
+def test_llm_debug_uses_unified_reasoning_effort(provider, field):
+    agent = _debug_agent({"provider": provider, "model": "test-model", "reasoning_effort": "high"})
+    assert getattr(agent.config, field) == "high"
+
+
+def test_llm_debug_new_anthropic_effort_takes_precedence_over_legacy_field():
+    agent = _debug_agent({
+        "provider": "anthropic", "model": "test-model",
+        "reasoning_effort": "high", "thinking_effort": "low",
+    })
+    assert agent.config.effort == "high"
+
+
+@pytest.mark.parametrize("provider, effort", [("google", "max"), ("anthropic", "minimal")])
+def test_llm_debug_rejects_unsupported_provider_effort(provider, effort):
+    with pytest.raises(RuntimeError, match="reasoning_effort"):
+        _debug_agent({"provider": provider, "model": "test-model", "reasoning_effort": effort})
 
 
 def test_llm_debug_optional_bool_is_tristate() -> None:

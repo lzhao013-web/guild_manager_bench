@@ -18,10 +18,19 @@ from guild_manager_bench.bench.llm.openai_compat import (
     load_dotenv_values,
 )
 from guild_manager_bench.bench.llm.runner import LlmAgentResponse, LlmToolCall
+from guild_manager_bench.bench.llm.session import (
+    new_session_id,
+    resolve_session_id,
+    session_headers,
+)
 
 
 class AnthropicMessagesError(RuntimeError):
     """Anthropic Messages API 调用失败。"""
+
+
+# thinking 与 tool_use 共用同一份输出预算，默认值过小会让高思考强度直接截断工具调用。
+DEFAULT_MAX_TOKENS = 65536
 
 
 def _optional_bool_config(
@@ -53,13 +62,20 @@ class AnthropicMessagesConfig:
     base_url: str = "https://api.anthropic.com"
     api_version: str = "2023-06-01"
     timeout: float = 180.0
-    max_tokens: int = 4096
+    max_tokens: int = DEFAULT_MAX_TOKENS
     temperature: float | None = None
     top_p: float | None = None
     tool_choice: str | Mapping[str, Any] | None = "auto"
     thinking: bool | None = None
     effort: str | None = None
     extra_body: Mapping[str, Any] = field(default_factory=dict)
+    # 网关路由用会话标识（x-opencode-session）；未指定时自动生成，实例内保持稳定。
+    session_id: str = field(default_factory=new_session_id)
+    session_id_explicit: bool = False
+
+    def __post_init__(self) -> None:
+        if self.effort is not None and self.effort not in {"low", "medium", "high", "max"}:
+            raise AnthropicMessagesError("anthropic reasoning_effort must be low, medium, high, or max")
 
     @classmethod
     def from_env(
@@ -69,6 +85,7 @@ class AnthropicMessagesConfig:
         api_key: str | None = None,
         base_url: str | None = None,
         api_version: str | None = None,
+        session_id: str | None = None,
         env_file: str | os.PathLike[str] | None = ".env",
         timeout: float | None = None,
         max_tokens: int | None = None,
@@ -108,7 +125,12 @@ class AnthropicMessagesConfig:
         if resolved_max_tokens is not None:
             resolved_max_tokens = int(resolved_max_tokens)
         else:
-            resolved_max_tokens = 4096
+            resolved_max_tokens = DEFAULT_MAX_TOKENS
+        resolved_session = resolve_session_id(
+            session_id,
+            dotenv_values,
+            "ANTHROPIC_SESSION_ID",
+        )
         return cls(
             model=resolved_model,
             api_key=_first_config_value(
@@ -145,6 +167,8 @@ class AnthropicMessagesConfig:
                 "ANTHROPIC_REASONING_EFFORT",
             ),
             extra_body={} if extra_body is None else dict(extra_body),
+            session_id=resolved_session.value,
+            session_id_explicit=resolved_session.explicit,
         )
 
 
@@ -159,8 +183,17 @@ class AnthropicMessagesAgent:
         stream_transport: StreamTransport | None = None,
     ) -> None:
         self.config = config
+        self._session_id = config.session_id
         self._transport = transport or _urllib_transport
         self._stream_transport = stream_transport or _urllib_stream_transport
+
+    def bind_session(self, session_id: str) -> None:
+        """绑定游戏会话 id，使同一局（含 --resume 续跑）复用同一路由会话。"""
+
+        value = session_id.strip() if isinstance(session_id, str) else ""
+        if not value:
+            raise AnthropicMessagesError("session_id must be a non-empty string")
+        self._session_id = value
 
     @classmethod
     def from_env(
@@ -170,6 +203,7 @@ class AnthropicMessagesAgent:
         api_key: str | None = None,
         base_url: str | None = None,
         api_version: str | None = None,
+        session_id: str | None = None,
         env_file: str | os.PathLike[str] | None = ".env",
         timeout: float | None = None,
         max_tokens: int | None = None,
@@ -188,6 +222,7 @@ class AnthropicMessagesAgent:
                 api_key=api_key,
                 base_url=base_url,
                 api_version=api_version,
+                session_id=session_id,
                 env_file=env_file,
                 timeout=timeout,
                 max_tokens=max_tokens,
@@ -199,7 +234,6 @@ class AnthropicMessagesAgent:
                 extra_body=extra_body,
             )
         )
-
     def respond(
         self,
         *,
@@ -405,8 +439,9 @@ class AnthropicMessagesAgent:
         headers = {
             "Content-Type": "application/json",
             "Accept": "application/json",
-            "User-Agent": "guild-manager-bench/0.1",
+            "User-Agent": "guild-manager-bench/1.0",
             "anthropic-version": self.config.api_version,
+            **session_headers(self._session_id),
         }
         if self.config.api_key:
             headers["x-api-key"] = self.config.api_key

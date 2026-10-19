@@ -78,7 +78,11 @@ class LlmAgentResponse:
 
 
 class LlmTurnAgent(Protocol):
-    """模型适配器协议。"""
+    """模型适配器协议。
+
+    可选实现 ``bind_session(session_id)``：跑局会将游戏会话 id 同步给适配器，
+    以便同一局（含续跑）的所有请求复用同一个网关会话路由标识。
+    """
 
     def respond(
         self,
@@ -114,6 +118,22 @@ class LlmRunConfig:
         _require_non_negative("max_turn_retries", self.max_turn_retries)
         _require_optional_int("game_seed", self.game_seed)
         _require_optional_int("scoring_seed", self.scoring_seed)
+
+
+def _bind_agent_session(agent: LlmTurnAgent, session_id: str) -> None:
+    """将游戏会话 id 同步给模型适配器（若其支持）。
+
+    OpenCode Go 等网关要求每个会话携带稳定的 ``x-opencode-session`` 头，
+    绑定后同一局（含 ``--resume`` 续跑）的路由与 prompt cache 保持一致。
+    用户通过 ``--session-id`` 或环境变量显式指定会话标识时不覆盖。
+    """
+
+    bind = getattr(agent, "bind_session", None)
+    if not callable(bind):
+        return
+    if getattr(getattr(agent, "config", None), "session_id_explicit", False):
+        return
+    bind(session_id)
 
 
 def run_llm_game(
@@ -162,6 +182,7 @@ def run_llm_game(
         )
         initial_observation = tools.get_observation(session_id)["observation"]
 
+    _bind_agent_session(agent, session_id)
     def emit(event: dict[str, Any]) -> None:
         if archive_writer is not None and _should_archive_event(event):
             archive_writer.append_event(event)

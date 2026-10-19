@@ -242,6 +242,40 @@ def test_resume_counts_completed_turns_not_failed_attempts_and_keeps_score_delta
     assert "secret-key" not in command
 
 
+@pytest.mark.parametrize("provider", ["anthropic", "google"])
+def test_resume_preserves_provider_effort_with_unified_flag(recorded_run, monkeypatch, provider):
+    from guild_manager_bench.bench.llm import AnthropicMessagesConfig, GoogleGenerateContentConfig
+    from guild_manager_bench.bench.llm.runner import _compute_run_stats
+
+    events, run, _, _ = recorded_run
+    reporter = RunReporter(Console(file=io.StringIO()), provider=provider, mode="quiet")
+    config = (
+        AnthropicMessagesConfig(model="test-model", effort="high", thinking=True)
+        if provider == "anthropic" else GoogleGenerateContentConfig(model="test-model", reasoning_effort="high")
+    )
+    reporter.configure(config, streaming=True)
+    reporter.on_event(events[0])
+    reporter.on_event({
+        "type": "run_resumed", "archive": {"directory": "runs/effort"},
+        "stats": _compute_run_stats(run), "last_rank_score": 40.0,
+        "restored_observation": {"turn": 2},
+    })
+    command = reporter.resume_command()
+    assert command.count("--reasoning-effort high") == 1
+    assert "--thinking-effort" not in command
+
+    import shlex
+    import sys
+    from guild_manager_bench import cli
+
+    captured = {}
+    monkeypatch.setattr(cli, "_run", lambda args: captured.update(vars(args)))
+    monkeypatch.setattr(sys, "argv", shlex.split(command))
+    cli.main()
+    assert captured["provider"] == provider
+    assert captured["reasoning_effort"] == "high"
+
+
 def test_json_abort_has_no_human_output_and_does_not_claim_missing_checkpoint(recorded_run):
     events, _, _, _ = recorded_run
     stream = io.StringIO()

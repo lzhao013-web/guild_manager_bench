@@ -140,7 +140,7 @@ class RunReporter:
         # 白名单避免将 API Key、URL 中的凭证或 extra_body 打印到配置面板。
         self.settings = {
             name: getattr(config, name)
-            for name in ("model", "timeout", "reasoning_effort", "thinking", "effort")
+            for name in ("model", "timeout", "max_tokens", "reasoning_effort", "thinking", "effort")
             if hasattr(config, name)
         }
         self.settings["streaming"] = streaming
@@ -323,6 +323,9 @@ class RunReporter:
         thinking = self.settings.get("thinking")
         if thinking is not None:
             parts.append("thinking 开启" if thinking else "thinking 关闭")
+        max_tokens = self.settings.get("max_tokens")
+        if max_tokens is not None:
+            parts.append(f"输出上限 {max_tokens}")
         return " · ".join(parts)
 
     def _start_turn(self, observation: dict[str, Any]) -> None:
@@ -512,7 +515,10 @@ class RunReporter:
         for key, flag in (("game_seed", "--game-seed"), ("scoring_seed", "--scoring-seed")):
             parts += [flag, str(self.data[key])]
         parts += ["--max-tool-calls-per-turn", str(self.config["max_tool_calls_per_turn"])]
-        for key, flag in (("reasoning_effort", "--reasoning-effort"), ("effort", "--thinking-effort"), ("timeout", "--timeout")):
+        effort = self.settings.get("effort") if self.provider == "anthropic" else self.settings.get("reasoning_effort")
+        if effort is not None:
+            parts += ["--reasoning-effort", effort]
+        for key, flag in (("max_tokens", "--max-tokens"), ("timeout", "--timeout")):
             if self.settings.get(key) is not None:
                 parts += [flag, str(self.settings[key])]
         if self.settings.get("thinking") is not None:

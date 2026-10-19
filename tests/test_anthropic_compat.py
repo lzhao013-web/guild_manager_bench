@@ -96,14 +96,28 @@ def test_anthropic_config_missing_model_raises(tmp_path, monkeypatch) -> None:
         pass
 
 
-def test_anthropic_config_max_tokens_defaults_to_4096(tmp_path, monkeypatch) -> None:
+def test_anthropic_config_max_tokens_defaults_to_65536(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")
     env_file = tmp_path / ".env"
     env_file.write_text("", encoding="utf-8")
 
     config = AnthropicMessagesConfig.from_env(env_file=env_file)
 
-    assert config.max_tokens == 4096
+    assert config.max_tokens == 65536
+
+
+def test_anthropic_config_max_tokens_prefers_explicit_over_env(tmp_path, monkeypatch) -> None:
+    monkeypatch.delenv("ANTHROPIC_MAX_TOKENS", raising=False)
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "ANTHROPIC_MODEL=claude-sonnet-4-6\nANTHROPIC_MAX_TOKENS=32000\n",
+        encoding="utf-8",
+    )
+
+    assert AnthropicMessagesConfig.from_env(env_file=env_file).max_tokens == 32000
+    assert AnthropicMessagesConfig.from_env(
+        env_file=env_file, max_tokens=16384
+    ).max_tokens == 16384
 
 
 def test_anthropic_config_reads_thinking_and_effort(tmp_path, monkeypatch) -> None:
@@ -193,7 +207,7 @@ def test_anthropic_agent_sends_messages_request_and_parses_tool_use() -> None:
     assert captured["headers"]["anthropic-version"] == "2023-06-01"
     assert captured["headers"]["Content-Type"] == "application/json"
     assert captured["body"]["model"] == "claude-sonnet-4-6"
-    assert captured["body"]["max_tokens"] == 4096
+    assert captured["body"]["max_tokens"] == 65536
     assert captured["body"]["system"] == "你是公会管理助手。"
     assert captured["body"]["messages"] == [{"role": "user", "content": "play"}]
     assert captured["body"]["tools"][0] == {

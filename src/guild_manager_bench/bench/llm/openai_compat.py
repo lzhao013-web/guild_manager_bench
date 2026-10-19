@@ -10,6 +10,11 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from guild_manager_bench.bench.llm.runner import LlmAgentResponse, LlmToolCall
+from guild_manager_bench.bench.llm.session import (
+    new_session_id,
+    resolve_session_id,
+    session_headers,
+)
 
 
 class OpenAICompatibleError(RuntimeError):
@@ -157,6 +162,9 @@ class OpenAIChatCompletionsConfig:
     tool_choice: str | Mapping[str, Any] | None = "auto"
     reasoning_effort: str | None = None
     extra_body: Mapping[str, Any] = field(default_factory=dict)
+    # 网关路由用会话标识（x-opencode-session）；未指定时自动生成，实例内保持稳定。
+    session_id: str = field(default_factory=new_session_id)
+    session_id_explicit: bool = False
 
     @classmethod
     def from_env(
@@ -165,6 +173,7 @@ class OpenAIChatCompletionsConfig:
         model: str | None = None,
         api_key: str | None = None,
         base_url: str | None = None,
+        session_id: str | None = None,
         env_file: EnvFile | None = ".env",
         timeout: float | None = None,
         temperature: float | None = None,
@@ -197,6 +206,12 @@ class OpenAIChatCompletionsConfig:
             resolved_timeout = float(resolved_timeout)
         else:
             resolved_timeout = 180.0
+        resolved_session = resolve_session_id(
+            session_id,
+            dotenv_values,
+            "OPENAI_SESSION_ID",
+            "OPENAI_COMPAT_SESSION_ID",
+        )
         return cls(
             model=resolved_model,
             api_key=_first_config_value(
@@ -223,6 +238,8 @@ class OpenAIChatCompletionsConfig:
                 "OPENAI_REASONING_EFFORT",
             ),
             extra_body={} if extra_body is None else dict(extra_body),
+            session_id=resolved_session.value,
+            session_id_explicit=resolved_session.explicit,
         )
 
 
@@ -237,8 +254,17 @@ class OpenAIChatCompletionsAgent:
         stream_transport: StreamTransport | None = None,
     ) -> None:
         self.config = config
+        self._session_id = config.session_id
         self._transport = transport or _urllib_transport
         self._stream_transport = stream_transport or _urllib_stream_transport
+
+    def bind_session(self, session_id: str) -> None:
+        """绑定游戏会话 id，使同一局（含 --resume 续跑）复用同一路由会话。"""
+
+        value = session_id.strip() if isinstance(session_id, str) else ""
+        if not value:
+            raise OpenAICompatibleError("session_id must be a non-empty string")
+        self._session_id = value
 
     @classmethod
     def from_env(
@@ -247,6 +273,7 @@ class OpenAIChatCompletionsAgent:
         model: str | None = None,
         api_key: str | None = None,
         base_url: str | None = None,
+        session_id: str | None = None,
         env_file: EnvFile | None = ".env",
         timeout: float | None = None,
         temperature: float | None = None,
@@ -263,6 +290,7 @@ class OpenAIChatCompletionsAgent:
                 model=model,
                 api_key=api_key,
                 base_url=base_url,
+                session_id=session_id,
                 env_file=env_file,
                 timeout=timeout,
                 temperature=temperature,
@@ -440,7 +468,8 @@ class OpenAIChatCompletionsAgent:
         headers = {
             "Content-Type": "application/json",
             "Accept": "application/json",
-            "User-Agent": "guild-manager-bench/0.1",
+            "User-Agent": "guild-manager-bench/1.0",
+            **session_headers(self._session_id),
         }
         if self.config.api_key:
             headers["Authorization"] = f"Bearer {self.config.api_key}"

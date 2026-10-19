@@ -1900,9 +1900,9 @@ function llmPayload(options = {}) {
   if (thinking) {
     payload.thinking = thinking === "true";
   }
-  const thinkingEffort = readOptionalValue("llmThinkingEffort");
-  if (thinkingEffort) {
-    payload.thinking_effort = thinkingEffort;
+  const reasoningEffort = readOptionalValue("llmReasoningEffort");
+  if (reasoningEffort) {
+    payload.reasoning_effort = reasoningEffort;
   }
   if (options.resumeRunId) {
     payload.resume_run_id = options.resumeRunId;
@@ -2315,6 +2315,11 @@ const LLM_PRESETS = {
     base_url: "https://api.anthropic.com",
     model: "claude-sonnet-4-6",
   },
+  google: {
+    provider: "google",
+    base_url: "https://generativelanguage.googleapis.com/v1beta",
+    model: "gemini-2.5-flash",
+  },
 };
 
 function applyLlmPreset(value) {
@@ -2331,20 +2336,41 @@ function applyLlmPreset(value) {
   $("llmPresetSelect").value = "";
 }
 
+const LLM_REASONING_EFFORTS = {
+  openai: ["none", "minimal", "low", "medium", "high", "xhigh", "ultra", "max"],
+  "openai-responses": ["none", "minimal", "low", "medium", "high", "xhigh", "ultra", "max"],
+  anthropic: ["low", "medium", "high", "max"],
+  google: ["minimal", "low", "medium", "high"],
+};
+
 function syncLlmProviderFields() {
-  const isAnthropic = $("llmProvider")?.value === "anthropic";
+  const provider = $("llmProvider")?.value;
+  const isAnthropic = provider === "anthropic";
+  const isGoogle = provider === "google";
   document.querySelectorAll("[data-anthropic-control]").forEach((element) => {
     element.hidden = !isAnthropic;
   });
+  const effortInput = $("llmReasoningEffort");
+  if (effortInput) {
+    const allowedEfforts = LLM_REASONING_EFFORTS[provider];
+    for (const option of effortInput.options) {
+      const unsupported = option.value !== "" && !allowedEfforts.includes(option.value);
+      option.hidden = unsupported;
+      option.disabled = unsupported;
+    }
+    if (effortInput.value && !allowedEfforts.includes(effortInput.value)) {
+      effortInput.value = "";
+    }
+  }
   const modelInput = $("llmModel");
   const baseUrlInput = $("llmBaseUrl");
   if (modelInput) {
-    modelInput.placeholder = isAnthropic ? "ANTHROPIC_MODEL" : "OPENAI_MODEL";
+    modelInput.placeholder = isAnthropic ? "ANTHROPIC_MODEL" : isGoogle ? "GOOGLE_MODEL" : "OPENAI_MODEL";
   }
   if (baseUrlInput) {
     baseUrlInput.placeholder = isAnthropic
       ? "https://api.anthropic.com"
-      : "https://api.openai.com/v1";
+      : isGoogle ? "https://generativelanguage.googleapis.com/v1beta" : "https://api.openai.com/v1";
   }
 }
 
@@ -2368,7 +2394,7 @@ function labelOf(id) {
     llmScoringSeed: "评分 Seed",
     llmTemperature: "Temperature",
     llmThinking: "Anthropic 思考",
-    llmThinkingEffort: "Anthropic 思考强度",
+    llmReasoningEffort: "推理强度",
   };
   return labels[id] || id;
 }

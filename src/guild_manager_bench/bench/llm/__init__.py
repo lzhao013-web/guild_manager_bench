@@ -13,6 +13,11 @@ from guild_manager_bench.bench.llm.anthropic_compat import (
     AnthropicMessagesConfig,
     AnthropicMessagesError,
 )
+from guild_manager_bench.bench.llm.google_genai import (
+    GoogleGenerateContentAgent,
+    GoogleGenerateContentConfig,
+    GoogleGenerateContentError,
+)
 from guild_manager_bench.bench.llm.openai_compat import (
     OpenAIChatCompletionsAgent,
     OpenAIChatCompletionsConfig,
@@ -39,6 +44,12 @@ from guild_manager_bench.bench.llm.runner import (
     run_llm_game,
     run_llm_turn,
 )
+from guild_manager_bench.bench.llm.session import (
+    OPENCODE_SESSION_HEADER,
+    new_session_id,
+    resolve_session_id,
+    session_headers,
+)
 from guild_manager_bench.bench.llm.tools import (
     GuildManagerTools,
     ToolCallError,
@@ -51,6 +62,9 @@ __all__ = [
     "AnthropicMessagesAgent",
     "AnthropicMessagesConfig",
     "AnthropicMessagesError",
+    "GoogleGenerateContentAgent",
+    "GoogleGenerateContentConfig",
+    "GoogleGenerateContentError",
     "GuildManagerTools",
     "LlmAgentResponse",
     "LlmRunArchive",
@@ -59,6 +73,7 @@ __all__ = [
     "LlmToolCall",
     "LlmTurnAgent",
     "MemoStore",
+    "OPENCODE_SESSION_HEADER",
     "OpenAIChatCompletionsAgent",
     "OpenAIChatCompletionsConfig",
     "OpenAICompatibleError",
@@ -73,9 +88,12 @@ __all__ = [
     "build_turn_prompt",
     "create_toolbox",
     "load_dotenv_values",
+    "new_session_id",
+    "resolve_session_id",
     "run_llm_game",
     "run_llm_turn",
     "resume_llm_run_archive",
+    "session_headers",
     "start_llm_run_archive",
     "tool_schemas",
     "write_llm_run_archive",

@@ -19,6 +19,11 @@ from guild_manager_bench.bench.llm.openai_compat import (
     load_dotenv_values,
 )
 from guild_manager_bench.bench.llm.runner import LlmAgentResponse, LlmToolCall
+from guild_manager_bench.bench.llm.session import (
+    new_session_id,
+    resolve_session_id,
+    session_headers,
+)
 
 
 class OpenAIResponsesError(RuntimeError):
@@ -40,6 +45,9 @@ class OpenAIResponsesConfig:
     reasoning_effort: str | None = None
     reasoning_summary: str | None = None
     extra_body: Mapping[str, Any] = field(default_factory=dict)
+    # 网关路由用会话标识（x-opencode-session）；未指定时自动生成，实例内保持稳定。
+    session_id: str = field(default_factory=new_session_id)
+    session_id_explicit: bool = False
 
     @classmethod
     def from_env(
@@ -48,6 +56,7 @@ class OpenAIResponsesConfig:
         model: str | None = None,
         api_key: str | None = None,
         base_url: str | None = None,
+        session_id: str | None = None,
         env_file: EnvFile | None = ".env",
         timeout: float | None = None,
         temperature: float | None = None,
@@ -91,6 +100,12 @@ class OpenAIResponsesConfig:
             "OPENAI_RESPONSES_MAX_OUTPUT_TOKENS",
             "OPENAI_MAX_OUTPUT_TOKENS",
         )
+        resolved_session = resolve_session_id(
+            session_id,
+            dotenv_values,
+            "OPENAI_RESPONSES_SESSION_ID",
+            "OPENAI_SESSION_ID",
+        )
         return cls(
             model=resolved_model,
             api_key=_first_config_value(
@@ -131,6 +146,8 @@ class OpenAIResponsesConfig:
                 "OPENAI_RESPONSES_REASONING_SUMMARY",
             ),
             extra_body={} if extra_body is None else dict(extra_body),
+            session_id=resolved_session.value,
+            session_id_explicit=resolved_session.explicit,
         )
 
 
@@ -145,8 +162,17 @@ class OpenAIResponsesAgent:
         stream_transport: StreamTransport | None = None,
     ) -> None:
         self.config = config
+        self._session_id = config.session_id
         self._transport = transport or _responses_urllib_transport
         self._stream_transport = stream_transport or _responses_urllib_stream_transport
+
+    def bind_session(self, session_id: str) -> None:
+        """绑定游戏会话 id，使同一局（含 --resume 续跑）复用同一路由会话。"""
+
+        value = session_id.strip() if isinstance(session_id, str) else ""
+        if not value:
+            raise OpenAIResponsesError("session_id must be a non-empty string")
+        self._session_id = value
 
     @classmethod
     def from_env(
@@ -155,6 +181,7 @@ class OpenAIResponsesAgent:
         model: str | None = None,
         api_key: str | None = None,
         base_url: str | None = None,
+        session_id: str | None = None,
         env_file: EnvFile | None = ".env",
         timeout: float | None = None,
         temperature: float | None = None,
@@ -171,6 +198,7 @@ class OpenAIResponsesAgent:
                 model=model,
                 api_key=api_key,
                 base_url=base_url,
+                session_id=session_id,
                 env_file=env_file,
                 timeout=timeout,
                 temperature=temperature,
@@ -372,6 +400,7 @@ class OpenAIResponsesAgent:
             "Content-Type": "application/json",
             "Accept": "application/json",
             "User-Agent": "guild-manager-bench/1.0",
+            **session_headers(self._session_id),
         }
         if self.config.api_key:
             headers["Authorization"] = f"Bearer {self.config.api_key}"

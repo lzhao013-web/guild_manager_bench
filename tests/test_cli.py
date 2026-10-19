@@ -25,6 +25,110 @@ def test_run_accepts_extended_reasoning_effort(monkeypatch) -> None:
         assert captured["reasoning_effort"] == reasoning_effort
 
 
+@pytest.mark.parametrize("provider, key", [
+    ("openai", "max_tokens"),
+    ("openai-responses", "max_output_tokens"),
+    ("anthropic", "max_tokens"),
+    ("google", "max_tokens"),
+])
+def test_run_passes_max_tokens_to_each_provider(monkeypatch, provider, key) -> None:
+    from guild_manager_bench.bench.llm import (
+        AnthropicMessagesAgent,
+        GoogleGenerateContentAgent,
+        OpenAIChatCompletionsAgent,
+        OpenAIResponsesAgent,
+    )
+
+    agent_classes = {
+        "openai": OpenAIChatCompletionsAgent,
+        "openai-responses": OpenAIResponsesAgent,
+        "anthropic": AnthropicMessagesAgent,
+        "google": GoogleGenerateContentAgent,
+    }
+    captured = {}
+
+    def from_env(**kwargs):
+        captured.update(kwargs)
+        raise RuntimeError("stop after config")
+
+    monkeypatch.setattr(agent_classes[provider], "from_env", from_env)
+
+    for argv_tail, expected in ((["--max-tokens", "32000"], 32000), ([], None)):
+        captured.clear()
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["guild-manager", "run", "--provider", provider, *argv_tail],
+        )
+
+        with pytest.raises(SystemExit):
+            cli.main()
+
+        assert captured[key] == expected
+
+
+@pytest.mark.parametrize("provider, key", [
+    ("openai", "reasoning_effort"), ("openai-responses", "reasoning_effort"),
+    ("anthropic", "effort"), ("google", "reasoning_effort"),
+])
+def test_run_dispatches_unified_reasoning_effort(monkeypatch, provider, key):
+    from guild_manager_bench.bench.llm import (
+        AnthropicMessagesAgent, GoogleGenerateContentAgent,
+        OpenAIChatCompletionsAgent, OpenAIResponsesAgent,
+    )
+    classes = {
+        "openai": OpenAIChatCompletionsAgent, "openai-responses": OpenAIResponsesAgent,
+        "anthropic": AnthropicMessagesAgent, "google": GoogleGenerateContentAgent,
+    }
+    captured = {}
+
+    def from_env(**kwargs):
+        captured.update(kwargs)
+        raise RuntimeError("stop after config")
+
+    monkeypatch.setattr(classes[provider], "from_env", from_env)
+    monkeypatch.setattr(sys, "argv", ["guild-manager", "run", "--provider", provider, "--reasoning-effort", "high"])
+    with pytest.raises(SystemExit):
+        cli.main()
+    assert captured[key] == "high"
+
+
+def test_old_thinking_effort_is_alias_for_unified_flag(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(cli, "_run", lambda args: captured.update(vars(args)))
+    monkeypatch.setattr(sys, "argv", ["guild-manager", "run", "--provider", "anthropic", "--thinking-effort", "high"])
+    cli.main()
+    assert captured["reasoning_effort"] == "high"
+
+
+def test_reasoning_effort_and_legacy_alias_cannot_conflict(monkeypatch):
+    monkeypatch.setattr(sys, "argv", [
+        "guild-manager", "run", "--provider", "anthropic",
+        "--reasoning-effort", "high", "--thinking-effort", "low",
+    ])
+    with pytest.raises(SystemExit) as error:
+        cli.main()
+    assert error.value.code == 2
+
+
+@pytest.mark.parametrize("provider, effort", [("google", "max"), ("anthropic", "minimal")])
+def test_cli_rejects_invalid_provider_effort_before_network(monkeypatch, capsys, provider, effort):
+    import json
+
+    def urlopen(*args, **kwargs):
+        pytest.fail("invalid effort must not issue a network request")
+
+    monkeypatch.setattr("urllib.request.urlopen", urlopen)
+    monkeypatch.setattr(sys, "argv", [
+        "guild-manager", "run", "--provider", provider, "--model", "test-model",
+        "--reasoning-effort", effort, "--archive-dir", "none", "--json",
+    ])
+    with pytest.raises(SystemExit) as error:
+        cli.main()
+    assert error.value.code == 1
+    assert "reasoning_effort" in json.loads(capsys.readouterr().out)["failure_reason"]
+
+
 @pytest.mark.parametrize("option, field", [
     ("--verbose", "verbose"), ("--debug", "debug"), ("--json", "json_output"),
     ("--show-model-text", "show_model_text"), ("--show-reasoning", "show_reasoning"),
@@ -67,12 +171,13 @@ def test_run_rejects_conflicting_output_options(monkeypatch, options) -> None:
     assert error.value.code == 2
 
 
-@pytest.mark.parametrize("provider", ["openai", "openai-responses", "anthropic"])
+@pytest.mark.parametrize("provider", ["openai", "openai-responses", "anthropic", "google"])
 @pytest.mark.parametrize("mode", [[], ["--quiet"], ["--verbose"], ["--debug"], ["--json"]])
 def test_cli_runs_offline_with_each_provider_and_output_mode(monkeypatch, capsys, provider, mode) -> None:
     import json
     from guild_manager_bench.bench.llm import (
         AnthropicMessagesAgent, AnthropicMessagesConfig,
+        GoogleGenerateContentAgent, GoogleGenerateContentConfig,
         OpenAIChatCompletionsAgent, OpenAIChatCompletionsConfig,
         OpenAIResponsesAgent, OpenAIResponsesConfig,
     )
@@ -80,6 +185,7 @@ def test_cli_runs_offline_with_each_provider_and_output_mode(monkeypatch, capsys
         "openai": (OpenAIChatCompletionsAgent, OpenAIChatCompletionsConfig),
         "openai-responses": (OpenAIResponsesAgent, OpenAIResponsesConfig),
         "anthropic": (AnthropicMessagesAgent, AnthropicMessagesConfig),
+        "google": (GoogleGenerateContentAgent, GoogleGenerateContentConfig),
     }
     responses = {
         "openai": {"choices": [{"message": {"role": "assistant", "tool_calls": [
@@ -87,6 +193,9 @@ def test_cli_runs_offline_with_each_provider_and_output_mode(monkeypatch, capsys
         ]}}], "usage": {"prompt_tokens": 10, "completion_tokens": 5}},
         "openai-responses": {"output": [{"type": "function_call", "call_id": "call-1", "name": "end_turn", "arguments": '{"hunts": []}'}], "usage": {"input_tokens": 10, "output_tokens": 5}},
         "anthropic": {"content": [{"type": "tool_use", "id": "call-1", "name": "end_turn", "input": {"hunts": []}}], "usage": {"input_tokens": 10, "output_tokens": 5}},
+        "google": {"candidates": [{"content": {"role": "model", "parts": [
+            {"functionCall": {"name": "end_turn", "args": {"hunts": []}}}
+        ]}, "finishReason": "STOP"}], "usageMetadata": {"promptTokenCount": 10, "candidatesTokenCount": 3, "thoughtsTokenCount": 2}},
     }
     requests = []
 
@@ -96,12 +205,18 @@ def test_cli_runs_offline_with_each_provider_and_output_mode(monkeypatch, capsys
 
     agent_class, config_class = classes[provider]
     agent = agent_class(config_class(model="offline-test", api_key="do-not-print-this-key"), transport=transport)
-    monkeypatch.setattr(agent_class, "from_env", lambda **kwargs: agent)
+    def from_env(**kwargs):
+        from dataclasses import replace
+        field = "effort" if provider == "anthropic" else "reasoning_effort"
+        agent.config = replace(agent.config, **{field: kwargs[field]})
+        return agent
+
+    monkeypatch.setattr(agent_class, "from_env", from_env)
     # 即使环境强制颜色，重定向输出仍保持无 ANSI、无动画。
     monkeypatch.setenv("FORCE_COLOR", "1")
     monkeypatch.setattr(sys, "argv", [
         "guild-manager", "run", "--provider", provider, "--no-stream",
-        "--archive-dir", "none", *mode,
+        "--archive-dir", "none", "--reasoning-effort", "high", *mode,
     ])
     cli.main()
     output = capsys.readouterr()
@@ -109,10 +224,20 @@ def test_cli_runs_offline_with_each_provider_and_output_mode(monkeypatch, capsys
     assert "do-not-print-this-key" not in output.out
     assert "\x1b" not in output.out
     assert len(requests) == 8
+    for body in requests:
+        if provider == "google":
+            assert body["generationConfig"]["thinkingConfig"] == {"thinkingLevel": "HIGH"}
+        elif provider == "anthropic":
+            assert body["output_config"] == {"effort": "high"}
+        elif provider == "openai-responses":
+            assert body["reasoning"]["effort"] == "high"
+        else:
+            assert body["reasoning_effort"] == "high"
     if mode == ["--json"]:
         report = json.loads(output.out)
         assert report["status"] == "completed"
         assert report["stats"]["token_usage"]["input_tokens"] == 80
+        assert report["stats"]["token_usage"]["output_tokens"] == 40
         assert report["stats"]["model_interaction"]["total_turns_completed"] == 8
         assert report["data"]["game_seed"] == 20260524
     else:
@@ -171,12 +296,21 @@ def test_cli_returns_failure_exit_code_and_counts_failed_attempts(monkeypatch, c
     assert report["score"] is None
 
 
-def test_cli_streaming_prints_requested_model_content_once(monkeypatch, capsys) -> None:
-    from guild_manager_bench.bench.llm import OpenAIChatCompletionsAgent, OpenAIChatCompletionsConfig
+@pytest.mark.parametrize("provider", ["openai", "google"])
+def test_cli_streaming_prints_requested_model_content_once(monkeypatch, capsys, provider) -> None:
+    from guild_manager_bench.bench.llm import (
+        GoogleGenerateContentAgent, GoogleGenerateContentConfig,
+        OpenAIChatCompletionsAgent, OpenAIChatCompletionsConfig,
+    )
     calls = []
 
     def stream_transport(url, headers, body, timeout):
         calls.append(body)
+        if provider == "google":
+            yield {"candidates": [{"content": {"parts": [{"text": "API推理标记", "thought": True}]}}]}
+            yield {"candidates": [{"content": {"parts": [{"text": "模型正文标记"}]}}]}
+            yield {"candidates": [{"content": {"parts": [{"functionCall": {"name": "end_turn", "args": {"hunts": []}}}]}, "finishReason": "STOP"}]}
+            return
         yield {"choices": [{"delta": {"reasoning_content": "API推理标记"}}]}
         yield {"choices": [{"delta": {"content": "模型正文标记"}}]}
         yield {"choices": [{"delta": {"tool_calls": [{
@@ -185,9 +319,13 @@ def test_cli_streaming_prints_requested_model_content_once(monkeypatch, capsys) 
         }]}}]}
         yield {"choices": [{"delta": {}, "finish_reason": "tool_calls"}], "usage": {"prompt_tokens": 10, "completion_tokens": 5}}
 
-    agent = OpenAIChatCompletionsAgent(OpenAIChatCompletionsConfig(model="offline-test"), stream_transport=stream_transport)
-    monkeypatch.setattr(OpenAIChatCompletionsAgent, "from_env", lambda **kwargs: agent)
-    monkeypatch.setattr(sys, "argv", ["guild-manager", "run", "--archive-dir", "none", "--show-model-text", "--show-reasoning"])
+    agent_class, config_class = {
+        "openai": (OpenAIChatCompletionsAgent, OpenAIChatCompletionsConfig),
+        "google": (GoogleGenerateContentAgent, GoogleGenerateContentConfig),
+    }[provider]
+    agent = agent_class(config_class(model="offline-test"), stream_transport=stream_transport)
+    monkeypatch.setattr(agent_class, "from_env", lambda **kwargs: agent)
+    monkeypatch.setattr(sys, "argv", ["guild-manager", "run", "--provider", provider, "--archive-dir", "none", "--show-model-text", "--show-reasoning"])
     cli.main()
     output = capsys.readouterr().out
     assert len(calls) == 8
