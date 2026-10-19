@@ -6,6 +6,7 @@ from concurrent.futures import ProcessPoolExecutor
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from datetime import datetime
+from functools import cache
 from pathlib import Path
 from time import perf_counter
 from typing import Any, Callable, Mapping, Protocol, Sequence
@@ -95,6 +96,7 @@ class LlmTurnAgent(Protocol):
 
 
 EventSink = Callable[[dict[str, Any]], None]
+_MonsterPowerEvaluator = Callable[[CombatStats, tuple[Skill, ...]], float]
 
 
 @dataclass(frozen=True, slots=True)
@@ -196,6 +198,8 @@ def run_llm_game(
         initial_observation = tools.get_observation(session_id)["observation"]
 
     _bind_agent_session(agent, session_id)
+    power_evaluator = _cached_monster_power(definition)
+
     def emit(event: dict[str, Any]) -> None:
         if archive_writer is not None and _should_archive_event(event):
             archive_writer.append_event(event)
@@ -211,6 +215,7 @@ def run_llm_game(
                 turns=list(traces),
             ),
             definition,
+            power_evaluator=power_evaluator,
         )
 
     _emit(
@@ -312,7 +317,7 @@ def run_llm_game(
                         traces=traces,
                         final_observation=observation,
                         score=score,
-                        stats=_compute_run_stats(run, definition),
+                        stats=_compute_run_stats(run, definition, power_evaluator=power_evaluator),
                     )
                     _emit(emit, "run_completed", run=_run_summary(run))
                     return run
@@ -387,7 +392,7 @@ def run_llm_game(
                         traces=traces,
                         final_observation=final_observation,
                         failure_reason=turn_trace.failure_reason,
-                        stats=_compute_run_stats(run, definition),
+                        stats=_compute_run_stats(run, definition, power_evaluator=power_evaluator),
                     )
                     _emit(emit, "run_failed", run=_run_summary(run))
                     return run
@@ -2182,11 +2187,26 @@ def _agent_metadata(agent: LlmTurnAgent) -> dict[str, Any]:
     return metadata
 
 
+def _cached_monster_power(definition: GameDefinition) -> _MonsterPowerEvaluator:
+    """缓存单局固定定义下的怪物强度，局间不共享。"""
+
+    @cache
+    def evaluate(stats: CombatStats, skills: tuple[Skill, ...]) -> float:
+        return monster_combat_power(definition, stats, skills)
+
+    return evaluate
+
+
 def _compute_run_stats(
     run: LlmGameRun,
     definition: GameDefinition | None = None,
+    *,
+    power_evaluator: _MonsterPowerEvaluator | None = None,
 ) -> dict[str, Any]:
-    """从 LlmGameRun 轨迹中聚合全面的运行统计数据。"""
+    """聚合运行统计。检查点复用同一局的怪物强度缓存。"""
+
+    if definition is not None and power_evaluator is None:
+        power_evaluator = _cached_monster_power(definition)
 
     # Timing accumulators
     total_duration_ms: float = 0.0
@@ -2344,6 +2364,7 @@ def _compute_run_stats(
                         turn.observation_before,
                         turn.turn,
                         definition=definition,
+                        power_evaluator=power_evaluator,
                     )
                     if enemy is None:
                         enemy = _strongest_defeated_enemy_from_tool_content(
@@ -2351,6 +2372,7 @@ def _compute_run_stats(
                             turn.observation_before,
                             turn.turn,
                             definition=definition,
+                            power_evaluator=power_evaluator,
                         )
                     strongest_defeated_enemy = _stronger_enemy(
                         strongest_defeated_enemy,
@@ -2518,6 +2540,7 @@ def _strongest_defeated_enemy_from_tool_result(
     turn_number: int,
     *,
     definition: GameDefinition | None = None,
+    power_evaluator: _MonsterPowerEvaluator | None = None,
 ) -> dict[str, Any] | None:
     turn_result = result.get("turn_result")
     if not isinstance(turn_result, Mapping):
@@ -2537,6 +2560,7 @@ def _strongest_defeated_enemy_from_tool_result(
             observation_before,
             turn_number,
             definition=definition,
+            power_evaluator=power_evaluator,
         )
         best = _stronger_enemy(best, candidate)
     return best
@@ -2548,6 +2572,7 @@ def _strongest_defeated_enemy_from_tool_content(
     turn_number: int,
     *,
     definition: GameDefinition | None = None,
+    power_evaluator: _MonsterPowerEvaluator | None = None,
 ) -> dict[str, Any] | None:
     if not content:
         return None
@@ -2592,6 +2617,7 @@ def _strongest_defeated_enemy_from_tool_content(
             observation_before,
             turn_number,
             definition=definition,
+            power_evaluator=power_evaluator,
         )
         best = _stronger_enemy(best, candidate)
     return best
@@ -2720,6 +2746,7 @@ def _defeated_enemy_from_battle(
     turn_number: int,
     *,
     definition: GameDefinition | None = None,
+    power_evaluator: _MonsterPowerEvaluator | None = None,
 ) -> dict[str, Any] | None:
     monster = _monster_from_observation(battle, observation_before)
     stats_source = None
@@ -2762,7 +2789,11 @@ def _defeated_enemy_from_battle(
         monster_skills = _skills_from_observation(monster)
         if combat_stats is not None and monster_skills is not None:
             try:
-                power = monster_combat_power(definition, combat_stats, monster_skills)
+                power = (
+                    monster_combat_power(definition, combat_stats, monster_skills)
+                    if power_evaluator is None
+                    else power_evaluator(combat_stats, monster_skills)
+                )
             except Exception:
                 pass  # fallback to static formula
 
