@@ -9,6 +9,8 @@
 // ============================================================================
 // DOM Helpers
 // ============================================================================
+import { selectBoard, versionLabel } from './boards.mjs';
+
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
 
@@ -170,6 +172,7 @@ function renderBadges(badges) {
 // ============================================================================
 // Global State
 // ============================================================================
+let _allBoardsData = null;
 let _leaderboardData = null;
 let _modelNotes = {};       // model name -> note string
 let _cardModels = [];       // 当前排行榜 models，供详情懒渲染按 index 取用
@@ -279,7 +282,8 @@ function setMainVisible(el, visible) {
 
 function syncViewUrl() {
   const url = new URL(window.location.href);
-  const values = { q: _leaderboardSearchQuery, type: _leaderboardFilter === 'all' ? '' : _leaderboardFilter,
+  const values = { preset: _leaderboardData.preset, version: _leaderboardData.version,
+    q: _leaderboardSearchQuery, type: _leaderboardFilter === 'all' ? '' : _leaderboardFilter,
     sort: _leaderboardSort === 'rank' ? '' : _leaderboardSort, tab: _activeTab === 'curves' ? 'curves' : '' };
   for (const [key, value] of Object.entries(values)) {
     if (value) url.searchParams.set(key, value);
@@ -937,6 +941,12 @@ function renderCardDetail(m) {
   if (latestRun.preset) {
     details.push({ label: 'Preset', value: latestRun.preset });
   }
+  if (latestRun.benchmark_version) {
+    details.push({ label: '评测版本', value: latestRun.benchmark_version });
+  }
+  if (latestRun.protocol_hash) {
+    details.push({ label: '协议指纹', value: latestRun.protocol_hash });
+  }
   if (latestRun.game_seed != null) {
     details.push({ label: 'Game Seed', value: fmtInt(latestRun.game_seed) });
   }
@@ -1114,6 +1124,7 @@ function renderRunCard(run, num, total) {
   // Footer tags
   const tags = [];
   if (run.preset) tags.push(run.preset);
+  if (run.benchmark_version) tags.push(run.benchmark_version);
   if (run.game_seed != null) tags.push(`game ${fmtInt(run.game_seed)}`);
   if (run.scoring_seed != null) tags.push(`score ${fmtInt(run.scoring_seed)}`);
   if (run.score_mode) tags.push(run.score_mode);
@@ -1614,7 +1625,10 @@ async function init() {
     ]);
     if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     const data = await res.json();
-    _leaderboardData = data;
+    _allBoardsData = data;
+    const params = new URLSearchParams(window.location.search);
+    _leaderboardData = selectBoard(data, params.get('preset'), params.get('version'));
+    initProtocolPicker();
     if (notesRes.ok) {
       try { _modelNotes = await notesRes.json(); } catch (_) { /* ignore malformed notes */ }
     }
@@ -1622,12 +1636,44 @@ async function init() {
     restoreView();
     initLeaderboardSearch();
     initCardInteractions();
-    renderLeaderboard(data);
+    renderLeaderboard(_leaderboardData);
     initTabs();
     initRankScoreHelp();
   } catch (e) {
     showError(`无法加载 leaderboard_data.json: ${e.message}`);
   }
+}
+
+function renderProtocolPicker() {
+  const presets = [...new Set(_allBoardsData.boards.map(b => b.preset))];
+  $('#presetSelect').innerHTML = presets.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+  $('#presetSelect').value = _leaderboardData.preset;
+  const versions = _allBoardsData.boards.filter(b => b.preset === _leaderboardData.preset);
+  $('#versionSelect').innerHTML = versions.map(b => `<option value="${esc(b.version)}">${esc(versionLabel(b))} · ${b.total_runs} runs</option>`).join('');
+  $('#versionSelect').value = _leaderboardData.version;
+  $('#presetSelect').disabled = false;
+  $('#versionSelect').disabled = false;
+  $('#protocolNotice').textContent = _leaderboardData.protocol_status === 'unverified'
+    ? '历史运行按已知数据版本归类，尚未核验完整评测协议。不与冻结版本混排，分数保持原值。'
+    : '只显示当前 preset 与版本的运行。排名、统计和曲线对比均不跨版本聚合。';
+}
+
+function switchProtocol(preset, version) {
+  _leaderboardData = selectBoard(_allBoardsData, preset, version);
+  _comparisonModels.clear();
+  _expandedModels.clear();
+  _curveRunSelection = {};
+  _adventurerTooltipDetails.clear();
+  if (_curveChart) { _curveChart.destroy(); _curveChart = null; }
+  renderProtocolPicker();
+  renderLeaderboard(_leaderboardData);
+  setActiveTab('leaderboard', { scroll: false });
+}
+
+function initProtocolPicker() {
+  renderProtocolPicker();
+  $('#presetSelect').addEventListener('change', e => switchProtocol(e.target.value));
+  $('#versionSelect').addEventListener('change', e => switchProtocol(_leaderboardData.preset, e.target.value));
 }
 
 function initRankScoreHelp() {

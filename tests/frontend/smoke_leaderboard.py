@@ -41,7 +41,12 @@ def leaderboard_fixture() -> dict:
             },
             "run_details": runs,
         })
-    return {"models": models, "total_runs": 84, "generated_at": "2026-10-02"}
+    return {"schema_version": 3, "generated_at": "2026-10-02", "boards": [
+        {"preset": "full", "version": "v1", "protocol_status": "frozen", "models": models, "total_runs": 84},
+        {"preset": "full", "version": "legacy-test", "protocol_status": "unverified", "models": models[:1], "total_runs": 3},
+        {"preset": "advanced", "version": "snapshot-test", "protocol_status": "recorded",
+         "models": [{**models[0], "model": "进阶模型"}], "total_runs": 3},
+    ]}
 
 
 def position_row(page, row) -> float:
@@ -155,6 +160,28 @@ def check_interactions(page, base: str, width: int, screenshots: Path | None) ->
             document.querySelector('.header').getBoundingClientRect().height) < 1""")
         position_row(page, row)
         assert_sticky_header(page)
+
+
+def check_protocol_switching(page, base: str) -> None:
+    page.goto(base)
+    expect(page.locator('.model-card')).to_have_count(28)
+    page.locator('.model-card input[type=checkbox]').first.check()
+    page.locator('#presetSelect').select_option('advanced')
+    expect(page.locator('.model-card')).to_have_count(1)
+    expect(page.locator('.model-name')).to_have_text('进阶模型')
+    expect(page.locator('#compareTray')).to_be_hidden()
+    expect(page.locator('#versionSelect')).to_have_value('snapshot-test')
+    assert 'preset=advanced' in page.url and 'version=snapshot-test' in page.url
+    page.reload()
+    expect(page.locator('.model-name')).to_have_text('进阶模型')
+    page.locator('#presetSelect').select_option('full')
+    page.locator('#versionSelect').select_option('legacy-test')
+    expect(page.locator('.model-card')).to_have_count(1)
+    expect(page.locator('#protocolNotice')).to_contain_text('尚未核验')
+    page.locator('#versionSelect').select_option('v1')
+    expect(page.locator('.model-card')).to_have_count(28)
+    expect(page.locator('.model-card input:checked')).to_have_count(0)
+    assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
 
 
 def check_animations(page, base: str, width: int) -> None:
@@ -277,6 +304,7 @@ def main() -> None:
                 page = context.new_page()
                 base = f"http://127.0.0.1:{server.server_port}/"
                 check_interactions(page, base, width, args.screenshots)
+                check_protocol_switching(page, base)
                 page.close()
                 page = context.new_page()
                 check_animations(page, base, width)

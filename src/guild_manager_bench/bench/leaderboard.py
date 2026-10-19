@@ -22,19 +22,15 @@ from __future__ import annotations
 
 import hashlib
 import json
-import sys
 from datetime import datetime
 from pathlib import Path
 from statistics import mean, median
 from typing import Any
 
-from guild_manager_bench.bench.replay_scoring import (
-    with_rank_score_curve,
-    with_rank_score_from_final_observation,
-)
+from guild_manager_bench.bench.protocols import run_version
 
 # Incremental build cache version — bump when _extract_run_info schema changes.
-_CACHE_VERSION = 11
+_CACHE_VERSION = 12
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -131,6 +127,7 @@ def _extract_run_info(replay: dict, *, source_path: Path | None = None) -> dict 
         "turns": turns_count,
         "preset": data.get("preset") or _preset_from_data_dir(data.get("data_dir")),
         "data_hash": data.get("data_hash"),
+        **run_version(data),
         "game_seed": data.get("game_seed"),
         "scoring_seed": data.get("scoring_seed"),
         "final_turn": final_observation.get("turn"),
@@ -262,6 +259,7 @@ def _extract_baseline_run_info(replay: dict, *, source_path: Path | None = None)
         "turns": final_observation.get("max_turns"),
         "preset": data.get("preset") or _preset_from_data_dir(data.get("data_dir")),
         "data_hash": data.get("data_hash"),
+        **run_version(data),
         "game_seed": data.get("game_seed", final_observation.get("seed")),
         "scoring_seed": data.get("scoring_seed"),
         "final_turn": final_observation.get("turn"),
@@ -1635,183 +1633,102 @@ def _save_cache(cache_path: Path, entries: dict[str, dict]) -> None:
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
-def _load_previous_output(output: Path) -> dict[str, dict] | None:
-    """Load the previous leaderboard output. Returns {model_name: model_data} or None."""
+def _run_key(run: dict) -> str:
+    return str(run.get("session_id") or run["run_id"])
+
+
+def _previous_runs(output: Path) -> dict[str, dict]:
     if not output.exists():
-        return None
-    try:
-        data = json.loads(output.read_text(encoding="utf-8"))
-        if data.get("schema_version") != 2:
-            return None
-        return {m["model"]: m for m in data.get("models", []) if isinstance(m, dict)}
-    except (json.JSONDecodeError, UnicodeDecodeError, KeyError):
-        return None
+        return {}
+    data = json.loads(output.read_text(encoding="utf-8"))
+    if data["schema_version"] == 2:
+        models = data["models"]
+    elif data["schema_version"] == 3:
+        models = [model for board in data["boards"] for model in board["models"]]
+    else:
+        raise ValueError("unsupported leaderboard schema")
+    runs = {}
+    for model in models:
+        for detail in model["run_details"]:
+            run = {**detail, "model": model["model"], "is_baseline": model.get("is_baseline", False)}
+            run.update(run_version(run))
+            runs[_run_key(run)] = run
+    return runs
 
 
-def build_leaderboard(data_dir: Path, output: Path, *, incremental: bool = True) -> None:
-    """Scan *data_dir* for replay JSON files and write aggregated leaderboard to *output*.
+def _build_boards(runs: list[dict]) -> list[dict]:
+    groups: dict[tuple[str, str], list[dict]] = {}
+    for run in runs:
+        run.update(run_version(run))
+        key = (run.get("preset") or "unknown", run["benchmark_version"])
+        groups.setdefault(key, []).append(run)
+    boards = []
+    for (preset, version), members in sorted(groups.items()):
+        signatures = {(r.get("protocol_hash"), r.get("settings_hash"), r.get("data_hash")) for r in members}
+        if not version.startswith("legacy-") and len(signatures) != 1:
+            raise ValueError(f"conflicting protocol/settings/data for {preset}/{version}")
+        model_runs: dict[str, list[dict]] = {}
+        for run in members:
+            model_runs.setdefault(run["model"], []).append(run)
+        models = [{**_aggregate_model(values), "model": name} for name, values in model_runs.items()]
+        models.sort(key=lambda m: (-_sort_key(m), m["model"]))
+        for rank, model in enumerate(models, 1):
+            model["rank"] = rank
+        boards.append({
+            "preset": preset, "version": version,
+            "protocol_status": members[0]["protocol_status"],
+            "protocol_hash": members[0].get("protocol_hash"),
+            "total_runs": len(members), "models": models,
+        })
+    return boards
 
-    When *incrementual* is True (default):
 
-    * A ``.build_cache.json`` file is maintained next to *output* so that
-      unchanged replay files are skipped on subsequent runs.
-    * The previous ``leaderboard_data.json`` is read; only models whose replays
-      have changed (added / modified / deleted) are re-aggregated.  Models with
-      no changes are carried forward verbatim.
+def build_leaderboard(data_dir: Path, output: Path, *, incremental: bool = True,
+                      run_dirs: tuple[Path, ...] = ()) -> None:
+    """按 preset 和协议版本聚合，保留历史明细，不重新计算旧成绩。
+
+    full-rebuild 仅禁用解析缓存。额外 run_dirs 递归读取 replay.json。
     """
-    json_files = sorted(data_dir.glob("*.json"))
-    if not json_files:
-        print(f"No JSON files found in {data_dir}")
-        sys.exit(1)
-
+    json_files = set(data_dir.glob("*.json"))
+    for root in run_dirs:
+        if not root.is_dir():
+            raise ValueError(f"run directory not found: {root}")
+        json_files.update(root.rglob("replay.json"))
     cache_path = output.parent / ".build_cache.json"
-    prev_models = _load_previous_output(output) if incremental else None
-    cache: dict[str, dict] = _load_cache(cache_path) if incremental else {}
-    new_cache: dict[str, dict] = {}
-
-    # Determine which files changed vs. cache
-    current_names = {p.name for p in json_files}
-    cached_names = set(cache.keys())
-
-    new_or_changed = set()
-    deleted = cached_names - current_names
-
-    for path in json_files:
-        fp = _file_fingerprint(path)
-        cached = cache.get(path.name)
-        if not (cached and cached.get("fingerprint") == fp):
-            new_or_changed.add(path.name)
-
-    # Collect affected models from new/changed files
-    affected_models: set[str] = set()
-    for fname in new_or_changed:
-        # Model name will be resolved during parsing below
-        pass
-
-    # Build per-model run lists:
-    #   - For affected models: re-aggregate from scratch (all runs)
-    #   - For unaffected models: carry from previous output
-    model_runs: dict[str, list[dict]] = {}
-    skipped = 0
-    reused = 0
-    parsed = 0
-
-    for path in json_files:
-        fp = _file_fingerprint(path)
-        cached = cache.get(path.name)
-        is_hit = incremental and cached and cached.get("fingerprint") == fp
-
-        if is_hit:
-            info = cached.get("info")
-            if info is not None:
-                model_runs.setdefault(info["model"], []).append(info)
-                new_cache[path.name] = cached
-                reused += 1
-                # If this model is already affected, we'll re-aggregate anyway
-                if info["model"] in affected_models:
-                    continue
-                # Otherwise this model is clean — no need to re-aggregate
-                continue
-
-        # Parse the file (cache miss or non-incremental)
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, UnicodeDecodeError) as e:
-            print(f"  ! Skipping {path.name}: {e}")
-            skipped += 1
-            continue
-
-        data = with_rank_score_from_final_observation(data)
-        data = with_rank_score_curve(data)
-        info = _extract_run_info(data, source_path=path)
-        if info is None:
-            skipped += 1
-            continue
-
-        affected_models.add(info["model"])
-        model_runs.setdefault(info["model"], []).append(info)
-        new_cache[path.name] = {"fingerprint": fp, "info": info}
-        parsed += 1
-
-    if not model_runs and not prev_models:
-        print("No valid completed replays found.")
-        sys.exit(1)
-
-    # Aggregate: re-aggregate affected models, carry unaffected from prev
-    models: list[dict] = []
-    unaffected_count = 0
-
-    for model_name, runs in model_runs.items():
-        if model_name in affected_models:
-            agg = _aggregate_model(runs)
-            agg["model"] = model_name
-            models.append(agg)
-        elif prev_models and model_name in prev_models:
-            models.append(prev_models[model_name])
-            unaffected_count += 1
+    cache = _load_cache(cache_path) if incremental else {}
+    new_cache = {}
+    runs = _previous_runs(output)
+    for path in sorted(json_files):
+        key = str(path.resolve())
+        fingerprint = _file_fingerprint(path)
+        cached = cache.get(key)
+        if cached and cached["fingerprint"] == fingerprint:
+            info = cached["info"]
         else:
-            # New model — aggregate fresh
-            agg = _aggregate_model(runs)
-            agg["model"] = model_name
-            models.append(agg)
-
-    # Carry over models from prev that have no replays in data_dir.
-    # These models keep their historical data (replays may have been moved
-    # out of data_dir but their aggregated stats should persist).
-    if prev_models:
-        current_model_names = {m["model"] for m in models}
-        for name, prev in prev_models.items():
-            if name not in current_model_names:
-                models.append(prev)
-                unaffected_count += 1
-
-    # Sort and assign ranks
-    models.sort(key=_sort_key, reverse=True)
-    for i, entry in enumerate(models):
-        entry["rank"] = i + 1
-
-    # Build output
-    result = {
-        "schema_version": 2,
-        "generated_at": datetime.now().isoformat(timespec="seconds"),
-        "total_runs": sum(m["runs"] for m in models),
-        "models": models,
-    }
-
-    # Write output and cache
+            data = json.loads(path.read_text(encoding="utf-8"))
+            info = _extract_run_info(data, source_path=path)
+        new_cache[key] = {"fingerprint": fingerprint, "info": info}
+        if info is not None:
+            previous = runs.get(_run_key(info), {})
+            info = dict(info)
+            # 原回放缺少历史榜单已补算的字段时，保留已发布值。
+            for field in ("rank_score", "rank_score_source", "rank_score_curve", "rank_score_per_adventurer"):
+                if info.get(field) is None and previous.get(field) is not None:
+                    info[field] = previous[field]
+            runs[_run_key(info)] = info
+    if not runs:
+        raise ValueError("No valid completed replays found")
+    boards = _build_boards(list(runs.values()))
+    result = {"schema_version": 3, "generated_at": datetime.now().isoformat(timespec="seconds"),
+              "total_runs": len(runs), "boards": boards}
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
-
-    if incremental:
-        _save_cache(cache_path, new_cache)
-
-    changed_count = len(affected_models)
-    inc_info = ""
-    if incremental:
-        parts = []
-        if parsed:
-            parts.append(f"{parsed} parsed")
-        if reused:
-            parts.append(f"{reused} cached")
-        if unaffected_count:
-            parts.append(f"{unaffected_count} models unchanged")
-        if deleted:
-            parts.append(f"{len(deleted)} deleted")
-        if parts:
-            inc_info = f" ({', '.join(parts)})"
-    print(f"OK {len(models)} model(s), {result['total_runs']} run(s)"
-          + (f", {skipped} skipped" if skipped else "")
-          + inc_info)
-    print(f"  -> {output}")
-    for m in models:
-        rs = m.get("rank_score")
-        rs_str = f"{rs['best']:,.1f}" if rs else "—"
-        sc = m.get("score")
-        sc_str = f"{sc['best']:.2f}" if sc else "—"
-        eff = m.get("efficiency") or {}
-        tok = eff.get("input_tokens", {})
-        tok_str = f"{tok.get('mean', 0):,} tok" if tok else ""
-        print(f"  #{m['rank']}  {m['model']:<40s}  rank={rs_str}  score={sc_str}  {tok_str}  ({m['runs']} runs)")
+    temp = output.with_suffix(output.suffix + ".tmp")
+    temp.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
+    temp.replace(output)
+    _save_cache(cache_path, new_cache)
+    print(f"OK {len(boards)} preset/version board(s), {len(runs)} run(s) -> {output}")
+    for board in boards:
+        print(f"  {board['preset']} / {board['version']}: {board['total_runs']} runs")
 
 
 def _run_detail(run: dict) -> dict:
@@ -1827,6 +1744,7 @@ def _run_detail(run: dict) -> dict:
         "turns": run.get("turns"),
         "preset": run.get("preset"),
         "data_hash": run.get("data_hash"),
+        **run_version(run),
         "game_seed": run.get("game_seed"),
         "scoring_seed": run.get("scoring_seed"),
         "score_mode": run.get("score_mode"),

@@ -67,6 +67,11 @@ button, a, input, select { transition: color var(--transition), background var(-
 .header-link { font-size: 12px; color: var(--text-secondary); border-left: 1px solid var(--line); padding-left: 28px; }
 .header-link span { margin-left: 8px; }
 .main { width: 100%; max-width: 1240px; margin: 0 auto; padding: 0 28px 64px; min-height: 70vh; }
+.protocol-picker { max-width: 1240px; margin: 0 auto; padding: 24px 28px 0; }
+.protocol-picker-fields { display: flex; flex-wrap: wrap; gap: 16px 24px; }
+.protocol-picker label { display: flex; align-items: center; gap: 10px; color: var(--text-secondary); }
+.protocol-picker select { max-width: min(420px, 65vw); }
+.protocol-picker p { margin-top: 10px; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
 .hero { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 48px; align-items: center; padding: 27px 0 24px; }
 .hero .eyebrow { display: flex; align-items: center; gap: 8px; color: var(--medal-gold); margin-bottom: 14px; }
 .status-dot { width: 5px; height: 5px; background: var(--medal-gold); border-radius: 50%; box-shadow: 0 0 0 4px #d7b77910; }

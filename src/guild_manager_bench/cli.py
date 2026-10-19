@@ -30,7 +30,9 @@ def main() -> None:
         default=Path("web/leaderboard/leaderboard_data.json"),
         help="输出文件路径 (默认: web/leaderboard/leaderboard_data.json)",
     )
-    bl_parser.add_argument("--full-rebuild", action="store_true", help="忽略缓存，完全重新构建")
+    bl_parser.add_argument("--full-rebuild", action="store_true", help="忽略解析缓存，保留已发布历史明细")
+    bl_parser.add_argument("--run-dir", type=Path, action="append", default=[],
+                           help="额外正式存档目录，递归读取 replay.json，可重复指定")
 
     run_parser = subparsers.add_parser("run", help="运行 LLM agent benchmark")
     run_parser.add_argument(
@@ -90,7 +92,8 @@ def main() -> None:
             run_parser.error("--quiet / --json 不能与模型文本展示选项同时使用")
         _run(args)
     elif args.command == "build-leaderboard":
-        _build_leaderboard(args.data_dir, args.output, full_rebuild=args.full_rebuild)
+        _build_leaderboard(args.data_dir, args.output, full_rebuild=args.full_rebuild,
+                           run_dirs=tuple(args.run_dir))
     elif args.command == "serve-leaderboard":
         _serve_leaderboard(args.host, args.port, args.directory)
 
@@ -183,11 +186,13 @@ def _serve(data_dir: str, preset: str | None, host: str, port: int) -> None:
     uvicorn.run(create_app(data_dir, preset=preset), host=host, port=port)
 
 
-def _build_leaderboard(data_dir: Path, output: Path, *, full_rebuild: bool = False) -> None:
+def _build_leaderboard(data_dir: Path, output: Path, *, full_rebuild: bool = False,
+                       run_dirs: tuple[Path, ...] = ()) -> None:
     """构建排行榜数据文件。"""
     from guild_manager_bench.bench.leaderboard import build_leaderboard
 
-    build_leaderboard(data_dir.resolve(), output.resolve(), incremental=not full_rebuild)
+    build_leaderboard(data_dir.resolve(), output.resolve(), incremental=not full_rebuild,
+                      run_dirs=tuple(path.resolve() for path in run_dirs))
 
 
 def _serve_leaderboard(host: str, port: int, directory: Path) -> None:

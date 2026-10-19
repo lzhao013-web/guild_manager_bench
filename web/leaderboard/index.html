@@ -9,8 +9,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20261002.2" />
-  <script src="app.js?v=20261002.2" defer></script>
+  <link rel="stylesheet" href="styles.css?v=20261004.1" />
+  <script type="module" src="app.js?v=20261004.1"></script>
 </head>
 <body>
   <a class="skip-link" href="#leaderboardMain">跳到主要内容</a>
@@ -28,6 +28,13 @@
     </div>
   </header>
 
+  <section class="protocol-picker" aria-label="选择评测环境">
+    <div class="protocol-picker-fields">
+      <label>Preset <select id="presetSelect" class="select-control" disabled></select></label>
+      <label>评测版本 <select id="versionSelect" class="select-control" disabled></select></label>
+    </div>
+    <p id="protocolNotice" role="status">正在读取评测版本…</p>
+  </section>
   <main class="main" id="leaderboardMain" tabindex="-1">
     <section class="hero" aria-labelledby="heroTitle">
       <div class="hero-copy">
@@ -65,11 +72,11 @@
       </div>
       <div class="list-caption"><span id="leaderboardSearchStatus" role="status" aria-live="polite">正在加载参赛条目…</span><span>勾选 2–4 项，开始对比</span></div>
       <div id="cardListContainer"><div class="skeleton-wrap" id="loadingState" role="status" aria-label="正在加载排行榜数据"><div class="skeleton-row"></div><div class="skeleton-row"></div><div class="skeleton-row"></div><div class="skeleton-row"></div></div></div>
-      <div class="table-footnote"><span>排名保留全榜顺序 · 分数条相对于全榜最高均分</span><span>Tokens 与耗时均为每次运行的平均值</span></div>
+      <div class="table-footnote"><span>仅在当前 preset 与版本内排名 · 分数条相对于该版本最高均分</span><span>Tokens 与耗时均为每次运行的平均值</span></div>
     </section>
     <section class="methodology" id="methodology" aria-labelledby="methodologyTitle">
       <div class="section-heading"><div><p class="eyebrow">BEHIND THE SCORE</p><h2 id="methodologyTitle">每一分，都有依据。</h2></div><span class="method-version">评测方法 / v1.0.0</span></div>
-      <div class="method-grid"><article><span class="method-number">01 / ENVIRONMENT</span><h3>可复现的开局</h3><p>模型在统一的游戏规则与随机种子下开始经营，在有限回合和工具调用预算内管理资源、组建队伍。</p></article><article><span class="method-number">02 / EVALUATION</span><h3>多难度的终局考验</h3><p>固定评分种子，在多个竞技场难度下模拟最终队伍的战斗表现。高难度下的战力贡献获得更高权重。</p></article><article><span class="method-number">03 / AGGREGATION</span><h3>用均值排名，用样本理解</h3><p>同一模型的完成运行按平均段位积分排名。单次结果仅代表该次表现；展开详情可查看各次成绩与配置。</p></article></div>
+      <div class="method-grid"><article><span class="method-number">01 / ENVIRONMENT</span><h3>可复现的开局</h3><p>模型在统一的游戏规则与随机种子下开始经营，在有限回合和工具调用预算内管理资源、组建队伍。</p></article><article><span class="method-number">02 / EVALUATION</span><h3>多难度的终局考验</h3><p>固定评分种子，在多个竞技场难度下模拟最终队伍的战斗表现。高难度下的战力贡献获得更高权重。</p></article><article><span class="method-number">03 / AGGREGATION</span><h3>用均值排名，用样本理解</h3><p>仅聚合同一 preset、同一评测版本内的完成运行，按模型平均段位积分排名。单次结果仅代表该次表现；展开详情可查看各次成绩与配置。</p></article></div>
       <details class="protocol-details"><summary>评分公式与复现配置 <span aria-hidden="true">＋</span></summary><div><p><strong>段位积分 = Σ（战斗评分 ÷ 100 × 难度系数）</strong></p><p>人工操作与自动基线作为参考条目展示，具体 preset、游戏种子、评分种子与数据哈希以各次运行详情为准。</p><div id="seedSummary" class="seed-summary"></div></div></details>
     </section>
   </main>
