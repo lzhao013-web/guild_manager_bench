@@ -11,32 +11,32 @@ from guild_manager_bench.runtime.observation import _skill_to_dict
 FORECAST_SCHEMA = {
     "name": "get_forecast",
     "description": (
-        "查询未来经营回合的普通怪物、固定挑战（kind=monsters）或招募候选（kind=recruits），不改变游戏状态。"
-        "start_turn 必须大于当前回合，end_turn 默认等于 start_turn。"
-        "默认 detail=summary 返回简表（每页最多 10 条），设 detail=full 可返回完整属性与技能"
-        "（每页最多 3 条，也可对单回合指定 entry_index 精确查看某一条目）。"
-        "返回的 future: 编号仅作参考，不可传入当前回合的操作工具。怪物显示基础奖励（未计经营天赋加成），且不包含终局评测敌人。"
-        "tier=challenge 可查看固定挑战，其未来存在以此前尚未击败为条件，已击败者不再返回。"
+        "只读查询未来回合自然刷新的怪物（含未击败的固定挑战）或招募候选，不包含终局评测敌人。"
+        "怪物显示未计经营天赋的基础奖励，返回的 future: 引用不可用于操作。"
     ),
     "parameters": {
         "type": "object", "required": ["kind", "start_turn"],
         "properties": {
-            "kind": {"type": "string", "enum": ["monsters", "recruits"]},
-            "start_turn": {"type": "integer", "minimum": 1},
-            "end_turn": {"type": "integer", "minimum": 1},
+            "kind": {"type": "string", "enum": ["monsters", "recruits"],
+                     "description": "查询类别：monsters（怪物）或 recruits（招募候选）。"},
+            "start_turn": {"type": "integer", "minimum": 1,
+                           "description": "起始回合（必须大于当前回合）。"},
+            "end_turn": {"type": "integer", "minimum": 1,
+                         "description": "结束回合（默认等于 start_turn）。"},
             "name_contains": {"type": "string", "minLength": 1,
-                              "description": "显示名称或职业/怪物原型字符串 ID 中的片段。"},
+                              "description": "按显示名称或原型/职业 ID 子串筛选。"},
             "material": {"type": "string", "minLength": 1,
-                         "description": "仅用于怪物。掉落材料的中文名称或字符串 ID，例如秘银碎片或 mithril_shard。"},
+                         "description": "仅 monsters：按掉落材料中文名或 ID 筛选（如秘银碎片或 mithril_shard）。"},
             "tier": {"type": "string", "enum": ["normal", "elite", "boss", "challenge"],
-                     "description": "仅用于怪物，普通/精英/首领/固定挑战。"},
+                     "description": "仅 monsters：按普通/精英/首领/固定挑战筛选。"},
             "entry_index": {"type": "integer", "minimum": 1,
-                            "description": "该回合原始刷新列表中的序号，只能与单回合查询一起使用。"},
-            "detail": {"type": "string", "enum": ["summary", "full"], "default": "summary"},
+                            "description": "单回合刷新列表序号（从1开始，仅 start_turn=end_turn 时可用）。"},
+            "detail": {"type": "string", "enum": ["summary", "full"], "default": "summary",
+                       "description": "summary 返回简表（最多10条/页），full 返回完整属性与技能（最多3条/页）。"},
             "offset": {"type": "integer", "minimum": 0, "default": 0,
-                       "description": "筛选后的条目偏移量。翻页时保持其他筛选参数不变。"},
+                       "description": "分页偏移量，翻页时保持筛选条件不变并传入返回的 next_offset。"},
             "limit": {"type": "integer", "minimum": 1, "maximum": 10, "default": 3,
-                      "description": "summary 最多10条，full 最多3条。"},
+                      "description": "每页条数上限（summary 最多10，full 最多3）。"},
         },
         "additionalProperties": False,
     },

@@ -15,14 +15,7 @@ _STATS = {"hp": "HP", "mp": "MP", "attack": "攻击", "defense": "防御", "spee
 def battle_log_lines(result: Mapping[str, Any]) -> list[str]:
     source = "当轮预览记录（未实际执行）" if result["source"] == "preview" else "上轮真实战斗记录"
     lines = [f"来源：{source}，T{result['turn']}。记录反映当时状态，不代表当前队伍。",
-             "战斗内 left=冒险者，right=怪物。目录序号只用于 get_battle_log，不是可操作对象编号。"]
-    if "battles" in result:
-        lines.append(f"战斗目录：共 {result['record_count']} 场。")
-        for battle in result["battles"]:
-            lines.append(_battle_summary(battle))
-        if result["battles"]:
-            lines.append("传入 source 和 battle_index 查看统计，detail=events 查看过程。")
-        return lines
+             "战斗内 left=冒险者，right=怪物。battle_id 仅用于查日志，不是可操作对象编号。"]
 
     lines.append(_battle_summary(result["battle"]))
     lines.append("伤害为日志记录值，可能包含溢出伤害。即时技能附带普攻合并在该技能事件内。")
@@ -34,10 +27,10 @@ def battle_log_lines(result: Mapping[str, Any]) -> list[str]:
                 f"直接伤害 {stats['direct_damage']}，自身状态伤害 {stats['status_damage_taken']}，"
                 f"收到的实际治疗 {stats['healing_received']}。"
             )
-        lines.append("可用 detail=events、action_start/action_end 查询指定行动区间。日志不包含逐动作MP余额或技能跳过原因。")
+        lines.append("设 detail=events 查看逐行动事件。日志不包含逐动作MP余额或技能跳过原因。")
         return lines
 
-    lines.append(f"整场 {result['total_events']} 条事件，筛选命中 {result['matched_events']} 条，本页 offset={result['offset']}。")
+    lines.append(f"整场 {result['total_events']} 条事件，本页 {len(result['events'])} 条，cursor={result['cursor']}。")
     for event in result["events"]:
         action_type = event["action_type"]
         if action_type == "skill":
@@ -55,7 +48,8 @@ def battle_log_lines(result: Mapping[str, Any]) -> list[str]:
             text += (f"，治疗 {_SIDES[event['healing_target_side']]} {event['healing']}，"
                      f"治疗后HP {event['healing_target_hp']}")
         lines.append(text)
-    lines.append(_next_page(result["next_offset"]))
+    next_cursor = result["next_cursor"]
+    lines.append("已返回全部事件。" if next_cursor is None else f"还有未返回的事件。保持 battle_id 和 detail 不变，下一页 cursor={next_cursor}。")
     return lines
 
 
@@ -94,7 +88,7 @@ def forecast_lines(result: Mapping[str, Any]) -> list[str]:
 
 
 def _battle_summary(battle: Mapping[str, Any]) -> str:
-    return (f"- battle_index={battle['battle_index']} {battle['adventurer_name']} vs {battle['monster_name']}："
+    return (f"- battle_id={battle['battle_id']} {battle['adventurer_name']} vs {battle['monster_name']}："
             f"{_OUTCOMES[battle['outcome']]}，原因 {battle['reason']}，"
             f"行动数 {battle['actions_taken']}，耗时 {battle['time_elapsed']}，事件数 {battle['event_count']}")
 

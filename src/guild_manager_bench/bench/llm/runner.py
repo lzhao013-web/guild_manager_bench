@@ -564,7 +564,7 @@ def run_llm_turn(
             )
             result = turn_harness.call_tool(call.name, call.arguments)
             # Capture observation snapshot after successful write operations
-            if _tool_mutates_state(call.name, call.arguments) and result.get("ok") is True:
+            if call.name in _STATE_MUTATING_TOOL_NAMES and result.get("ok") is True:
                 obs_snapshot = tools.get_observation(session_id)["observation"]
                 result = dict(result)
                 result["_observation_after"] = obs_snapshot
@@ -700,8 +700,6 @@ def _replay_confirmed_tool_result(
         return
 
     arguments = _replay_tool_arguments(step)
-    if not _tool_mutates_state(name, arguments):
-        return
     replayed = harness.call_tool(str(name), arguments)
     if replayed.get("ok") is not True:
         raise ValueError(
@@ -912,9 +910,10 @@ def _format_tool_result_for_model(name: str, result: Mapping[str, Any]) -> str:
         _append_party_result_lines(lines, result, _result_refs(result))
     elif name == "get_monsters":
         _append_monsters_result_lines(lines, result, _result_refs(result))
-    elif name == "refresh_monsters" and result.get("simulation_only") is True:
-        lines[0] = f"成功 refresh_monsters：仅预览，刷新费用{result['gold_cost']}金币。"
+    elif name == "preview_monster_refresh":
+        lines[0] = f"成功 preview_monster_refresh：仅预览，刷新费用{result['gold_cost']}金币。"
         lines.append("未扣费，怪池未变。refresh:编号不可用于操作。")
+        lines.append("重复预览和改变锁定名单不会重抽其他位置，实际刷新后才能预览下一批。")
         if not result["can_afford"]:
             lines.append("金币不足，不能实际刷新。")
         for monster in result["monsters"]:
@@ -1051,9 +1050,9 @@ def _append_battle_preview_lines(
         f"动作数 {preview.get('actions_taken')}; 耗时 {preview.get('time_elapsed')}"
     )
     lines.append(f"胜利奖励: {reward_text}")
-    if "battle_log_index" in preview:
+    if "battle_id" in preview:
         lines.append(
-            f"预览记录已保存。可调用 get_battle_log(source=preview, battle_index={preview['battle_log_index']}) 查询统计或过程。"
+            f"预览记录已保存，battle_id={preview['battle_id']}。可按此编号调用 get_battle_log。"
             "记录基于本次预览时的状态，不随后续调整更新。"
         )
 
@@ -1682,6 +1681,7 @@ def _append_battles_lines(
             f"{_battle_participant_text(battle, 'adventurer', refs)} vs "
             f"{_battle_participant_text(battle, 'monster', refs)}: {outcome}; "
             f"奖励 {reward_text}"
+            + (f"，battle_id={battle['battle_id']}" if "battle_id" in battle else "")
         )
     return True
 
@@ -1943,7 +1943,7 @@ def _agent_response(
 def _is_retryable(turn: TurnTrace) -> bool:
     """回合是否可安全重试：没有任何成功执行的改变游戏状态的工具调用。"""
     return not any(
-        _tool_mutates_state(call.name, call.arguments) and call.ok is True
+        call.name in _STATE_MUTATING_TOOL_NAMES and call.ok is True
         for call in turn.tool_calls
     )
 
@@ -3249,13 +3249,6 @@ _STATE_MUTATING_TOOL_NAMES = {
 }
 
 
-def _tool_mutates_state(name: str, arguments: Mapping[str, Any]) -> bool:
-    """双模式刷新工具的预览不是写操作，不录制或重放写入快照。"""
-    return name in _STATE_MUTATING_TOOL_NAMES and not (
-        name == "refresh_monsters" and arguments.get("preview") is True
-    )
-
-
 def replay_observations_complete(replay: Mapping[str, Any]) -> bool:
     """Return whether replay has the snapshots needed for step playback."""
 
@@ -3280,8 +3273,6 @@ def replay_observations_complete(replay: Mapping[str, Any]) -> bool:
             if step.get("name") not in _STATE_MUTATING_TOOL_NAMES:
                 continue
             if not _replay_tool_step_succeeded(step):
-                continue
-            if not _tool_mutates_state(step["name"], _replay_tool_arguments(step)):
                 continue
             if step.get("observation_after") is None:
                 return False
@@ -3336,8 +3327,6 @@ def rebuild_replay_observations(
             if not _replay_tool_step_succeeded(step):
                 continue
             arguments = _replay_tool_arguments(step)
-            if not _tool_mutates_state(name, arguments):
-                continue
             result = harness.call_tool(str(name), arguments)
             if result.get("ok") is not True:
                 raise ValueError(

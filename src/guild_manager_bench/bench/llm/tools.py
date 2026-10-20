@@ -9,9 +9,9 @@ from threading import RLock
 from typing import Any, Callable, Mapping, Sequence
 from uuid import uuid4
 
-from guild_manager_bench.bench.llm.battle_log import BATTLE_LOG_SCHEMA, query_battle_log
+from guild_manager_bench.bench.llm.battle_log import BATTLE_LOG_SCHEMA, battle_log_id, query_battle_log
 from guild_manager_bench.bench.llm.forecast import FORECAST_SCHEMA, query_forecast
-from guild_manager_bench.bench.llm.monster_refresh import REFRESH_SCHEMA
+from guild_manager_bench.bench.llm.monster_refresh import PREVIEW_REFRESH_SCHEMA, REFRESH_SCHEMA
 from guild_manager_bench.game.engine import GameError, preview_battle as preview_battle_result
 from guild_manager_bench.game.loader import load_game_definition
 from guild_manager_bench.game.models import CombatResources
@@ -51,15 +51,15 @@ def tool_schemas(*, expose_battle_preview: bool = False, talent_tree_enabled: bo
     if expose_forecast:
         schemas.append(FORECAST_SCHEMA)
     if expose_monster_refresh:
-        schemas.append(REFRESH_SCHEMA)
+        schemas.extend((PREVIEW_REFRESH_SCHEMA, REFRESH_SCHEMA))
     schemas = [_without_session_id(schema) for schema in schemas]
     if expose_ultimates:
         unequip = next(s for s in schemas if s["name"] == "unequip_item")
         unequip["parameters"]["properties"]["slot"]["enum"].append("ultimate")
     if talent_tree_enabled:
         descriptions = {
-            "get_upgrades": "读取完整全局天赋树的所有节点（含未满足前置的节点），包含各节点的资源成本、效果、前置与互斥条件。",
-            "purchase_upgrade": "按节点成本消耗金币、材料和经验池经验购买全局天赋。需满足全部前置条件，互斥节点不可兼得，购买后不可退款或洗点。",
+            "get_upgrades": "查看全局天赋树全部节点的成本、效果、前置、互斥与解锁状态。",
+            "purchase_upgrade": "消耗金币、材料和经验池经验解锁一个全局天赋节点。需满足前置且未选互斥节点，解锁后不可退回。",
         }
         for schema in schemas:
             if schema["name"] in descriptions:
@@ -235,19 +235,22 @@ class GuildManagerTools:
             assert session.state is not None
             return session.state
 
-    def refresh_monsters(
-        self, session_id: str, locked_monster_ids: Sequence[str], preview: bool,
+    def preview_monster_refresh(
+        self, session_id: str, locked_monster_ids: Sequence[str],
     ) -> dict[str, Any]:
-        """同一入口选择只读预览或付费刷新，必须明确指定模式。"""
-        if not isinstance(preview, bool):
-            raise ToolCallError("preview 必须是布尔值：true仅预览，false实际刷新")
+        """只读预览下一批普通怪物与费用。"""
         with self._lock:
-            if preview:
-                session = self._get_session(session_id)
-                try:
-                    return session.preview_monster_refresh(locked_monster_ids)
-                except (GameError, ValueError, TypeError) as exc:
-                    return {"ok": False, "error": str(exc)}
+            session = self._get_session(session_id)
+            try:
+                return session.preview_monster_refresh(locked_monster_ids)
+            except (GameError, ValueError, TypeError) as exc:
+                return {"ok": False, "error": str(exc)}
+
+    def refresh_monsters(
+        self, session_id: str, locked_monster_ids: Sequence[str],
+    ) -> dict[str, Any]:
+        """付费刷新未锁定的普通怪物。"""
+        with self._lock:
             result = self._submit_preparation(session_id, {
                 "type": "refresh_monsters", "locked_monster_ids": locked_monster_ids,
             })
@@ -394,14 +397,14 @@ class GuildManagerTools:
                 return _error_response(session, event, str(exc))
 
             self._battle_previews.pop(session_id, None)
+            compact_event = _compact_event(
+                event, include_battle_ids=self.definition.llm_tools.expose_battle_log,
+            )
             return {
                 "ok": True,
-                "event": _compact_event(event),
+                "event": compact_event,
                 "turn_result": {
-                    "battles": [
-                        _compact_battle(battle)
-                        for battle in event.payload["battles"]
-                    ],
+                    "battles": compact_event["battles"],
                     "crafted_equipment_ids": list(result.crafted_equipment_ids),
                     "purchased_upgrade_ids": list(result.purchased_upgrade_ids),
                     "recruited_adventurer_ids": list(result.recruited_adventurer_ids),
@@ -430,7 +433,10 @@ class GuildManagerTools:
                 ]
             return {
                 "session_id": session.session_id,
-                "events": [_compact_event(event) for event in events],
+                "events": [
+                    _compact_event(event, include_battle_ids=self.definition.llm_tools.expose_battle_log)
+                    for event in events
+                ],
             }
 
     def preview_battle(
@@ -469,35 +475,34 @@ class GuildManagerTools:
                     },
                 })
                 self._battle_previews[session_id] = (session.state.turn, records)
-                preview["battle_log_index"] = len(records)
+                preview["battle_id"] = battle_log_id("preview", session.state.turn, len(records))
             return {"ok": True, "preview": preview}
 
     def get_battle_log(
-        self, session_id: str, source: str, battle_index: int | None = None,
-        detail: str = "summary", action_start: int | None = None, action_end: int | None = None,
-        offset: int = 0, limit: int = 20,
+        self, session_id: str, battle_id: str, detail: str = "summary", cursor: int = 0,
     ) -> dict[str, Any]:
-        """读取当轮预览或上轮实战。缓存和历史事件都保留原始战斗时的事实。"""
+        """按编号读取当轮预览或上轮实战的原始记录。"""
         if not self.definition.llm_tools.expose_battle_log:
             raise ToolCallError("get_battle_log 未启用")
         with self._lock:
             session = self._get_session(session_id)
             assert session.state is not None
-            turn = session.state.turn if source == "preview" else session.state.turn - 1
-            records = []
-            if source == "preview":
-                cached_turn, cached = self._battle_previews.get(session_id, (turn, []))
-                if cached_turn == turn:
-                    records = cached
-            elif source == "actual":
-                for event in reversed(session.events):
-                    if event.event_type == "turn_ended" and event.turn == turn:
-                        records = event.payload["battles"]
-                        break
-            return query_battle_log(
-                records, source=source, turn=turn, battle_index=battle_index, detail=detail,
-                action_start=action_start, action_end=action_end, offset=offset, limit=limit,
-            )
+            turn = session.state.turn
+            records = {}
+            cached_turn, cached = self._battle_previews.get(session_id, (turn, []))
+            if cached_turn == turn:
+                for index, record in enumerate(cached, 1):
+                    records[battle_log_id("preview", turn, index)] = {
+                        **record, "source": "preview", "turn": turn,
+                    }
+            for event in reversed(session.events):
+                if event.event_type == "turn_ended" and event.turn == turn - 1:
+                    for index, record in enumerate(event.payload["battles"], 1):
+                        records[battle_log_id("actual", event.turn, index)] = {
+                            **record, "source": "actual", "turn": event.turn,
+                        }
+                    break
+            return query_battle_log(records, battle_id=battle_id, detail=detail, cursor=cursor)
 
     def get_forecast(
         self, session_id: str, kind: str, start_turn: int, end_turn: int | None = None,
@@ -592,6 +597,7 @@ class GuildManagerTools:
         if self.definition.llm_tools.expose_forecast:
             names["get_forecast"] = "get_forecast"
         if self.definition.rules.monster_refresh.enabled:
+            names["preview_monster_refresh"] = "preview_monster_refresh"
             names["refresh_monsters"] = "refresh_monsters"
         if self.definition.llm_tools.endgame_start_turn is not None:
             names["preview_team_power"] = "preview_team_power"
@@ -602,11 +608,14 @@ def _session_snapshot(session: GameSession) -> dict[str, Any]:
     return {
         "session_id": session.session_id,
         "observation": session.observation(),
-        "events": [_compact_event(event) for event in session.events],
+        "events": [
+            _compact_event(event, include_battle_ids=session.definition.llm_tools.expose_battle_log)
+            for event in session.events
+        ],
     }
 
 
-def _compact_event(event) -> dict[str, Any]:
+def _compact_event(event, *, include_battle_ids: bool = False) -> dict[str, Any]:
     payload = dict(event.payload)
     data: dict[str, Any] = {
         "sequence": event.sequence,
@@ -622,6 +631,9 @@ def _compact_event(event) -> dict[str, Any]:
         data["changes"] = list(payload["changes"])
     if "battles" in payload:
         data["battles"] = [_compact_battle(battle) for battle in payload["battles"]]
+        if include_battle_ids:
+            for index, battle in enumerate(data["battles"], 1):
+                battle["battle_id"] = battle_log_id("actual", event.turn, index)
     return data
 
 
@@ -750,39 +762,39 @@ _SESSION_ID = {
 _ADVENTURER_ID = {
     "type": "integer",
     "minimum": 1,
-    "description": "冒险者数字 id，使用回合提示词或工具返回中“冒险者”列表左侧的数字。",
+    "description": "冒险者数字 id（“冒险者”列表左侧数字）。",
 }
 _MONSTER_ID = {
     "type": "integer",
     "minimum": 1,
-    "description": "怪物数字 id，使用回合提示词中“当前怪物”列表左侧的数字。",
+    "description": "怪物数字 id（“当前怪物”列表左侧数字）。",
 }
 _RECIPE_ID = {
     "type": "integer",
     "minimum": 1,
-    "description": "配方数字 id，使用 get_crafting 中“制作配方”列表左侧的数字。",
+    "description": "配方数字 id（get_crafting“制作配方”列表左侧数字）。",
 }
 _UPGRADE_ID = {
     "type": "integer",
     "minimum": 1,
-    "description": "升级数字 id，使用 get_upgrades 中“全局升级”列表左侧的数字。",
+    "description": "升级数字 id（get_upgrades“全局升级”列表左侧数字）。",
 }
 _RECRUIT_CANDIDATE_ID = {
     "type": "integer",
     "minimum": 1,
-    "description": "招募候选数字 id，使用 get_recruitment 中“招募候选”列表左侧的数字。",
+    "description": "招募候选数字 id（get_recruitment“招募候选”列表左侧数字）。",
 }
 _EQUIPMENT_INSTANCE_ID = {
     "type": "integer",
     "minimum": 1,
-    "description": "装备数字 id，使用 get_inventory 中“装备库存”列表左侧的数字。",
+    "description": "装备数字 id（get_inventory“装备库存”列表左侧数字）。",
 }
 
 
 _BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
     {
         "name": "get_crafting",
-        "description": "读取装备制作配方的详细信息。",
+        "description": "查看当前金币、材料及全部装备配方（产物槽位、属性、技能、职业限制、成本与缺口）。",
         "parameters": {
             "type": "object",
             "required": ["session_id"],
@@ -792,7 +804,7 @@ _BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
     },
     {
         "name": "get_inventory",
-        "description": "读取当前装备库存、装备属性、技能和装备者详细信息。",
+        "description": "查看装备库存：空闲装备展示完整槽位、属性、职业限制与技能，已穿戴装备展示槽位与装备者。",
         "parameters": {
             "type": "object",
             "required": ["session_id"],
@@ -802,7 +814,7 @@ _BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
     },
     {
         "name": "get_upgrades",
-        "description": "读取全局升级的详细信息。",
+        "description": "查看全局升级的成本、效果与购买状态。",
         "parameters": {
             "type": "object",
             "required": ["session_id"],
@@ -812,7 +824,7 @@ _BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
     },
     {
         "name": "get_recruitment",
-        "description": "读取可招募的候选冒险者的详细信息。需要招募/替换冒险者时可调用此工具查看详情；如果只是想了解队伍人数上限，请查看回合概览。",
+        "description": "查看本回合招募候选的职业、价格、初始属性、成长与技能（队伍人数及上限见回合概览）。",
         "parameters": {
             "type": "object",
             "required": ["session_id"],
@@ -822,7 +834,7 @@ _BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
     },
     {
         "name": "craft_equipment",
-        "description": "消耗金币和材料，按配方合成装备。",
+        "description": "按配方消耗金币和材料制作一件装备，产物进入库存。",
         "parameters": {
             "type": "object",
             "required": ["session_id", "recipe_id"],
@@ -835,7 +847,7 @@ _BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
     },
     {
         "name": "purchase_upgrade",
-        "description": "消耗金币购买一个全局加成。",
+        "description": "消耗金币购买一项全局升级。",
         "parameters": {
             "type": "object",
             "required": ["session_id", "upgrade_id"],
@@ -848,7 +860,7 @@ _BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
     },
     {
         "name": "allocate_experience",
-        "description": "从经验池中分配指定数量的经验给冒险者。若触发升级，最大HP/MP提升时保持已损失HP/MP差值不变（不会直接回满）。",
+        "description": "从经验池向指定角色分配经验。升级提升最大HP/MP时，当前值按相同增幅增加，不会直接回满。",
         "parameters": {
             "type": "object",
             "required": ["session_id", "adventurer_id", "amount"],
@@ -858,7 +870,7 @@ _BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
                 "amount": {
                     "type": "integer",
                     "minimum": 0,
-                    "description": "要分配的经验值，不能超过当前经验池（experience_pool）。",
+                    "description": "分配的经验值，不超过当前经验池。",
                 },
             },
             "additionalProperties": False,
@@ -866,7 +878,7 @@ _BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
     },
     {
         "name": "recruit_adventurer",
-        "description": "消耗金币招募一个候选冒险者加入队伍；队伍人数不能超过当前上限。",
+        "description": "消耗金币招募一名候选角色入队，要求队伍未满员。",
         "parameters": {
             "type": "object",
             "required": ["session_id", "candidate_id"],
@@ -879,7 +891,7 @@ _BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
     },
     {
         "name": "dismiss_adventurer",
-        "description": "解散队伍中的冒险者，腾出队伍名额；该冒险者的装备会归还到库存，已分配的经验会返还到经验池，招募费用不会返还。",
+        "description": "解雇一名在队角色：装备归还库存，已投入经验全额返还经验池，招募金币不退。",
         "parameters": {
             "type": "object",
             "required": ["session_id", "adventurer_id"],
@@ -893,8 +905,8 @@ _BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
     {
         "name": "equip_item",
         "description": (
-            "把装备穿戴到指定冒险者身上。会自动卸下冲突槽位的已有装备（同槽位替换；穿戴 two_hand 双手武器会自动卸下 main_hand 和 off_hand，反之亦然）。"
-            "若该装备正穿在其他队友身上，会自动从原队友身上卸下并转移给目标冒险者，无需先调用 unequip_item。"
+            "为角色穿戴指定装备。自动替换冲突槽位（同槽位，或 two_hand 与 main_hand/off_hand 互换）；"
+            "若装备在队友身上，直接转移，无需先卸下。"
         ),
         "parameters": {
             "type": "object",
@@ -909,7 +921,7 @@ _BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
     },
     {
         "name": "unequip_item",
-        "description": "卸下冒险者指定装备槽位上的装备。",
+        "description": "卸下角色指定槽位的装备并归还库存。",
         "parameters": {
             "type": "object",
             "required": ["session_id", "adventurer_id", "slot"],
@@ -934,7 +946,7 @@ _BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
     },
     {
         "name": "end_turn",
-        "description": "结束当前回合：提交本回合讨伐列表并进入下一回合；hunts 可为空。",
+        "description": "提交本回合1v1讨伐配对并结束回合。hunts 可为空（如最终整备回合或全员休整）。",
         "parameters": {
             "type": "object",
             "required": ["session_id"],
@@ -951,7 +963,7 @@ _BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
                         },
                         "additionalProperties": False,
                     },
-                    "description": "讨伐匹配列表；同一冒险者和同一怪物本回合只能出现一次。",
+                    "description": "讨伐配对列表；每名角色（当前HP>0）和每个怪物本回合最多出战一次。",
                 },
             },
             "additionalProperties": False,
@@ -959,7 +971,7 @@ _BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
     },
     {
         "name": "get_events",
-        "description": "读取本局游戏的历史操作与回合结算流水账（简短摘要，不含具体战斗过程；如需查看战斗详情请使用 get_battle_log）。",
+        "description": "查看本局历史操作与回合结算流水账（仅含简短摘要，不含战斗详情）。",
         "parameters": {
             "type": "object",
             "required": ["session_id"],
@@ -968,7 +980,7 @@ _BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
                 "since_sequence": {
                     "type": "integer",
                     "minimum": 1,
-                    "description": "只返回 sequence 大于该值的事件。",
+                    "description": "仅返回 sequence 大于该值的事件。",
                 },
             },
             "additionalProperties": False,
@@ -979,15 +991,14 @@ _BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
 
 def _battle_preview_schema(max_battle_preview_per_turn: int = 3) -> dict[str, Any]:
     limit_notice = (
-        f"注意：每回合最多调用 {max_battle_preview_per_turn} 次，请仅在胜负或战损存疑的关键对局中使用。"
+        f"每回合最多 {max_battle_preview_per_turn} 次。"
         if max_battle_preview_per_turn
         else ""
     )
     return {
         "name": "preview_battle",
         "description": (
-            "预览一场 1v1 战斗的结果，不改变真实状态。"
-            "仅支持当前已在队伍中的冒险者（不可传入招募候选）与当前回合的怪物。"
+            "无副作用模拟一场已入队角色与当前怪物的1v1战斗，不适用于招募候选。"
             f"{limit_notice}"
         ),
         "parameters": {
@@ -1008,10 +1019,8 @@ _BATTLE_PREVIEW_SCHEMA: dict[str, Any] = _battle_preview_schema(3)
 _TACTICS_SCHEMA: dict[str, Any] = {
     "name": "configure_tactics",
     "description": (
-        "覆盖设置指定冒险者的主动技能释放优先级（skill_priority）与停用列表（disabled_skills）。"
-        "仅可填入该角色当前拥有的主动技能字符串 ID（被动技能不可配置且不受影响）。"
-        "未列入 skill_priority 且未停用的主动技能排在后面，保持默认顺序；两个列表均传空数组 [] 时恢复默认配置。"
-        "装备卸下期间其附带技能不生效，重新穿戴后沿用已有配置。"
+        "覆盖设置角色的主动技能释放顺序与停用列表（填当前拥有的主动技能字符串 ID，被动技能不受影响）。"
+        "未列入的可用技能按默认顺序排在后面；两项均传 [] 恢复默认。"
     ),
     "parameters": {
         "type": "object",
@@ -1021,12 +1030,12 @@ _TACTICS_SCHEMA: dict[str, Any] = {
             "skill_priority": {
                 "type": "array", "uniqueItems": True,
                 "items": {"type": "string", "minLength": 1},
-                "description": "主动技能字符串 ID，按优先级从高到低排列，不可与停用列表重叠。",
+                "description": "按优先级从高到低排列的主动技能字符串 ID，不可与 disabled_skills 重叠。",
             },
             "disabled_skills": {
                 "type": "array", "uniqueItems": True,
                 "items": {"type": "string", "minLength": 1},
-                "description": "停用的主动技能字符串 ID。",
+                "description": "停用的主动技能字符串 ID 列表。",
             },
         },
         "additionalProperties": False,
@@ -1040,10 +1049,9 @@ def team_power_preview_schema(schemas: Sequence[Mapping[str, Any]]) -> dict[str,
     return {
         "name": "preview_team_power",
         "description": (
-            "在终局阶段无副作用地试算一组准备动作（最多 20 步）对全队终局战力评分（rank_score）的影响，真实状态不改变。"
-            "返回当前真实分数、假设执行方案后的分数及两者的差值（相对于调用前的真实状态，而非回合初状态）。"
-            "传入 operations=[] 可仅查询当前真实分数。仅支持准备类动作（不可包含查询、预览、write_memo 或 end_turn），"
-            "动作按顺序校验资源与前置条件。试算仅消耗 1 次工具调用预算，若决定采纳方案，仍需逐一调用真实工具执行。"
+            "终局阶段只读试算准备方案（最多20步）对全队终局评分（rank_score）的影响，不改变真实状态。"
+            "返回调用前真实分、方案执行后分数及差值；传 operations=[] 仅查询当前真实分。"
+            "试算只占1次工具预算，若采纳方案仍需调用真实工具执行。"
         ),
         "parameters": {
             "type": "object", "required": ["operations"],

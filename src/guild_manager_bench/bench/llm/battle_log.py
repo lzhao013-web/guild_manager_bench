@@ -1,99 +1,70 @@
-"""按需读取已有战斗事件，不重新运行战斗。"""
+"""按战斗编号读取已有事件，不重新运行战斗。"""
 
 from collections import Counter
 from typing import Any, Mapping, Sequence
 
 
+EVENTS_PER_PAGE = 20
+
 BATTLE_LOG_SCHEMA = {
     "name": "get_battle_log",
-    "description": (
-        "查询本回合已执行的 preview_battle（source=preview）或上一回合实际讨伐（source=actual）的战斗记录，仅消耗普通工具调用预算。"
-        "用法：1) 不传 battle_index 时返回该来源的战斗目录；"
-        "2) 传入 battle_index 且 detail=summary（默认）时返回整场伤害/治疗/技能释放统计；"
-        "3) 传入 battle_index 且 detail=events 时分页返回逐行动事件（支持用 action_start/action_end 按双方累计行动序号过滤，"
-        "用 offset/limit 翻页；即时技能附带的普攻合并在该技能事件中）。"
-    ),
+    "description": "按 battle_id 查看本回合预览或上回合实战记录（只读，代表当时快照）。默认 summary 返回伤害/治疗/技能统计，events 分页返回逐行动事件。",
     "parameters": {
         "type": "object",
-        "required": ["source"],
+        "required": ["battle_id"],
         "properties": {
-            "source": {"type": "string", "enum": ["preview", "actual"]},
-            "battle_index": {"type": "integer", "minimum": 1,
-                             "description": "指定来源内的战斗目录序号，不是冒险者或怪物编号。"},
-            "detail": {"type": "string", "enum": ["summary", "events"], "default": "summary"},
-            "action_start": {"type": "integer", "minimum": 1, "maximum": 1000},
-            "action_end": {"type": "integer", "minimum": 1, "maximum": 1000},
-            "offset": {"type": "integer", "minimum": 0, "default": 0,
-                       "description": "筛选后的事件偏移量。翻页时保持其他筛选参数不变。"},
-            "limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 20},
+            "battle_id": {"type": "string", "minLength": 1,
+                          "description": "预览或回合结算返回的 battle_id（非角色或怪物编号）。"},
+            "detail": {"type": "string", "enum": ["summary", "events"], "default": "summary",
+                       "description": "summary 返回整场统计，events 返回逐行动事件（每页20条）。"},
+            "cursor": {"type": "integer", "minimum": 0, "default": 0,
+                       "description": "events 分页游标，续查时传入上一页返回的 next_cursor。"},
         },
         "additionalProperties": False,
     },
 }
 
 
+def battle_log_id(source: str, turn: int, index: int) -> str:
+    return f"{source}:T{turn}:{index}"
+
+
 def query_battle_log(
-    records: Sequence[Mapping[str, Any]], *, source: str, turn: int,
-    battle_index: int | None = None, detail: str = "summary",
-    action_start: int | None = None, action_end: int | None = None,
-    offset: int = 0, limit: int = 20,
+    records: Mapping[str, Mapping[str, Any]], *, battle_id: str,
+    detail: str = "summary", cursor: int = 0,
 ) -> dict[str, Any]:
-    if source not in ("preview", "actual"):
-        raise ValueError("source 必须是 preview 或 actual")
+    if not isinstance(battle_id, str) or not battle_id:
+        raise ValueError("battle_id 必须是战斗结果中返回的非空字符串编号")
     if detail not in ("summary", "events"):
         raise ValueError("detail 必须是 summary 或 events")
-    _integer(offset, "offset", 0)
-    _integer(limit, "limit", 1, 50)
-    for name, value in (("action_start", action_start), ("action_end", action_end)):
-        if value is not None:
-            _integer(value, name, 1, 1000)
-    if action_start is not None and action_end is not None and action_start > action_end:
-        raise ValueError("action_start 不能大于 action_end")
-    if detail != "events" and (action_start is not None or action_end is not None or offset != 0 or limit != 20):
-        raise ValueError("行动区间和分页参数仅用于 detail=events")
+    if not isinstance(cursor, int) or isinstance(cursor, bool) or cursor < 0:
+        raise ValueError("cursor 必须是大于等于 0 的整数")
+    if detail != "events" and cursor != 0:
+        raise ValueError("cursor 仅用于 detail=events")
+    if battle_id not in records:
+        raise ValueError("战斗编号不存在或已过期，仅可查询本回合预览与上一回合实战")
+    record = records[battle_id]
     result: dict[str, Any] = {
-        "ok": True, "source": source, "turn": turn, "detail": detail,
-        "record_count": len(records),
+        "ok": True, "source": record["source"], "turn": record["turn"], "detail": detail,
+        "battle": _summary(record, battle_id),
     }
-    if battle_index is None:
-        if detail != "summary":
-            raise ValueError("查看事件必须指定 battle_index，请先查询战斗目录")
-        result["battles"] = [_summary(record, i) for i, record in enumerate(records, 1)]
-        return result
-
-    _integer(battle_index, "battle_index", 1)
-    if battle_index > len(records):
-        raise ValueError("battle_index 不在该来源的可查询目录中")
-    record = records[battle_index - 1]
-    result["battle"] = _summary(record, battle_index)
     events = record["combat"]["events"]
     if detail == "summary":
         result["statistics"] = _statistics(events)
     else:
-        selected = [event for event in events
-                    if (action_start is None or event["action_index"] >= action_start)
-                    and (action_end is None or event["action_index"] <= action_end)]
-        page = selected[offset:offset + limit]
+        page = events[cursor:cursor + EVENTS_PER_PAGE]
         result.update({
             "events": [_visible_event(event) for event in page],
-            "total_events": len(events), "matched_events": len(selected),
-            "offset": offset, "limit": limit,
-            "next_offset": offset + len(page) if offset + len(page) < len(selected) else None,
+            "total_events": len(events), "cursor": cursor,
+            "next_cursor": cursor + len(page) if cursor + len(page) < len(events) else None,
         })
     return result
 
 
-def _integer(value: Any, name: str, minimum: int, maximum: int | None = None) -> None:
-    if not isinstance(value, int) or isinstance(value, bool) or value < minimum:
-        raise ValueError(f"{name} 必须是大于等于 {minimum} 的整数")
-    if maximum is not None and value > maximum:
-        raise ValueError(f"{name} 不能超过 {maximum}")
-
-
-def _summary(record: Mapping[str, Any], index: int) -> dict[str, Any]:
+def _summary(record: Mapping[str, Any], battle_id: str) -> dict[str, Any]:
     combat = record["combat"]
     return {
-        "battle_index": index,
+        "battle_id": battle_id,
         "adventurer_name": record["adventurer_name"], "monster_name": record["monster_name"],
         "outcome": combat["outcome"], "reason": combat["reason"],
         "actions_taken": combat["actions_taken"], "time_elapsed": combat["time_elapsed"],

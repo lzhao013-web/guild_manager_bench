@@ -2,6 +2,7 @@ from copy import deepcopy
 from dataclasses import asdict, replace
 from pathlib import Path
 import random
+import re
 
 import pytest
 
@@ -32,11 +33,10 @@ def game():
 
 def test_preview_log_is_cached_paginated_and_uses_only_query_budget(game, monkeypatch):
     tools, sid, harness = game
-    assert harness.call_tool("get_battle_log", {"source": "preview"})["battles"] == []
     preview = harness.call_tool("preview_battle", {"adventurer_id": 1, "monster_id": 1})
-    assert preview["preview"]["battle_log_index"] == 1
+    battle_id = preview["preview"]["battle_id"]
     text = _format_tool_result_for_model("preview_battle", preview)
-    assert "battle_index=1" in text
+    assert f"battle_id={battle_id}" in text
     assert "不随后续调整更新" in text
     state = tools.get_state(sid)
     events = deepcopy(tools.get_events(sid))
@@ -45,15 +45,15 @@ def test_preview_log_is_cached_paginated_and_uses_only_query_budget(game, monkey
     def no_simulation(*args, **kwargs):
         raise AssertionError("读取记录不得重新模拟")
     monkeypatch.setattr("guild_manager_bench.bench.llm.tools.preview_battle_result", no_simulation)
-    directory = harness.call_tool("get_battle_log", {"source": "preview"})
-    assert directory["battles"][0]["event_count"] == len(preview["preview"]["events"])
-    args = {"source": "preview", "battle_index": 1, "detail": "events", "limit": 2}
+    summary = harness.call_tool("get_battle_log", {"battle_id": battle_id})
+    assert summary["battle"]["event_count"] == len(preview["preview"]["events"])
+    args = {"battle_id": battle_id, "detail": "events"}
     result = harness.call_tool("get_battle_log", args)
     returned = list(result["events"])
     assert result["tool_budget"]["battle_preview_used"] == 1
-    assert result["tool_budget"]["used"] == 5
-    while result["next_offset"] is not None:
-        result = harness.call_tool("get_battle_log", {**args, "offset": result["next_offset"]})
+    assert result["tool_budget"]["used"] == 4
+    while result["next_cursor"] is not None:
+        result = harness.call_tool("get_battle_log", {**args, "cursor": result["next_cursor"]})
         assert result["ok"]
         returned.extend(result["events"])
     assert len(returned) == len(preview["preview"]["events"])
@@ -73,36 +73,44 @@ def test_preview_log_is_cached_paginated_and_uses_only_query_budget(game, monkey
 
 def test_log_window_and_cached_records_survive_roster_changes(game):
     tools, sid, harness = game
-    harness.call_tool("preview_battle", {"adventurer_id": 1, "monster_id": 1})
-    original = tools.get_battle_log(sid, "preview", 1, "events")
+    preview = harness.call_tool("preview_battle", {"adventurer_id": 1, "monster_id": 1})
+    battle_id = preview["preview"]["battle_id"]
+    original = tools.get_battle_log(sid, battle_id, "events")
     assert tools.dismiss_adventurer(sid, tools.get_state(sid).adventurers[0].adventurer_id)["ok"]
-    assert tools.get_battle_log(sid, "preview", 1, "events") == original
-    subset = tools.get_battle_log(sid, "preview", 1, "events", action_start=2, action_end=3)
-    assert subset["events"] == [e for e in original["events"] if 2 <= e["action_index"] <= 3]
-    stats = tools.get_battle_log(sid, "preview", 1)["statistics"]
+    assert tools.get_battle_log(sid, battle_id, "events") == original
+    stats = tools.get_battle_log(sid, battle_id)["statistics"]
     all_events = list(original["events"])
-    cursor = original["next_offset"]
+    cursor = original["next_cursor"]
     while cursor is not None:
-        page = tools.get_battle_log(sid, "preview", 1, "events", offset=cursor)
+        page = tools.get_battle_log(sid, battle_id, "events", cursor=cursor)
         all_events.extend(page["events"])
-        cursor = page["next_offset"]
+        cursor = page["next_cursor"]
     for side in ("left", "right"):
         own = [e for e in all_events if e["actor_side"] == side]
         assert stats[side]["direct_damage"] == sum(e["damage"] for e in own if e["action_type"] != "status")
     # Returned objects cannot be used to rewrite the cached record.
     original["events"][0]["damage"] = -999
-    assert tools.get_battle_log(sid, "preview", 1, "events")["events"][0]["damage"] >= 0
+    assert tools.get_battle_log(sid, battle_id, "events")["events"][0]["damage"] >= 0
 
 
 def test_only_current_previews_and_previous_actual_battles_are_visible(game):
     tools, sid, harness = game
-    assert harness.call_tool("get_battle_log", {"source": "actual"})["battles"] == []
-    harness.call_tool("preview_battle", {"adventurer_id": 1, "monster_id": 1})
-    assert harness.call_tool("end_turn", {"hunts": [{"adventurer_id": 1, "monster_id": 1}]})["ok"]
+    assert not harness.call_tool("get_battle_log", {"battle_id": "missing"})["ok"]
+    preview = harness.call_tool("preview_battle", {"adventurer_id": 1, "monster_id": 1})
+    preview_id = preview["preview"]["battle_id"]
+    ended = harness.call_tool("end_turn", {"hunts": [{"adventurer_id": 1, "monster_id": 1}]})
+    assert ended["ok"]
+    battle_id = ended["turn_result"]["battles"][0]["battle_id"]
+    assert battle_id != preview_id
+    assert ended["event"]["battles"][0]["battle_id"] == battle_id
+    assert battle_id in _format_tool_result_for_model("end_turn", ended)
+    from guild_manager_bench.bench.llm.prompts import build_turn_prompt
+    prompt = build_turn_prompt(tools.get_observation(sid)["observation"], previous_turn_event=ended["event"])
+    assert f"battle_id={battle_id}" in prompt
     assert sid not in tools._battle_previews
     harness = TurnToolHarness(tools, sid, max_tool_calls=10)
-    assert harness.call_tool("get_battle_log", {"source": "preview"})["battles"] == []
-    result = harness.call_tool("get_battle_log", {"source": "actual", "battle_index": 1, "detail": "events"})
+    assert not harness.call_tool("get_battle_log", {"battle_id": preview_id})["ok"]
+    result = harness.call_tool("get_battle_log", {"battle_id": battle_id, "detail": "events"})
     real = next(e for e in tools._sessions[sid].events if e.event_type == "turn_ended").payload["battles"][0]
     assert result["turn"] == 1
     assert result["battle"]["outcome"] == real["combat"]["outcome"]
@@ -111,7 +119,7 @@ def test_only_current_previews_and_previous_actual_battles_are_visible(game):
     assert result["events"] == expected
     assert "上轮真实战斗记录" in _format_tool_result_for_model("get_battle_log", result)
     assert harness.call_tool("end_turn", {"hunts": []})["ok"]
-    assert tools.get_battle_log(sid, "actual")["battles"] == []
+    assert not TurnToolHarness(tools, sid, max_tool_calls=1).call_tool("get_battle_log", {"battle_id": battle_id})["ok"]
 
 
 def test_battle_statistics_keep_status_damage_and_instant_skill_events_distinct():
@@ -128,7 +136,8 @@ def test_battle_statistics_keep_status_damage_and_instant_skill_events_distinct(
     monster = Combatant("monster", CombatStats(100, 0, 8, 2, 20, 0))
     combat = run_auto_battle(hero, monster)
     record = {"adventurer_name": "角色", "monster_name": "怪物", "combat": asdict(combat)}
-    summary = query_battle_log([record], source="preview", turn=1, battle_index=1)
+    records = {"test-battle": {**record, "source": "preview", "turn": 1}}
+    summary = query_battle_log(records, battle_id="test-battle")
     stats = summary["statistics"]
     assert stats["left"]["skill_uses"] == {"opening": 1}
     assert stats["left"]["healing_received"] == 10
@@ -137,10 +146,10 @@ def test_battle_statistics_keep_status_damage_and_instant_skill_events_distinct(
     assert stats["left"]["direct_damage"] > 0
     # Both a status tick and a normal action can share one action index.
     status_action = next(e.action_index for e in combat.events if e.action_type == "status")
-    selected = query_battle_log([record], source="preview", turn=1, battle_index=1,
-                                detail="events", action_start=status_action, action_end=status_action)
-    assert {e["action_type"] for e in selected["events"]} == {"status", "basic_attack"}
-    assert len(selected["events"]) == 2
+    page = query_battle_log(records, battle_id="test-battle", detail="events")
+    selected = [event for event in page["events"] if event["action_index"] == status_action]
+    assert {e["action_type"] for e in selected} == {"status", "basic_attack"}
+    assert len(selected) == 2
     text = _format_tool_result_for_model("get_battle_log", summary)
     assert "附带普攻合并" in text
     assert "日志不包含逐动作MP余额" in text
@@ -149,35 +158,40 @@ def test_battle_statistics_keep_status_damage_and_instant_skill_events_distinct(
 def test_log_queries_work_after_preview_quota_is_exhausted_and_are_session_local(game):
     tools, sid, _ = game
     harness = TurnToolHarness(tools, sid, max_tool_calls=10, max_battle_preview_per_turn=1)
-    assert harness.call_tool("preview_battle", {"adventurer_id": 1, "monster_id": 1})["ok"]
+    preview = harness.call_tool("preview_battle", {"adventurer_id": 1, "monster_id": 1})
+    assert preview["ok"]
+    battle_id = preview["preview"]["battle_id"]
     assert not harness.call_tool("preview_battle", {"adventurer_id": 1, "monster_id": 1})["ok"]
-    assert harness.call_tool("get_battle_log", {"source": "preview", "battle_index": 1})["ok"]
+    assert harness.call_tool("get_battle_log", {"battle_id": battle_id})["ok"]
     tools.start_session("other")
-    assert tools.get_battle_log("other", "preview")["battles"] == []
-    assert tools.get_battle_log("other", "actual")["battles"] == []
+    assert not TurnToolHarness(tools, "other", max_tool_calls=1).call_tool("get_battle_log", {"battle_id": battle_id})["ok"]
 
 
 def test_actual_battle_log_survives_session_export_and_restore(game):
     tools, sid, harness = game
-    harness.call_tool("end_turn", {"hunts": [{"adventurer_id": 1, "monster_id": 1}]})
-    expected = tools.get_battle_log(sid, "actual", 1, "events")
+    ended = harness.call_tool("end_turn", {"hunts": [{"adventurer_id": 1, "monster_id": 1}]})
+    battle_id = ended["turn_result"]["battles"][0]["battle_id"]
+    expected = tools.get_battle_log(sid, battle_id, "events")
     fast_definition = replace(tools.definition, scoring=replace(tools.definition.scoring, rank_waves=1, rank_max_diff=1))
     tools._sessions[sid].definition = fast_definition
     saved = tools._sessions[sid].export_replay()
     restored_tools = GuildManagerTools(tools.definition)
     restored_tools._sessions[sid] = GameSession.from_export(tools.definition, saved)
-    assert restored_tools.get_battle_log(sid, "actual", 1, "events") == expected
-    assert restored_tools.get_battle_log(sid, "preview")["battles"] == []
+    assert restored_tools.get_battle_log(sid, battle_id, "events") == expected
+    restored_event = next(e for e in restored_tools.get_events(sid)["events"] if e["type"] == "turn_ended")
+    assert restored_event["battles"][0]["battle_id"] == battle_id
+    assert sid not in restored_tools._battle_previews
 
 
 @pytest.mark.parametrize("arguments", [
-    {"source": "other"}, {"source": []}, {"source": "preview", "battle_index": True},
-    {"source": "preview", "battle_index": 99}, {"source": "actual", "detail": "events"},
-    {"source": "preview", "battle_index": 1, "detail": "all"},
-    {"source": "preview", "battle_index": 1, "detail": "events", "limit": 51},
-    {"source": "preview", "battle_index": 1, "detail": "events", "offset": -1},
-    {"source": "preview", "battle_index": 1, "detail": "events", "action_start": 5, "action_end": 2},
-    {"source": "preview", "action_start": 2},
+    {}, {"battle_id": ""}, {"battle_id": []}, {"battle_id": True}, {"battle_id": 1},
+    {"battle_id": "missing"}, {"battle_id": "missing", "detail": "all"},
+    {"battle_id": "missing", "detail": "events", "cursor": -1},
+    {"battle_id": "missing", "detail": "events", "cursor": True},
+    {"battle_id": "missing", "cursor": 20},
+    {"source": "preview", "battle_index": 1},
+    {"battle_id": "missing", "action_start": 2},
+    {"battle_id": "missing", "limit": 1},
 ])
 def test_bad_log_queries_are_bounded_and_do_not_mutate(game, arguments):
     tools, sid, harness = game
@@ -189,6 +203,45 @@ def test_bad_log_queries_are_bounded_and_do_not_mutate(game, arguments):
     assert result["tool_budget"]["battle_preview_used"] == 0
     assert tools.get_state(sid) is before
     assert tools.get_events(sid) == events
+
+
+def test_event_pages_have_fixed_size_and_preserve_all_events():
+    from guild_manager_bench.bench.llm.battle_log import query_battle_log
+    from guild_manager_bench.game.combat import Combatant, run_auto_battle
+    from guild_manager_bench.game.models import CombatStats
+
+    stats = CombatStats(45, 0, 1, 100, 20, 0)
+    combat = run_auto_battle(Combatant("hero", stats), Combatant("monster", stats))
+    records = {"long-battle": {
+        "source": "actual", "turn": 1, "adventurer_name": "角色", "monster_name": "怪物",
+        "combat": asdict(combat),
+    }}
+    page = query_battle_log(records, battle_id="long-battle", detail="events")
+    assert len(page["events"]) == 20 and page["next_cursor"] == 20
+    assert "cursor=20" in _format_tool_result_for_model("get_battle_log", page)
+    events = list(page["events"])
+    while page["next_cursor"] is not None:
+        page = query_battle_log(records, battle_id="long-battle", detail="events", cursor=page["next_cursor"])
+        assert 1 <= len(page["events"]) <= 20
+        events.extend(page["events"])
+    expected = [{k: v for k, v in asdict(event).items() if k not in ("actor_id", "target_id")}
+                for event in combat.events]
+    assert events == expected
+    assert "已返回全部事件" in _format_tool_result_for_model("get_battle_log", page)
+
+
+def test_preview_ids_are_distinct_and_never_alias_later_turns(game):
+    tools, sid, harness = game
+    first = harness.call_tool("preview_battle", {"adventurer_id": 1, "monster_id": 1})["preview"]["battle_id"]
+    second = harness.call_tool("preview_battle", {"adventurer_id": 1, "monster_id": 1})["preview"]["battle_id"]
+    assert first != second
+    assert harness.call_tool("get_battle_log", {"battle_id": first})["ok"]
+    assert harness.call_tool("end_turn", {"hunts": []})["ok"]
+    current = TurnToolHarness(tools, sid, max_tool_calls=5)
+    third = current.call_tool("preview_battle", {"adventurer_id": 1, "monster_id": 1})["preview"]["battle_id"]
+    assert third not in (first, second)
+    assert not current.call_tool("get_battle_log", {"battle_id": first})["ok"]
+    assert current.call_tool("get_battle_log", {"battle_id": third})["ok"]
 
 
 def test_forecast_is_paginated_and_matches_real_future_refresh(game):
@@ -329,6 +382,8 @@ def test_tools_are_discoverable_and_off_by_default(game):
     assert {"get_battle_log", "get_forecast"} <= schemas.keys()
     for name in ("get_battle_log", "get_forecast"):
         assert "session_id" not in schemas[name]["parameters"]["properties"]
+    assert schemas["get_battle_log"]["parameters"]["required"] == ["battle_id"]
+    assert set(schemas["get_battle_log"]["parameters"]["properties"]) == {"battle_id", "detail", "cursor"}
     system = build_system_prompt(battle_log_enabled=True, forecast_enabled=True)
     assert "get_battle_log" in system and "get_forecast" in system
     plain = GuildManagerTools.from_data_dir(ROOT / "data/presets/default")
@@ -338,7 +393,7 @@ def test_tools_are_discoverable_and_off_by_default(game):
     assert "get_forecast" not in build_system_prompt()
     wrapper = TurnToolHarness(plain, "plain", max_tool_calls=5)
     assert not wrapper.call_tool("get_forecast", {"kind": "monsters", "start_turn": 2})["ok"]
-    assert not wrapper.call_tool("get_battle_log", {"source": "actual"})["ok"]
+    assert not wrapper.call_tool("get_battle_log", {"battle_id": "missing"})["ok"]
 
 
 def test_runner_renders_query_outputs_and_retains_previous_battle_on_resume(tmp_path):
@@ -359,9 +414,11 @@ def test_runner_renders_query_outputs_and_retains_previous_battle_on_resume(tmp_
                 assert "未来刷新查询" in messages[-1]["content"]
                 return LlmAgentResponse(tool_calls=(LlmToolCall("end_turn", {"hunts": [{"adventurer_id": 1, "monster_id": 1}]}),))
             if self.call == 4:
+                self.battle_id = re.search(r"battle_id=([^\s，。]+)", messages[-1]["content"]).group(1)
                 raise RuntimeError("interrupt after first turn")
             if self.call == 5:
-                return LlmAgentResponse(tool_calls=(LlmToolCall("get_battle_log", {"source": "actual", "battle_index": 1, "detail": "events"}),))
+                assert f"battle_id={self.battle_id}" in messages[-1]["content"]
+                return LlmAgentResponse(tool_calls=(LlmToolCall("get_battle_log", {"battle_id": self.battle_id, "detail": "events"}),))
             self.saw_log = "上轮真实战斗记录" in messages[-1]["content"]
             raise RuntimeError("stop after verifying restored log")
 

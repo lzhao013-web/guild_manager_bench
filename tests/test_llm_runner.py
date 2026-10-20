@@ -430,7 +430,9 @@ def test_system_prompt_includes_static_rules() -> None:
     assert "刷新机制：" in prompt
     assert "每回合最多允许 7 次非 end_turn 工具调用" in prompt
     assert "preview_battle 最多 5 次/回合" in prompt
-    assert "所有工具参数的对象 id 均使用列表左侧的数字 id" in prompt
+    assert "使用列表左侧的数字 id" in prompt
+    assert "技能配置使用技能字符串 ID" in prompt
+    assert "战斗日志使用结果中的 battle_id" in prompt
     assert "每次调用均返回执行状态（成功/失败）、剩余预算及结果摘要" in prompt
 
     # Dynamic content should NOT be in system prompt

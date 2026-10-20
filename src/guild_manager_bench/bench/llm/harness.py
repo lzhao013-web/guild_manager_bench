@@ -265,9 +265,8 @@ class TurnToolHarness:
 _WRITE_MEMO_SCHEMA: dict[str, Any] = {
     "name": "write_memo",
     "description": (
-        "写入一条跨回合备忘录。本回合的对话与思考不会保留到下回合，下回合初你将只看到最新状态与本回合写入的备忘录"
-        "（备忘录展示一次后即清空，需跨多回合保留的信息请在下回合重新写入）。"
-        "同回合多次调用会追加记录，建议在结束回合前一次性汇总写入（如长期培养规划、目标配方材料缺口、未来刷新目标等）以节省工具预算。"
+        "写入跨回合备忘录。对话历史不跨回合保留，备忘录仅在下回合初展示一次后清空；"
+        "同回合多次调用会追加，建议回合末汇总写入。"
     ),
     "parameters": {
         "type": "object",
@@ -277,7 +276,7 @@ _WRITE_MEMO_SCHEMA: dict[str, Any] = {
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 500,
-                "description": "要记录的备忘内容，最多 500 字符。",
+                "description": "备忘内容，最多 500 字符。",
             },
         },
         "additionalProperties": False,

@@ -37,14 +37,11 @@ def plan_operations_schema(schemas: Sequence[Mapping[str, Any]]) -> dict[str, An
         if name not in PREPARATION_TOOLS:
             continue
         arguments = deepcopy(schema["parameters"])
-        if name == "refresh_monsters":
-            arguments["properties"]["preview"]["enum"] = [False]
-            arguments["properties"]["preview"]["description"] = "操作方案仅支持实际刷新，必须为false。"
         for field in ("adventurer_id", "equipment_instance_id"):
             if field in arguments["properties"]:
                 original = arguments["properties"][field]
                 arguments["properties"][field] = {
-                    "description": "现有对象的数字 ID，或本方案前序步骤通过 as 定义的 $变量名。",
+                    "description": "现有对象的数字 id，或前序步骤通过 as 定义的 $变量名。",
                     "anyOf": [original, {"type": "string", "pattern": rf"^\${ALIAS_PATTERN}$"}],
                 }
         properties = {
@@ -54,7 +51,7 @@ def plan_operations_schema(schemas: Sequence[Mapping[str, Any]]) -> dict[str, An
         if name in _RESULT_FIELDS:
             properties["as"] = {
                 "type": "string", "pattern": rf"^{ALIAS_PATTERN}$",
-                "description": "可选：为本步新招募的角色或新制作的装备指定临时变量名（不含 $，如 new_hero），供后续步骤通过 $new_hero 引用（仅在本次试算内有效）。",
+                "description": "可选：为本步新招募角色或新制作装备命名（不含 $，如 new_hero），供本方案后续步骤以 $new_hero 引用。",
             }
         variants.append({
             "type": "object", "required": ["tool", "arguments"],
@@ -63,7 +60,7 @@ def plan_operations_schema(schemas: Sequence[Mapping[str, Any]]) -> dict[str, An
     return {
         "type": "array", "maxItems": MAX_PLAN_OPERATIONS,
         "items": {"anyOf": variants},
-        "description": "按顺序试算的准备动作列表；传空列表 [] 则仅评估当前状态。",
+        "description": "按顺序校验并试算的准备动作列表（仅限准备工具，不可含查询、预览、write_memo 或 end_turn）；传 [] 仅评估当前状态。",
     }
 
 
@@ -97,8 +94,6 @@ def simulate_preparation_plan(
             missing = set(schema.get("required", ())) - set(arguments)
             if missing:
                 raise ValueError(f"缺少参数: {', '.join(sorted(missing))}")
-            if tool == "refresh_monsters" and arguments["preview"] is not False:
-                raise ValueError("方案只允许 preview=false 的实际刷新，不允许嵌套刷新预览")
             if "as" in operation:
                 alias = operation["as"]
                 if tool not in _RESULT_FIELDS:

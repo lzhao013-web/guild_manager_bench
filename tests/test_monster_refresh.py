@@ -90,7 +90,7 @@ def test_loader_uses_custom_preset_prices_without_code_changes(tmp_path):
 def test_refresh_disabled_for_other_presets(preset):
     d=load_game_definition(ROOT/'data/presets'/preset)
     tools=GuildManagerTools(d)
-    assert 'refresh_monsters' not in {s['name'] for s in tools.list_tool_schemas()}
+    assert not {'preview_monster_refresh','refresh_monsters'} & {s['name'] for s in tools.list_tool_schemas()}
     assert 'monster_refresh' not in build_observation(d,new_game(d))
     with pytest.raises(GameError,match='未启用'):
         preview_monster_refresh(d,new_game(d))
@@ -103,7 +103,7 @@ def test_preview_is_pure_repeatable_and_does_not_require_gold(definition):
     b=preview_monster_refresh(definition,state)
     assert a==b and _serialize_state(state)==before
     result=GameSession(definition=definition,state=state).preview_monster_refresh()
-    text=_format_tool_result_for_model('refresh_monsters',result)
+    text=_format_tool_result_for_model('preview_monster_refresh',result)
     assert '仅预览' in text and '金币不足，不能实际刷新。' in text
     with pytest.raises(GameError,match='金币不足'):
         apply_preparation_action(definition,state,RefreshMonstersAction())
@@ -130,7 +130,7 @@ def test_rejections_are_atomic_and_all_locked_is_not_paid(game):
     before=tools.get_state(sid)
     ids=[m.monster_id for m in before.current_monsters]
     for locked in ([ids[0],ids[0]],['missing'],['future:T2:monsters:1'],ids,'invalid',None,[True]):
-        result=tools.refresh_monsters(sid,locked,preview=False)
+        result=tools.refresh_monsters(sid,locked)
         assert not result['ok'],result
         assert tools.get_state(sid) is before
 
@@ -193,16 +193,16 @@ def test_preview_refs_are_not_real_ids_and_budget_is_not_battle_preview(game):
     original=tools.get_state(sid)
     refs=deepcopy(harness._turn_refs)
     events=deepcopy(tools.get_events(sid))
-    result=harness.call_tool('refresh_monsters',{'locked_monster_ids':[1],'preview':True})
+    result=harness.call_tool('preview_monster_refresh',{'locked_monster_ids':[1]})
     assert result['ok'] and result['simulation_only']
     assert result['tool_budget']['used']==1 and result['tool_budget']['battle_preview_used']==0
     assert tools.get_state(sid) is original and tools.get_events(sid)==events
     assert refs==harness._turn_refs
     assert all('monster_id' not in m for m in result['monsters'])
     assert all(m['refresh_ref'].startswith('refresh:') for m in result['monsters'])
-    text=_format_tool_result_for_model('refresh_monsters',result)
+    text=_format_tool_result_for_model('preview_monster_refresh',result)
     assert '仅预览' in text and '不可用于' in text
-    assert not harness.call_tool('refresh_monsters',{'locked_monster_ids':[result['monsters'][1]['refresh_ref']],'preview':False})['ok']
+    assert not harness.call_tool('refresh_monsters',{'locked_monster_ids':[result['monsters'][1]['refresh_ref']]})['ok']
     assert tools.get_state(sid) is original
 
 
@@ -211,8 +211,8 @@ def test_real_refresh_allocates_new_refs_and_old_targets_cannot_be_used(game):
     harness=TurnToolHarness(tools,sid,max_tool_calls=20)
     assert harness.call_tool('recruit_adventurer',{'candidate_id':1})['ok']
     before=tools.get_state(sid)
-    preview=harness.call_tool('refresh_monsters',{'locked_monster_ids':[1],'preview':True})
-    result=harness.call_tool('refresh_monsters',{'locked_monster_ids':[1],'preview':False})
+    preview=harness.call_tool('preview_monster_refresh',{'locked_monster_ids':[1]})
+    result=harness.call_tool('refresh_monsters',{'locked_monster_ids':[1]})
     assert result['ok'] and not result.get('simulation_only',False)
     assert tools.get_state(sid).gold==before.gold-15
     assert harness._turn_refs['monster'][before.current_monsters[0].monster_id]==1
@@ -222,7 +222,7 @@ def test_real_refresh_allocates_new_refs_and_old_targets_cannot_be_used(game):
     text=_format_tool_result_for_model('refresh_monsters',result)
     assert new.monster_id not in text
     assert f"{harness._turn_refs['monster'][new.monster_id]} " in text
-    stale=harness.call_tool('refresh_monsters',{'locked_monster_ids':[2],'preview':False})
+    stale=harness.call_tool('refresh_monsters',{'locked_monster_ids':[2]})
     assert not stale['ok'] and tools.get_state(sid).monster_refresh_count==1
     snapshot=tools.get_state(sid)
     assert not harness.call_tool('end_turn',{'hunts':[{'adventurer_id':1,'monster_id':2}]})['ok']
@@ -232,9 +232,9 @@ def test_real_refresh_allocates_new_refs_and_old_targets_cannot_be_used(game):
 def test_refresh_tools_respect_normal_call_budget(game):
     tools,sid=game
     harness=TurnToolHarness(tools,sid,max_tool_calls=1)
-    assert harness.call_tool('refresh_monsters',{'locked_monster_ids':[],'preview':True})['ok']
+    assert harness.call_tool('preview_monster_refresh',{'locked_monster_ids':[]})['ok']
     before=tools.get_state(sid)
-    assert not harness.call_tool('refresh_monsters',{'locked_monster_ids':[],'preview':False})['ok']
+    assert not harness.call_tool('refresh_monsters',{'locked_monster_ids':[]})['ok']
     assert tools.get_state(sid) is before
 
 
@@ -242,7 +242,7 @@ def test_preparation_plan_can_pay_refresh_but_never_changes_real_board(game):
     from guild_manager_bench.bench.llm.preparation_plan import simulate_preparation_plan
     tools,sid=game
     before=tools.get_state(sid)
-    plan=[{'tool':'refresh_monsters','arguments':{'locked_monster_ids':[before.current_monsters[0].monster_id],'preview':False}}]
+    plan=[{'tool':'refresh_monsters','arguments':{'locked_monster_ids':[before.current_monsters[0].monster_id]}}]
     simulated=simulate_preparation_plan(tools.definition,before,plan,tools.list_tool_schemas())
     actual=apply_preparation_action(tools.definition,before,RefreshMonstersAction((before.current_monsters[0].monster_id,)))
     assert simulated==actual and tools.get_state(sid) is before
@@ -258,8 +258,8 @@ def test_observation_and_prompts_explain_cost_without_fake_pool(game):
     assert '可先免费预览' not in turn_prompt
     prompt=build_system_prompt(monster_refresh_rules=obs['monster_refresh'])
     assert 'refresh_monsters' in prompt and '翻倍' in prompt
-    assert 'preview_monster_refresh' not in prompt
-    assert 'preview=true只预览' in prompt and 'preview=false扣费刷新' in prompt
+    assert 'preview_monster_refresh 只预览' in prompt and 'refresh_monsters 扣费刷新' in prompt
+    assert 'preview=true' not in prompt and 'preview=false' not in prompt
     assert '锁定' in prompt and '不影响' in prompt
 
 
@@ -296,9 +296,9 @@ def test_replay_rebuild_reexecutes_paid_refresh_and_not_preview(definition):
     harness=TurnToolHarness(tools,sid,max_tool_calls=20)
     steps=[]
     for name,args in [
-        ('refresh_monsters',{'locked_monster_ids':[1],'preview':True}),
-        ('refresh_monsters',{'locked_monster_ids':[1],'preview':False}),
-        ('refresh_monsters',{'locked_monster_ids':[1],'preview':False}),
+        ('preview_monster_refresh',{'locked_monster_ids':[1]}),
+        ('refresh_monsters',{'locked_monster_ids':[1]}),
+        ('refresh_monsters',{'locked_monster_ids':[1]}),
         ('end_turn',{'hunts':[]}),
     ]:
         result=harness.call_tool(name,args)
@@ -324,25 +324,31 @@ def test_existing_battle_preview_log_survives_monster_refresh(game):
     assert harness.call_tool('recruit_adventurer',{'candidate_id':1})['ok']
     result=harness.call_tool('preview_battle',{'adventurer_id':1,'monster_id':1})
     assert result['ok']
-    log=tools.get_battle_log(sid,'preview',1,'events')
-    assert harness.call_tool('refresh_monsters',{'locked_monster_ids':[],'preview':False})['ok']
-    assert tools.get_battle_log(sid,'preview',1,'events')==log
-    assert harness.call_tool('get_battle_log',{'source':'preview'})['tool_budget']['battle_preview_used']==1
+    battle_id=result['preview']['battle_id']
+    log=tools.get_battle_log(sid,battle_id,'events')
+    assert harness.call_tool('refresh_monsters',{'locked_monster_ids':[]})['ok']
+    assert tools.get_battle_log(sid,battle_id,'events')==log
+    assert harness.call_tool('get_battle_log',{'battle_id':battle_id})['tool_budget']['battle_preview_used']==1
 
 
-def test_refresh_has_one_tool_with_required_preview_parameter(game):
+def test_refresh_has_separate_preview_and_paid_tools(game):
     tools,sid=game
     schemas={s['name']:s for s in tools.list_tool_schemas()}
-    assert 'preview_monster_refresh' not in schemas
-    schema=schemas['refresh_monsters']['parameters']
-    assert 'preview' in schema['required']
-    assert schema['properties']['preview']['type']=='boolean'
+    for name in ('preview_monster_refresh','refresh_monsters'):
+        schema=schemas[name]['parameters']
+        assert schema['required']==['locked_monster_ids']
+        assert set(schema['properties'])=={'locked_monster_ids'}
     harness=TurnToolHarness(tools,sid,max_tool_calls=20)
     before=tools.get_state(sid)
-    assert not harness.call_tool('preview_monster_refresh',{'locked_monster_ids':[]})['ok']
-    for args in ({'locked_monster_ids':[]}, *({'locked_monster_ids':[],'preview':v} for v in (None,0,1,'true','false'))):
-        assert not harness.call_tool('refresh_monsters',args)['ok']
+    preview=harness.call_tool('preview_monster_refresh',{'locked_monster_ids':[]})
+    assert preview['ok'] and preview['simulation_only']
+    assert tools.get_state(sid) is before
+    for name in ('preview_monster_refresh','refresh_monsters'):
+        assert not harness.call_tool(name,{'locked_monster_ids':[],'preview':True})['ok']
         assert tools.get_state(sid) is before
+    paid=harness.call_tool('refresh_monsters',{'locked_monster_ids':[]})
+    assert paid['ok'] and tools.get_state(sid).gold==before.gold-preview['gold_cost']
+    assert [m['stats'] for m in paid['monsters']]==[m['stats'] for m in preview['monsters']]
 
 
 def test_preparation_plan_rejects_refresh_preview(game):
@@ -351,9 +357,13 @@ def test_preparation_plan_rejects_refresh_preview(game):
     before=tools.get_state(sid)
     schema=plan_operations_schema(tools.list_tool_schemas())
     variant=next(v for v in schema['items']['anyOf'] if v['properties']['tool']['enum']==['refresh_monsters'])
-    assert variant['properties']['arguments']['properties']['preview']['enum']==[False]
-    for value in (True,None,0,1,'false'):
-        with pytest.raises(ValueError,match='preview=false'):
+    assert set(variant['properties']['arguments']['properties'])=={'locked_monster_ids'}
+    with pytest.raises(ValueError,match='不允许查询、预览'):
+        simulate_preparation_plan(tools.definition,before,[{
+            'tool':'preview_monster_refresh','arguments':{'locked_monster_ids':[]}
+        }],tools.list_tool_schemas())
+    for value in (True,False,None,0,1,'false'):
+        with pytest.raises(ValueError,match='未知参数'):
             simulate_preparation_plan(tools.definition,before,[{
                 'tool':'refresh_monsters','arguments':{'locked_monster_ids':[],'preview':value}
             }],tools.list_tool_schemas())
@@ -367,8 +377,8 @@ def test_runner_records_only_actual_refresh_as_mutation(game):
     class Agent:
         def __init__(self):
             self.responses=iter([
-                LlmAgentResponse(tool_calls=(LlmToolCall('refresh_monsters',{'locked_monster_ids':[],'preview':True}),)),
-                LlmAgentResponse(tool_calls=(LlmToolCall('refresh_monsters',{'locked_monster_ids':[],'preview':False}),)),
+                LlmAgentResponse(tool_calls=(LlmToolCall('preview_monster_refresh',{'locked_monster_ids':[]}),)),
+                LlmAgentResponse(tool_calls=(LlmToolCall('refresh_monsters',{'locked_monster_ids':[]}),)),
                 LlmAgentResponse(tool_calls=(LlmToolCall('end_turn',{'hunts':[]}),)),
             ])
 

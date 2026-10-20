@@ -31,15 +31,13 @@ rules:
 
 ## LLM 工具
 
-### `refresh_monsters(locked_monster_ids, preview)`
+提供两个工具，预览与付费执行分开。两者都只需传 `locked_monster_ids`，使用当前普通怪物的数字编号，空列表表示不保留任何普通目标。
 
-只提供一个LLM工具。`preview` 是必填布尔值，`true` 仅预览，`false` 扣金币并实际刷新。`locked_monster_ids` 传当前普通怪物的数字ID列表，空列表表示刷新全部普通位置。
+### `preview_monster_refresh(locked_monster_ids)`：仅预览
 
 ```json
-{"locked_monster_ids": [], "preview": true}
+{"locked_monster_ids": []}
 ```
-
-### `preview=true`：仅预览
 
 - 不扣金币，不推进刷新次数，不改变真实怪池，不写入会话事件。
 - 即使当前金币不足，也能查看费用和候选。
@@ -48,10 +46,10 @@ rules:
 - 返回 `simulation_only=true`、费用、是否有足够金币以及候选属性、技能、奖励。
 - `refresh:T…:R…:slot…` 仅作预览参考，不能用于锁定、战斗预览或讨伐。预览不会分配真实怪物数字编号。
 
-### `preview=false`：实际刷新
+### `refresh_monsters(locked_monster_ids)`：实际刷新
 
 ```json
-{"locked_monster_ids": [], "preview": false}
+{"locked_monster_ids": []}
 ```
 
 实际支付当前费用并提交刷新。工具返回真实怪池、新目标的数字ID和下一次费用。
@@ -66,7 +64,7 @@ rules:
 
 刷新预览与实刷各占一次普通工具调用。可以不预览而直接实刷，或看过候选后选择不付费。实际付费前不能跳过当前候选查看再下一次。
 
-真实刷新也是准备动作，可用于 `preview_team_power` 的操作方案试算，必须传 `preview=false`，不允许在方案中嵌套刷新预览。方案只返回终局评分，不返回可操作的虚拟怪池。刷新费用可能影响方案后续购买，刷新本身不会让经营讨伐奖励提前进入库存。
+真实刷新也是准备动作，可用于 `preview_team_power` 的操作方案试算。方案使用 `refresh_monsters`，参数同真实工具，不允许嵌套 `preview_monster_refresh`。方案只返回终局评分，不返回可操作的虚拟怪池。刷新费用可能影响方案后续购买，刷新本身不会让经营讨伐奖励提前进入库存。
 
 ## 未来预测、存档与回放
 

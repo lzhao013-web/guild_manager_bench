@@ -58,7 +58,7 @@ def build_system_prompt(
             f"MP回复 = {mp_recovery} + 最大MP×{mp_percent} + 战后回魔属性。",
             "刷新机制：每回合结束时，当前未讨伐的怪物和未招募的候选冒险者均不保留，下回合会刷新全新列表。",
             f"调用预算：每回合最多允许 {max_tool_calls} 次非 end_turn 工具调用{bp_limit_text}；所有查询、战斗预览、准备动作以及失败的调用均会消耗预算，请合理规划工具调用。",
-            "对象编号：除 configure_tactics 使用技能字符串 ID 外，所有工具参数的对象 id 均使用列表左侧的数字 id（同一回合内已有对象的数字 id 固定不变，新招募角色或新制作装备的数字 id 见工具返回）。",
+            "对象编号：角色、怪物、配方、升级、候选和装备使用列表左侧的数字 id（同回合已有编号固定，新对象编号见工具返回）。技能配置使用技能字符串 ID，战斗日志使用结果中的 battle_id。",
             "工具返回：每次调用均返回执行状态（成功/失败）、剩余预算及结果摘要。准备工具仅返回变更摘要，完整列表详情需通过对应的查询工具查看。",
     ]
     if talent_tree_enabled:
@@ -73,9 +73,8 @@ def build_system_prompt(
         )
     if battle_log_enabled:
         lines.append(
-            "战斗记录：可通过 get_battle_log 复盘本回合已执行的 preview_battle 或上一回合的实际讨伐过程"
-            "（读取记录不重新模拟，仅消耗普通工具预算，不消耗战斗预览次数）。"
-            "记录反映战斗发生时的状态快照，不随之后的队伍调整而改变。"
+            "战斗记录：按预览或实战结算返回的 battle_id 调用 get_battle_log，可查当轮预览和上轮实战。"
+            "查询不重新模拟，只占普通工具预算。记录不随后续调整改变。"
         )
     if forecast_enabled:
         lines.append(
@@ -104,7 +103,7 @@ def build_system_prompt(
     if monster_refresh_rules is not None:
         prices = "、".join(f"T{p['from_turn']}起{p['gold']}金币" for p in monster_refresh_rules["base_prices"])
         lines.extend([
-            "手动刷新：refresh_monsters，preview=true只预览，preview=false扣费刷新。",
+            "手动刷新：preview_monster_refresh 只预览，refresh_monsters 扣费刷新。",
             f"首刷价格：{prices}。同回合每次付费刷新后，下次费用翻倍。新回合恢复基础价。",
             "锁定普通怪物不收费，不跨回合。固定挑战自动保留。手动刷新不影响后续自然刷新和招募，不增加讨伐次数。",
             "预览和实际刷新各占一次普通调用，不占战斗预览额度。最终整备回合不能刷新。",
@@ -324,6 +323,7 @@ def _previous_turn_summary(previous_turn_event: Mapping[str, Any] | None) -> str
             "- "
             f"{_battle_participant_name(battle, 'adventurer')} vs {_battle_participant_name(battle, 'monster')}：{result}，"
             f"奖励 金币={reward['gold']} 经验={reward['experience']} 掉落材料={_mapping_text(reward['materials'])}"
+            + (f"，battle_id={battle['battle_id']}" if "battle_id" in battle else "")
         )
     return "\n".join(lines)
 

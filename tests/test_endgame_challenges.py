@@ -97,7 +97,7 @@ def test_winning_preview_never_clears_target_or_grants_rewards(game):
     assert result["ok"] and result["preview"]["won"]
     assert tools.get_state(sid) is before
     assert tools.get_events(sid) == events
-    log = harness.call_tool("get_battle_log", {"source": "preview", "battle_index": 1})
+    log = harness.call_tool("get_battle_log", {"battle_id": result["preview"]["battle_id"]})
     assert log["battle"]["monster_name"].startswith("【挑战】")
     assert log["tool_budget"]["battle_preview_used"] == 1
 
@@ -112,7 +112,7 @@ def test_first_clear_rewards_once_and_stays_cleared_across_turns(game):
     assert state.experience_pool == before.experience_pool + 1000
     assert state.materials["renewal_core"] == 1
     assert challenge_ids(state) == {"iron_colossus", "blade_tyrant"}
-    actual = tools.get_battle_log(sid, "actual", 1, "events")
+    actual = tools.get_battle_log(sid, result["turn_result"]["battles"][0]["battle_id"], "events")
     assert actual["battle"]["outcome"] == "left_win"
     assert not tools.end_turn(sid, hunts=[{"adventurer_id": "hero_1", "monster_id": "challenge_doom_oracle"}])["ok"]
     assert tools.get_state(sid) is state

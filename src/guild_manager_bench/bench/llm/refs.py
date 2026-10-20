@@ -104,7 +104,7 @@ def resolve_tool_arguments_with_refs(
                 _resolve_hunt(hunt, refs)
                 for hunt in hunts
             ]
-    elif name == "refresh_monsters":
+    elif name in {"preview_monster_refresh", "refresh_monsters"}:
         locked = values.get("locked_monster_ids")
         if isinstance(locked, (list, tuple)):
             values["locked_monster_ids"] = [

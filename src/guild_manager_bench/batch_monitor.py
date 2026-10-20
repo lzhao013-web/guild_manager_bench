@@ -29,6 +29,7 @@ _TOOL_LABELS = {
     "recruit_adventurer": "招募", "dismiss_adventurer": "解雇", "craft_equipment": "制作",
     "equip_item": "穿装", "unequip_item": "卸装", "purchase_upgrade": "购天赋",
     "allocate_experience": "分经验", "preview_battle": "战斗预览", "write_memo": "备忘",
+    "preview_monster_refresh": "刷新预览", "refresh_monsters": "刷新怪物",
     "end_turn": "结束回合",
 }
 _ESCAPE = re.compile(r"\x1b\][^\x07]*(?:\x07|\x1b\\)|\x1b\[[0-?]*[ -/]*[@-~]")
