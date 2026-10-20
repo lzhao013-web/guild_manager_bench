@@ -535,7 +535,8 @@ function ModelPanel({
                             </option>
                         ))}
                     </select>
-                    <div className="model-call-config">
+                    <div className="model-call-config" title="当前 run 的配置，不代表未记录的历史调用配置">
+                        <span>当前 run 配置</span>
                         <strong>{job.config.model || "服务端默认模型"}</strong>
                         <span>接口 {job.config.provider}</span>
                         <span>配置强度 {job.config.reasoning_effort || "默认"}</span>

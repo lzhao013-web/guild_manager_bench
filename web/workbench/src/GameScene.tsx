@@ -26,6 +26,7 @@ import {
 import type { SceneModule, SceneView } from "./sceneNavigation";
 import { Portrait, SlotIcon, Vital } from "./SceneParts";
 import { MonsterBadges } from "./MonsterBadges";
+import { AdventurerStatus, adventurerFrame, adventurerStateText, monsterFrame } from "./UnitFrame";
 import { monsterClassification } from "./monsterModel";
 import { SceneInspector } from "./SceneInspector";
 import { UpgradeGraph } from "./UpgradeGraph";
@@ -219,8 +220,8 @@ export function GameScene({
                                     {observation.monsters.map((monster) => (
                                         <button
                                             key={monster.monster_id as string}
-                                            className="scene-monster-card"
-                                            data-monster-role={monster.tier}
+                                            className="scene-monster-card actor-frame"
+                                            {...monsterFrame(monster)}
                                             aria-label={`查看怪物 ${monster.name}`}
                                             aria-description={monsterClassification(monster)}
                                             onClick={() => inspect("monster", monster)}
@@ -404,13 +405,16 @@ function MemberCard({
     const equipped = member.equipment_slots?.filter((slot) => slot.item != null).length;
     return (
         <button
-            className={`scene-member-card spectator-member ${changes.length ? "has-change" : ""}`}
+            className={`scene-member-card spectator-member actor-frame ${changes.length ? "has-change" : ""}`}
+            {...adventurerFrame(member)}
             aria-label={`查看成员 ${member.name}`}
+            aria-description={adventurerStateText(member)}
             onClick={onClick}
         >
             <div className="member-art">
                 <Portrait id={member.template_id} name={member.name} />
                 <span className="member-level mono">Lv. {member.level}</span>
+                <AdventurerStatus member={member} />
                 {changes.length > 0 && <span className="member-change-label">{changes[0]}</span>}
             </div>
             <div className="member-card-info">

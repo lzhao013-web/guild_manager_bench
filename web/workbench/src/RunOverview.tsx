@@ -6,17 +6,17 @@ import {
 import { fmt, modelEntries, time } from "./model";
 import { Portrait, SlotIcon, Vital } from "./SceneParts";
 import { MonsterBadges } from "./MonsterBadges";
+import { AdventurerStatus, adventurerFrame, adventurerStateText, isLowHealth, monsterFrame } from "./UnitFrame";
 import { ModelCallStats } from "./ModelCallStats";
 import { monsterClassification } from "./monsterModel";
 import type { Selection } from "./sceneModel";
 import type { RunModule } from "./sceneNavigation";
-import type { Observation, PartyMember } from "./types";
+import type { Observation } from "./types";
 import { actionSummary, recentActions } from "./actionModel";
 import { prioritizeUpgrades } from "./previewOrder";
 import type { WatchFrame, WatchRecord } from "./watchModel";
 
-const lowHealth = (member: PartyMember) =>
-    member.resources.current_hp / member.effective_stats.hp < 0.3;
+const lowHealth = isLowHealth;
 
 export function RunOverview({ observation, frames, records, onOpen, onFrame, live = false }: {
     observation: Observation | null;
@@ -55,12 +55,14 @@ export function RunOverview({ observation, frames, records, onOpen, onFrame, liv
                     {members?.length ? (
                         <div className="overview-party-grid">
                             {members.map((member) => (
-                                <button key={member.adventurer_id} className={lowHealth(member) ? "is-low-health" : ""}
-                                    aria-label={`查看成员 ${member.name}`}
+                                <button key={member.adventurer_id} className={`actor-frame ${lowHealth(member) ? "is-low-health" : ""}`}
+                                    {...adventurerFrame(member)}
+                                    aria-label={`查看成员 ${member.name}`} aria-description={adventurerStateText(member)}
                                     onClick={() => onOpen("party", { kind: "member", id: member.adventurer_id })}>
                                     <Portrait id={member.template_id} name={member.name} />
                                     <div className="overview-member-info">
                                         <div className="overview-member-name">
+                                            <AdventurerStatus member={member} compact />
                                             <strong title={member.name}>{member.name}</strong>
                                             <span className="overview-member-level mono">Lv.{member.level}</span>
                                         </div>
@@ -97,7 +99,7 @@ export function RunOverview({ observation, frames, records, onOpen, onFrame, liv
                     {observation?.monsters ? (
                         <div className="overview-enemies">
                             {observation.monsters.slice(0, 6).map((monster) => (
-                                <button key={monster.monster_id as string} aria-label={`查看怪物 ${monster.name}`} aria-description={monsterClassification(monster)}
+                                <button key={monster.monster_id as string} className="actor-frame" {...monsterFrame(monster)} aria-label={`查看怪物 ${monster.name}`} aria-description={monsterClassification(monster)}
                                     onClick={() => onOpen("monsters", { kind: "monster", id: monster.monster_id as string })}>
                                     <Portrait monster id={monster.archetype_id as string} name={monster.name!} />
                                     <span><strong title={monster.name}>{monster.name}</strong>

@@ -25,6 +25,7 @@ import {
     time,
 } from "./model";
 import { Empty, JsonDetails, Metric, StatusBadge, Trend } from "./ui";
+import { ModelCallStats } from "./ModelCallStats";
 import type { Job } from "./types";
 
 export function RunDetail({
@@ -414,12 +415,8 @@ export function RunDetail({
                                                     回合 {entry.turn ?? "?"} /
                                                     调用 {entry.step ?? "?"}
                                                 </strong>
-                                                <span className="muted">
-                                                    {entry.response
-                                                        ? "已返回"
-                                                        : "等待或接收中"}
-                                                </span>
                                             </header>
+                                            <ModelCallStats model={entry} compact live={isActive(job) && entry === models.at(-1)} />
                                             {entry.text ? (
                                                 <pre className="model-text">
                                                     {entry.text}

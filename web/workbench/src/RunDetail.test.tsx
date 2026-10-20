@@ -9,14 +9,14 @@ import type { Observation } from "./types";
 
 const initial: Observation = { gold: 100, experience_pool: 0, materials: {}, adventurers: [], party_size_limit: 3, turn: 1, max_turns: 8 };
 const rec = (cursor: number, event: WatchRecord["event"]): WatchRecord => ({ cursor, after: cursor - 1, at: "2026-10-19T10:00:00Z", event });
-function setup(records: WatchRecord[]) {
+function setup(records: WatchRecord[], rawRecords: WatchRecord[] = []) {
     const requests: string[] = [];
     const page: WatchPage = { cursor: 10, selected: 1, attempts: [], records };
     vi.spyOn(globalThis, "fetch").mockImplementation(async input => {
         const path = String(input);
         requests.push(path);
         // 原始事件窗口为空，行动必须来自完整的只读回合投影。
-        return new Response(JSON.stringify(path.endsWith("/watch") ? page : { events: [], cursor: 10, has_more: false }));
+        return new Response(JSON.stringify(path.endsWith("/watch") ? page : { events: rawRecords, cursor: 10, has_more: false }));
     });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
     render(<QueryClientProvider client={client}><Theme><RunDetail job={testJob("sidebar", { status: "completed", cursor: 10 })}
@@ -50,4 +50,17 @@ it("侧栏只查询时不把成功查询描述为经营成果", async () => {
         rec(2, { type: "tool_result", name: "get_party", result: { ok: true, adventurers: [] } })]);
     expect(await screen.findByText("目前只进行了 1 次查询，尚无经营动作。", { exact: true })).toBeVisible();
     expect(within(screen.getByRole("region", { name: "构造的同名模型 的运行详情" })).getByText("返回 0 位成员", { exact: true })).toBeVisible();
+});
+
+it("列表侧栏的模型正文也附带本次调用统计，不用整局累计代替", async () => {
+    setup([], [
+        rec(1, { type: "model_request", turn: 1, step: 1 }),
+        rec(2, { type: "model_response", turn: 1, step: 1, text: "侧栏构造正文", usage: { input_tokens: 7, output_tokens: 4 }, timing: { duration_ms: 200 } }),
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: /模型/ }));
+    const stats = await screen.findByRole("group", { name: "本次模型调用概览" });
+    expect(stats).toHaveTextContent("输入 7");
+    expect(stats).toHaveTextContent("输出 4 Token");
+    expect(stats).toHaveTextContent("耗时 200 ms");
+    expect(screen.getByText("侧栏构造正文")).toBeVisible();
 });

@@ -5,6 +5,7 @@ import { MATERIALS, SLOTS, resolveSubject, subjectId } from "./sceneModel";
 import type { Selection, SceneSubject } from "./sceneModel";
 import { Portrait, SkillCards, SlotIcon, StatTiles, Vital } from "./SceneParts";
 import { MonsterBadges } from "./MonsterBadges";
+import { AdventurerStatus, adventurerFrame, adventurerStateText, monsterFrame } from "./UnitFrame";
 import type { CraftingRecipe, GameEntity, Observation, PartyMember } from "./types";
 import { RecipeDetails } from "./RecipeDetails";
 import { TalentDetails } from "./TalentDetails";
@@ -144,7 +145,7 @@ function MemberInspector({
     return (
         <>
             <div className="scene-member-status">
-                <b>Lv. {member.level}</b>
+                <b>Lv. {member.level}<AdventurerStatus member={member} /></b>
                 <Vital
                     label="生命"
                     value={member.resources.current_hp}
@@ -180,7 +181,7 @@ function MemberInspector({
                         aria-label={`${member.name} 的装备槽位图`}
                     >
                         <div className="paperdoll">
-                            <div className="paperdoll-portrait">
+                            <div className="paperdoll-portrait actor-frame" {...adventurerFrame(member)} data-unit-selected="true" role="img" aria-label={`${member.name}，${adventurerStateText(member)}`}>
                                 <Portrait id={member.template_id} name={member.name} />
                                 <span>{member.name}</span>
                             </div>
@@ -324,16 +325,12 @@ function EntityInspector({
     return (
         <div className={`scene-entity-detail entity-${kind}`}>
             <div className="scene-entity-hero">
-                {kind === "monster" || kind === "candidate" ? (
-                    <Portrait
-                        id={
-                            (kind === "monster"
-                                ? entity.archetype_id
-                                : entity.template_id) as string
-                        }
-                        name={entity.name!}
-                        monster={kind === "monster"}
-                    />
+                {kind === "monster" ? (
+                    <div className="scene-portrait unit-portrait-frame actor-frame" {...monsterFrame(entity)} data-unit-selected="true">
+                        <Portrait id={entity.archetype_id as string} name={entity.name!} monster />
+                    </div>
+                ) : kind === "candidate" ? (
+                    <Portrait id={entity.template_id} name={entity.name!} />
                 ) : (
                     <div className="entity-item-glyph">
                         <SlotIcon slot={entity.slot || "ultimate"} size={65} />

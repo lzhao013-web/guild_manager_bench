@@ -36,9 +36,6 @@
 .monitor-monster-info > strong { font-size: 10px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .monitor-monsters .monster-badges, .monitor-monsters .monster-badges > span { overflow: visible; }
 .monitor-monsters > button:not(.monitor-section-link):not(.monitor-more) { min-height: 31px; }
-.scene-monster-card[data-monster-role="elite"] { border-inline-start: 3px solid var(--violet-8); }
-.scene-monster-card[data-monster-role="boss"] { border-inline-start: 3px solid var(--amber-8); }
-.scene-monster-card[data-monster-role="challenge"] { border-inline-start: 3px solid var(--red-8); }
 .overview-enemies .monster-badges { gap: 3px; }
 .overview-enemies button > span { gap: 3px; }
 .scene-entity-detail.entity-monster .monster-badges { margin-bottom: 8px; }

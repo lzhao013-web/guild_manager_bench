@@ -6,6 +6,7 @@ import {
 import { duration, fmt, isActive, modelEntries, PHASE, short } from "./model";
 import { Portrait, Vital } from "./SceneParts";
 import { MonsterBadges } from "./MonsterBadges";
+import { AdventurerStatus, adventurerFrame, adventurerStateText, isLowHealth, monsterFrame } from "./UnitFrame";
 import { ModelCallStats } from "./ModelCallStats";
 import { monsterClassification } from "./monsterModel";
 import { StatusBadge } from "./ui";
@@ -44,8 +45,7 @@ export function WatchMonitor({ job, page, live, frame, frames, records, position
     const selected = page?.attempts.find(attempt => attempt.id === page.selected);
     const observation = frame?.observation;
     const members = observation && [...observation.adventurers].sort((a, b) =>
-        Number(b.resources.current_hp / b.effective_stats.hp < 0.3) -
-        Number(a.resources.current_hp / a.effective_stats.hp < 0.3)).slice(0, 6);
+        Number(isLowHealth(b)) - Number(isLowHealth(a))).slice(0, 6);
     const monsters = observation?.monsters;
     const model = useMemo(() => modelEntries(records).at(-1), [records]);
     const index = frame ? frames.indexOf(frame) : -1;
@@ -90,11 +90,12 @@ export function WatchMonitor({ job, page, live, frame, frames, records, position
             ) : <div className="monitor-body">
                 <section className="monitor-party" aria-label="编队摘要">
                     {members?.length ? members.map(member => <button key={member.adventurer_id}
-                        className={`monitor-member ${member.resources.current_hp / member.effective_stats.hp < 0.3 ? "is-low-health" : ""}`}
-                        aria-label={`查看成员 ${member.name}`} title={`${member.name} · Lv.${member.level}\n生命 ${fmt(member.resources.current_hp)} / ${fmt(member.effective_stats.hp)}\n法力 ${fmt(member.resources.current_mp)} / ${fmt(member.effective_stats.mp)}`} disabled={!onFocus}
+                        className={`monitor-member actor-frame ${isLowHealth(member) ? "is-low-health" : ""}`}
+                        {...adventurerFrame(member)}
+                        aria-label={`查看成员 ${member.name}`} aria-description={adventurerStateText(member)} title={`${member.name} · Lv.${member.level}\n生命 ${fmt(member.resources.current_hp)} / ${fmt(member.effective_stats.hp)}\n法力 ${fmt(member.resources.current_mp)} / ${fmt(member.effective_stats.mp)}`} disabled={!onFocus}
                         onClick={() => inspect({ module: "party", selection: { kind: "member", id: member.adventurer_id } })}>
                         <Portrait id={member.template_id} name={member.name} />
-                        <span className="monitor-member-body"><span className="monitor-member-name"><strong title={member.name}>{member.name}</strong><small>Lv.{member.level}</small></span>
+                        <span className="monitor-member-body"><span className="monitor-member-name"><AdventurerStatus member={member} compact /><strong title={member.name}>{member.name}</strong><small>Lv.{member.level}</small></span>
                             <Vital label="生命" value={member.resources.current_hp} max={member.effective_stats.hp} />
                             {member.effective_stats.mp > 0 && <Vital label="法力" value={member.resources.current_mp} max={member.effective_stats.mp} mana />}
                         </span>
@@ -102,7 +103,7 @@ export function WatchMonitor({ job, page, live, frame, frames, records, position
                 </section>
                 <section className="monitor-monsters" aria-label="怪物摘要">
                     <button className="monitor-section-link" disabled={!onFocus} onClick={() => inspect({ module: "monsters" })}>怪物{monsters ? ` ${monsters.length}` : "未记录"}</button>
-                    {monsters?.slice(0, 4).map(monster => <button key={monster.monster_id as string} title={`${monster.name} · ${monsterClassification(monster)}`} aria-label={`查看怪物 ${monster.name}`} aria-description={monsterClassification(monster)} disabled={!onFocus}
+                    {monsters?.slice(0, 4).map(monster => <button key={monster.monster_id as string} className="actor-frame" {...monsterFrame(monster)} title={`${monster.name} · ${monsterClassification(monster)}`} aria-label={`查看怪物 ${monster.name}`} aria-description={monsterClassification(monster)} disabled={!onFocus}
                         onClick={() => inspect({ module: "monsters", selection: { kind: "monster", id: monster.monster_id as string } })}>
                         <Portrait monster id={monster.archetype_id as string} name={monster.name!} />
                         <span className="monitor-monster-info"><strong>{monster.name}</strong><MonsterBadges monster={monster} compact /></span>
