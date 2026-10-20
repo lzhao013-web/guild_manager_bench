@@ -5,6 +5,9 @@ import {
 } from "@phosphor-icons/react";
 import { fmt, modelEntries, time } from "./model";
 import { Portrait, SlotIcon, Vital } from "./SceneParts";
+import { MonsterBadges } from "./MonsterBadges";
+import { ModelCallStats } from "./ModelCallStats";
+import { monsterClassification } from "./monsterModel";
 import type { Selection } from "./sceneModel";
 import type { RunModule } from "./sceneNavigation";
 import type { Observation, PartyMember } from "./types";
@@ -15,12 +18,13 @@ import type { WatchFrame, WatchRecord } from "./watchModel";
 const lowHealth = (member: PartyMember) =>
     member.resources.current_hp / member.effective_stats.hp < 0.3;
 
-export function RunOverview({ observation, frames, records, onOpen, onFrame }: {
+export function RunOverview({ observation, frames, records, onOpen, onFrame, live = false }: {
     observation: Observation | null;
     frames: WatchFrame[];
     records: WatchRecord[];
     onOpen: (module: RunModule, selection?: Selection) => void;
     onFrame: (frame: WatchFrame) => void;
+    live?: boolean;
 }) {
     const models = modelEntries(records);
     const model = models.at(-1);
@@ -93,11 +97,11 @@ export function RunOverview({ observation, frames, records, onOpen, onFrame }: {
                     {observation?.monsters ? (
                         <div className="overview-enemies">
                             {observation.monsters.slice(0, 6).map((monster) => (
-                                <button key={monster.monster_id as string} aria-label={`查看怪物 ${monster.name}`}
+                                <button key={monster.monster_id as string} aria-label={`查看怪物 ${monster.name}`} aria-description={monsterClassification(monster)}
                                     onClick={() => onOpen("monsters", { kind: "monster", id: monster.monster_id as string })}>
                                     <Portrait monster id={monster.archetype_id as string} name={monster.name!} />
                                     <span><strong title={monster.name}>{monster.name}</strong>
-                                        <small>生命上限 {fmt((monster.stats as Record<string, number> | undefined)?.hp)}</small></span>
+                                        <MonsterBadges monster={monster} compact /></span>
                                 </button>
                             ))}
                             {!observation.monsters.length && <p className="overview-empty">此时没有怪物记录</p>}
@@ -105,7 +109,8 @@ export function RunOverview({ observation, frames, records, onOpen, onFrame }: {
                     ) : <p className="overview-empty">该快照未记录怪物</p>}
                 </OverviewModule>
                 <OverviewModule id="models" title="模型输出" icon={<ChatText size={16} />}
-                    note={`${models.length} 次调用${model ? (model.response ? "，已返回" : "，等待响应") : ""}`} onOpen={onOpen}>
+                    note={`${models.length} 次调用`} onOpen={onOpen}>
+                    {model && <ModelCallStats model={model} live={live} compact />}
                     {model ? <p className="overview-model-excerpt">{model.text.slice(0, 800) || "此位置没有模型正文，展开查看调用记录。"}</p>
                         : <p className="overview-empty">此位置尚未发出模型请求</p>}
                 </OverviewModule>

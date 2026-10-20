@@ -25,6 +25,8 @@ import {
 } from "./sceneNavigation";
 import type { SceneModule, SceneView } from "./sceneNavigation";
 import { Portrait, SlotIcon, Vital } from "./SceneParts";
+import { MonsterBadges } from "./MonsterBadges";
+import { monsterClassification } from "./monsterModel";
 import { SceneInspector } from "./SceneInspector";
 import { UpgradeGraph } from "./UpgradeGraph";
 import type { GameEntity, Observation, PartyMember } from "./types";
@@ -218,7 +220,9 @@ export function GameScene({
                                         <button
                                             key={monster.monster_id as string}
                                             className="scene-monster-card"
+                                            data-monster-role={monster.tier}
                                             aria-label={`查看怪物 ${monster.name}`}
+                                            aria-description={monsterClassification(monster)}
                                             onClick={() => inspect("monster", monster)}
                                         >
                                             <Portrait
@@ -227,9 +231,7 @@ export function GameScene({
                                                 name={monster.name!}
                                             />
                                             <div>
-                                                <span className="monster-tier">
-                                                    {String(monster.tier)}
-                                                </span>
+                                                <MonsterBadges monster={monster} />
                                                 <strong>{monster.name}</strong>
                                                 <ItemStats item={monster} />
                                             </div>

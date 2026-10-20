@@ -56,6 +56,7 @@ export const TOOLS: Record<string, string> = {
     get_battle_log: "查看战斗日志",
     get_forecast: "查看预告",
     configure_tactics: "配置战术",
+    preview_monster_refresh: "预览怪物刷新",
     refresh_monsters: "刷新怪物",
     recruit_adventurer: "招募冒险者",
     dismiss_adventurer: "解雇冒险者",
@@ -243,6 +244,8 @@ export interface ModelEntry {
     reasoning: string;
     request?: unknown;
     response?: unknown;
+    requestedAt?: string;
+    observedAt?: string;
 }
 export function modelEntries(records: EventRecord[]): ModelEntry[] {
     const entries: ModelEntry[] = [];
@@ -257,6 +260,8 @@ export function modelEntries(records: EventRecord[]): ModelEntry[] {
                 text: "",
                 reasoning: "",
                 request: e.request,
+                requestedAt: record.at,
+                observedAt: record.at,
             };
             entries.push(current);
         } else if (
@@ -268,6 +273,7 @@ export function modelEntries(records: EventRecord[]): ModelEntry[] {
                 current = { key: record.cursor, text: "", reasoning: "" };
                 entries.push(current);
             }
+            current.observedAt = record.at;
             if (e.type === "model_delta") current.text += e.text || "";
             if (e.type === "model_reasoning_delta")
                 current.reasoning += e.text || "";

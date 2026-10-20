@@ -5,6 +5,7 @@ from urllib.parse import urlsplit
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 
 from guild_manager_bench.api.workbench import ACTIVE, Workbench
 from guild_manager_bench.api.workbench_curves import CurveStore, empty_curves
@@ -63,6 +64,17 @@ def workbench_router(manager: Workbench) -> APIRouter:
         try:
             return manager.api_profiles.save(body)
         except (ValueError, RuntimeError, OSError) as exc:
+            raise profile_error(exc) from None
+
+    @router.post("/api-profiles/{profile_id}/key", dependencies=[Depends(same_origin)])
+    async def read_profile_key(profile_id: str):
+        try:
+            connection = manager.api_profiles.resolve(profile_id)
+            return JSONResponse(
+                {"api_key": connection["api_key"]},
+                headers={"Cache-Control": "no-store"},
+            )
+        except (KeyError, CredentialError, OSError) as exc:
             raise profile_error(exc) from None
 
     @router.put("/api-profiles/{profile_id}", dependencies=[Depends(same_origin)])
@@ -158,6 +170,8 @@ def workbench_router(manager: Workbench) -> APIRouter:
             if raw_after is not None:
                 return await asyncio.to_thread(trajectories.raw, path, archived=archived, after=raw_after)
             payload = await asyncio.to_thread(trajectories.read, path, archived=archived, attempt=attempt)
+            if attempt is not None:
+                payload = {**payload, "monster_stages": manager.monster_stages(job_id)}
             if attempt is not None and job.get("status") in {"interrupted", "failed"}:
                 # 受控进程停止事件只写入工作台日志，整局归档可能停在执行或评分中。
                 tail = payload["attempts"][-1]

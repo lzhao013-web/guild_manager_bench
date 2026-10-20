@@ -21,6 +21,7 @@ export function RunWorkspace({
     actions,
     models,
     initialSelection,
+    live = false,
 }: {
     observation: Observation | null;
     before: Observation | null;
@@ -32,6 +33,7 @@ export function RunWorkspace({
     actions: ReactNode;
     models: ReactNode;
     initialSelection?: Selection;
+    live?: boolean;
 }) {
     const [visited, setVisited] = useState<RunModule[]>(() => activeModule ? [activeModule] : []);
     const [views, setViews] = useState<SceneViews>(() => activeModule && activeModule !== "actions" && activeModule !== "models"
@@ -114,7 +116,7 @@ export function RunWorkspace({
                 <RunOverview
                     observation={observation}
                     frames={frames}
-                    records={records}
+                    records={records} live={live}
                     onOpen={open}
                     onFrame={onFrame}
                 />

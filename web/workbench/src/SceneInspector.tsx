@@ -4,6 +4,7 @@ import { fmt } from "./model";
 import { MATERIALS, SLOTS, resolveSubject, subjectId } from "./sceneModel";
 import type { Selection, SceneSubject } from "./sceneModel";
 import { Portrait, SkillCards, SlotIcon, StatTiles, Vital } from "./SceneParts";
+import { MonsterBadges } from "./MonsterBadges";
 import type { CraftingRecipe, GameEntity, Observation, PartyMember } from "./types";
 import { RecipeDetails } from "./RecipeDetails";
 import { TalentDetails } from "./TalentDetails";
@@ -344,7 +345,7 @@ function EntityInspector({
                     )}
                     {kind === "monster" && (
                         <>
-                            <span className="scene-tag">{String(entity.tier)}</span>
+                            <MonsterBadges monster={entity} />
                             <p className="scene-note">
                                 属性来自本回合怪物快照，不推测胜率或剩余生命。
                             </p>

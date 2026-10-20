@@ -94,6 +94,12 @@
     .monitor-buttons button { width: 22px; }
     .monitor-step-controls input { width: 30px; }
 }
+@container (max-height: 339px) {
+    .monitor-header { padding-block: 3px; }
+    .monitor-metrics { padding-block: 2px; }
+    .monitor-body { gap: 2px; padding-block: 4px; }
+    .monitor-controls { padding-block: 3px; }
+}
 @container (min-height: 340px) {
     .monitor-member { padding: 4px; }
     .monitor-member > .scene-portrait { width: 33px; height: 40px; }

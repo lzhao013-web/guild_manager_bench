@@ -1,5 +1,7 @@
 import { TOOLS } from "./model";
 import type { EventRecord, Observation } from "./types";
+import { withMonsterStages } from "./monsterModel";
+import type { MonsterStages } from "./monsterModel";
 
 export interface WatchAttempt {
     id: number;
@@ -19,6 +21,7 @@ export interface WatchPage {
     records: WatchRecord[];
     origin?: "archive" | "execution";
     live_cursor?: number;
+    monster_stages?: MonsterStages;
 }
 export interface WatchPosition {
     attempt: number | null;
@@ -50,7 +53,7 @@ const TITLES: Record<string, string> = {
     checkpoint_failed: "检查点保存失败", worker_failed: "工作进程失败", worker_stopped: "任务已停止",
     run_completed: "运行已完成", run_failed: "运行失败",
 };
-export function watchFrames(records: WatchRecord[], initialScore: number | null = null): WatchFrame[] {
+export function watchFrames(records: WatchRecord[], initialScore: number | null = null, stages: MonsterStages = {}): WatchFrame[] {
     const frames: WatchFrame[] = [];
     let observation: Observation | null = null;
     let score: number | null = initialScore;
@@ -58,12 +61,12 @@ export function watchFrames(records: WatchRecord[], initialScore: number | null 
     for (const record of records) {
         const e = record.event;
         const before = observation;
-        if (e.type === "run_started" || e.type === "turn_started") observation = e.observation;
+        if (e.type === "run_started" || e.type === "turn_started") observation = withMonsterStages(e.observation, stages);
         if (e.type === "run_resumed") {
-            observation = e.restored_observation;
+            observation = withMonsterStages(e.restored_observation, stages);
             score = e.last_rank_score ?? null;
         }
-        if (e.type === "tool_result" && e.result?._observation_after) observation = e.result._observation_after;
+        if (e.type === "tool_result" && e.result?._observation_after) observation = withMonsterStages(e.result._observation_after, stages);
         if (e.type === "turn_scored") score = e.rank_score;
         if ((e.type === "run_completed" || e.type === "run_failed") && e.score?.rank_score != null) score = e.score.rank_score;
         if (e.type === "model_request") call = record.cursor;

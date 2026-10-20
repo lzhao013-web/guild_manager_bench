@@ -22,6 +22,7 @@ import { api, useLiveWatch } from "./api";
 import { duration, fmt, isActive, modelEntries, PHASE, time } from "./model";
 import { Empty, JsonDetails, StatusBadge, Trend } from "./ui";
 import { WatchMonitor } from "./WatchMonitor";
+import { ModelCallStats } from "./ModelCallStats";
 import { ActionTimeline } from "./ActionTimeline";
 import { TrajectoryProvider } from "./TrajectoryContext";
 import type { TrajectoryPage } from "./trajectoryModel";
@@ -97,7 +98,7 @@ export function WatchRun({
             )
             .reverse()
             .find((a) => a.score !== null);
-        return watchFrames(page?.records || [], previous?.score ?? null);
+        return watchFrames(page?.records || [], previous?.score ?? null, page?.monster_stages);
     }, [page]);
     const frame =
         position.cursor == null
@@ -160,8 +161,7 @@ export function WatchRun({
     const actionsPanel = (
         <ActionTimeline frames={frames} frame={frame} active={actionsVisible} following={following}
             rolledBack={selected?.status === "rolled_back"} onFrame={chooseFrame} onWholeRun={() => setHistoryRequested(true)}
-            renderDetails={item => <><BattleResults event={item.record.event} />
-                <LazyRecord key={item.cursor} jobId={job.id} record={item.record} label="原始事件与调用参数" active={actionsVisible} trajectory={page?.origin} /></>} />
+            renderDetails={item => <LazyRecord key={item.cursor} jobId={job.id} record={item.record} label="原始事件与调用参数" active={actionsVisible} trajectory={page?.origin} />} />
     );
     const modelsPanel = (
         <section className="spectator-models" aria-label="所选位置的模型调用">
@@ -170,6 +170,7 @@ export function WatchRun({
                 records={modelRecords}
                 call={frame?.call ?? null}
                 active={activeModule === "models"}
+                live={following && isActive(job)}
                 trajectory={page?.origin}
             />
         </section>
@@ -325,6 +326,7 @@ export function WatchRun({
                             actions={actionsPanel}
                             models={modelsPanel}
                             initialSelection={initialFocus?.selection}
+                            live={following && isActive(job)}
                         />
 
                 </>
@@ -467,12 +469,14 @@ function ModelPanel({
     records,
     call,
     active,
+    live,
     trajectory,
 }: {
     job: Job;
     records: WatchRecord[];
     call: number | null;
     active: boolean;
+    live: boolean;
     trajectory?: "archive" | "execution";
 }) {
     const models = useMemo(() => modelEntries(records), [records]);
@@ -531,30 +535,18 @@ function ModelPanel({
                             </option>
                         ))}
                     </select>
-                    <p className="muted">
-                        {model.response ? "API 已返回" : "此位置尚未记录完整响应"}
-                    </p>
+                    <div className="model-call-config">
+                        <strong>{job.config.model || "服务端默认模型"}</strong>
+                        <span>接口 {job.config.provider}</span>
+                        <span>配置强度 {job.config.reasoning_effort || "默认"}</span>
+                    </div>
+                    <ModelCallStats model={model} live={live && active && model === models.at(-1)} />
                     {model.text ? (
                         <pre className="watch-model-text">{model.text}</pre>
                     ) : (
                         <p className="scene-empty">
                             {model.response ? "本次未返回正文，可能仅调用工具。" : "尚未收到正文。"}
                         </p>
-                    )}
-                    {model.response != null && (
-                        <div className="model-usage mono">
-                            输入{" "}
-                            {fmt(
-                                (model.response as any).usage?.input_tokens ??
-                                    (model.response as any).usage?.prompt_tokens,
-                            )}{" "}
-                            / 输出{" "}
-                            {fmt(
-                                (model.response as any).usage?.output_tokens ??
-                                    (model.response as any).usage?.completion_tokens,
-                            )}{" "}
-                            Token
-                        </div>
                     )}
                     {model.reasoning && (
                         <details className="reasoning">
@@ -627,61 +619,5 @@ function LazyRecord({
                     <pre>{JSON.stringify(query.data && ("events" in query.data ? query.data.events[0]?.event : query.data.event), null, 2)}</pre>
                 ))}
         </details>
-    );
-}
-function BattleResults({ event }: { event: EventRecord["event"] }) {
-    if (event.name === "get_battle_log" && event.result?.ok === true) {
-        const result = event.result;
-        return (
-            <div className="watch-battles">
-                <h3>模型已查询的战斗日志</h3>
-                {result.battle && (
-                    <p>
-                        {result.battle.adventurer_name} 对 {result.battle.monster_name}
-                    </p>
-                )}
-                {result.events && (
-                    <JsonDetails
-                        title={`已记录 ${result.events.length} 条行动事件`}
-                        value={result.events}
-                    />
-                )}
-                {result.statistics && (
-                    <JsonDetails title="已记录的伤害、治疗与技能统计" value={result.statistics} />
-                )}
-                {result.battles && <JsonDetails title="已记录的战斗目录" value={result.battles} />}
-                <p>只展示模型已查询并返回的记录，不额外调用工具或重新模拟战斗。</p>
-            </div>
-        );
-    }
-    const battles = event.result?.turn_result?.battles;
-    if (!Array.isArray(battles) || !battles.length) return null;
-    const outcome: Record<string, string> = { left_win: "胜利", right_win: "失败", draw: "平局" };
-    return (
-        <div className="watch-battles">
-            <h3>已记录的战斗结果</h3>
-            {battles.map((battle, i) => (
-                <details key={i}>
-                    <summary>
-                        {battle.adventurer_name || "冒险者"} 对 {battle.monster_name || "怪物"}
-                        <strong>
-                            {typeof battle.won === "boolean"
-                                ? battle.won
-                                    ? "胜利"
-                                    : "失败"
-                                : outcome[battle.combat?.outcome || battle.outcome] ||
-                                  battle.combat?.outcome ||
-                                  battle.outcome ||
-                                  "结果未记录"}
-                        </strong>
-                    </summary>
-                    <p>
-                        奖励：金币 {fmt(battle.reward?.gold)} / 经验{" "}
-                        {fmt(battle.reward?.experience)}
-                    </p>
-                    <JsonDetails title="战斗返回记录" value={battle} />
-                </details>
-            ))}
-        </div>
     );
 }

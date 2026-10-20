@@ -19,6 +19,7 @@ from guild_manager_bench.api.workbench_events import apply_event, set_phase
 from guild_manager_bench.api.workbench_models import CreateBatch, RunSpec, SchedulerSettings
 from guild_manager_bench.api.workbench_lock import FileLease
 from guild_manager_bench.api.workbench_watch import WatchJournal
+from guild_manager_bench.api.monster_display import monster_stages
 from guild_manager_bench.game.presets import DataPreset
 
 ACTIVE = {"queued", "starting", "running", "stopping"}
@@ -156,7 +157,11 @@ class Workbench:
         self.get(job_id)
         if job_id not in self._watch:
             self._watch[job_id] = WatchJournal(self.root / job_id / "events.jsonl")
-        return self._watch[job_id].read(attempt)
+        return {**self._watch[job_id].read(attempt), "monster_stages": self.monster_stages(job_id)}
+
+    def monster_stages(self, job_id: str) -> dict[str, str]:
+        job = self.get(job_id)
+        return monster_stages(self.presets.get(job["config"]["preset"]))
 
     def create_batch(self, request: CreateBatch) -> dict[str, Any]:
         if self.failure:

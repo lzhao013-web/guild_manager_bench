@@ -5,6 +5,9 @@ import {
 } from "@phosphor-icons/react";
 import { duration, fmt, isActive, modelEntries, PHASE, short } from "./model";
 import { Portrait, Vital } from "./SceneParts";
+import { MonsterBadges } from "./MonsterBadges";
+import { ModelCallStats } from "./ModelCallStats";
+import { monsterClassification } from "./monsterModel";
 import { StatusBadge } from "./ui";
 import { MonitorPreviews } from "./MonitorPreviews";
 import { ATTEMPT_STATUS, attemptLabel, livePosition } from "./watchModel";
@@ -99,16 +102,21 @@ export function WatchMonitor({ job, page, live, frame, frames, records, position
                 </section>
                 <section className="monitor-monsters" aria-label="怪物摘要">
                     <button className="monitor-section-link" disabled={!onFocus} onClick={() => inspect({ module: "monsters" })}>怪物{monsters ? ` ${monsters.length}` : "未记录"}</button>
-                    {monsters?.slice(0, 4).map(monster => <button key={monster.monster_id as string} title={monster.name} aria-label={`查看怪物 ${monster.name}`} disabled={!onFocus}
+                    {monsters?.slice(0, 4).map(monster => <button key={monster.monster_id as string} title={`${monster.name} · ${monsterClassification(monster)}`} aria-label={`查看怪物 ${monster.name}`} aria-description={monsterClassification(monster)} disabled={!onFocus}
                         onClick={() => inspect({ module: "monsters", selection: { kind: "monster", id: monster.monster_id as string } })}>
-                        <Portrait monster id={monster.archetype_id as string} name={monster.name!} /><span>{monster.name}</span>
+                        <Portrait monster id={monster.archetype_id as string} name={monster.name!} />
+                        <span className="monitor-monster-info"><strong>{monster.name}</strong><MonsterBadges monster={monster} compact /></span>
                     </button>)}
                     {monsters && monsters.length > 4 && <button className="monitor-more" aria-label={`查看全部 ${monsters.length} 个怪物`} disabled={!onFocus} onClick={() => inspect({ module: "monsters" })}>+{monsters.length - 4}</button>}
                     {monsters?.length === 0 && <span className="muted">此时没有怪物记录</span>}
                 </section>
                 <MonitorPreviews observation={observation || null} frame={frame} frames={frames} onFrame={onFrame} onFocus={onFocus} />
                 <button className={`monitor-model ${text ? "has-output" : "is-pending"}`} aria-label="查看完整模型输出" title={body} disabled={!onFocus} onClick={() => inspect({ module: "models" })}>
-                    <span className="monitor-row-label">{!model?.text && model?.reasoning ? "API 推理摘要" : "模型"}</span><span className="monitor-model-excerpt">{body}</span><ArrowsOutSimple size={12} />
+                    <span className="monitor-row-label">{!model?.text && model?.reasoning ? "推理" : "模型"}</span>
+                    <span className="monitor-model-content">
+                        {model && <ModelCallStats model={model} live={following && isActive(job)} compact />}
+                        {(text || !model) && <span className="monitor-model-excerpt">{body}</span>}
+                    </span><ArrowsOutSimple size={12} />
                 </button>
             </div>}
             <footer className="monitor-controls">

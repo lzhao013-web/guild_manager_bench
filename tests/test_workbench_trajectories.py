@@ -123,7 +123,7 @@ def test_api_uses_same_archive_across_jobs_does_not_leak_raw_data_and_locates_ex
                  {"type": "turn_completed"}])
     original = path.read_bytes()
     for identity in ("old", "new"):
-        m.jobs[identity] = {"id": identity, "archive_id": "same", "config": {}}
+        m.jobs[identity] = {"id": identity, "archive_id": "same", "config": {"preset": "default"}}
     app = FastAPI()
     app.include_router(workbench_router(m))
     with TestClient(app) as client:
@@ -139,14 +139,14 @@ def test_api_uses_same_archive_across_jobs_does_not_leak_raw_data_and_locates_ex
         assert any(r["cursor"] == row["cursor"] for r in page.json()["records"])
         assert client.get("/api/workbench/jobs/new/trajectories?attempt=999999").status_code == 422
         assert client.get("/api/workbench/jobs/missing/trajectories").status_code == 404
-        m.jobs["bad"] = {"id": "bad", "archive_id": "../outside", "config": {}}
+        m.jobs["bad"] = {"id": "bad", "archive_id": "../outside", "config": {"preset": "default"}}
         assert client.get("/api/workbench/jobs/bad/trajectories").status_code == 400
     assert path.read_bytes() == original
 
 
 def test_missing_archive_reports_partial_coverage_instead_of_claiming_never_bought(tmp_path):
     m = manager(tmp_path)
-    m.jobs["waiting"] = {"id": "waiting", "archive_id": None, "config": {}}
+    m.jobs["waiting"] = {"id": "waiting", "archive_id": None, "config": {"preset": "default"}}
     app = FastAPI()
     app.include_router(workbench_router(m))
     with TestClient(app) as client:
@@ -156,7 +156,7 @@ def test_missing_archive_reports_partial_coverage_instead_of_claiming_never_boug
 
 def test_stopped_job_does_not_show_an_archived_attempt_as_still_running(tmp_path):
     m = manager(tmp_path)
-    m.jobs["one"] = {"id": "one", "archive_id": "same", "status": "interrupted", "config": {}}
+    m.jobs["one"] = {"id": "one", "archive_id": "same", "status": "interrupted", "config": {"preset": "default"}}
     write(m.archive_root / "same" / "trace.jsonl", [
         {"type": "turn_started", "turn": 2, "observation": {**observation(), "turn": 2}},
         {"type": "tool_result", "name": "purchase_upgrade", "arguments": {"upgrade_id": "training"}, "result": {"ok": True}},
@@ -172,7 +172,7 @@ def test_stopped_job_does_not_show_an_archived_attempt_as_still_running(tmp_path
 
 def test_locations_pin_the_log_origin_and_raw_offsets_cannot_read_archive_metadata(tmp_path):
     m = manager(tmp_path)
-    m.jobs["one"] = {"id": "one", "archive_id": "same", "config": {}}
+    m.jobs["one"] = {"id": "one", "archive_id": "same", "config": {"preset": "default"}}
     events = [{"type": "turn_started", "turn": 1, "observation": observation()},
               {"type": "tool_result", "name": "purchase_upgrade", "arguments": {"upgrade_id": "training"}, "result": {"ok": False, "error": "金币不足"}}]
     write(m.root / "one" / "events.jsonl", events, archived=False)
@@ -215,3 +215,33 @@ def test_numeric_references_are_resolved_only_with_recorded_mapping(tmp_path):
     write(unknown, [{"type": "turn_started", "turn": 1, "observation": before},
                     {"type": "tool_result", "name": "purchase_upgrade", "arguments": {"upgrade_id": 7}, "result": {"ok": False, "error": "无效引用"}}])
     assert TrajectoryStore().read(unknown, archived=True)["entries"][0]["subjects"] == []
+
+
+def test_merged_result_preserves_input_from_matching_call_without_mutating_raw_log(tmp_path):
+    path = tmp_path / "trace.jsonl"
+    events = [{"type": "turn_started", "turn": 1, "observation": observation()},
+              {"type": "tool_call", "name": "purchase_upgrade", "call_id": "first", "arguments": {"upgrade_id": "training"}},
+              {"type": "tool_call", "name": "purchase_upgrade", "call_id": "second", "arguments": {"upgrade_id": "other"}},
+              {"type": "tool_result", "name": "purchase_upgrade", "call_id": "second", "result": {"ok": False, "error": "未知升级"}},
+              {"type": "tool_result", "name": "purchase_upgrade", "call_id": "first", "result": {"ok": True}}]
+    write(path, events)
+    original = path.read_bytes()
+    rows = TrajectoryStore().read(path, archived=True)["entries"]
+    assert len(rows) == 2
+    assert rows[0]["event"]["arguments"] == {"upgrade_id": "training"}
+    assert rows[0]["subjects"] == [{"kind": "upgrade", "id": "training", "name": "训练场"}]
+    assert rows[1]["event"]["arguments"] == {"upgrade_id": "other"}
+    assert path.read_bytes() == original
+
+
+def test_absent_and_explicitly_empty_input_remain_distinguishable(tmp_path):
+    path = tmp_path / "trace.jsonl"
+    write(path, [{"type": "turn_started", "turn": 1, "observation": observation()},
+                 {"type": "tool_call", "name": "purchase_upgrade", "call_id": "empty", "arguments": {"upgrade_id": "training"}},
+                 {"type": "tool_result", "name": "purchase_upgrade", "call_id": "empty", "arguments": {}, "result": {"ok": False}},
+                 {"type": "tool_result", "name": "write_memo", "result": {"ok": True}},
+                 {"type": "tool_call", "name": "write_memo", "call_id": "pending"}])
+    rows = TrajectoryStore().read(path, archived=True)["entries"]
+    assert rows[0]["event"]["arguments"] == {}
+    assert "arguments" not in rows[1]["event"]
+    assert "arguments" not in rows[2]["event"]

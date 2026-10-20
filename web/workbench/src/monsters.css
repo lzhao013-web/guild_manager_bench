@@ -1,0 +1,44 @@
+.monster-badges {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: nowrap;
+    flex-shrink: 0;
+    gap: 4px;
+    width: max-content;
+    line-height: 17px;
+    vertical-align: middle;
+}
+.monster-badges > span {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 0 5px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 650;
+    white-space: nowrap;
+    overflow: visible;
+}
+.monster-badges svg { flex-shrink: 0; }
+.monster-stage.stage-t1 { color: var(--cyan-11); background: var(--cyan-3); border-color: var(--cyan-6); }
+.monster-stage.stage-t2 { color: var(--amber-11); background: var(--amber-3); border-color: var(--amber-6); }
+.monster-stage.stage-t3 { color: var(--violet-11); background: var(--violet-3); border-color: var(--violet-6); }
+.monster-stage.stage-challenge { color: var(--red-11); background: var(--red-3); border-color: var(--red-7); }
+.monster-role.role-normal { color: var(--gray-11); background: var(--gray-3); }
+.monster-role.role-elite { color: var(--violet-11); background: var(--violet-3); border-color: var(--violet-6); }
+.monster-role.role-boss { color: var(--amber-11); background: var(--amber-3); border-color: var(--amber-7); }
+.monster-stage.stage-unknown, .monster-role.role-unknown { color: var(--gray-11); background: var(--gray-3); }
+.monster-badges.is-compact { gap: 3px; line-height: 14px; }
+.monster-badges.is-compact > span { padding: 0 3px; gap: 2px; font-size: 10px; border-radius: 3px; }
+.monster-badges.is-compact svg { width: 10px; height: 10px; }
+.monitor-monster-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.monitor-monster-info > strong { font-size: 10px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.monitor-monsters .monster-badges, .monitor-monsters .monster-badges > span { overflow: visible; }
+.monitor-monsters > button:not(.monitor-section-link):not(.monitor-more) { min-height: 31px; }
+.scene-monster-card[data-monster-role="elite"] { border-inline-start: 3px solid var(--violet-8); }
+.scene-monster-card[data-monster-role="boss"] { border-inline-start: 3px solid var(--amber-8); }
+.scene-monster-card[data-monster-role="challenge"] { border-inline-start: 3px solid var(--red-8); }
+.overview-enemies .monster-badges { gap: 3px; }
+.overview-enemies button > span { gap: 3px; }
+.scene-entity-detail.entity-monster .monster-badges { margin-bottom: 8px; }

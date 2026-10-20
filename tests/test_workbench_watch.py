@@ -66,7 +66,7 @@ def test_partial_line_restart_and_retry_are_separate_attempts(tmp_path):
 def test_watch_api_checks_job_and_attempt_without_starting_worker(tmp_path):
     m = manager(tmp_path)
     job_id = "readonly"
-    m.jobs[job_id] = {"id": job_id}
+    m.jobs[job_id] = {"id": job_id, "config": {"preset": "default"}}
     directory = m.root / job_id
     directory.mkdir(parents=True)
     path = directory / "events.jsonl"
