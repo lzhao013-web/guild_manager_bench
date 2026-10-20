@@ -10,6 +10,7 @@ import {
 import { expect, it, vi } from "vitest";
 import { NewBatch, defaultDraft } from "./NewBatch";
 import { ModelPicker } from "./ModelPicker";
+import { ApiProfilesPanel } from "./ApiProfiles";
 import { safeTemplate } from "./model";
 import type { ApiProfile } from "./types";
 
@@ -284,4 +285,103 @@ it("配置列表失败时保留引用并报错，不把连接悄悄改成自定�
         profile.id,
     );
     expect(screen.queryByLabelText("API Key")).not.toBeInTheDocument();
+});
+
+function renderProfileEditor() {
+    const changed = vi.fn();
+    render(<Theme><ApiProfilesPanel profiles={[profile]} loading={false} onChanged={changed} onUse={vi.fn()} /></Theme>);
+    fireEvent.click(screen.getByRole("button", { name: "编辑 / 模型" }));
+    return changed;
+}
+
+it("编辑时自动明文读取 Key，不影响未修改连接获取模型，也不持久化密钥", async () => {
+    const store = vi.spyOn(Storage.prototype, "setItem");
+    const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(json({ api_key: "saved-visible-key" }));
+    renderProfileEditor();
+    const input = screen.getByLabelText("API Key", { exact: true });
+    await waitFor(() => expect(input).toHaveValue("saved-visible-key"));
+    expect(input).toHaveAttribute("type", "text");
+    expect(screen.getByRole("button", { name: "获取模型" })).toBeEnabled();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(fetch.mock.calls[0][0]).toBe("/api/workbench/api-profiles/saved-api/key");
+    expect(fetch.mock.calls[0][1]).toMatchObject({ method: "POST", cache: "no-store" });
+    expect(store).not.toHaveBeenCalled();
+});
+
+it("直接修改 Key 并保存，不需要额外更换凭证步骤", async () => {
+    const fetch = vi.spyOn(globalThis, "fetch")
+        .mockResolvedValueOnce(json({ api_key: "old-visible-key" }))
+        .mockResolvedValueOnce(json(profile));
+    const changed = renderProfileEditor();
+    const input = screen.getByLabelText("API Key", { exact: true });
+    await waitFor(() => expect(input).toHaveValue("old-visible-key"));
+    fireEvent.change(input, { target: { value: "new-visible-key" } });
+    expect(screen.getByRole("button", { name: "获取模型" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "保存 API 配置" }));
+    await waitFor(() => expect(changed).toHaveBeenCalledOnce());
+    expect(fetch.mock.calls[1][1]?.method).toBe("PUT");
+    expect(JSON.parse(fetch.mock.calls[1][1]?.body as string)).toMatchObject({ api_key: "new-visible-key", clear_api_key: false });
+    expect(screen.queryByDisplayValue("new-visible-key")).not.toBeInTheDocument();
+});
+
+it("清空输入再保存直接移除已保存 Key，不把留空当保留", async () => {
+    const fetch = vi.spyOn(globalThis, "fetch")
+        .mockResolvedValueOnce(json({ api_key: "key-to-clear" }))
+        .mockResolvedValueOnce(json({ ...profile, credential_present: false }));
+    const changed = renderProfileEditor();
+    const input = screen.getByLabelText("API Key", { exact: true });
+    await waitFor(() => expect(input).toHaveValue("key-to-clear"));
+    fireEvent.change(input, { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存 API 配置" }));
+    await waitFor(() => expect(changed).toHaveBeenCalledOnce());
+    expect(JSON.parse(fetch.mock.calls[1][1]?.body as string)).toMatchObject({ api_key: null, clear_api_key: true });
+});
+
+it("读取 Key 期间不能提交，避免加载中的空值清除旧 Key", async () => {
+    let resolve!: (response: Response) => void;
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(() => new Promise<Response>(r => { resolve = r; }));
+    renderProfileEditor();
+    expect(screen.getByLabelText("API Key", { exact: true })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "保存 API 配置" })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("API 配置名称"), { target: { value: "只改名字" } });
+    fireEvent.submit(screen.getByLabelText("API 配置名称").closest("form")!);
+    expect(fetch).toHaveBeenCalledOnce();
+    await act(async () => resolve(json({ api_key: "loaded-key" })));
+    expect(screen.getByLabelText("API Key", { exact: true })).toHaveValue("loaded-key");
+    expect(screen.getByRole("button", { name: "保存 API 配置" })).toBeEnabled();
+});
+
+it("旧 Key 读取失败时允许直接输入替换，但不能误保存空值", async () => {
+    const fetch = vi.spyOn(globalThis, "fetch")
+        .mockResolvedValueOnce(json({ detail: "系统凭证缺失" }, 503))
+        .mockResolvedValueOnce(json(profile));
+    const changed = renderProfileEditor();
+    expect(await screen.findByRole("alert")).toHaveTextContent("系统凭证缺失");
+    expect(screen.getByRole("button", { name: "保存 API 配置" })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("API Key", { exact: true }), { target: { value: "repaired-key" } });
+    expect(screen.getByRole("button", { name: "保存 API 配置" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "保存 API 配置" }));
+    await waitFor(() => expect(changed).toHaveBeenCalledOnce());
+    expect(JSON.parse(fetch.mock.calls[1][1]?.body as string).api_key).toBe("repaired-key");
+});
+
+it("关闭编辑后迟到的 Key 响应不能覆盖新窗口", async () => {
+    let resolve!: (response: Response) => void;
+    vi.spyOn(globalThis, "fetch")
+        .mockImplementationOnce(() => new Promise<Response>(r => { resolve = r; }))
+        .mockResolvedValueOnce(json({ api_key: "current-key" }));
+    renderProfileEditor();
+    fireEvent.click(screen.getByRole("button", { name: "关闭" }));
+    fireEvent.click(screen.getByRole("button", { name: "编辑 / 模型" }));
+    await waitFor(() => expect(screen.getByLabelText("API Key", { exact: true })).toHaveValue("current-key"));
+    await act(async () => resolve(json({ api_key: "stale-key" })));
+    expect(screen.getByLabelText("API Key", { exact: true })).toHaveValue("current-key");
+});
+
+it("未单独保存 Key 的配置保持空白，不把环境 Key 回填", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(json({ api_key: null }));
+    renderProfileEditor();
+    await waitFor(() => expect(screen.getByRole("button", { name: "保存 API 配置" })).toBeEnabled());
+    expect(screen.getByLabelText("API Key", { exact: true })).toHaveValue("");
+    expect(screen.getByRole("button", { name: "获取模型" })).toBeEnabled();
 });

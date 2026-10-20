@@ -102,11 +102,26 @@ def main():
             page.locator(".api-profile-table tbody tr").get_by_role(
                 "button", name="编辑 / 模型", exact=True
             ).click()
-            expect(page.get_by_label("API Key", exact=True)).to_have_value("")
+            key_input = page.get_by_label("API Key", exact=True)
+            expect(key_input).to_have_value("fake-secret")
+            expect(key_input).to_have_attribute("type", "text")
+            expect(page.get_by_role("button", name="获取模型", exact=True)).to_be_enabled()
+            expect(page.get_by_role("checkbox")).to_have_count(0)
+            page.get_by_role("dialog").evaluate(
+                "node => Promise.all(node.getAnimations().map(animation => animation.finished))"
+            )
+            page.screenshot(path=str(directory / "api-key-editor.png"), full_page=True)
             page.get_by_label("API 配置名称", exact=True).fill("改名后的 API 配置")
             page.get_by_role("button", name="保存 API 配置", exact=True).click()
             expect(page.locator(".api-profile-table tbody tr")).to_contain_text("改名后的 API 配置")
             assert list(vault.values.values()) == ["fake-secret"]
+            page.locator(".api-profile-table tbody tr").get_by_role("button", name="编辑 / 模型", exact=True).click()
+            expect(key_input).to_have_value("fake-secret")
+            key_input.fill("replacement-fake-key")
+            expect(page.get_by_role("button", name="获取模型", exact=True)).to_be_disabled()
+            page.get_by_role("button", name="保存 API 配置", exact=True).click()
+            expect(page.get_by_role("dialog")).to_have_count(0)
+            assert list(vault.values.values()) == ["replacement-fake-key"]
             page.reload()
             expect(page.get_by_role("heading", name="API 配置", exact=True)).to_be_visible()
             page.get_by_role("button", name="API 配置", exact=True).click()
@@ -115,6 +130,19 @@ def main():
             page.set_viewport_size({"width": 390, "height": 844})
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
             page.screenshot(path=str(directory / "api-profiles-mobile.png"), full_page=True)
+            page.locator(".api-profile-table tbody tr").get_by_role("button", name="编辑 / 模型", exact=True).click()
+            expect(key_input).to_have_value("replacement-fake-key")
+            assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+            key_input.fill("")
+            page.get_by_role("button", name="保存 API 配置", exact=True).click()
+            expect(page.get_by_role("dialog")).to_have_count(0)
+            assert vault.values == {}
+            expect(page.locator(".api-profile-table tbody tr")).to_contain_text("使用环境变量")
+            metadata = page.request.get(base + "/api/workbench/api-profiles")
+            assert "replacement-fake-key" not in metadata.text()
+            stored = page.evaluate("JSON.stringify([localStorage, sessionStorage])")
+            assert "fake-secret" not in stored and "replacement-fake-key" not in stored
+            assert all(not any(secret in path.read_text(encoding="utf-8") for secret in ("fake-secret", "replacement-fake-key")) for path in (m.root / "api_profiles.json", m.root / job["id"] / "state.json", m.root / job["id"] / "events.jsonl"))
             page.get_by_role("button", name="删除 API 配置 改名后的 API 配置", exact=True).click()
             page.get_by_role("button", name="确认删除", exact=True).click()
             expect(page.locator(".api-profile-table tbody tr")).to_have_count(0)
@@ -152,7 +180,7 @@ def main():
             )
         assert not errors, errors
         print(
-            f"API 配置浏览器验收通过：保存、模型目录、复用运行、无密钥回传、编辑保留密钥、刷新、删除和窄屏。截图：{directory}"
+            f"API 配置浏览器验收通过：保存、模型目录、复用运行、列表不含密钥、明文编辑 Key、刷新后保留、清空和删除、无持久明文及窄屏。截图：{directory}"
         )
     finally:
         server.should_exit = True

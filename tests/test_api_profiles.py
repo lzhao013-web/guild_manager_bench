@@ -151,7 +151,7 @@ def catalog_server():
         thread.join()
 
 
-def test_profile_survives_reload_but_never_exposes_or_persists_secret(tmp_path):
+def test_profile_survives_reload_without_secret_in_metadata_or_listing(tmp_path):
     vault = MemoryVault()
     store = ApiProfiles(tmp_path, vault)
     profile = store.save(
@@ -343,6 +343,53 @@ def test_api_crud_catalog_and_origin_checks_do_not_return_secret(tmp_path, monke
         assert client.delete(f"/api/workbench/api-profiles/{profile['id']}").status_code == 200
         assert client.post(f"/api/workbench/api-profiles/{profile['id']}/models").status_code == 404
         assert client.get("/api/workbench/api-profiles").json()["profiles"] == []
+
+
+def test_key_editor_reads_updates_and_clears_saved_key_without_exposing_environment(tmp_path, monkeypatch):
+    m = manager(tmp_path)
+    m.api_profiles = ApiProfiles(m.root, MemoryVault())
+    app = FastAPI()
+    app.include_router(workbench_router(m))
+    monkeypatch.setenv("OPENAI_API_KEY", "environment-key-must-not-be-returned")
+    with TestClient(app) as client:
+        body = {"name": "可直接编辑 Key", "base_url": "https://example.test/v1", "api_key": "saved-editor-key"}
+        profile = client.post("/api/workbench/api-profiles", json=body).json()
+        route = f"/api/workbench/api-profiles/{profile['id']}"
+        blocked = client.post(route + "/key", headers={"Origin": "https://other.example"})
+        assert blocked.status_code == 403
+        assert "saved-editor-key" not in blocked.text
+        read = client.post(route + "/key", headers={"Origin": "http://testserver"})
+        assert read.status_code == 200
+        assert read.json() == {"api_key": "saved-editor-key"}
+        assert read.headers["cache-control"] == "no-store"
+        assert "saved-editor-key" not in client.get("/api/workbench/api-profiles").text
+        changed = {**body, "api_key": "edited-editor-key"}
+        response = client.put(route, json=changed)
+        assert response.status_code == 200
+        assert "edited-editor-key" not in response.text
+        assert client.post(route + "/key").json() == {"api_key": "edited-editor-key"}
+        cleared = {**body, "api_key": None, "clear_api_key": True}
+        assert client.put(route, json=cleared).status_code == 200
+        assert client.post(route + "/key").json() == {"api_key": None}
+        assert m.api_profiles.vault.values == {}
+        assert "environment-key-must-not-be-returned" not in client.post(route + "/key").text
+        metadata = m.api_profiles.path.read_text(encoding="utf-8")
+        assert all(key not in metadata for key in ("saved-editor-key", "edited-editor-key", "environment-key-must-not-be-returned"))
+
+
+def test_key_editor_reports_deleted_profile_and_missing_key_without_mutating_config(tmp_path):
+    m = manager(tmp_path)
+    m.api_profiles = ApiProfiles(m.root, MemoryVault())
+    profile = m.api_profiles.save(ProfileWrite(name="凭证已丢失", base_url="https://example.test/v1", api_key="missing-key"))
+    m.api_profiles.vault.values.clear()
+    app = FastAPI()
+    app.include_router(workbench_router(m))
+    with TestClient(app) as client:
+        assert client.post("/api/workbench/api-profiles/not-found/key").status_code == 404
+        response = client.post(f"/api/workbench/api-profiles/{profile['id']}/key")
+        assert response.status_code == 503
+        assert "missing-key" not in response.text
+        assert m.api_profiles.list() == [profile]
 
 
 def test_selected_profile_reaches_real_worker_without_key_in_job_metadata(tmp_path):
