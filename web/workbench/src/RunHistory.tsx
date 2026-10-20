@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@radix-ui/themes";
-import { ArrowSquareOut, MagnifyingGlass } from "@phosphor-icons/react";
+import { ArrowDown, ArrowSquareOut, ArrowUp, ArrowsDownUp, MagnifyingGlass } from "@phosphor-icons/react";
 import { api } from "./api";
-import { fmt, STATUS } from "./model";
-import { historyRuns } from "./runCatalog";
+import { fmt } from "./model";
+import { HISTORY_COLUMNS, historyCreatedAt, historyPreset, historyRuns, historyStatus, sortHistoryRuns } from "./runCatalog";
+import type { HistorySort, HistorySortField } from "./runCatalog";
 import { Empty } from "./ui";
 import type { Archive, Job } from "./types";
 
@@ -25,15 +26,35 @@ export function RunHistory({ jobs, batchId, onBatchChange, onResume, onOpen, onC
     });
     const [search, setSearch] = useState("");
     const [filter, setFilter] = useState("all");
+    const [preset, setPreset] = useState("all");
+    const [sort, setSort] = useState<HistorySort>({ field: "created_at", direction: "desc" });
     const [checked, setChecked] = useState<string[]>([]);
-    const rows = historyRuns(jobs, query.data?.runs || []).filter(row => {
+    const allRows = historyRuns(jobs, query.data?.runs || []);
+    // 续跑会把 run 移出历史；保留正在使用的筛选项，不能让控件静默变回“全部”。
+    const presets = [...new Set([...allRows.map(historyPreset), ...(preset === "all" ? [] : [preset])])]
+        .sort((a, b) => a.localeCompare(b));
+    const rows = sortHistoryRuns(allRows.filter(row => {
         const status = row.job?.status || row.archive!.status;
-        const text = `${row.job?.name || ""} ${row.job?.config.model || row.archive?.model || ""} ${row.id} ${row.job?.config.preset || row.archive?.preset || ""}`;
-        return text.toLowerCase().includes(search.toLowerCase()) && (filter === "all" || status === filter) && (batchId === "all" || row.job?.batch_id === batchId);
-    });
+        const text = `${row.job?.name || ""} ${row.job?.config.model || row.archive?.model || ""} ${row.id} ${historyPreset(row)}`;
+        return text.toLowerCase().includes(search.toLowerCase()) && (filter === "all" || status === filter)
+            && (preset === "all" || historyPreset(row) === preset)
+            && (batchId === "all" || row.job?.batch_id === batchId);
+    }), sort);
     const selectedRows = rows.filter(row => checked.includes(row.id));
     const selected = selectedRows.flatMap(row => row.job ? [row.job] : []);
     const curveId = (row: typeof rows[number]) => row.job?.id || `archive:${row.archive!.run_id}`;
+    function sortHeader(field: HistorySortField) {
+        const column = HISTORY_COLUMNS[field];
+        const active = sort.field === field;
+        const next = active ? sort.direction === "asc" ? "desc" : "asc" : column.initial;
+        const Icon = active ? sort.direction === "asc" ? ArrowUp : ArrowDown : ArrowsDownUp;
+        return <th scope="col" className="history-sort-column" aria-sort={active ? sort.direction === "asc" ? "ascending" : "descending" : undefined}>
+            <button type="button" title={`点击按${column.label}${next === "asc" ? "升序" : "降序"}排列`}
+                onClick={() => setSort({ field, direction: next })}>
+                {column.label}<Icon size={13} aria-hidden="true" />
+            </button>
+        </th>;
+    }
     return (
         <section className="archives-section">
             <p className="callout">
@@ -49,6 +70,10 @@ export function RunHistory({ jobs, batchId, onBatchChange, onResume, onOpen, onC
                     <option value="all">所有批次</option>
                     {[...new Map(jobs.map(job => [job.batch_id, job.batch_name]))].map(([id, name]) => <option key={id} value={id}>{name}</option>)}
                 </select>
+                <select aria-label="筛选历史 preset" value={preset} onChange={event => setPreset(event.target.value)}>
+                    <option value="all">所有 preset</option>
+                    {presets.map(value => <option key={value} value={value}>{value || "未记录 preset"}</option>)}
+                </select>
                 <select aria-label="筛选历史状态" value={filter} onChange={event => setFilter(event.target.value)}>
                     <option value="all">所有历史状态</option>
                     <option value="completed">已完成</option>
@@ -58,6 +83,7 @@ export function RunHistory({ jobs, batchId, onBatchChange, onResume, onOpen, onC
                 </select>
                 <Button highContrast variant="soft" onClick={() => void query.refetch()}>刷新归档</Button>
             </div>
+            <p className="history-count muted" role="status">显示 {rows.length} / {allRows.length} 个历史 run</p>
             {selectedRows.length > 0 && <div className="selection-toolbar">
                 <strong>已选择 {selectedRows.length} 个 run</strong>
                 <Button highContrast size="1" variant="soft" onClick={() => onCompare(selectedRows.map(curveId))}>对比选中曲线{selectedRows.length > 4 ? "（前 4 个）" : ""}</Button>
@@ -75,12 +101,14 @@ export function RunHistory({ jobs, batchId, onBatchChange, onResume, onOpen, onC
                             <th className="checkbox-col"><input type="checkbox" aria-label="选择当前筛选的全部历史 run"
                                 checked={rows.length > 0 && rows.every(row => checked.includes(row.id))}
                                 onChange={event => setChecked(event.target.checked ? rows.map(row => row.id) : [])} /></th>
-                            <th>Run / 模型</th><th>Preset</th><th>当前状态</th><th>进度</th><th>Rank Score</th><th>操作</th>
+                            {sortHeader("name")}{sortHeader("preset")}{sortHeader("status")}{sortHeader("turns")}{sortHeader("score")}{sortHeader("created_at")}<th>操作</th>
                         </tr></thead>
                         <tbody>{rows.map(row => {
                             const { job, archive } = row;
                             const status = job?.status || archive!.status;
                             const failure = job ? job.error : archive!.failure_reason;
+                            const timestamp = historyCreatedAt(row);
+                            const created = timestamp == null ? null : new Date(timestamp);
                             return <tr key={row.id}>
                                 <td><input type="checkbox" aria-label={`选择历史 ${job?.name || archive!.model || row.id}`}
                                     checked={checked.includes(row.id)}
@@ -89,10 +117,14 @@ export function RunHistory({ jobs, batchId, onBatchChange, onResume, onOpen, onC
                                     <small className="archive-id">{job?.archive_id || archive?.run_id || "未生成存档"}</small>
                                     {failure && <small className="history-error">{failure}</small>}
                                 </td>
-                                <td>{job?.config.preset || archive?.preset || "未知"}</td>
-                                <td>{STATUS[status as Job["status"]] || status}</td>
+                                <td>{historyPreset(row) || "未记录"}</td>
+                                <td>{historyStatus(row) || "未记录"}</td>
                                 <td className="mono">{job ? (job.turn == null ? "未开始" : `${job.turn} / ${job.max_turns}`) : archive!.turns}</td>
                                 <td className="mono">{fmt(job ? job.last_score : archive!.rank_score)}</td>
+                                <td className="archive-created mono">{created ? <time dateTime={row.created_at} title={row.created_at}>
+                                    {created.toLocaleDateString("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit" })}
+                                    <small>{created.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false })}</small>
+                                </time> : "未记录"}</td>
                                 <td><div className="archive-actions">
                                     {job && <Button highContrast size="1" variant="soft" onClick={() => onOpen(job)}>查看详情</Button>}
                                     <Button highContrast size="1" variant="soft" onClick={() => onCompare([curveId(row)])}>查看曲线</Button>

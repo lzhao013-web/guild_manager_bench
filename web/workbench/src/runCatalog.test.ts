@@ -1,5 +1,7 @@
 import { expect, it } from "vitest";
-import { buildRunCatalog, canonicalRunIds, historyRuns } from "./runCatalog";
+import type { Archive } from "./types";
+import { buildRunCatalog, canonicalRunIds, historyPreset, historyRuns, sortHistoryRuns } from "./runCatalog";
+import type { HistorySort } from "./runCatalog";
 import { testArchive, testJob } from "./test-jobs";
 
 it("同一存档只保留最新状态，顺序不依赖 UUID，也不重复累加续跑恢复的用量", () => {
@@ -51,4 +53,48 @@ it("未归档的失败和取消留在历史，同时保留只读 CLI 存档", ()
     const rows = historyRuns(catalog.runs, [testArchive(), testArchive("cli", { status: "running" })]);
     expect(rows).toHaveLength(3);
     expect(rows.map(row => row.id)).toEqual(expect.arrayContaining(["failed", "cancelled", "cli"]));
+});
+
+const sortedArchives: Archive[] = [
+    testArchive("a", { created_at: "2026-10-18T12:00:00+08:00", model: "Model2", rank_score: 0, turns: 2 }),
+    testArchive("b", { created_at: "2026-10-18T05:00:00Z", model: "Model10", rank_score: 100, turns: 9 }),
+    testArchive("unknown-date", { created_at: null, model: "", rank_score: 50, turns: 0 }),
+];
+const sortedJobs = [testJob("c", { archive_id: null, status: "failed", created_at: "2026-10-18T06:00:00Z", name: "Model1", last_score: null, turn: null })];
+
+it.each<[HistorySort, string[]]>([
+    [{ field: "created_at", direction: "desc" }, ["c", "b", "a", "unknown-date"]],
+    [{ field: "created_at", direction: "asc" }, ["a", "b", "c", "unknown-date"]],
+    [{ field: "score", direction: "desc" }, ["b", "unknown-date", "a", "c"]],
+    [{ field: "score", direction: "asc" }, ["a", "unknown-date", "b", "c"]],
+    [{ field: "turns", direction: "desc" }, ["b", "a", "unknown-date", "c"]],
+    [{ field: "turns", direction: "asc" }, ["unknown-date", "a", "b", "c"]],
+    [{ field: "name", direction: "asc" }, ["c", "a", "b", "unknown-date"]],
+    [{ field: "name", direction: "desc" }, ["b", "a", "c", "unknown-date"]],
+])("历史排序 %s 支持受控 run 与 CLI，缺失值始终置后且不修改原列表", (sort, expected) => {
+    const rows = historyRuns(sortedJobs, sortedArchives);
+    const before = rows.map(row => row.id);
+    expect(sortHistoryRuns(rows, sort).map(row => row.id)).toEqual(expected);
+    expect(rows.map(row => row.id)).toEqual(before);
+});
+
+it("preset 与评分均以当前展示值为准，不使用受控 run 旧存档的过时值排序", () => {
+    const job = testJob("managed", { status: "failed", last_score: null });
+    const rows = historyRuns([job], [testArchive("same-archive", { preset: "advanced", rank_score: 9999 }), testArchive("zero", { rank_score: 0 })]);
+    expect(historyPreset(rows.find(row => row.job)!)).toBe("default");
+    expect(sortHistoryRuns(rows, { field: "score", direction: "desc" }).map(row => row.id)).toEqual(["zero", "same-archive"]);
+});
+
+it.each<[HistorySort, string[]]>([
+    [{ field: "preset", direction: "asc" }, ["advanced", "default", "full", "unknown"]],
+    [{ field: "preset", direction: "desc" }, ["full", "default", "advanced", "unknown"]],
+    [{ field: "status", direction: "asc" }, ["default", "full", "advanced", "unknown"]],
+    [{ field: "status", direction: "desc" }, ["advanced", "full", "default", "unknown"]],
+])("表头排序 %s 使用 preset 和当前显示状态，未记录值不参与正常值排序", (sort, expected) => {
+    const rows = historyRuns([testJob("default", { archive_id: null, status: "failed" })], [
+        testArchive("full", { preset: "full", status: "completed" }),
+        testArchive("advanced", { preset: "advanced", status: "interrupted" }),
+        testArchive("unknown", { preset: "", status: "" }),
+    ]);
+    expect(sortHistoryRuns(rows, sort).map(row => row.id)).toEqual(expected);
 });

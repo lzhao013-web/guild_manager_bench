@@ -1311,7 +1311,16 @@ pre {
   margin-top: 0;
 }
 .archives-section .runs-toolbar {
-  padding: 8px 0 18px;
+  flex-wrap: wrap;
+  padding: 8px 0 10px;
+}
+.archives-section .runs-toolbar > select {
+  width: auto;
+  max-width: min(190px, 100%);
+}
+.history-count {
+  margin: 0 0 12px;
+  font-size: 12px;
 }
 .archive-table-wrap {
   overflow: auto;
@@ -1322,6 +1331,49 @@ pre {
 }
 .archive-table tbody tr {
   cursor: default;
+}
+.archive-table th.history-sort-column {
+  padding: 0;
+}
+.history-sort-column > button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  padding: 11px 14px;
+  color: inherit;
+  font: inherit;
+  white-space: nowrap;
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+.history-sort-column > button:hover {
+  color: var(--accent-11);
+  background: var(--accent-2);
+}
+.history-sort-column > button:focus-visible {
+  outline: 2px solid var(--accent-9);
+  outline-offset: -2px;
+}
+.history-sort-column svg {
+  flex-shrink: 0;
+  color: var(--gray-9);
+}
+.history-sort-column[aria-sort] > button,
+.history-sort-column[aria-sort] svg {
+  color: var(--accent-11);
+}
+.archive-created {
+  white-space: nowrap;
+  font-size: 11px;
+}
+.archive-created small {
+  display: block;
+  color: var(--gray-11);
+  margin-top: 4px;
 }
 .archive-id {
   display: block;
