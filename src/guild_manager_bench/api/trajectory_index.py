@@ -5,6 +5,8 @@ import json
 import re
 from typing import Any
 
+from guild_manager_bench.api.action_output import action_output
+
 
 COLLECTIONS = {
     "member": ("adventurers", "adventurer_id"),
@@ -75,13 +77,27 @@ class TrajectoryIndex:
         if previous is None:
             self.ordinal += 1
         ordinal = self.rows[previous]["ordinal"] if previous is not None else self.ordinal
-        args = event.get("arguments") or {}
+        # 部分旧日志只在调用时记录参数，结果合并时不能将其覆盖为空对象。
+        recorded_args = "arguments" in event
+        arguments = event.get("arguments")
+        if not recorded_args and previous is not None:
+            call = self.rows[previous]["event"]
+            recorded_args = "arguments" in call
+            arguments = call.get("arguments")
+        args = arguments or {}
         subjects, names = self._subjects(name, args, result, self.observation, after)
         # 仅投影行动所需字段，不发送提示词、原始模型返回或完整局面。
-        compact = {k: result[k] for k in ("ok", "error", "event", "_llm_refs", "memo") if k in result}
+        compact = {k: result[k] for k in ("ok", "error", "event", "_llm_refs", "memo", "monster_refresh") if k in result}
+        output = action_output(result, self.observation, result.get("_observation_after") or {},
+                               members=tuple(subject["id"] for subject in subjects if subject["kind"] == "member"))
+        if output:
+            compact["_action_output"] = output
+        if "monsters" in result:
+            compact["monsters"] = [{key: item[key] for key in ("monster_id", "name", "stats", "reward", "traits", "tier") if key in item}
+                                   for item in result["monsters"]]
         if "turn_result" in result:
             compact["turn_result"] = {"battles": [
-                {k: b[k] for k in ("adventurer_name", "monster_name", "won", "outcome") if k in b}
+                {k: b[k] for k in ("adventurer_name", "monster_name", "won", "outcome", "reward") if k in b}
                 for b in result["turn_result"].get("battles", [])
             ]}
         tokens = set(re.findall(r"[\w-]+", json.dumps([args, compact], ensure_ascii=False)))
@@ -91,7 +107,8 @@ class TrajectoryIndex:
             "turn": event.get("turn", self.turn), "ordinal": ordinal, "cursor": cursor,
             "at": at, "lifecycle": self.attempt_states.get(attempt, "uncommitted"),
             "subjects": subjects, "names": used_names,
-            "event": {"type": kind, "name": name, "arguments": args, "result": compact},
+            "event": {"type": kind, "name": name, "result": compact,
+                      **({"arguments": arguments} if recorded_args else {})},
         }
         if previous is not None:
             self.rows[previous] = row

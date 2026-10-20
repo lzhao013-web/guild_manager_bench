@@ -110,6 +110,8 @@ class WatchJournal:
         records: list[dict[str, Any]] = []
         # 流式碎片折叠为每次调用的两条文本记录，避免成千上万的 DOM 节点。
         deltas: dict[str, dict[str, Any]] = {}
+        outputs = {self.trajectory.rows[index]["cursor"]: self.trajectory.rows[index]["event"]["result"].get("_action_output")
+                   for index in self.trajectory.by_attempt.get(key, [])}
         with self.path.open("rb") as stream:
             stream.seek(selected["start"])
             while stream.tell() < end:
@@ -134,6 +136,12 @@ class WatchJournal:
                     deltas[kind] = record
                 elif kind == "tool_call_delta":
                     continue  # 最终工具参数位于 tool_call / model_response。
+                elif kind == "tool_result":
+                    event = {k: v for k, v in event.items() if k not in {"raw", "config", "data"}}
+                    result = event.get("result") or {}
+                    output = outputs.get(record["cursor"])
+                    if output:
+                        event = {**event, "result": {**result, "_action_output": output}}
                 elif kind == "turn_completed":
                     event = {"type": kind, "turn": selected["turn"]}
                 elif kind in {"run_completed", "run_failed"}:

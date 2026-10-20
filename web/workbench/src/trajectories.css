@@ -57,7 +57,8 @@
 .trajectory-when small { font-size: 10px; color: var(--gray-11); }
 .trajectory-content { min-width: 0; flex: 1; }
 .trajectory-content > strong { display: block; font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
-.trajectory-content > small { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 11px; color: var(--gray-11); line-height: 1.6; }
+.trajectory-content > small { display: block; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; color: var(--gray-11); line-height: 1.6; }
+.trajectory-content > .action-input-preview { color: var(--accent-11); margin-top: 4px; }
 .trajectory-tags { display: flex; flex-wrap: wrap; gap: 4px 7px; margin-top: 5px; font-size: 10px; color: var(--gray-11); }
 .trajectory-tags .mono { overflow-wrap: anywhere; }
 .trajectory-pagination button { border: 1px solid var(--border); border-radius: 4px; padding: 4px 8px; color: var(--gray-12); background: var(--gray-3); cursor: pointer; }

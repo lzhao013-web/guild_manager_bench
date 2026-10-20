@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { TrajectoryOverview } from "./TrajectoryOverview";
 import { ArrowSquareOut, ClockCounterClockwise, MagnifyingGlass, CaretDown } from "@phosphor-icons/react";
 import { ACTION_STATUS, actionSummary } from "./actionModel";
+import { inputPreview } from "./actionInputs";
 import { TOOLS } from "./model";
 import type { Selection } from "./sceneModel";
 import { useTrajectories } from "./TrajectoryContext";
@@ -30,7 +31,8 @@ export function TrajectoryResult({ row, subject }: { row: TrajectoryRow; subject
         <span className="trajectory-when"><b>第 {row.turn ?? "未知"} 回合</b><small>操作 {row.ordinal}</small></span>
         <span className="trajectory-content"><strong>{title}</strong>
             {title !== entry.title && <small>对应行动：{entry.title}</small>}
-            {actionSummary(entry) && <small>{actionSummary(entry)}</small>}
+            <small>{actionSummary(entry)}</small>
+            <small className="action-input-preview">输入 · {inputPreview(entry.input)}</small>
             <span className="trajectory-tags"><span className={`action-status is-${entry.status}`}>{ACTION_STATUS[entry.status]}</span>
                 <span>{LIFECYCLE[row.lifecycle]}</span>
                 {history.viewTurn != null && row.turn != null && row.turn > history.viewTurn && <span>后续回合</span>}

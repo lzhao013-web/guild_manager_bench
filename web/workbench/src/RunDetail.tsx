@@ -13,6 +13,7 @@ import {
 import { useEvents, useLiveWatch } from "./api";
 import { ACTION_STATUS, actionEntries, actionGroups, actionSummary, recentActions } from "./actionModel";
 import type { ActionEntry } from "./actionModel";
+import { ActionResults } from "./ActionResultPanel";
 import { watchFrames } from "./watchModel";
 import "./actions.css";
 import {
@@ -63,8 +64,7 @@ export function RunDetail({
             <header><strong>{entry.title}</strong><span className={`action-status is-${entry.status}`}>{ACTION_STATUS[entry.status]}</span>
                 <span className="muted mono">{time(entry.frame.record.at)}</span></header>
             {entry.rolledBack && <p className="action-rollback">本次尝试已回滚，不再生效</p>}
-            <p>{actionSummary(entry)}</p>
-            {entry.effects.length > 0 && <details><summary>{entry.effects.length} 项实际局面变化</summary><ul>{entry.effects.map((effect, index) => <li key={index}>{effect}</li>)}</ul></details>}
+            <ActionResults entry={entry} />
             <JsonDetails title="原始参数与返回" value={entry.frame.record.event} />
         </article>;
     }

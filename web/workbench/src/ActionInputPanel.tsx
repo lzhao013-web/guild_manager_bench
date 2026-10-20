@@ -1,0 +1,29 @@
+import type { ActionInput, InputValue } from "./actionInputs";
+
+function Value({ value }: { value: InputValue }) {
+    if (value.kind === "array" && value.children.length) {
+        if (value.children.every(field => field.value.kind === "object")) {
+            const columns = [...new Map(value.children.flatMap(row => row.value.children.map(field => [field.key, field.label] as const)))];
+            if (columns.length) return <table className="action-input-table"><thead><tr><th scope="col">序号</th>{columns.map(([key, label]) => <th scope="col" key={key}>{label} <code>{key}</code></th>)}</tr></thead>
+                <tbody>{value.children.map((row, i) => <tr key={row.key}><th scope="row">{row.label.startsWith("派遣") ? row.label : i + 1}</th>{columns.map(([key]) => {
+                    const field = row.value.children.find(field => field.key === key);
+                    return <td key={key}>{field ? <Value value={field.value} /> : "未提供"}</td>;
+                })}</tr>)}</tbody></table>;
+        }
+        return <ol className="action-input-list">{value.children.map(field => <li key={field.key}><Value value={field.value} /></li>)}</ol>;
+    }
+    if (value.children.length) return <dl className="action-input-fields">{value.children.map(field => <div key={field.key} className={`action-input-field ${field.value.children.length ? "is-group" : ""}`}>
+        <dt>{field.label}{field.label !== field.key && <code>{field.key}</code>}</dt>
+        <dd><Value value={field.value} /></dd>
+    </div>)}</dl>;
+    return <><span className="action-input-value">{value.text}</span>{value.original !== null && <code className="action-input-original">原值：{value.original}</code>}</>;
+}
+
+export function ActionInputs({ input }: { input: ActionInput }) {
+    return <section className="action-inputs" aria-label="输入参数">
+        <h4>输入参数</h4>
+        {input.state === "missing" ? <p className="muted">原日志未记录输入参数，不能从结果反推。</p>
+            : input.value.kind === "object" && !input.value.children.length ? <p className="muted">无输入参数（已记录为空对象）</p>
+            : <Value value={input.value} />}
+    </section>;
+}

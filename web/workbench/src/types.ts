@@ -155,7 +155,7 @@ export interface EventPage {
 }
 export interface Archive {
     run_id: string;
-    created_at: string;
+    created_at: string | null;
     status: string;
     turns: number;
     preset: string;

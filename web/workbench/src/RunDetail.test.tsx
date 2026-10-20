@@ -39,7 +39,8 @@ it("运行列表侧栏也保留具体对象与影响，不再被原始 600 事�
     fireEvent.click(screen.getByRole("button", { name: "行动时间线" }));
     expect(screen.getAllByText("购买全局加成 验收训练场", { exact: true })).toHaveLength(1);
     expect(screen.getByText("连续查询 · 2 次", { exact: true }).closest("details")).not.toHaveAttribute("open");
-    expect(screen.getByText("1 项实际局面变化", { exact: true })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "实际局面变化" })).toBeVisible();
+    expect(screen.getAllByText("金币 100 → 40（-60）", { exact: true }).every(node => !node.closest("details"))).toBe(true);
     expect(requests.some(path => path.endsWith("/watch"))).toBe(true);
     expect(requests.every(path => path.includes("/watch") || path.includes("/events?"))).toBe(true);
 });

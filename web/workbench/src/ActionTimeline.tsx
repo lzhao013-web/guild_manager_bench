@@ -3,6 +3,8 @@ import { RunTrajectories } from "./RunTrajectories";
 import { useTrajectories } from "./TrajectoryContext";
 import type { ReactNode } from "react";
 import { ACTION_STATUS, actionEntries, actionGroups, actionSummary, describeAction, recentActions } from "./actionModel";
+import { ActionResults } from "./ActionResultPanel";
+import { inputPreview } from "./actionInputs";
 import type { ActionEntry } from "./actionModel";
 import { time } from "./model";
 import type { WatchFrame } from "./watchModel";
@@ -25,7 +27,7 @@ export function ActionTimeline({ frames, frame, active, following, rolledBack, o
     const recent = useMemo(() => recentActions(frames.filter(item => item.cursor <= (frame?.cursor ?? 0))), [frames, frame?.cursor]);
     const showingRecent = following && frame && !frame.failed && !["tool_call", "tool_result"].includes(frame.record.event.type);
     const detailFrame = showingRecent ? recent.actions[0]?.frame || recent.queries.at(-1)?.frame || frame : frame;
-    const selected = detailFrame && describeAction(detailFrame);
+    const selected = detailFrame && (recent.entries.find(entry => entry.frame.cursor === detailFrame.cursor) || describeAction(detailFrame));
     const actions = entries.filter(entry => entry.kind === "action");
     const queries = entries.filter(entry => entry.kind === "query");
     const viewport = useRef<HTMLDivElement>(null);
@@ -49,7 +51,8 @@ export function ActionTimeline({ frames, frame, active, following, rolledBack, o
             onClick={() => onFrame(entry.frame)}>
             <span className="action-entry-time mono">{time(entry.frame.record.at)}</span>
             <span><strong>{entry.title}</strong>
-                {actionSummary(entry) && <small>{actionSummary(entry)}</small>}
+                <small>{actionSummary(entry)}</small>
+                {entry.kind !== "system" && <small className="action-input-preview">输入 · {inputPreview(entry.input)}</small>}
                 <span className="action-entry-meta"><span className={`action-status is-${entry.status}`}>{entry.kind === "system" && entry.status === "recorded" ? "运行提示" : ACTION_STATUS[entry.status]}</span>
                     {(entry.rolledBack || rolledBack && entry.kind === "action") && <span className="action-rollback">已回滚，不再生效</span>}</span>
             </span>
@@ -66,9 +69,7 @@ export function ActionTimeline({ frames, frame, active, following, rolledBack, o
             </header>
             {showingRecent && detailFrame !== frame && <p className="muted">最近操作详情。观战仍跟随最新局面。</p>}
             {rolledBack && selected.kind === "action" && <p className="action-detail-warning">本次尝试已回滚。以下是当时的执行结果，不代表当前生效局面。</p>}
-            {selected.summary && <p className={selected.status === "failed" ? "action-detail-warning" : "action-detail-summary"}>{selected.summary}</p>}
-            {selected.effects.length > 0 && <section className="action-effects"><h4>实际局面变化</h4><ul>{selected.effects.map((effect, i) => <li key={i}>{effect}</li>)}</ul></section>}
-            {selected.kind === "action" && selected.status === "succeeded" && !selected.effects.length && <p className="muted">原记录未包含可展示的局面变化，不推算额外效果。</p>}
+            <ActionResults entry={selected} />
             {renderDetails(selected.frame)}
         </> : <p className="scene-empty">选择一条行动查看对象、结果和局面变化</p>}
     </section>;

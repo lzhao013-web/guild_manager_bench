@@ -39,7 +39,9 @@ def action_events():
         result = invoke()
         if result.get("ok") and not name.startswith("get_"):
             result = {**result, "_observation_after": observation()}
-        events.append({"type": "tool_result", "turn": 1, "name": name, "arguments": arguments, "call_id": call_id, "result": result})
+        # 覆盖只在调用记录参数的旧日志，结果不能将输入覆盖为空。
+        repeated = {} if name in {"allocate_experience", "equip_item"} else {"arguments": arguments}
+        events.append({"type": "tool_result", "turn": 1, "name": name, **repeated, "call_id": call_id, "result": result})
         if result.get("ok") and result.get("event", {}).get("summary"):
             summaries[name] = result["event"]["summary"]
         return result
@@ -50,6 +52,7 @@ def action_events():
     call("recruit_adventurer", {"candidate_id": candidate["candidate_id"]}, lambda: tools.recruit_adventurer(session, candidate["candidate_id"]))
     member = observation()["adventurers"][0]
     member_id = member["adventurer_id"]
+    call("get_crafting", {}, lambda: tools.get_crafting(session))
     call("get_party", {}, lambda: tools.get_party(session))
     call("get_party", {}, lambda: tools.get_party(session))
     call("allocate_experience", {"adventurer_id": member_id, "amount": 100}, lambda: tools.allocate_experience(session, member_id, 100))
@@ -118,12 +121,39 @@ def main():
                 expect(row).to_have_count(1)
                 row.click()
                 expect(detail.get_by_role("heading", name=summaries[name], exact=True)).to_be_visible()
+                inputs = detail.get_by_role("region", name="输入参数", exact=True)
+                expect(inputs).to_be_visible()
+                result_event = next(e for e in events if e["type"] == "tool_result" and e["name"] == name and e["result"].get("event", {}).get("summary") == summaries[name])
+                call_args = next(e["arguments"] for e in events if e["type"] == "tool_call" and e["call_id"] == result_event["call_id"])
+                for key, value in call_args.items():
+                    expect(inputs.get_by_text(key, exact=True)).to_be_visible()
+                    expect(inputs).to_contain_text(str(value))
+                expect(detail.get_by_role("region", name="执行结果", exact=True)).not_to_be_empty()
+                returned = detail.get_by_role("region", name="业务返回", exact=True)
+                expect(returned).to_be_visible()
+                assert inputs.evaluate("element => !element.closest('details')"), "输入必须保持常驻"
+                assert inputs.bounding_box()["height"] <= 140, (name, inputs.bounding_box())
+                assert inputs.bounding_box()["y"] < returned.bounding_box()["y"], "输入不能被移到底部"
             expect(detail.get_by_role("heading", name="实际局面变化", exact=True)).to_be_visible()
             expect(detail.get_by_text("攻击", exact=False).first).to_be_visible()
             expect(page.get_by_text("历史局面", exact=True)).to_be_visible()
             page.screenshot(path=str(directory / "purchase-light.png"), full_page=True)
+            # 整局索引也必须保留原调用输入，而不只在所选回合中有效。
+            page.get_by_role("button", name="整局检索", exact=True).click()
+            page.get_by_label("筛选轨迹操作", exact=True).select_option("allocate_experience")
+            page.get_by_role("button", name=f"查看轨迹 回合1 {summaries['allocate_experience']}", exact=True).click()
+            expect(detail.get_by_role("region", name="输入参数", exact=True)).to_contain_text("分配经验数量")
+            expect(detail.get_by_role("region", name="输入参数", exact=True)).to_contain_text("100")
+            page.screenshot(path=str(directory / "whole-run-parameters-light.png"), full_page=True)
+            page.get_by_role("button", name="所选回合", exact=True).click()
             timeline.locator(".action-entry").filter(has_text="配置主动技能").click()
             expect(detail).to_contain_text("停用技能")
+            inputs = detail.get_by_role("region", name="输入参数", exact=True)
+            expect(inputs).to_contain_text("技能优先级")
+            expect(inputs).to_contain_text("空列表 []")
+            expect(detail.get_by_role("region", name="业务返回", exact=True)).to_contain_text("默认顺序")
+            assert inputs.bounding_box()["height"] <= 170, inputs.bounding_box()
+            page.screenshot(path=str(directory / "tactics-parameters-light.png"), full_page=True)
             timeline.locator(".action-entry.failed").click()
             expect(detail.locator(".action-detail-warning")).to_be_visible()
             queries = timeline.locator("details.is-query")
@@ -131,9 +161,20 @@ def main():
             expect(queries.first).not_to_have_attribute("open", "")
             queries.last.locator("summary").click()
             expect(queries.last.get_by_role("button", name="定位行动 查看队伍", exact=True)).to_have_count(2)
+            queries.last.get_by_role("button", name="定位行动 查看制作配方", exact=True).click()
+            recipes = detail.get_by_role("region", name="返回的制作配方", exact=True)
+            expect(recipes).to_be_visible()
+            actual_recipe = next(recipe for event in events if event["type"] == "tool_result" and event["name"] == "get_crafting"
+                                 for recipe in event["result"]["crafting_recipes"] if recipe["recipe_id"] == "recipe_t1_heavy_sword")
+            recipes.get_by_role("searchbox").fill(actual_recipe["name"])
+            expect(recipes).to_contain_text("可制作")
+            page.screenshot(path=str(directory / "returned-recipes-light.png"), full_page=True)
             queries.last.locator("summary").click()
             timeline.get_by_role("button", name=f"定位行动 {summaries['end_turn']}", exact=True).click()
             expect(detail.get_by_text(f"{member_name} → {monster_name}：", exact=False).first).to_be_visible()
+            expect(detail.get_by_role("region", name="输入参数", exact=True)).to_contain_text("派遣 1")
+            expect(detail.get_by_role("region", name="输入参数", exact=True).get_by_role("table")).to_be_visible()
+            expect(detail.get_by_role("region", name="已记录的战斗结果", exact=True)).to_contain_text("金币")
             page.get_by_role("button", name="深色", exact=True).click()
             page.screenshot(path=str(directory / "battle-dark.png"), full_page=True)
             for width, height in [(1280, 720), (390, 844)]:
