@@ -46,7 +46,9 @@ def test_recovery_talent_does_not_replace_a_payable_finisher(talents, talent_id,
         Combatant("foe", foe),
     )
     assert result.outcome == "left_win"
-    assert result.events[0].skill_id == "finisher"
+    assert result.events[-1].skill_id == "finisher"
+    assert result.actions_taken == 1
+    assert result.events[0].skill_id == talent_id
 
 
 def test_reflux_is_used_when_original_skill_is_unaffordable_then_allows_casting(talents):
@@ -60,22 +62,22 @@ def test_reflux_is_used_when_original_skill_is_unaffordable_then_allows_casting(
         Combatant("hero", stats, CombatResources(100, 0), (spell, talents["talent_mana_reflux"])),
         Combatant("foe", foe), max_actions=4,
     )
-    assert [event.skill_id for event in result.events] == ["talent_mana_reflux", "spell", "spell", None]
-    assert result.events[0].damage == 5
+    assert [event.skill_id for event in result.events] == ["talent_mana_reflux", "spell", "spell", None, None]
+    assert result.events[0].damage == 0
     assert result.left_resources.current_mp == 0
 
 
-def test_emergency_care_precedes_reflux_when_no_other_active_skill_can_be_used(talents):
+def test_emergency_care_precedes_reflux_without_consuming_normal_action(talents):
     stats = CombatStats(hp=100, mp=20, attack=5, defense=0, speed=100, recovery=0)
     foe = CombatStats(hp=1000, mp=0, attack=1, defense=0, speed=1, recovery=0)
     result = run_auto_battle(
         Combatant("hero", stats, CombatResources(30, 0), tuple(talents[key] for key in ("talent_mana_reflux", "talent_emergency_care"))),
         Combatant("foe", foe), max_actions=2,
     )
-    assert [event.skill_id for event in result.events] == ["talent_emergency_care", "talent_mana_reflux"]
-    assert result.left_resources.current_hp == 42
+    assert [event.skill_id for event in result.events] == ["talent_emergency_care", "talent_mana_reflux", None, None]
+    assert result.left_resources.current_hp == 55
     assert result.left_resources.current_mp == 12
-    assert [event.damage for event in result.events] == [5, 5]
+    assert [event.damage for event in result.events] == [0, 0, 5, 5]
 
 
 def test_current_character_and_equipment_actives_precede_recovery_talents(definition, talents):
@@ -134,8 +136,8 @@ def test_recorded_recovery_regressions_remain_winnable(definition, node_id, clas
 
 
 @pytest.mark.parametrize("node_id,gold,experience", [
-    ("craft_standardization", 150, 150),
-    ("training_manual", 240, 800),
+    ("craft_standardization", 150, 50),
+    ("training_manual", 100, 80),
 ])
 def test_economy_revised_purchase_boundary_and_atomic_failure(definition, node_id, gold, experience):
     node = next(item for item in definition.content.global_upgrades if item.upgrade_id == node_id)
@@ -149,7 +151,7 @@ def test_economy_revised_purchase_boundary_and_atomic_failure(definition, node_i
     assert all(amount == 0 for amount in after.materials.values())
     assert node_id in after.unlocked_upgrade_ids
     assert node.craft_gold_discount_percent == (15 if node_id == "craft_standardization" else 0)
-    assert node.hunt_experience_bonus_percent == (15 if node_id == "training_manual" else 0)
+    assert node.hunt_experience_bonus_percent == (6 if node_id == "training_manual" else 0)
     for field in ("gold", "experience_pool"):
         short = replace(state, **{field: getattr(state, field) - 1})
         before = build_observation(definition, short)
@@ -163,7 +165,7 @@ def test_craft_standardization_requires_only_early_iron_and_blacksmith(definitio
     assert node.required_upgrade_ids == ("blacksmith",)
     assert {c.material_id: c.quantity for c in node.material_costs} == {"iron_ore": 4}
     state = replace(
-        new_game(definition), gold=150, experience_pool=150,
+        new_game(definition), gold=150, experience_pool=50,
         materials={"iron_ore": 4}, unlocked_upgrade_ids=frozenset({"blacksmith"}),
     )
     after = apply_preparation_action(definition, state, PurchaseUpgradeAction(node.upgrade_id))

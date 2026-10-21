@@ -50,6 +50,7 @@ class CombatEvent:
     healing_target_hp: int | None = None
     status_id: str | None = None
     status_name: str | None = None
+    mp_restored: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,6 +74,7 @@ class _RuntimeCombatant:
     stats: CombatStats
     resources: CombatResources
     active_skills: tuple[Skill, ...]
+    automatic_skills: tuple[Skill, ...]
     passive_skills: tuple[Skill, ...]
     used_once_skill_ids: set[str]
     statuses: list[_RuntimeStatus]
@@ -168,6 +170,9 @@ def run_auto_battle(
                 actions_taken=action_index - 1,
                 time_elapsed=time_elapsed,
             )
+
+        if actor.automatic_skills:
+            _trigger_action_start_recovery(actor, target, action_index, time_elapsed, events, record_events=record_events)
 
         action_event = _perform_action(
             action_index,
@@ -381,6 +386,12 @@ def _apply_active_skill_effects(
         if effect.effect_type == "mp_restore":
             recipient = actor if effect.target == "self" else target
             _apply_mp_restore(recipient, int(effect.value))
+            continue
+
+        if effect.effect_type == "mp_restore_percent":
+            recipient = actor if effect.target == "self" else target
+            amount = max(effect.minimum, int(recipient.stats.mp * float(effect.value)))
+            _apply_mp_restore(recipient, amount)
 
     return total_damage, total_healing, healing_target
 
@@ -522,6 +533,38 @@ def _apply_status_ticks(
     )
 
 
+def _trigger_action_start_recovery(
+    actor: _RuntimeCombatant,
+    target: _RuntimeCombatant,
+    action_index: int,
+    time_elapsed: int,
+    events: list[CombatEvent],
+    *,
+    record_events: bool,
+) -> None:
+    for skill in actor.automatic_skills:
+        # 没有MP池的角色不消耗一次性纯回魔技能。
+        if actor.stats.mp == 0 and all(e.effect_type in {"mp_restore", "mp_restore_percent"} for e in skill.effects):
+            continue
+        if not _can_use_active_skill(skill, actor, target, action_index=action_index):
+            continue
+        actor.used_once_skill_ids.add(skill.skill_id)
+        old_mp = actor.resources.current_mp
+        damage, healing, healing_target = _apply_active_skill_effects(skill, actor, target, action_index=action_index)
+        if record_events:
+            events.append(CombatEvent(
+                action_index=action_index, time_elapsed=time_elapsed, action_type="skill",
+                actor_side=actor.side, actor_id=actor.combatant_id,
+                target_side=target.side, target_id=target.combatant_id,
+                damage=damage, target_hp=target.resources.current_hp,
+                skill_id=skill.skill_id, skill_name=skill.name,
+                healing=healing,
+                healing_target_side=healing_target.side if healing_target is not None else None,
+                healing_target_hp=healing_target.resources.current_hp if healing_target is not None else None,
+                mp_restored=actor.resources.current_mp-old_mp,
+            ))
+
+
 def _select_active_skill(
     actor: _RuntimeCombatant,
     target: _RuntimeCombatant,
@@ -556,7 +599,8 @@ def _build_runtime_combatant(side: CombatSide, combatant: Combatant) -> _Runtime
         combatant_id=combatant.combatant_id,
         stats=combatant.stats,
         resources=resources,
-        active_skills=_active_skills(combatant.skills),
+        active_skills=_active_skills(combatant.skills, "action"),
+        automatic_skills=_active_skills(combatant.skills, "action_start"),
         passive_skills=_passive_skills(combatant.skills),
         used_once_skill_ids=set(),
         statuses=[],
@@ -564,10 +608,10 @@ def _build_runtime_combatant(side: CombatSide, combatant: Combatant) -> _Runtime
 
 
 @lru_cache(maxsize=4096)
-def _active_skills(skills: tuple[Skill, ...]) -> tuple[Skill, ...]:
+def _active_skills(skills: tuple[Skill, ...], trigger: str) -> tuple[Skill, ...]:
     return tuple(
         sorted(
-            (skill for skill in skills if skill.kind == "active"),
+            (skill for skill in skills if skill.kind == "active" and skill.trigger == trigger),
             key=lambda item: (-item.priority, item.skill_id),
         )
     )

@@ -129,6 +129,7 @@ export interface SkillCondition {
 export interface SkillEffect {
     type: string;
     value: number | null;
+    minimum?: number;
     stat: string | null;
     target: string;
     status: { name: string; duration: number; effects: SkillEffect[] } | null;
@@ -136,6 +137,7 @@ export interface SkillEffect {
 export interface SceneSkill extends GameEntity {
     skill_id: string;
     kind: string;
+    trigger?: "action" | "action_start";
     mp_cost: number;
     free: boolean;
     once_per_battle: boolean;
@@ -169,6 +171,7 @@ export function effectText(effect: SkillEffect): string {
     if (type === "heal") return `为${target}恢复 ${value} 点生命`;
     if (type === "heal_percent") return `为${target}恢复 ${percent(value)} 最大生命`;
     if (type === "mp_restore") return `为${target}恢复 ${value} 点法力`;
+    if (type === "mp_restore_percent") return `为${target}恢复 ${percent(value)} 最大法力${effect.minimum ? `，至少 ${effect.minimum} MP` : ""}`;
     if (type === "stat_bonus")
         return `${target}${STAT_NAMES[effect.stat!] || effect.stat} ${signed(value!)}`;
     if (type === "stat_multiplier")

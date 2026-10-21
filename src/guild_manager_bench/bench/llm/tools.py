@@ -1020,7 +1020,7 @@ _TACTICS_SCHEMA: dict[str, Any] = {
     "name": "configure_tactics",
     "description": (
         "覆盖设置角色的主动技能释放顺序与停用列表（填当前拥有的主动技能字符串 ID，被动技能不受影响）。"
-        "未列入的可用技能按默认顺序排在后面；两项均传 [] 恢复默认。"
+        "未列入的普通主动按默认顺序排在后面。自动回复只能停用，不能排序。两项均传 [] 恢复默认。"
     ),
     "parameters": {
         "type": "object",
@@ -1030,12 +1030,12 @@ _TACTICS_SCHEMA: dict[str, Any] = {
             "skill_priority": {
                 "type": "array", "uniqueItems": True,
                 "items": {"type": "string", "minLength": 1},
-                "description": "按优先级从高到低排列的主动技能字符串 ID，不可与 disabled_skills 重叠。",
+                "description": "按优先级从高到低排列的普通主动技能字符串 ID，不接受自动回复技能，不可与 disabled_skills 重叠。",
             },
             "disabled_skills": {
                 "type": "array", "uniqueItems": True,
                 "items": {"type": "string", "minLength": 1},
-                "description": "停用的主动技能字符串 ID 列表。",
+                "description": "停用的普通主动或自动回复技能字符串 ID 列表。",
             },
         },
         "additionalProperties": False,

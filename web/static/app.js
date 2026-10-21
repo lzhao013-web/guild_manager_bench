@@ -882,6 +882,9 @@ function talentRowHtml(obs, upgrade) {
   const economy = [
     upgrade.craft_gold_discount_percent ? `后续制作金币费用降低 ${upgrade.craft_gold_discount_percent}%` : "",
     upgrade.hunt_experience_bonus_percent ? `后续胜利讨伐经验增加 ${upgrade.hunt_experience_bonus_percent}%` : "",
+    upgrade.hunt_gold_bonus_percent ? `后续胜利讨伐金币增加 ${upgrade.hunt_gold_bonus_percent}%` : "",
+    upgrade.elite_boss_gold_bonus_percent ? `精英、首领金币额外增加 ${upgrade.elite_boss_gold_bonus_percent}%` : "",
+    upgrade.monster_refresh_discount_percent ? `刷新基础价降低 ${upgrade.monster_refresh_discount_percent}%` : "",
   ].filter(Boolean).join(" · ");
   return `<div class="row upgrade-row" data-talent-id="${escapeHtml(upgrade.upgrade_id)}">
     <div class="row-title"><strong>${escapeHtml(upgrade.name)}</strong><span class="${upgrade.unlocked || upgrade.can_purchase ? 'ok' : 'danger'} small">第${upgrade.tier}阶 · ${status}</span></div>
@@ -1243,7 +1246,7 @@ function combatEventText(event) {
   return `
     <div class="combat-line">
       <span>#${event.action_index} t=${event.time_elapsed}</span>
-      <span>${escapeHtml(actor)} ${escapeHtml(action)}，造成 ${event.damage} 伤害，${escapeHtml(target)} HP ${event.target_hp}${healing}</span>
+      <span>${escapeHtml(actor)} ${escapeHtml(action)}，造成 ${event.damage} 伤害，${escapeHtml(target)} HP ${event.target_hp}${healing}${event.mp_restored ? `，自身恢复 ${event.mp_restored} MP` : ""}</span>
     </div>
   `;
 }
@@ -1669,7 +1672,7 @@ function skillTag(skill) {
 
 function skillDescText(skill) {
   const parts = [];
-  parts.push(skill.kind === "active" ? "主动" : "被动");
+  parts.push(skill.trigger === "action_start" ? "自动回复，自身行动开始，不占主动选择，不额外普攻" : skill.kind === "active" ? "主动" : "被动");
   if (skill.mp_cost > 0) parts.push(`消耗 ${skill.mp_cost} MP`);
   if (skill.free) parts.push("即时（附赠普攻）");
   if (skill.once_per_battle) parts.push("每场限一次");
@@ -1682,6 +1685,7 @@ function skillDescText(skill) {
     if (eff.type === "heal") parts.push(`治疗 ${eff.value} HP`);
     if (eff.type === "heal_percent") parts.push(`治疗 ${Math.round(eff.value * 100)}% 最大HP`);
     if (eff.type === "mp_restore") parts.push(`${eff.target === "self" ? "自身" : "目标"}恢复 ${eff.value} MP`);
+    if (eff.type === "mp_restore_percent") parts.push(`恢复 ${Math.round(eff.value * 100)}% 最大MP${eff.minimum ? `，至少 ${eff.minimum} MP` : ""}`);
     if (eff.type === "damage_bonus") parts.push(`伤害 +${eff.value}`);
     if (eff.type === "true_damage") parts.push(`真实伤害 ${eff.value}`);
     if (eff.type === "self_damage") parts.push(`自身受伤 ${eff.value}`);

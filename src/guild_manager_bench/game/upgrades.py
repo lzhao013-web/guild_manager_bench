@@ -40,6 +40,9 @@ class GlobalUpgrade:
     exclusive_upgrade_ids: tuple[str, ...] = ()
     craft_gold_discount_percent: int = 0
     hunt_experience_bonus_percent: int = 0
+    hunt_gold_bonus_percent: int = 0
+    elite_boss_gold_bonus_percent: int = 0
+    monster_refresh_discount_percent: int = 0
 
     def __post_init__(self) -> None:
         _require_non_empty("upgrade_id", self.upgrade_id)
@@ -53,6 +56,11 @@ class GlobalUpgrade:
         if self.craft_gold_discount_percent > 100:
             raise ValueError("craft_gold_discount_percent must be <= 100")
         _require_at_least("hunt_experience_bonus_percent", self.hunt_experience_bonus_percent, 0)
+        _require_at_least("hunt_gold_bonus_percent", self.hunt_gold_bonus_percent, 0)
+        _require_at_least("elite_boss_gold_bonus_percent", self.elite_boss_gold_bonus_percent, 0)
+        _require_at_least("monster_refresh_discount_percent", self.monster_refresh_discount_percent, 0)
+        if self.monster_refresh_discount_percent > 100:
+            raise ValueError("monster_refresh_discount_percent must be <= 100")
         object.__setattr__(self, "material_costs", tuple(self.material_costs))
         seen_materials: set[str] = set()
         for cost in self.material_costs:
@@ -193,6 +201,8 @@ def validate_upgrade_tree(upgrades: tuple[GlobalUpgrade, ...]) -> None:
     by_id = {u.upgrade_id: u for u in upgrades}
     if sum(u.craft_gold_discount_percent for u in upgrades) > 100:
         raise ValueError("combined crafting discount must be <= 100%")
+    if sum(u.monster_refresh_discount_percent for u in upgrades) > 100:
+        raise ValueError("combined monster refresh discount must be <= 100%")
     for upgrade in upgrades:
         for uid in upgrade.required_upgrade_ids + upgrade.exclusive_upgrade_ids:
             if uid not in by_id:

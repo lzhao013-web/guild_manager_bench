@@ -102,23 +102,30 @@ def test_winning_preview_never_clears_target_or_grants_rewards(game):
     assert log["tool_budget"]["battle_preview_used"] == 1
 
 
-def test_first_clear_rewards_once_and_stays_cleared_across_turns(game):
+@pytest.mark.parametrize("challenge,core", [
+    ("iron_colossus", "siege_core"),
+    ("blade_tyrant", "aegis_core"),
+    ("doom_oracle", "renewal_core"),
+])
+def test_first_clear_grants_only_one_core_and_stays_cleared_across_turns(game, challenge, core):
     tools, sid = game
     before = tools.get_state(sid)
-    result = kill(tools, sid)
+    result = kill(tools, sid, challenge)
     state = tools.get_state(sid)
-    assert state.defeated_challenge_ids == {"doom_oracle"}
-    assert state.gold == before.gold + 600
-    assert state.experience_pool == before.experience_pool + 1000
-    assert state.materials["renewal_core"] == 1
-    assert challenge_ids(state) == {"iron_colossus", "blade_tyrant"}
-    actual = tools.get_battle_log(sid, result["turn_result"]["battles"][0]["battle_id"], "events")
+    assert state.defeated_challenge_ids == {challenge}
+    assert state.gold == before.gold
+    assert state.experience_pool == before.experience_pool
+    assert state.materials[core] == 1
+    assert challenge_ids(state) == challenge_ids(before) - {challenge}
+    battle = result["turn_result"]["battles"][0]
+    assert battle["reward"] == {"gold": 0, "experience": 0, "materials": {core: 1}}
+    actual = tools.get_battle_log(sid, battle["battle_id"], "events")
     assert actual["battle"]["outcome"] == "left_win"
-    assert not tools.end_turn(sid, hunts=[{"adventurer_id": "hero_1", "monster_id": "challenge_doom_oracle"}])["ok"]
+    assert not tools.end_turn(sid, hunts=[{"adventurer_id": "hero_1", "monster_id": f"challenge_{challenge}"}])["ok"]
     assert tools.get_state(sid) is state
     assert tools.end_turn(sid, hunts=[])["ok"]
-    assert "doom_oracle" not in challenge_ids(tools.get_state(sid))
-    assert tools.get_state(sid).materials["renewal_core"] == 1
+    assert challenge not in challenge_ids(tools.get_state(sid))
+    assert tools.get_state(sid).materials[core] == 1
 
 
 def test_multiple_first_clears_and_duplicate_target_atomicity(game):
@@ -135,8 +142,8 @@ def test_multiple_first_clears_and_duplicate_target_atomicity(game):
     after = tools.get_state(sid)
     assert len(after.defeated_challenge_ids) == 3
     assert not challenge_ids(after)
-    assert after.gold - before.gold == 1600
-    assert after.experience_pool - before.experience_pool == 3750
+    assert after.gold == before.gold
+    assert after.experience_pool == before.experience_pool
     assert all(after.materials[core] == 1 for core in ("siege_core", "aegis_core", "renewal_core"))
 
 
@@ -169,6 +176,7 @@ def test_forecast_challenges_are_conditional_paginated_and_not_operable(game):
     })
     assert response["total_matches"] == 3 and response["next_offset"] == 1
     entry = response["items"][0]
+    assert entry["base_reward"] == {"gold": 0, "experience": 0, "materials": {"siege_core": 1}}
     assert "此前尚未击败" in entry["availability_condition"]
     assert "仅在此前尚未击败" in _format_tool_result_for_model("get_forecast", response)
     assert harness._turn_refs == refs
@@ -245,7 +253,7 @@ def test_observation_and_state_roundtrip_keep_clear_flags_and_ultimates(game):
     assert "doom_oracle" not in challenge_ids(result.state)
 
 
-def test_last_battle_rewards_can_be_spent_in_final_preparation(game):
+def test_last_battle_core_can_be_crafted_in_final_preparation(game):
     tools, sid = game
     tools._sessions[sid].state = replace(tools.get_state(sid), turn=34,
         current_monsters=spawn_monsters(tools.definition, 34))
@@ -256,7 +264,6 @@ def test_last_battle_rewards_can_be_spent_in_final_preparation(game):
     assert "当前为最终整备" in text
     assert tools.craft_equipment(sid, "recipe_seal_cleric")["ok"]
     assert tools.equip_item(sid, "hero_1", "eq_0001")["ok"]
-    assert tools.allocate_experience(sid, "hero_1", 1000)["ok"]
     assert not tools.end_turn(sid, hunts=[{"adventurer_id": "hero_1", "monster_id": "challenge_iron_colossus"}])["ok"]
     assert tools.end_turn(sid, hunts=[])["ok"]
     assert tools.get_state(sid).turn == 36
@@ -265,7 +272,7 @@ def test_last_battle_rewards_can_be_spent_in_final_preparation(game):
 def test_static_rules_disclose_challenges_without_strategy_recommendations():
     text = build_system_prompt(forecast_enabled=True,
         challenge_rules={"start_turn": 30, "last_hunt_turn": 34})
-    for fragment in ("T30", "T34", "T35", "tier=challenge", "ultimate", "不能拆回核心", "奖励", "满HP/MP"):
+    for fragment in ("T30", "T34", "T35", "tier=challenge", "ultimate", "不能拆回核心", "不奖励金币或经验", "满HP/MP"):
         assert fragment in text
     assert "普通怪物和未招募" in text
     assert "刷新的普通怪物和招募候选" in text

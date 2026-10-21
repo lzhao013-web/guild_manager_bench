@@ -49,10 +49,13 @@ test('legacy upgrades retain their original grouping and gold-only presentation'
 });
 
 test('economic effects are visible and data is HTML-escaped', () => {
-  const html = render([{ ...talent, branch: 'economy', name: '<research>', description: '<unsafe>', craft_gold_discount_percent: 25, hunt_experience_bonus_percent: 15 }]);
+  const html = render([{ ...talent, branch: 'economy', name: '<research>', description: '<unsafe>', craft_gold_discount_percent: 25, hunt_experience_bonus_percent: 15, hunt_gold_bonus_percent: 10, elite_boss_gold_bonus_percent: 18, monster_refresh_discount_percent: 20 }]);
   assert.ok(html.includes('经营支线'));
   assert.ok(html.includes('降低 25%'));
   assert.ok(html.includes('增加 15%'));
+  assert.ok(html.includes('金币增加 10%'));
+  assert.ok(html.includes('金币额外增加 18%'));
+  assert.ok(html.includes('刷新基础价降低 20%'));
   assert.ok(html.includes('&lt;research&gt;'));
   assert.ok(html.includes('&lt;unsafe&gt;'));
 });

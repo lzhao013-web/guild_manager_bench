@@ -161,7 +161,7 @@ export function SkillCards({ skills }: { skills: GameEntity[] | undefined }) {
                         <div>
                             <strong>{skill.name}</strong>
                             <span>
-                                {skill.kind === "active" ? "主动" : "被动"}
+                                {skill.trigger === "action_start" ? "自动回复" : skill.kind === "active" ? "主动" : "被动"}
                                 {skill.kind === "active" ? ` / ${skill.mp_cost} MP` : ""}
                             </span>
                         </div>
@@ -169,6 +169,7 @@ export function SkillCards({ skills }: { skills: GameEntity[] | undefined }) {
                     </header>
                     <p>{skill.effects.map(effectText).join("。")}</p>
                     <footer>
+                        {skill.trigger === "action_start" ? "自身行动开始，状态结算后；不占主动选择，不额外普攻 / " : ""}
                         {conditionText(skill.condition)}
                         {skill.once_per_battle ? " / 每场战斗限一次" : ""}
                     </footer>

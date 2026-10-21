@@ -54,6 +54,9 @@ export function TalentDetails({ talent, upgrades, onSelect }: {
             {typeof talent.party_size_bonus === "number" && talent.party_size_bonus !== 0 && <p>编队容量 +{talent.party_size_bonus}</p>}
             {typeof talent.craft_gold_discount_percent === "number" && talent.craft_gold_discount_percent !== 0 && <p>制作金币减免 {talent.craft_gold_discount_percent}%</p>}
             {typeof talent.hunt_experience_bonus_percent === "number" && talent.hunt_experience_bonus_percent !== 0 && <p>讨伐经验加成 {talent.hunt_experience_bonus_percent}%</p>}
+            {typeof talent.hunt_gold_bonus_percent === "number" && talent.hunt_gold_bonus_percent !== 0 && <p>讨伐金币加成 {talent.hunt_gold_bonus_percent}%</p>}
+            {typeof talent.elite_boss_gold_bonus_percent === "number" && talent.elite_boss_gold_bonus_percent !== 0 && <p>精英、首领金币额外加成 {talent.elite_boss_gold_bonus_percent}%</p>}
+            {typeof talent.monster_refresh_discount_percent === "number" && talent.monster_refresh_discount_percent !== 0 && <p>刷新基础价减免 {talent.monster_refresh_discount_percent}%</p>}
             <StatTiles stats={talent.stats as Record<string, number> | undefined} modifier />
             <h4>技能效果</h4>
             <SkillCards skills={talent.skills as GameEntity[] | undefined} />

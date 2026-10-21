@@ -4,8 +4,8 @@ challenges:
     min_turn: 30
     base_stats: {hp: 650, mp: 0, attack: 110, defense: 180, speed: 24, recovery: 0}
     base_reward:
-      gold: 550
-      experience: 1250
+      gold: 0
+      experience: 0
       materials: {siege_core: 1}
     skills: [challenge_repair]
 
@@ -14,8 +14,8 @@ challenges:
     min_turn: 30
     base_stats: {hp: 1500, mp: 0, attack: 260, defense: 75, speed: 90, recovery: 0}
     base_reward:
-      gold: 450
-      experience: 1500
+      gold: 0
+      experience: 0
       materials: {aegis_core: 1}
     skills: [challenge_charge, challenge_exhaustion]
 
@@ -24,8 +24,8 @@ challenges:
     min_turn: 30
     base_stats: {hp: 1800, mp: 0, attack: 90, defense: 60, speed: 35, recovery: 0}
     base_reward:
-      gold: 600
-      experience: 1000
+      gold: 0
+      experience: 0
       materials: {renewal_core: 1}
     skills: [challenge_doom, challenge_spark]
 

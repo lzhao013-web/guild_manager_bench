@@ -47,6 +47,8 @@ def battle_log_lines(result: Mapping[str, Any]) -> list[str]:
         if event["healing"]:
             text += (f"，治疗 {_SIDES[event['healing_target_side']]} {event['healing']}，"
                      f"治疗后HP {event['healing_target_hp']}")
+        if event.get("mp_restored"):
+            text += f"，自身恢复MP {event['mp_restored']}"
         lines.append(text)
     next_cursor = result["next_cursor"]
     lines.append("已返回全部事件。" if next_cursor is None else f"还有未返回的事件。保持 battle_id 和 detail 不变，下一页 cursor={next_cursor}。")

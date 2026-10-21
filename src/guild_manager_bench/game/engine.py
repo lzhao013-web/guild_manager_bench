@@ -213,6 +213,9 @@ def apply_preparation_action(
         for skill_id in (*action.skill_priority, *action.disabled_skills):
             if skill_id not in available:
                 raise GameError(f"不是该角色当前拥有的主动技能: {skill_id}")
+        automatic = {skill.skill_id for skill in available_adventurer_skills(definition, state, adventurer) if skill.trigger == "action_start"}
+        if automatic.intersection(action.skill_priority):
+            raise GameError("自动回复技能只能停用，不能设置优先级排序")
         return _replace_adventurer(state, replace(
             adventurer, skill_priority=action.skill_priority, disabled_skills=action.disabled_skills,
         ))
@@ -339,7 +342,9 @@ def monster_refresh_cost(definition: GameDefinition, state: GameState) -> int:
         raise GameError("手动刷新未启用")
     if is_finished(state) or (definition.rules.final_preparation_only and state.turn == state.max_turns):
         raise GameError("当前回合不能刷新怪物")
-    return definition.rules.monster_refresh.base_price(state.turn) * 2 ** state.monster_refresh_count
+    discount = sum(u.monster_refresh_discount_percent for u in _unlocked_upgrades(definition, state))
+    base = definition.rules.monster_refresh.base_price(state.turn)
+    return ((base * (100 - discount) + 99) // 100) * 2 ** state.monster_refresh_count
 
 
 def preview_monster_refresh(
@@ -479,7 +484,7 @@ def effective_adventurer_skills(
     }
     return tuple(
         replace(skill, priority=priorities[skill.skill_id])
-        if skill.kind == "active" and skill.skill_id in priorities else skill
+        if skill.kind == "active" and skill.trigger == "action" and skill.skill_id in priorities else skill
         for skill in skills
         if skill.kind != "active" or skill.skill_id not in disabled
     )
@@ -522,12 +527,17 @@ def effective_crafting_recipe(
 
 
 def effective_hunt_reward(
-    definition: GameDefinition, state: GameState, reward: RewardBundle,
+    definition: GameDefinition, state: GameState, reward: RewardBundle, *, tier: str,
 ) -> RewardBundle:
-    """返回胜利讨伐奖励，经验加成逐场向下取整。"""
+    """金币和经验分别从基础奖励计算，各自合并加成后一次向下取整。"""
 
-    bonus = sum(u.hunt_experience_bonus_percent for u in _unlocked_upgrades(definition, state))
-    return replace(reward, experience=reward.experience * (100 + bonus) // 100)
+    upgrades = _unlocked_upgrades(definition, state)
+    experience_bonus = sum(u.hunt_experience_bonus_percent for u in upgrades)
+    gold_bonus = sum(u.hunt_gold_bonus_percent for u in upgrades)
+    if tier in {"elite", "boss"}:
+        gold_bonus += sum(u.elite_boss_gold_bonus_percent for u in upgrades)
+    return replace(reward, gold=reward.gold * (100 + gold_bonus) // 100,
+                   experience=reward.experience * (100 + experience_bonus) // 100)
 
 
 def _apply_craft_action(
@@ -745,7 +755,7 @@ def _apply_hunt_action(
         ),
     )
     won = combat_result.outcome == "left_win"
-    reward = effective_hunt_reward(definition, state, monster.reward) if won else RewardBundle()
+    reward = effective_hunt_reward(definition, state, monster.reward, tier=monster.tier) if won else RewardBundle()
     updated_adventurer = replace(adventurer, resources=combat_result.left_resources)
     state = _replace_adventurer(state, updated_adventurer)
     if won:

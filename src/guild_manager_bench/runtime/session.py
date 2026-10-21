@@ -304,6 +304,7 @@ def _battle_to_dict(
                     "healing_target_hp": event.healing_target_hp,
                     "status_id": event.status_id,
                     "status_name": event.status_name,
+                    **({"mp_restored": event.mp_restored} if event.mp_restored else {}),
                 }
                 for event in result.events
             ],
@@ -898,6 +899,7 @@ def _restore_from_observation(definition: GameDefinition, obs: dict[str, Any]) -
             stat=d.get("stat"),
             target=d.get("target"),
             status=_status(d.get("status")),
+            minimum=d.get("minimum", 0),
         )
 
     def _skill(d: dict) -> Skill:
@@ -911,6 +913,7 @@ def _restore_from_observation(definition: GameDefinition, obs: dict[str, Any]) -
             priority=d.get("priority", 0),
             once_per_battle=d.get("once_per_battle", False),
             free=d.get("free", False),
+            trigger=d.get("trigger", "action"),
         )
 
     def _reward(d: dict) -> RewardBundle:

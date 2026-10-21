@@ -15,10 +15,10 @@ rules:
       per_turn: 0.15
   monster_refresh:
     base_prices:
-      - {from_turn: 1, gold: 15}
-      - {from_turn: 8, gold: 30}
-      - {from_turn: 18, gold: 50}
-      - {from_turn: 30, gold: 100}
+      - {from_turn: 1, gold: 10}
+      - {from_turn: 8, gold: 20}
+      - {from_turn: 18, gold: 40}
+      - {from_turn: 30, gold: 80}
   recruitment:
     candidate_count: 3
     first_turn_candidate_count: 10

@@ -25,7 +25,7 @@ upgrades:
     branch: economy
     tier: 2
     gold: 150
-    experience: 150
+    experience: 50
     materials: {iron_ore: 4}
     required: [blacksmith]
     description: 后续制作装备的金币费用降低15%，向上取整。材料消耗不变，不返还历史支出。
@@ -35,12 +35,12 @@ upgrades:
     name: 训练教范
     branch: economy
     tier: 2
-    gold: 240
-    experience: 800
-    materials: {herb: 8, arcane_dust: 6}
+    gold: 100
+    experience: 80
+    materials: {herb: 2, arcane_dust: 2}
     required: [training_grounds]
-    description: 后续胜利讨伐的经验奖励增加15%，逐场向下取整。需要用未来收入收回研究成本。
-    hunt_experience_bonus_percent: 15
+    description: 后续胜利讨伐经验增加6%，与后续教范加成相加，逐场一次向下取整。
+    hunt_experience_bonus_percent: 6
 
   # 武备：短战斗与输出。突击、终结为可选旁支。
   - id: training_grounds
@@ -154,11 +154,11 @@ upgrades:
     name: 应急救护
     branch: survival
     tier: 2
-    gold: 240
-    experience: 400
-    materials: {herb: 8, arcane_dust: 4}
+    gold: 200
+    experience: 300
+    materials: {herb: 4, arcane_dust: 2}
     required: [herb_garden]
-    description: 每战一次，HP不高于30%且职业、装备主动技能均不可用时，恢复最大HP的12%并普通攻击。优先于法力回流，仍占用本次主动技能选择。
+    description: 每战一次，自身行动开始且存活、HP不高于30%时恢复25%最大HP。不占普通主动选择，可停用。
     skills: [talent_emergency_care]
 
   - id: endurance_doctrine
@@ -238,11 +238,11 @@ upgrades:
     name: 法力回流
     branch: arcane
     tier: 3
-    gold: 400
-    experience: 650
-    materials: {arcane_dust: 12, soul_shard: 10}
-    required: [meditation_hall]
-    description: 每战一次，MP不高于25%且职业、装备主动技能及应急救护均不可用时，恢复12 MP并普通攻击。仍占用本次主动技能选择。
+    gold: 220
+    experience: 350
+    materials: {arcane_dust: 6, herb: 4}
+    required: [scout_network]
+    description: 每战一次，自身行动开始且MP不高于25%时，恢复30%最大MP，至少12MP，不超过上限。无MP池不触发。不占普通主动选择，可停用。
     skills: [talent_mana_reflux]
 
   - id: arcane_council
@@ -256,3 +256,116 @@ upgrades:
     excludes: [war_academy, paladin_order]
     description: 奥术终阶专精，与战争学院、圣殿骑士团互斥。不可洗点。
     stats: {mp: 16, attack: 10, speed: 6, hp: 12}
+
+  # 新节点追加，保留原25项的顺序和标识。
+  - id: training_manual_2
+    name: 进阶教范
+    branch: economy
+    tier: 3
+    gold: 130
+    experience: 160
+    materials: {mithril_shard: 4, spider_silk: 2, arcane_dust: 4}
+    required: [training_manual, scout_network]
+    description: 后续胜利讨伐经验再增加8%，与训练教范累计14%。
+    hunt_experience_bonus_percent: 8
+
+  - id: training_manual_3
+    name: 大师研习
+    branch: economy
+    tier: 4
+    gold: 180
+    experience: 280
+    materials: {dragon_scale: 8, dragon_blood: 5, soul_shard: 6}
+    required: [training_manual_2]
+    description: 后续胜利讨伐经验再增加12%，三阶累计26%。加成不追溯历史奖励。
+    hunt_experience_bonus_percent: 12
+
+  - id: trade_network
+    name: 狩猎委托
+    branch: economy
+    tier: 3
+    gold: 280
+    experience: 80
+    materials: {iron_ore: 6, beast_hide: 4, sharp_claw: 6}
+    required: [craft_standardization, scout_network]
+    description: 精英、首领胜利金币增加18%，手动刷新基础价降低10%。固定挑战不在高阶加成范围。
+    elite_boss_gold_bonus_percent: 18
+    monster_refresh_discount_percent: 10
+
+  - id: guild_contracts
+    name: 行会商路
+    branch: economy
+    tier: 4
+    gold: 450
+    experience: 120
+    materials: {iron_ore: 10, beast_hide: 6, sharp_claw: 10}
+    required: [trade_network, supply_post]
+    description: 后续胜利金币再增加10%，普通累计10%、精英首领累计28%。刷新基础价再降低10%，累计20%。
+    hunt_gold_bonus_percent: 10
+    monster_refresh_discount_percent: 10
+
+  - id: battle_coordination
+    name: 作战协同
+    branch: martial
+    tier: 2
+    gold: 150
+    experience: 180
+    materials: {iron_ore: 4, sharp_claw: 3}
+    required: [training_grounds, scout_network]
+    description: 敌HP不低于50%时，攻击固定加3并乘1.02，速度固定加1并乘1.02。
+    skills: [talent_battle_coordination]
+
+  - id: fortified_line
+    name: 稳固战线
+    branch: survival
+    tier: 2
+    gold: 150
+    experience: 200
+    materials: {iron_ore: 4, herb: 4}
+    required: [supply_post, training_grounds]
+    description: 自身HP不低于50%时，攻击固定加2并乘1.02，防御固定加2并乘1.05。
+    skills: [talent_fortified_line]
+
+  - id: mana_harmony
+    name: 魔能协调
+    branch: arcane
+    tier: 2
+    gold: 180
+    experience: 220
+    materials: {arcane_dust: 4, beast_hide: 2}
+    required: [scout_network, herb_garden]
+    description: 自身MP不低于50%时，攻击和防御分别固定加2并乘1.03。无MP池不触发。
+    skills: [talent_mana_harmony]
+
+  - id: siege_focus
+    name: 攻坚战法
+    branch: martial
+    tier: 3
+    gold: 450
+    experience: 650
+    materials: {mithril_shard: 8, soul_shard: 6, sharp_claw: 12}
+    required: [battle_coordination]
+    description: 双方累计第9次行动起，攻击乘1.25。
+    skills: [talent_siege_focus]
+
+  - id: last_bastion
+    name: 绝境壁垒
+    branch: survival
+    tier: 3
+    gold: 320
+    experience: 450
+    materials: {mithril_shard: 6, dragon_scale: 4, bone: 8}
+    required: [fortified_line, herb_garden]
+    description: 自身HP不高于45%时，防御乘1.40。不减免无视防御伤害。
+    skills: [talent_last_bastion]
+
+  - id: mana_acceleration
+    name: 魔力疾行
+    branch: arcane
+    tier: 3
+    gold: 500
+    experience: 750
+    materials: {arcane_dust: 12, soul_shard: 10, spider_silk: 8}
+    required: [mana_harmony, meditation_hall]
+    description: 自身MP不低于70%时，速度乘1.25。耗蓝后可能失效，无MP池不触发。
+    skills: [talent_mana_acceleration]

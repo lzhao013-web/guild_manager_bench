@@ -21,11 +21,12 @@ def skill_summary_lines(skills: Any) -> tuple[str, ...]:
         if isinstance(skill, Mapping)
     ]
     active_skills = sorted(
-        (skill for skill in values if skill.get("kind") != "passive"),
+        (skill for skill in values if skill.get("kind") != "passive" and skill.get("trigger") != "action_start"),
         key=lambda skill: (-skill.get("priority", 0), skill.get("skill_id", "")),
     )
+    automatic_skills = sorted((skill for skill in values if skill.get("trigger") == "action_start"), key=lambda skill: (-skill.get("priority", 0), skill.get("skill_id", "")))
     passive_skills = [skill for skill in values if skill.get("kind") == "passive"]
-    return tuple(_skill_text(skill) for skill in (*active_skills, *passive_skills))
+    return tuple(_skill_text(skill) for skill in (*automatic_skills, *active_skills, *passive_skills))
 
 
 def tactics_summary_lines(tactics: Any) -> tuple[str, ...]:
@@ -38,7 +39,8 @@ def tactics_summary_lines(tactics: Any) -> tuple[str, ...]:
     for skill in tactics["available_active_skills"]:
         suffix = "（已停用）" if skill["skill_id"] in tactics["disabled_skills"] else ""
         detail = _skill_text(skill) if suffix else skill["name"]
-        lines.append(f"可配置技能 ID {skill['skill_id']}{suffix}：{detail}")
+        role = "自动回复，仅可停用" if skill.get("trigger") == "action_start" else "可配置技能"
+        lines.append(f"{role} ID {skill['skill_id']}{suffix}：{detail}")
     return tuple(lines)
 
 
@@ -56,8 +58,10 @@ def _skill_text(skill: Mapping[str, Any]) -> str:
     if kind == "passive":
         return f"{name}：被动技能。生效条件：{condition}。效果：{effect_text}。"
 
+    automatic = skill.get("trigger") == "action_start"
+    label = "自动回复" if automatic else "即时主动技能" if skill.get("free") else "主动技能"
     sentences = [
-        f"{name}：{'即时主动技能' if skill.get('free') else '主动技能'}。"
+        f"{name}：{label}。"
         f"技能ID {skill.get('skill_id', '')}。"
     ]
     limits: list[str] = []
@@ -69,7 +73,8 @@ def _skill_text(skill: Mapping[str, Any]) -> str:
     if limits:
         sentences.append("限制：" + "，".join(limits) + "。")
     sentences.append(f"触发条件：{condition}。")
-    replacement = "触发后不替代普通攻击" if skill.get("free") else "触发后替代普通攻击"
+    replacement = ("自身行动开始、持续状态结算后触发，不占主动选择，不额外普攻" if automatic
+                   else "触发后不替代普通攻击" if skill.get("free") else "触发后替代普通攻击")
     sentences.append(f"效果：{replacement}，{effect_text}。")
     return "".join(sentences)
 
@@ -144,6 +149,9 @@ def _effect_text(effect: Mapping[str, Any], *, status_context: bool = False) -> 
         return f"为{target_text}恢复{_percent(value)}最大HP"
     if effect_type == "mp_restore":
         return f"为{target_text}恢复{_number(value)}点MP"
+    if effect_type == "mp_restore_percent":
+        minimum = f"，至少{_number(effect['minimum'])}MP" if effect.get("minimum") else ""
+        return f"为{target_text}恢复{_percent(value)}最大MP{minimum}"
     if effect_type == "damage_bonus":
         return f"造成一段“普通攻击伤害＋{_number(value)}”的伤害"
     if effect_type == "true_damage":

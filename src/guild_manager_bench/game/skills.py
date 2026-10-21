@@ -25,6 +25,7 @@ SkillEffectType = Literal[
     "heal",
     "heal_percent",
     "mp_restore",
+    "mp_restore_percent",
     "damage_bonus",
     "true_damage",
     "atk_ratio_damage",
@@ -100,7 +101,7 @@ class StatusDefinition:
                 raise TypeError("status effects must be SkillEffect")
             if effect.effect_type == "apply_status":
                 raise ValueError("status effects must not apply another status")
-            if effect.effect_type in {"damage_multiplier", "damage_bonus", "self_damage"}:
+            if effect.effect_type in {"damage_multiplier", "damage_bonus", "self_damage", "mp_restore_percent"}:
                 raise ValueError(f"{effect.effect_type} is not supported in status effects")
 
 
@@ -185,8 +186,12 @@ class SkillEffect:
     stat: CombatStatName | None = None
     target: SkillTarget = "target"
     status: StatusDefinition | None = None
+    minimum: int = 0
 
     def __post_init__(self) -> None:
+        _require_at_least("minimum", self.minimum, 0)
+        if self.effect_type != "mp_restore_percent" and self.minimum:
+            raise ValueError("minimum is only supported by mp_restore_percent")
         if not isinstance(self.value, int | float):
             raise TypeError("value must be a number")
 
@@ -230,6 +235,14 @@ class SkillEffect:
                 raise ValueError("mp_restore must not have stat")
             if self.target not in {"self", "target"}:
                 raise ValueError("mp_restore target must be self or target")
+            return
+
+        if self.effect_type == "mp_restore_percent":
+            _require_ratio("value", self.value)
+            if self.stat is not None:
+                raise ValueError("mp_restore_percent must not have stat")
+            if self.target not in {"self", "target"}:
+                raise ValueError("mp_restore_percent target must be self or target")
             return
 
         if self.effect_type == "damage_bonus":
@@ -326,6 +339,7 @@ class Skill:
     priority: int = 0
     once_per_battle: bool = False
     free: bool = False
+    trigger: Literal["action", "action_start"] = "action"
 
     def __post_init__(self) -> None:
         if not self.skill_id:
@@ -342,6 +356,13 @@ class Skill:
                 raise TypeError("effects must be SkillEffect")
         _require_at_least("mp_cost", self.mp_cost, 0)
         _require_at_least("priority", self.priority, 0)
+        if self.trigger not in {"action", "action_start"}:
+            raise ValueError(f"unknown skill trigger: {self.trigger}")
+        if self.trigger == "action_start":
+            if self.kind != "active" or not self.once_per_battle or self.free or self.mp_cost:
+                raise ValueError("action_start recovery must be active, once_per_battle, not free, and cost no MP")
+            if any(e.effect_type not in {"heal", "heal_percent", "mp_restore", "mp_restore_percent"} or e.target != "self" for e in self.effects):
+                raise ValueError("action_start only supports self recovery effects")
 
         if self.kind == "passive":
             for effect in self.effects:

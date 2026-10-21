@@ -22,7 +22,7 @@ def test_system_prompt_explains_combat_timing_and_resource_boundaries(talent_tre
         "达到100即可行动，行动后扣除100",
         "依次比较当前行动条、速度（SPD），仍相同则冒险者先动",
         "先结算其身上的持续伤害、治疗和回魔",
-        "若仍存活，再检查主动技能",
+        "若仍存活，先结算自动回复，再检查普通主动技能" if talent_tree_enabled else "若仍存活，再检查主动技能",
         "判定通过后才扣除本次技能的MP消耗",
         "不包含战斗中的被动与状态加成",
         "（面板属性＋固定加成之和）×各倍率之积",

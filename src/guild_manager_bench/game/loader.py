@@ -274,6 +274,9 @@ def _parse_upgrades(values: list[Any], registry: dict[str, Skill]) -> tuple[Glob
                 ),
                 craft_gold_discount_percent=_int(data.get("craft_gold_discount_percent", 0), f"upgrades[{index}].craft_gold_discount_percent"),
                 hunt_experience_bonus_percent=_int(data.get("hunt_experience_bonus_percent", 0), f"upgrades[{index}].hunt_experience_bonus_percent"),
+                hunt_gold_bonus_percent=_int(data.get("hunt_gold_bonus_percent", 0), f"upgrades[{index}].hunt_gold_bonus_percent"),
+                elite_boss_gold_bonus_percent=_int(data.get("elite_boss_gold_bonus_percent", 0), f"upgrades[{index}].elite_boss_gold_bonus_percent"),
+                monster_refresh_discount_percent=_int(data.get("monster_refresh_discount_percent", 0), f"upgrades[{index}].monster_refresh_discount_percent"),
                 stat_modifier=_parse_stat_modifier(
                     _mapping(_stat_modifier_data(data), f"upgrades[{index}].stats")
                 ),
@@ -578,6 +581,7 @@ def _parse_skills(value: Any, path: str) -> tuple[Skill, ...]:
                 priority=_int(data.get("priority", 0), f"{path}[{index}].priority"),
                 once_per_battle=_bool(data.get("once_per_battle", False), f"{path}[{index}].once_per_battle"),
                 free=_bool(data.get("free", False), f"{path}[{index}].free"),
+                trigger=_str(data.get("trigger", "action"), f"{path}[{index}].trigger"),
             )
         )
     return tuple(skills)
@@ -626,6 +630,7 @@ def _parse_effects(values: list[Any]) -> tuple[SkillEffect, ...]:
                     else _number(_required(data, "value"), f"effects[{index}].value")
                 ),
                 stat=None if data.get("stat") is None else _str(data.get("stat"), f"effects[{index}].stat"),
+                minimum=_int(data.get("minimum", 0), f"effects[{index}].minimum"),
                 target=_str(data.get("target", "target"), f"effects[{index}].target"),
                 status=(
                     _parse_status(_mapping(_required(data, "status"), f"effects[{index}].status"))

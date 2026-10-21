@@ -1574,6 +1574,12 @@ def _append_upgrade_lines(
             lines.append(f"  后续制作金币费用降低 {upgrade['craft_gold_discount_percent']}%（向上取整，材料不变）")
         if upgrade.get("hunt_experience_bonus_percent"):
             lines.append(f"  后续胜利讨伐经验增加 {upgrade['hunt_experience_bonus_percent']}%（逐场向下取整）")
+        if upgrade.get("hunt_gold_bonus_percent"):
+            lines.append(f"  后续胜利讨伐金币增加 {upgrade['hunt_gold_bonus_percent']}%")
+        if upgrade.get("elite_boss_gold_bonus_percent"):
+            lines.append(f"  精英、首领胜利金币额外增加 {upgrade['elite_boss_gold_bonus_percent']}%")
+        if upgrade.get("monster_refresh_discount_percent"):
+            lines.append(f"  刷新基础价降低 {upgrade['monster_refresh_discount_percent']}%（合并折扣后向上取整，再按次数翻倍）")
         _append_skill_lines(lines, upgrade.get("skills"), indent="  ")
 
 

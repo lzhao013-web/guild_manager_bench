@@ -43,7 +43,7 @@ def game(definition):
     return tools,sid
 
 
-@pytest.mark.parametrize('turn,cost',[(1,15),(7,15),(8,30),(17,30),(18,50),(29,50),(30,100),(34,100)])
+@pytest.mark.parametrize('turn,cost',[(1,10),(7,10),(8,20),(17,20),(18,40),(29,40),(30,80),(34,80)])
 def test_preset_price_boundaries_and_doubling(definition,turn,cost):
     state=at_turn(definition,turn)
     assert monster_refresh_cost(definition,state)==cost
@@ -169,7 +169,7 @@ def test_refresh_does_not_affect_next_turn_forecast_recruits_or_locks(definition
     assert next_state.current_monsters==spawn_monsters(d,19)
     assert next_state.recruit_candidates==spawn_recruit_candidates(d,19)
     assert next_state.monster_refresh_count==0
-    assert monster_refresh_cost(d,next_state)==50
+    assert monster_refresh_cost(d,next_state)==40
 
 
 def test_codec_and_both_save_formats_preserve_refresh_sequence(definition):
@@ -214,7 +214,7 @@ def test_real_refresh_allocates_new_refs_and_old_targets_cannot_be_used(game):
     preview=harness.call_tool('preview_monster_refresh',{'locked_monster_ids':[1]})
     result=harness.call_tool('refresh_monsters',{'locked_monster_ids':[1]})
     assert result['ok'] and not result.get('simulation_only',False)
-    assert tools.get_state(sid).gold==before.gold-15
+    assert tools.get_state(sid).gold==before.gold-10
     assert harness._turn_refs['monster'][before.current_monsters[0].monster_id]==1
     new=tools.get_state(sid).current_monsters[1]
     assert harness._turn_refs['monster'][new.monster_id]>len(before.current_monsters)
@@ -252,9 +252,9 @@ def test_preparation_plan_can_pay_refresh_but_never_changes_real_board(game):
 def test_observation_and_prompts_explain_cost_without_fake_pool(game):
     tools,sid=game
     obs=tools.get_observation(sid)['observation']
-    assert obs['monster_refresh']['next_gold_cost']==15
+    assert obs['monster_refresh']['next_gold_cost']==10
     turn_prompt=build_turn_prompt(obs)
-    assert '刷新：本回合0次，下次15金币。' in turn_prompt
+    assert '刷新：本回合0次，下次10金币。' in turn_prompt
     assert '可先免费预览' not in turn_prompt
     prompt=build_system_prompt(monster_refresh_rules=obs['monster_refresh'])
     assert 'refresh_monsters' in prompt and '翻倍' in prompt
@@ -275,12 +275,12 @@ def test_api_preview_commit_and_unknown_session(definition):
     before=session.state
     events=list(session.events)
     preview=client.post('/api/sessions/api-refresh/preview-monster-refresh',json={'locked_monster_ids':[]})
-    assert preview.status_code==200 and preview.json()['gold_cost']==15
+    assert preview.status_code==200 and preview.json()['gold_cost']==10
     assert session.state is before and session.events==events
     paid=client.post('/api/sessions/api-refresh/actions',json={'type':'refresh_monsters','locked_monster_ids':[]})
     assert paid.status_code==200
     obs=paid.json()['observation']
-    assert obs['gold']==before.gold-15 and obs['monster_refresh']['refreshes_used']==1
+    assert obs['gold']==before.gold-10 and obs['monster_refresh']['refreshes_used']==1
     assert [m['stats'] for m in obs['monsters']]==[m['stats'] for m in preview.json()['monsters']]
     current=session.state
     rejected=client.post('/api/sessions/api-refresh/actions',json={
@@ -313,7 +313,7 @@ def test_replay_rebuild_reexecutes_paid_refresh_and_not_preview(definition):
     assert observations[0] is None
     assert observations[1]['monster_refresh']['refreshes_used']==1
     assert observations[2]['monster_refresh']['refreshes_used']==2
-    assert observations[2]['gold']==175-15-30
+    assert observations[2]['gold']==175-10-20
     assert observations[3]['monster_refresh']['refreshes_used']==0
     assert observations[3]['monsters']==tools.get_observation(sid)['observation']['monsters']
 

@@ -163,7 +163,7 @@ def _monster_to_dict(definition: GameDefinition, state: GameState, monster: Spaw
         "tier": monster.tier,
         "stats": _stats_to_dict(monster.stats),
         **({"base_reward": _reward_to_dict(monster.reward)} if definition.content.has_talent_tree else {}),
-        "reward": _reward_to_dict(effective_hunt_reward(definition, state, monster.reward)),
+        "reward": _reward_to_dict(effective_hunt_reward(definition, state, monster.reward, tier=monster.tier)),
         "skills": [_skill_to_dict(skill) for skill in monster.skills],
     }
 
@@ -271,6 +271,9 @@ def _upgrade_to_dict(state, upgrade, *, talent_tree: bool) -> dict[str, Any]:
             "exclusive_upgrade_ids": list(upgrade.exclusive_upgrade_ids),
             "craft_gold_discount_percent": upgrade.craft_gold_discount_percent,
             "hunt_experience_bonus_percent": upgrade.hunt_experience_bonus_percent,
+            "hunt_gold_bonus_percent": upgrade.hunt_gold_bonus_percent,
+            "elite_boss_gold_bonus_percent": upgrade.elite_boss_gold_bonus_percent,
+            "monster_refresh_discount_percent": upgrade.monster_refresh_discount_percent,
         } if talent_tree else {}),
         "stats": _stat_modifier_to_dict(upgrade.stat_modifier),
         "party_size_bonus": upgrade.party_size_bonus,
@@ -293,6 +296,7 @@ def _skill_to_dict(skill: Skill) -> dict[str, Any]:
         "priority": skill.priority,
         "once_per_battle": skill.once_per_battle,
         "free": skill.free,
+        **({"trigger": skill.trigger} if skill.trigger != "action" else {}),
     }
 
 
@@ -313,6 +317,7 @@ def _effect_to_dict(effect: SkillEffect) -> dict[str, Any]:
         "value": effect.value,
         "stat": effect.stat,
         "target": effect.target,
+        **({"minimum": effect.minimum} if effect.minimum else {}),
         "status": (
             _status_to_dict(effect.status)
             if effect.status is not None

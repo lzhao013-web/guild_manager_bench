@@ -211,12 +211,11 @@ skills:
     kind: active
     condition: {type: self_hp_pct_lte, value: 0.3}
     effects:
-      - {type: heal_percent, value: 0.12, target: self}
+      - {type: heal_percent, value: 0.25, target: self}
     mp_cost: 0
-    # 后备主动，低于现有职业和装备主动技能，高于法力回流。
+    trigger: action_start
     priority: 2
     once_per_battle: true
-    free: true
 
   - id: talent_endurance
     name: 持久战法
@@ -237,12 +236,62 @@ skills:
     kind: active
     condition: {type: self_mp_pct_lte, value: 0.25}
     effects:
-      - {type: mp_restore, value: 12, target: self}
+      - {type: mp_restore_percent, value: 0.30, minimum: 12, target: self}
     mp_cost: 0
-    # 仅在更高优先级的主动技能均不可用时回蓝。
+    trigger: action_start
     priority: 1
     once_per_battle: true
-    free: true
+
+  - id: talent_battle_coordination
+    name: 作战协同
+    kind: passive
+    condition: {type: target_hp_pct_gte, value: 0.50}
+    effects:
+      - {type: stat_bonus, stat: attack, value: 3, target: self}
+      - {type: stat_multiplier, stat: attack, value: 1.02, target: self}
+      - {type: stat_bonus, stat: speed, value: 1, target: self}
+      - {type: stat_multiplier, stat: speed, value: 1.02, target: self}
+
+  - id: talent_fortified_line
+    name: 稳固战线
+    kind: passive
+    condition: {type: self_hp_pct_gte, value: 0.50}
+    effects:
+      - {type: stat_bonus, stat: attack, value: 2, target: self}
+      - {type: stat_multiplier, stat: attack, value: 1.02, target: self}
+      - {type: stat_bonus, stat: defense, value: 2, target: self}
+      - {type: stat_multiplier, stat: defense, value: 1.05, target: self}
+
+  - id: talent_mana_harmony
+    name: 魔能协调
+    kind: passive
+    condition: {type: self_mp_pct_gte, value: 0.50}
+    effects:
+      - {type: stat_bonus, stat: attack, value: 2, target: self}
+      - {type: stat_multiplier, stat: attack, value: 1.03, target: self}
+      - {type: stat_bonus, stat: defense, value: 2, target: self}
+      - {type: stat_multiplier, stat: defense, value: 1.03, target: self}
+
+  - id: talent_siege_focus
+    name: 攻坚战法
+    kind: passive
+    condition: {type: action_index_gte, value: 9}
+    effects:
+      - {type: stat_multiplier, stat: attack, value: 1.25, target: self}
+
+  - id: talent_last_bastion
+    name: 绝境壁垒
+    kind: passive
+    condition: {type: self_hp_pct_lte, value: 0.45}
+    effects:
+      - {type: stat_multiplier, stat: defense, value: 1.40, target: self}
+
+  - id: talent_mana_acceleration
+    name: 魔力疾行
+    kind: passive
+    condition: {type: self_mp_pct_gte, value: 0.70}
+    effects:
+      - {type: stat_multiplier, stat: speed, value: 1.25, target: self}
 
   # ===== Adventurer Initial Skills =====
 

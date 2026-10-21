@@ -31,6 +31,8 @@ export const RETURN_LABELS: Record<string, string> = {
     record_count: "战斗记录数量", battle_index: "战斗序号", adventurer_name: "成员", monster_name: "怪物", won: "获胜", outcome: "战斗结果",
     reason: "结束原因", actions_taken: "行动数", time_elapsed: "战斗耗时", event_count: "事件数", total_events: "整场事件数", matched_events: "匹配事件数",
     action_index: "行动序号", actor_side: "行动方", target_side: "目标方", action_type: "动作类型", skill_name: "技能名称", status_name: "状态名称",
+    mp_restored: "自身实际恢复MP", trigger: "触发时点", minimum: "最低回复量",
+    hunt_gold_bonus_percent: "讨伐金币加成百分比", elite_boss_gold_bonus_percent: "高阶金币额外加成百分比", monster_refresh_discount_percent: "刷新基础价折扣百分比",
     damage: "伤害", target_hp: "目标剩余生命", healing: "治疗", healing_target_side: "治疗对象", healing_target_hp: "治疗后生命",
     statistics: "战斗统计", basic_attack_events: "独立普攻次数", skill_uses: "技能释放次数", direct_damage: "直接伤害",
     status_damage_taken: "自身状态伤害", healing_received: "实际收到的治疗", left: "冒险者方", right: "怪物方",

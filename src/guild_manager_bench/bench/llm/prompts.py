@@ -62,7 +62,9 @@ def build_system_prompt(
             "工具返回：每次调用均返回执行状态（成功/失败）、剩余预算及结果摘要。准备工具仅返回变更摘要，完整列表详情需通过对应的查询工具查看。",
     ]
     if talent_tree_enabled:
+        lines = [line.replace("若仍存活，再检查主动技能。", "若仍存活，先结算自动回复，再检查普通主动技能。") for line in lines]
         lines.extend([
+            "自动回复：自身行动开始、持续状态结算后检查，每场一次，不占普通主动选择、不额外普攻。可停用，不能排序。",
             "全局天赋：可通过 get_upgrades 查询并由 purchase_upgrade 解锁天赋节点。购买天赋消耗金币、材料和经验池经验（材料与制作装备共用，经验池与角色升级共用）。节点需满足全部前置且与互斥节点不可兼得，购买后不可退款或洗点。经营类天赋仅对购买后的制作或讨伐生效，当前查询显示的配方费用与怪物奖励均已计入已生效的加成。",
         ])
     if tactics_enabled:
@@ -89,7 +91,7 @@ def build_system_prompt(
             f"固定挑战：T{start}起额外出现三个带【挑战】标识的单位，最多可挑战至T{last_hunt}。"
             "普通怪物和候选仍照常刷新，但未击败的挑战跨回合保留，属性不变。"
             "挑战失败后敌方下次恢复满HP/MP，己方保留实际消耗。挑战占正常讨伐名额，"
-            "胜利后永久移除并只发放一次奖励。可提前用 get_forecast 的 tier=challenge 查询属性与基础奖励，"
+            "胜利后永久移除，只奖励一份对应核心，不奖励金币或经验。可提前用 get_forecast 的 tier=challenge 查询属性与基础奖励，"
             "未来存在以此前未击败为条件。"
             "特殊核心可通过 get_crafting 查看全部职业印记配方，再用 craft_equipment 制作、equip_item 装入 ultimate 槽，"
             "从而获得终极技能。每份核心只能制作一个印记，每人最多一个。"
@@ -104,7 +106,7 @@ def build_system_prompt(
         prices = "、".join(f"T{p['from_turn']}起{p['gold']}金币" for p in monster_refresh_rules["base_prices"])
         lines.extend([
             "手动刷新：preview_monster_refresh 只预览，refresh_monsters 扣费刷新。",
-            f"首刷价格：{prices}。同回合每次付费刷新后，下次费用翻倍。新回合恢复基础价。",
+            f"首刷基础价：{prices}。先计天赋折扣，再按当回合实刷次数翻倍。新回合次数重置。",
             "锁定普通怪物不收费，不跨回合。固定挑战自动保留。手动刷新不影响后续自然刷新和招募，不增加讨伐次数。",
             "预览和实际刷新各占一次普通调用，不占战斗预览额度。最终整备回合不能刷新。",
         ])

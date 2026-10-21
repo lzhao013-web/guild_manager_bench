@@ -112,10 +112,10 @@ def test_invalid_talent_graph_is_rejected(economy_definition, upgrades):
         replace(economy_definition.content, global_upgrades=upgrades)
 
 
-def test_advanced_tree_has_25_nodes_and_three_mutually_exclusive_capstones():
+def test_advanced_tree_has_35_nodes_and_three_mutually_exclusive_capstones():
     d = load_game_definition("data/presets/advanced")
     nodes = {u.upgrade_id: u for u in d.content.global_upgrades}
-    assert len(nodes) == 25
+    assert len(nodes) == 35
     capstones = {"war_academy", "paladin_order", "arcane_council"}
     for uid in capstones:
         assert set(nodes[uid].exclusive_upgrade_ids) == capstones - {uid}
@@ -253,9 +253,9 @@ def test_llm_query_exposes_complete_tree_and_keeps_legacy_tool_contract():
     text = _format_tool_result_for_model("get_upgrades", result)
     for part in ("经验池", "材料", "互斥", "工艺标准化", "15%", "战争学院", "秘法结社"):
         assert part in text
-    assert len(result["global_upgrades"]) == 25
+    assert len(result["global_upgrades"]) == 35
     craft = next(u for u in result["global_upgrades"] if u["upgrade_id"] == "craft_standardization")
-    assert (craft["gold_cost"], craft["experience_cost"], craft["material_costs"], craft["craft_gold_discount_percent"]) == (150, 150, {"iron_ore": 4}, 15)
+    assert (craft["gold_cost"], craft["experience_cost"], craft["material_costs"], craft["craft_gold_discount_percent"]) == (150, 50, {"iron_ore": 4}, 15)
     legacy = GuildManagerTools(load_game_definition("data/presets/full"))
     assert legacy.list_tool_schemas() == tool_schemas(expose_battle_preview=True)
     legacy_result = legacy.get_upgrades(legacy.start_session()["session_id"])
@@ -303,16 +303,17 @@ def test_conditional_attack_talents_trigger_at_threshold(talent_skills, skill_id
     ("talent_mana_reflux", 100, 5, True),
     ("talent_mana_reflux", 100, 6, False),
 ])
-def test_immediate_talents_trigger_once_and_keep_basic_attack(talent_skills, skill_id, hp, mp, triggered):
+def test_automatic_talents_trigger_once_and_keep_basic_attack(talent_skills, skill_id, hp, mp, triggered):
     from guild_manager_bench.game.combat import Combatant, run_auto_battle
     actor = CombatStats(hp=100, mp=20, attack=5, defense=0, speed=100, recovery=0)
     foe = CombatStats(hp=1000, mp=0, attack=1, defense=0, speed=1, recovery=0)
     left = Combatant("hero", actor, CombatResources(hp, mp), (talent_skills[skill_id],))
     result = run_auto_battle(left, Combatant("foe", foe), max_actions=3)
     assert sum(e.skill_id == skill_id for e in result.events) == int(triggered)
-    assert result.events[0].damage == 5
+    assert all(e.damage == 0 for e in result.events if e.skill_id == skill_id)
+    assert [e.damage for e in result.events if e.action_type == "basic_attack"] == [5, 5, 5]
     if triggered and skill_id == "talent_emergency_care":
-        assert result.left_resources.current_hp == 42
+        assert result.left_resources.current_hp == 55
     if triggered and skill_id == "talent_mana_reflux":
         assert result.left_resources.current_mp == 17
     # 使用次数只属于单场战斗，下一场可以重新触发。

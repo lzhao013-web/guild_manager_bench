@@ -515,6 +515,7 @@ class GameContent:
         return any(
             u.material_costs or u.experience_cost or u.exclusive_upgrade_ids
             or u.craft_gold_discount_percent or u.hunt_experience_bonus_percent
+            or u.hunt_gold_bonus_percent or u.elite_boss_gold_bonus_percent or u.monster_refresh_discount_percent
             for u in self.global_upgrades
         )
 

@@ -1515,7 +1515,7 @@ function displayLabel(k) { return isStatKey(k) ? statLabel(k) : matLabel(k); }
 function skillTip(s){
   const p=[];
   const kindMap={active:'主动',passive:'被动'};
-  if(s.kind) p.push('类型:'+(kindMap[s.kind]||s.kind));
+  if(s.kind) p.push('类型:'+(s.trigger==='action_start'?'自动回复，自身行动开始，不占主动选择，不额外普攻':kindMap[s.kind]||s.kind));
   if(s.mp_cost!=null) p.push('MP:'+s.mp_cost);
   if(s.condition) p.push('条件:'+condText(s.condition));
   if(s.effects){
@@ -1562,6 +1562,7 @@ function effectText(e){
   if(t==='heal') return '为'+tgt+'恢复'+num(v)+'点HP';
   if(t==='heal_percent') return '为'+tgt+'恢复'+pct(v)+'最大HP';
   if(t==='mp_restore') return '为'+tgt+'恢复'+num(v)+'点MP';
+  if(t==='mp_restore_percent') return '为'+tgt+'恢复'+pct(v)+'最大MP'+(e.minimum?'，至少'+num(e.minimum)+'MP':'');
   if(t==='damage_bonus') return '额外+'+num(v)+'伤害';
   if(t==='true_damage') return '造成'+num(v)+'点无视防御伤害';
   if(t==='atk_ratio_damage') return '造成攻击力的'+pct(v)+'作为无视防御伤害';
