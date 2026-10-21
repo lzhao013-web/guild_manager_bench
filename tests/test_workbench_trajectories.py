@@ -33,6 +33,58 @@ def operation(name, args, before, after, summary):
                 ]}}}]
 
 
+def test_all_registered_tools_and_unknown_tools_are_indexed_once(tmp_path):
+    from guild_manager_bench.bench.llm.harness import TurnToolHarness
+    from guild_manager_bench.bench.llm.tools import GuildManagerTools
+
+    tools = GuildManagerTools.from_data_dir("data/presets/advanced")
+    sid = tools.start_session("all-tool-history")["session_id"]
+    names = [s["name"] for s in TurnToolHarness(tools, sid, max_tool_calls=20, endgame_start_turn=1).tool_schemas()]
+    names += ["get_party", "get_monsters", "future_custom_tool"]
+    path = tmp_path / "trace.jsonl"
+    events = [{"type": "turn_started", "turn": 1, "observation": observation()}]
+    for name in names:
+        events.extend([
+            {"type": "tool_call", "name": name, "call_id": name, "arguments": {}},
+            {"type": "tool_result", "name": name, "call_id": name, "result": {"ok": True}},
+        ])
+    events += [{"type": "tool_call", "name": "get_forecast", "call_id": "pending", "arguments": {"start_turn": 2}}]
+    write(path, events)
+    original = path.read_bytes()
+    store = TrajectoryStore()
+    rows = store.read(path, archived=True)["entries"]
+    assert [row["event"]["name"] for row in rows] == names + ["get_forecast"]
+    assert [row["ordinal"] for row in rows] == list(range(1, len(rows) + 1))
+    assert all(row["event"]["type"] == "tool_result" for row in rows[:-1])
+    assert rows[-1]["event"]["type"] == "tool_call"
+    page = store.read(path, archived=True, attempt=rows[0]["attempt"])
+    for row in rows:
+        assert next(r for r in page["records"] if r["cursor"] == row["cursor"])["event"]["name"] == row["event"]["name"]
+    assert path.read_bytes() == original
+
+
+def test_query_index_keeps_small_summaries_not_full_results_or_snapshots(tmp_path):
+    path = tmp_path / "events.jsonl"
+    huge = [{"name": "不应复制完整列表", "stats": {"hp": 100}}] * 1000
+    write(path, [
+        {"type": "turn_started", "turn": 1, "observation": observation()},
+        {"type": "tool_result", "name": "get_crafting", "content": "成功 get_crafting\n完整工具文本不应复制", "result": {"crafting_recipes": huge, "gold": 100}},
+        {"type": "tool_result", "name": "preview_battle", "result": {"ok": True, "preview": {"adventurer_name": "战士", "monster_name": "史莱姆", "won": True, "events": huge}}},
+        {"type": "tool_result", "name": "get_forecast", "result": {"ok": True, "forecast_only": True, "kind": "monsters", "start_turn": 2, "end_turn": 4, "total_matches": 1000, "items": huge}},
+        {"type": "tool_result", "name": "preview_team_power", "result": {"ok": True, "simulation_only": True, "current_rank_score": 10, "projected_rank_score": 12, "rank_score_delta": 2}},
+    ], archived=False)
+    rows = TrajectoryStore().read(path, archived=False)["entries"]
+    assert len(rows) == 4
+    assert rows[0]["event"]["content"] == "成功 get_crafting"
+    assert rows[0]["event"]["result"]["_collection_counts"] == {"crafting_recipes": 1000}
+    assert rows[1]["event"]["result"]["preview"]["won"] is True
+    assert rows[2]["event"]["result"]["total_matches"] == 1000
+    assert rows[3]["event"]["result"]["rank_score_delta"] == 2
+    assert all("_action_output" not in row["event"]["result"] for row in rows)
+    assert "不应复制完整列表" not in json.dumps(rows, ensure_ascii=False)
+    assert "完整工具文本不应复制" not in json.dumps(rows, ensure_ascii=False)
+
+
 def test_whole_run_history_merges_calls_and_distinguishes_instances_and_resume_rollback(tmp_path):
     path = tmp_path / "trace.jsonl"
     first = observation()

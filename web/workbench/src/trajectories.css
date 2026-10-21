@@ -18,10 +18,11 @@
 .trajectory-state-totals .is-rolled_back { color: var(--amber-11); }
 .trajectory-state-totals button[aria-pressed="true"] { background: var(--accent-3); border-color: var(--accent-7); }
 .trajectory-category-totals { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 4px; }
-.trajectory-category-totals button { display: grid; align-content: start; gap: 4px; min-width: 0; padding: 6px 8px; color: var(--gray-12); background: var(--gray-1); border: 1px solid var(--border); border-radius: 4px; text-align: left; cursor: pointer; }
+.trajectory-category-totals button { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0 4px; min-width: 0; padding: 4px 6px; color: var(--gray-12); background: var(--gray-1); border: 1px solid var(--border); border-radius: 4px; text-align: left; cursor: pointer; }
 .trajectory-category-totals button > strong { font-size: 11px; font-weight: 500; line-height: 1.5; }
 .trajectory-category-totals button > span { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 4px; line-height: 1.5; }
-.trajectory-category-totals button b { font-size: 17px; font-weight: 500; }
+.trajectory-category-totals button b { font-size: 14px; font-weight: 500; }
+.trajectory-category-totals button small { display: none; }
 .trajectory-category-totals button small, .trajectory-category-totals button em { font-size: 10px; font-style: normal; color: var(--gray-11); }
 .trajectory-category-totals button em { margin-left: auto; }
 .trajectory-category-totals button.is-zero { background: transparent; }
@@ -35,12 +36,12 @@
 .trajectory-mode button { padding: 5px 10px; font-size: 11px; color: var(--gray-11); border: 1px solid var(--border); border-radius: 4px; background: transparent; cursor: pointer; }
 .trajectory-mode button[aria-pressed="true"] { background: var(--accent-3); color: var(--accent-11); }
 .trajectory-search-panel { display: flex; flex-direction: column; min-width: 0; min-height: 0; flex: 1; }
-.trajectory-filters { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.trajectory-filters { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 8px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
 .trajectory-search { width: 100%; display: flex; align-items: center; gap: 6px; }
-.trajectory-filters .trajectory-search input { flex: 1; min-width: 0; width: 100%; }
-.trajectory-filters select { flex: 1; min-width: 90px; max-width: 100%; font-size: 11px; }
+.trajectory-filters .trajectory-search input { flex: 1; min-width: 0; width: 100%; min-height: 28px; padding: 4px 6px; font-size: 11px; }
+.trajectory-filters select { flex: 1; min-width: 90px; max-width: 100%; min-height: 28px; padding: 4px 6px; font-size: 11px; }
 .trajectory-range { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--gray-11); }
-.trajectory-filters .trajectory-range input { width: 60px; min-width: 0; padding: 5px; font-size: 11px; }
+.trajectory-filters .trajectory-range input { width: 60px; min-width: 0; min-height: 28px; padding: 4px; font-size: 11px; }
 .trajectory-note, .trajectory-warning { margin: 0; padding: 6px 10px; font-size: 10px; line-height: 1.6; color: var(--gray-11); flex-shrink: 0; }
 .trajectory-warning { color: var(--amber-11); background: var(--amber-3); }
 .trajectory-results { min-height: 0; overflow: auto; flex: 1; scrollbar-width: thin; }
@@ -74,10 +75,8 @@
 .object-trajectories .trajectory-when { flex-basis: 60px; }
 .object-trajectories .trajectory-content strong { font-size: 11px; }
 .object-trajectories .trajectory-note { font-size: 10px; }
-@container (max-width: 950px) {
-    .trajectory-category-totals { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-}
 @container (max-width: 650px) {
+    .trajectory-category-totals { grid-template-columns: repeat(4, minmax(0, 1fr)); }
     .action-whole-workspace { overflow-y: auto; scrollbar-width: thin; }
     .trajectory-browser { flex: none; }
     .trajectory-overview-heading { gap: 4px 8px; }

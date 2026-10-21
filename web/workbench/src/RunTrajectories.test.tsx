@@ -29,7 +29,7 @@ function setup(children: React.ReactNode, patch = payload, status = 200) {
 }
 it("概览始终统计整局，类别与状态入口清除旧条件后定位对应记录", async () => {
     const { onLocate } = setup(<RunTrajectories />);
-    const overview = screen.getByRole("region", { name: "整局经营操作概览" });
+    const overview = screen.getByRole("region", { name: "整局工具调用概览" });
     const craft = within(overview).getByRole("button", { name: "查看装备制作记录" });
     await waitFor(() => expect(craft).toBeEnabled());
     expect(within(craft).getByText("2", { exact: true })).toBeVisible();
@@ -51,9 +51,26 @@ it("概览始终统计整局，类别与状态入口清除旧条件后定位对�
     expect(screen.getAllByRole("button", { name: /查看轨迹/ })).toHaveLength(3);
     expect(onLocate).not.toHaveBeenCalled();
 });
+it("整局包括查询、预览、备忘及未知工具，可按工具和执行状态过滤", async () => {
+    const names = ["get_crafting", "get_forecast", "preview_monster_refresh", "refresh_monsters", "preview_team_power", "write_memo", "future_custom_tool"];
+    const allTools = names.map((name, index) => row({ id: `200:${index + 1}`, ordinal: index + 1, cursor: 250 + index,
+        subjects: [], event: { type: index === 6 ? "tool_call" : "tool_result", name, result: index === 6 ? {} : { ok: index !== 5 } } }));
+    setup(<RunTrajectories />, { ...payload, entries: allTools });
+    await waitFor(() => expect(screen.getAllByRole("button", { name: /查看轨迹/ })).toHaveLength(7));
+    expect(screen.getByRole("option", { name: /预览怪物刷新/ })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("筛选轨迹操作"), { target: { value: "preview_monster_refresh" } });
+    expect(screen.getAllByRole("button", { name: /查看轨迹/ })).toHaveLength(1);
+    expect(screen.getByRole("button", { name: /查看轨迹/ })).toHaveTextContent("只读预览");
+    fireEvent.click(screen.getByText(/按工具汇总/).closest("summary")!);
+    fireEvent.click(screen.getByRole("button", { name: "筛选工具 future_custom_tool" }));
+    expect(screen.getByLabelText("筛选轨迹操作")).toHaveValue("future_custom_tool");
+    fireEvent.change(screen.getByLabelText("筛选轨迹状态"), { target: { value: "pending" } });
+    expect(screen.getByRole("button", { name: /查看轨迹/ })).toHaveTextContent("执行中");
+});
+
 it("概览加载期间显示未知而非假零，失败时不提供可点击的零计数", async () => {
     setup(<RunTrajectories />, payload, 503);
-    const overview = screen.getByRole("region", { name: "整局经营操作概览" });
+    const overview = screen.getByRole("region", { name: "整局工具调用概览" });
     expect(overview).toHaveAttribute("aria-busy", "true");
     expect(within(overview).queryByText("0", { exact: true })).not.toBeInTheDocument();
     await screen.findByRole("alert");
@@ -63,7 +80,7 @@ it("概览加载期间显示未知而非假零，失败时不提供可点击的�
 });
 it("覆盖不完整的统计明确属于当前阶段，不宣称整局零操作", async () => {
     setup(<RunTrajectories />, { ...payload, origin: "execution", entries: [], warning: "仅覆盖当前运行阶段" });
-    const overview = screen.getByRole("region", { name: "整局经营操作概览" });
+    const overview = screen.getByRole("region", { name: "整局工具调用概览" });
     await waitFor(() => expect(within(overview).getByRole("button", { name: "查看装备制作记录" })).toBeEnabled());
     expect(within(overview).getByText("仅当前运行阶段", { exact: true })).toBeVisible();
     expect(screen.getByText("仅覆盖当前运行阶段", { exact: true })).toBeVisible();

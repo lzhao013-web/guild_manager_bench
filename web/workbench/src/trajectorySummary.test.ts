@@ -26,10 +26,11 @@ it("统计一次操作而非受影响对象，成功只计已提交且未回滚�
     const before = structuredClone(rows);
     const summary = summarizeTrajectories(rows);
     expect(summary.total).toBe(13);
-    expect(summary.states).toEqual({ confirmed: 9, uncommitted: 2, failed: 2, rolled_back: 2 });
+    expect(summary.states).toEqual({ confirmed: 9, uncommitted: 2, failed: 2, rolled_back: 2, succeeded: 10, pending: 1, recorded: 0 });
     expect(summary.categories.find(category => category.id === "craft")).toMatchObject({ attempts: 5, confirmed: 1 });
     expect(summary.categories.find(category => category.id === "equipment")).toMatchObject({ attempts: 2, confirmed: 2 });
-    expect(summary.categories.find(category => category.id === "other")).toMatchObject({ attempts: 2, confirmed: 2 });
+    expect(summary.categories.find(category => category.id === "memo")).toMatchObject({ attempts: 1, confirmed: 1 });
+    expect(summary.categories.find(category => category.id === "dismiss")).toMatchObject({ attempts: 1, confirmed: 1 });
     expect(rows).toEqual(before);
 });
 it("概览分类与筛选一致，失败和回滚是可以重叠的维度", () => {
@@ -46,25 +47,29 @@ it("概览分类与筛选一致，失败和回滚是可以重叠的维度", () =
     expect(matchesTrajectoryState(rolledFailure, "failed")).toBe(true);
     expect(matchesTrajectoryState(rolledFailure, "rolled_back")).toBe(true);
     expect(matchesTrajectoryState(rolledFailure, "confirmed")).toBe(false);
-    expect(operationCategory({ type: "tool_result", name: "write_memo", result: { ok: true } })).toBe("other");
+    expect(operationCategory({ type: "tool_result", name: "write_memo", result: { ok: true } })).toBe("memo");
 });
-it("刷新预览归为查询，不混入经营统计，实际付费刷新仍计入其它操作", () => {
+it("旧式刷新预览和实刷均可统计筛选，只读预览不混同付费动作", () => {
     const preview: TrajectoryRow = { ...records()[0], id: "100:10", ordinal: 10, cursor: 10100,
         event: { type: "tool_result", name: "refresh_monsters", arguments: { locked_monster_ids: [], preview: true }, result: { ok: true } } };
     const refresh: TrajectoryRow = { ...preview, id: "100:11", ordinal: 11, cursor: 10200,
         event: { ...preview.event, arguments: { locked_monster_ids: [], preview: false } } };
     const summary = summarizeTrajectories([preview, refresh]);
-    expect(summary.total).toBe(1);
-    expect(summary.states.confirmed).toBe(1);
-    expect(summary.categories.find(category => category.id === "other")).toMatchObject({ attempts: 1, confirmed: 1 });
-    expect(matchesOperation(preview, "all")).toBe(false);
-    expect(matchesOperation(preview, "refresh_monsters")).toBe(false);
-    expect(matchesOperation(refresh, "category:other")).toBe(true);
+    expect(summary.total).toBe(2);
+    expect(summary.states.confirmed).toBe(2);
+    expect(summary.categories.find(category => category.id === "preview")).toMatchObject({ attempts: 1, confirmed: 1 });
+    expect(summary.categories.find(category => category.id === "refresh")).toMatchObject({ attempts: 1, confirmed: 1 });
+    expect(summary.tools).toHaveLength(1);
+    expect(summary.tools[0]).toMatchObject({ name: "refresh_monsters", total: 2, succeeded: 2 });
+    expect(matchesOperation(preview, "all")).toBe(true);
+    expect(matchesOperation(preview, "refresh_monsters")).toBe(true);
+    expect(matchesOperation(refresh, "category:refresh")).toBe(true);
     expect(historyAction(preview)).toMatchObject({ kind: "query", title: "预览怪物刷新", summary: "仅查看刷新候选，未刷新怪物或消耗金币" });
 });
 it("已读取的空日志可得到零计数，不能修改原始数据或虚构成功", () => {
     const summary = summarizeTrajectories([]);
     expect(summary.total).toBe(0);
-    expect(summary.categories).toHaveLength(8);
+    expect(summary.categories).toHaveLength(13);
+    expect(summary.tools).toEqual([]);
     expect(summary.categories.every(category => category.attempts === 0 && category.confirmed === 0)).toBe(true);
 });

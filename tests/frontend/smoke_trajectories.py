@@ -21,6 +21,7 @@ from smoke_workbench import wait_until
 from guild_manager_bench.api.app import create_app
 from guild_manager_bench.api.workbench import timestamp
 from guild_manager_bench.bench.llm.tools import GuildManagerTools
+from guild_manager_bench.bench.llm.runner import _format_tool_result_for_model
 from guild_manager_bench.game.state import MATERIAL_NAMES
 
 
@@ -31,19 +32,29 @@ def scenario():
     obs = lambda: tools.get_observation(session)["observation"]
     events = [{"type": "run_started", "observation": obs()}]
     current = []
+    step = 0
 
     def start():
+        nonlocal step
+        step = 0
         events.append({"type": "turn_started", "turn": obs()["turn"], "observation": obs()})
 
     def call(name, args, invoke):
+        nonlocal step
+        step += 1
         turn = obs()["turn"]
         identity = str(len(events))
         result = invoke()
-        if result.get("ok") and not (name == "refresh_monsters" and args.get("preview") is True):
+        if result.get("ok") and not name.startswith(("get_", "preview_")):
             result = {**result, "_observation_after": obs()}
+        text = f"构造正文：调用 {name}，不代表真实模型决策。"
+        if name == "purchase_upgrade":
+            text += "\n用于验证长正文之后仍能直接定位推理，而非停留在正文顶部。" * 80
         events.extend([
+            {"type": "model_request", "turn": turn, "step": step, "request": {"messages": [{"role": "user", "content": "构造历史定位输入"}]}},
+            {"type": "model_response", "turn": turn, "step": step, "text": text, "assistant_metadata": {"reasoning_content": f"构造 API 推理：回合 {turn}，调用 {step}，工具 {name}。仅用于验证记录定位。"}, "tool_calls": [{"call_id": identity, "name": name, "arguments": args}]},
             {"type": "tool_call", "turn": turn, "name": name, "arguments": args, "call_id": identity},
-            {"type": "tool_result", "turn": turn, "name": name, "arguments": args, "call_id": identity, "result": result},
+            {"type": "tool_result", "turn": turn, "name": name, "arguments": args, "call_id": identity, "result": result, "content": _format_tool_result_for_model(name, result)},
         ])
         return result
 
@@ -54,8 +65,9 @@ def scenario():
         events.extend([{"type": "turn_completed", "turn": turn}, {"type": "turn_scored", "turn": turn, "rank_score": 0}])
 
     start()
-    preview = call("refresh_monsters", {"locked_monster_ids": [], "preview": True}, lambda: tools.refresh_monsters(session, [], True))
+    preview = call("preview_monster_refresh", {"locked_monster_ids": []}, lambda: tools.preview_monster_refresh(session, []))
     assert preview["ok"]
+    call("get_crafting", {}, lambda: tools.get_crafting(session))
     candidate = next(c for c in obs()["recruit_candidates"] if c["template_id"] == "mercenary_warrior")
     assert call("recruit_adventurer", {"candidate_id": candidate["candidate_id"]}, lambda: tools.recruit_adventurer(session, candidate["candidate_id"]))["ok"]
     end()
@@ -102,6 +114,7 @@ def main():
     jobs, _, _ = seed(manager)
     job = jobs[0]
     events, current, observation, purchase_summary, items = scenario()
+    tool_count = sum(event["type"] == "tool_call" for event in events)
     archive = manager.archive_root / "trajectory-fixture"
     archive.mkdir(parents=True)
     path = archive / "trace.jsonl"
@@ -126,14 +139,20 @@ def main():
             page = browser.new_page(viewport={"width": 1440, "height": 900})
             page.on("pageerror", lambda error: errors.append(str(error)))
             page.goto(base + f"/?view=focus&run={job['id']}")
-            page.get_by_role("button", name="展开最近行动", exact=True).click()
+            # 先从对象轨迹进入行动页，覆盖绕过模块导航的真实入口。
+            page.get_by_role("button", name="展开公会发展", exact=True).click()
+            page.get_by_role("button", name="查看升级 训练场", exact=True).click()
+            initial_talent = page.get_by_role("region", name="训练场 的详情", exact=True)
+            initial_talent.locator(".object-trajectories > summary").click()
+            initial_talent.locator(".trajectory-result").click()
+            expect(page.get_by_role("heading", name="行动时间线模块标题", exact=True)).to_be_visible()
             page.get_by_role("button", name="整局检索", exact=True).click()
-            overview = page.get_by_role("region", name="整局经营操作概览", exact=True)
+            overview = page.get_by_role("region", name="整局工具调用概览", exact=True)
             craft = overview.get_by_role("button", name="查看装备制作记录", exact=True)
             expect(craft).to_be_enabled()
             expect(craft.locator("b")).to_have_text("4")
             expect(craft.locator("em")).to_have_text("已确认 3")
-            expect(overview.get_by_role("button", name=re.compile(r"共\s*13\s*次尝试"))).to_be_visible()
+            expect(overview.get_by_role("button", name=re.compile(fr"共\s*{tool_count}\s*次调用"))).to_be_visible()
             page.screenshot(path=str(directory / "overview-light.png"), full_page=True)
             for width, height in [(1280, 720), (1440, 900)]:
                 page.set_viewport_size({"width": width, "height": height})
@@ -144,16 +163,38 @@ def main():
                     const s = summary.getBoundingClientRect(), b = body.getBoundingClientRect(), d = detail.getBoundingClientRect();
                     return { fits: element.scrollHeight <= element.clientHeight + 1, widthFits: summary.scrollWidth <= summary.clientWidth + 1,
                         fullWidth: Math.abs(s.width - b.width) <= 1, beforeDetail: s.bottom <= d.top + 1,
-                        resultHeight: element.querySelector('.trajectory-results').clientHeight };
+                        resultHeight: element.querySelector('.trajectory-results').clientHeight,
+                        overviewHeight: s.height, bodyHeight: b.height,
+                        grid: getComputedStyle(summary.querySelector('.trajectory-category-totals')).gridTemplateColumns,
+                        cardsHeight: summary.querySelector('.trajectory-category-totals').getBoundingClientRect().height,
+                        headerHeight: summary.querySelector('header').getBoundingClientRect().height };
                 }""")
+                page.screenshot(path=str(directory / f"layout-{width}.png"), full_page=True)
                 assert metrics["fits"] and metrics["widthFits"] and metrics["fullWidth"] and metrics["beforeDetail"] and metrics["resultHeight"] >= 120, metrics
+            page.get_by_label("筛选轨迹操作").select_option("get_crafting")
+            expect(page.locator(".trajectory-search-panel .trajectory-result")).to_have_count(1)
+            expect(page.locator(".trajectory-search-panel .trajectory-result")).to_contain_text("只读查询")
+            page.locator(".trajectory-results > .tool-call-summary > summary").click()
+            preview_tool = page.get_by_role("button", name="筛选工具 预览怪物刷新", exact=True)
+            expect(preview_tool).to_be_visible()
+            assert page.locator(".trajectory-results").evaluate("node => node.clientHeight >= 120")
+            preview_tool.click()
+            expect(page.locator(".trajectory-search-panel .trajectory-result")).to_have_count(1)
+            expect(page.locator(".trajectory-search-panel .trajectory-result")).to_contain_text("只读预览")
+            page.locator(".trajectory-search-panel .trajectory-result").click()
+            expect(page.get_by_role("region", name="所选行动详情", exact=True)).to_contain_text("刷新预览候选，不是实际刷新")
+            page.get_by_role("button", name="所选回合", exact=True).click()
+            page.get_by_label("筛选本回合工具").select_option("preview_monster_refresh")
+            expect(page.locator(".spectator-timeline-scroll .action-entry")).to_have_count(1)
+            expect(page.locator(".spectator-timeline-scroll .action-entry")).to_contain_text("只读预览")
+            page.get_by_role("button", name="整局检索", exact=True).click()
             craft.click()
             expect(page.get_by_label("筛选轨迹操作")).to_have_value("category:craft")
             expect(page.locator(".trajectory-search-panel .trajectory-result")).to_have_count(4)
             overview.get_by_role("button", name="查看操作失败记录", exact=True).click()
             expect(page.locator(".trajectory-search-panel .trajectory-result")).to_have_count(1)
-            overview.get_by_role("button", name=re.compile(r"共\s*13\s*次尝试")).click()
-            expect(page.locator(".trajectory-search-panel .trajectory-result")).to_have_count(13)
+            overview.get_by_role("button", name=re.compile(fr"共\s*{tool_count}\s*次调用")).click()
+            expect(page.locator(".trajectory-search-panel .trajectory-result")).to_have_count(tool_count)
             search = page.get_by_label("搜索整局行动", exact=True)
             search.fill("训练场")
             expect(craft.locator("b")).to_have_text("4")
@@ -171,6 +212,39 @@ def main():
             expect(raw.locator("pre")).to_contain_text("training_grounds")
             raw.locator("summary").click()
             page.screenshot(path=str(directory / "search-talent-light.png"), full_page=True)
+            detail.get_by_role("button", name="查看对应模型推理", exact=True).click()
+            expect(page.get_by_role("heading", name="模型输出模块标题", exact=True)).to_be_visible()
+            reasoning = page.locator(".model-linked-reasoning")
+            expect(reasoning).to_have_attribute("open", "")
+            expect(reasoning.locator("pre")).to_contain_text("构造 API 推理：回合 2，调用 1，工具 purchase_upgrade")
+            expect(page.locator(".model-reasoning-source")).to_contain_text(purchase_summary)
+            linked_page = page.request.get(base + f"/api/workbench/jobs/{job['id']}/trajectories", params={"attempt": int(page.get_by_label("选择观战回合").input_value()), "origin": "archive"}).json()
+            model_cursor = next(record["cursor"] for record in linked_page["records"] if record["event"]["type"] == "model_request" and record["event"]["step"] == 1)
+            expect(page.get_by_label("选择模型调用")).to_have_value(str(model_cursor))
+            page.screenshot(path=str(directory / "tool-reasoning-light.png"), full_page=True)
+            assert reasoning.locator("pre").evaluate("node => node.scrollHeight <= node.clientHeight + 1")
+            assert reasoning.evaluate("""node => {
+                const view = node.closest('.spectator-model-content').getBoundingClientRect();
+                const summary = node.querySelector('summary').getBoundingClientRect();
+                return summary.top >= view.top - 1 && summary.top <= view.top + 16 && summary.bottom <= Math.min(view.bottom, innerHeight) + 1;
+            }"""), "长正文后的推理应在跳转后立即可见"
+            for width, height in [(1280, 720), (390, 844)]:
+                page.set_viewport_size({"width": width, "height": height})
+                page.get_by_role("button", name="返回该工具", exact=True).click()
+                expect(search).to_have_value("训练场")
+                detail.get_by_role("button", name="查看对应模型推理", exact=True).click()
+                expect(reasoning).to_have_attribute("open", "")
+                expect(reasoning.locator("summary")).to_be_in_viewport()
+                assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+                page.screenshot(path=str(directory / f"tool-reasoning-{width}.png"), full_page=True)
+            page.set_viewport_size({"width": 1440, "height": 900})
+            page.get_by_role("button", name="返回该工具", exact=True).click()
+            expect(detail.get_by_role("heading", name=purchase_summary, exact=True)).to_be_visible()
+            expect(search).to_have_value("训练场")
+            expect(page.locator(".trajectory-search-panel .trajectory-result")).to_have_count(1)
+            detail.get_by_role("button", name="查看对应模型推理", exact=True).click()
+            expect(reasoning).to_have_attribute("open", "")
+            page.get_by_role("button", name="返回该工具", exact=True).click()
             page.get_by_label("切换展开模块", exact=True).select_option("upgrades")
             page.get_by_role("button", name="查看升级 训练场", exact=True).click()
             talent = page.get_by_role("region", name="训练场 的详情", exact=True)

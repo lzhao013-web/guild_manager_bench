@@ -54,6 +54,47 @@ it("回看调用时显示当时输入和执行中，不提前展示之后的结�
     expect(within(detail).queryByText("余额不足", { exact: true })).not.toBeInTheDocument();
 });
 
+it("所有工具默认可见且按具体工具筛选汇总，调用与结果合并计一次", () => {
+    setup([
+        rec(2, { type: "tool_call", name: "get_crafting", call_id: "query", arguments: {} }),
+        rec(3, { type: "tool_result", name: "get_crafting", call_id: "query", content: "成功 get_crafting", result: { crafting_recipes: [] } }),
+        rec(4, { type: "tool_result", name: "preview_monster_refresh", result: { ok: true, simulation_only: true } }),
+        rec(5, { type: "tool_result", name: "refresh_monsters", result: { ok: true } }),
+        rec(6, { type: "tool_result", name: "write_memo", result: { ok: false, error: "内容为空" } }),
+        rec(7, { type: "tool_result", name: "dismiss_adventurer", result: { ok: true } }),
+        rec(8, { type: "tool_call", name: "future_custom_tool", arguments: {} }),
+    ]);
+    const timeline = screen.getByRole("region", { name: "观战行动时间线" });
+    expect(within(timeline).getAllByRole("button", { name: "定位行动 查看制作配方" })).toHaveLength(1);
+    expect(within(timeline).getByRole("button", { name: "定位行动 刷新怪物" })).toBeVisible();
+    expect(within(timeline).getByRole("button", { name: "定位行动 记录备忘" })).toBeVisible();
+    expect(within(timeline).getByRole("button", { name: "定位行动 解雇冒险者" })).toBeVisible();
+    expect(within(timeline).getByRole("button", { name: "定位行动 预览怪物刷新" })).toBeVisible();
+    fireEvent.change(screen.getByLabelText("筛选本回合工具"), { target: { value: "preview_monster_refresh" } });
+    expect(within(timeline).getAllByRole("button", { name: /定位行动/ })).toHaveLength(1);
+    const summary = screen.getByText(/按工具汇总/).closest("summary")!;
+    fireEvent.click(summary);
+    const stats = screen.getByRole("region", { name: "本回合工具汇总" });
+    expect(within(stats).getByRole("button", { name: "筛选工具 查看制作配方" }).closest("tr")).toHaveTextContent("1");
+    fireEvent.click(within(stats).getByRole("button", { name: "筛选工具 future_custom_tool" }));
+    expect(screen.getByLabelText("筛选本回合工具")).toHaveValue("future_custom_tool");
+    expect(within(timeline).getByRole("button", { name: "定位行动 future_custom_tool" })).toHaveTextContent("执行中");
+    fireEvent.change(screen.getByLabelText("筛选本回合状态"), { target: { value: "succeeded" } });
+    expect(within(timeline).queryByRole("button", { name: /定位行动/ })).not.toBeInTheDocument();
+});
+
+it("旧式刷新结果没有重复参数时，预览仍可筛选且不计为付费刷新", () => {
+    setup([
+        rec(2, { type: "tool_call", name: "refresh_monsters", call_id: "preview", arguments: { locked_monster_ids: [], preview: true } }),
+        rec(3, { type: "tool_result", name: "refresh_monsters", call_id: "preview", result: { ok: true } }),
+    ]);
+    fireEvent.change(screen.getByLabelText("筛选本回合工具"), { target: { value: "category:preview" } });
+    const timeline = screen.getByRole("region", { name: "观战行动时间线" });
+    expect(within(timeline).getByRole("button", { name: "定位行动 预览怪物刷新" })).toHaveTextContent("只读预览");
+    fireEvent.change(screen.getByLabelText("筛选本回合工具"), { target: { value: "category:refresh" } });
+    expect(within(timeline).queryByRole("button", { name: /定位行动/ })).not.toBeInTheDocument();
+});
+
 it("派遣参数按成员和怪物逐项展示，实际战果与输入分开", () => {
     setup([rec(2, { type: "tool_result", name: "end_turn", arguments: { hunts: [{ adventurer_id: "hero", monster_id: "slime" }] },
         result: { ok: true, turn_result: { battles: [{ adventurer_name: "验收剑士", monster_name: "史莱姆", won: true }] } } })]);

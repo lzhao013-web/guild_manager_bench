@@ -3,11 +3,21 @@ import type { RunCatalog } from "./runCatalog";
 
 export type CurveMetric = "rank_score" | "gold" | "experience_pool" | "gold_income" | "experience_income";
 export interface CurvePoint { turn: number; rank_score: number | null; gold: number | null; experience_pool: number | null; gold_income: number | null; experience_income: number | null }
+export interface CurveMilestone {
+    id: string;
+    turn: number;
+    kind: "expansion" | "level_9" | "boss_victory" | "challenge_victory";
+    label: string;
+    detail: string;
+}
+export interface CurveMilestoneGroup { turn: number; events: CurveMilestone[] }
 export interface CurveData {
     run_id: string | null;
     status: string;
     max_turns: number | null;
     points: CurvePoint[];
+    // 旧服务仍可返回原有曲线，未提供节点时明确提示，不能据此声称从未发生。
+    milestones?: CurveMilestone[];
     conditions: Partial<Record<"preset" | "data_hash" | "benchmark_version" | "protocol_hash" | "settings_hash", string | null> & { game_seed: number | null; scoring_seed: number | null }>;
     updated_at: string | null;
     warning: string | null;
@@ -48,6 +58,28 @@ export function curveSegments(points: CurvePoint[], metric: CurveMetric, from: n
         previous = point.turn;
     }
     return segments;
+}
+export function latestCommonTurn(data: (CurveData | undefined)[], metrics: CurveMetric[], from: number, to: number): number | null {
+    if (!data.length || data.some(run => !run)) return null;
+    const turns = data.map(run => new Set(run!.points
+        .filter(point => point.turn >= from && point.turn <= to && metrics.every(metric => point[metric] !== null))
+        .map(point => point.turn)));
+    const common = [...turns[0]].filter(turn => turns.every(recorded => recorded.has(turn)));
+    return common.length ? Math.max(...common) : null;
+}
+
+export function milestoneCategory(kind: CurveMilestone["kind"]): "economy" | "experience" | "power" {
+    return kind === "expansion" ? "economy" : kind === "level_9" ? "experience" : "power";
+}
+export function curveMilestoneGroups(data: CurveData, metric: CurveMetric, from: number, to: number): CurveMilestoneGroup[] {
+    const category = metric === "rank_score" ? "power" : metric.startsWith("gold") ? "economy" : "experience";
+    const groups = new Map<number, CurveMilestone[]>();
+    for (const event of data.milestones ?? []) {
+        if (event.turn < from || event.turn > to || milestoneCategory(event.kind) !== category) continue;
+        if (!groups.has(event.turn)) groups.set(event.turn, []);
+        groups.get(event.turn)!.push(event);
+    }
+    return [...groups].sort(([a], [b]) => a - b).map(([turn, events]) => ({ turn, events }));
 }
 export function conditionWarning(data: CurveData[]): string | null {
     if (data.length < 2) return null;

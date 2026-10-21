@@ -6,12 +6,12 @@ import { expect, it, vi } from "vitest";
 import { CurveBoard } from "./CurveBoard";
 import { buildRunCatalog } from "./runCatalog";
 import { testArchive, testJob } from "./test-jobs";
-import type { CurveData, CurvePoint } from "./curveModel";
+import type { CurveData, CurvePoint, CurveMilestone } from "./curveModel";
 
 const point = (turn: number, scale = 1): CurvePoint => ({ turn, rank_score: turn === 1 ? 0 : turn * 100 * scale + (turn === 3 && scale === 1 ? 0.1234 : 0), gold_income: turn * 10 * scale, experience_income: turn * 20 * scale, gold: 50 - turn * 2, experience_pool: turn * 3 });
 const data = (points: CurvePoint[]): CurveData => ({ run_id: "fixture", status: "completed", max_turns: 8, points, updated_at: null, warning: null,
     conditions: { preset: "full", protocol_hash: "rules", settings_hash: "settings", data_hash: "data", game_seed: 7, scoring_seed: 11 } });
-function setup(empty = false, running = false) {
+function setup(empty = false, running = false, milestones: CurveMilestone[] = [], records?: Record<string, CurveData>) {
     const requests: string[] = [];
     const catalog = buildRunCatalog([testJob("a", { name: "构造模型 A", archive_id: "A", status: running ? "running" : "completed" }), testJob("b", { name: "构造模型 B", archive_id: "B", status: "completed" })]);
     let finished = false;
@@ -22,7 +22,7 @@ function setup(empty = false, running = false) {
         if (path === "/api/llm/runs") return new Response(JSON.stringify({ runs: [testArchive("cli", { model: "构造 CLI" })] }));
         const key = new URL(path, "http://localhost").searchParams.get("job_id");
         const points = empty ? [] : key === "b" ? [point(1, 2), point(3, 2)] : [point(1), point(2), point(3), ...(finished ? [point(4)] : [])];
-        return new Response(JSON.stringify(data(points)));
+        return new Response(JSON.stringify(records?.[key!] || { ...data(points), milestones }));
     });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
     function Harness() {
@@ -43,6 +43,10 @@ it("三类曲线统一展示并联动定位，收入与余额可切换，缺回�
     const values = await screen.findByRole("region", { name: "同回合数值与差值" });
     await waitFor(() => expect(values).toHaveTextContent("600"));
     expect(values).toHaveTextContent("300.1234");
+    const workspace = screen.getByRole("region", { name: "统一曲线对比工作区" });
+    workspace.focus();
+    expect(workspace).toHaveFocus();
+    expect(workspace).toHaveAttribute("tabindex", "0");
     expect(screen.getByRole("region", { name: "经济曲线" })).toBeVisible();
     expect(screen.getByRole("region", { name: "经验曲线" })).toBeVisible();
     expect(screen.getByRole("region", { name: "战力曲线" })).toBeVisible();
@@ -63,12 +67,84 @@ it("三类曲线统一展示并联动定位，收入与余额可切换，缺回�
     expect(requests.every(path => path.startsWith("GET ") && !path.includes("/replay") && !path.includes("/rescore"))).toBe(true);
 });
 
+it("三类节点在图下按 run 分轨，缺数值仍可定位，同数值不再合并不同 run", async () => {
+    setup(false, false, [
+        { id: "exp1", turn: 1, kind: "expansion", label: "解锁扩编 1", detail: "解锁扩编 1" },
+        { id: "exp2", turn: 2, kind: "expansion", label: "解锁扩编 2", detail: "解锁扩编 2" },
+        { id: "a9", turn: 2, kind: "level_9", label: "剑士达到 Lv9", detail: "剑士：Lv8 → Lv9" },
+        { id: "b9", turn: 2, kind: "level_9", label: "神官达到 Lv9", detail: "神官：Lv8 → Lv10" },
+        { id: "boss", turn: 3, kind: "boss_victory", label: "战胜首领", detail: "剑士战胜首领座狼" },
+        { id: "challenge", turn: 3, kind: "challenge_victory", label: "完成挑战", detail: "神官完成毁灭先知挑战" },
+    ]);
+    const experience = await screen.findByRole("region", { name: "经验曲线" });
+    const mark = within(experience).getByRole("button", { name: /轨道节点.*构造模型 A.*T2/ });
+    expect(mark).toHaveAttribute("data-event-count", "2");
+    fireEvent.click(mark);
+    expect(screen.getByLabelText("定位对比回合")).toHaveValue(2);
+    const details = screen.getByRole("region", { name: "所选回合关键节点" });
+    expect(details).toHaveTextContent("剑士：Lv8 → Lv9");
+    expect(details).toHaveTextContent("神官：Lv8 → Lv10");
+    const missing = within(experience).getByRole("button", { name: /轨道节点.*构造模型 B.*T2/ });
+    expect(missing).not.toBe(mark);
+    fireEvent.focus(missing);
+    expect(screen.getByLabelText("定位对比回合")).toHaveValue(2);
+    expect(experience.querySelector(".curve-plot button")).toBeNull();
+    fireEvent.click(within(experience).getByText(/节点详情/).closest("summary")!);
+    expect(within(experience).getByRole("button", { name: /定位节点.*构造模型 B.*T2/ })).toHaveTextContent("数值未记录");
+    fireEvent.click(screen.getByRole("button", { name: "结算后余额" }));
+    const economy = screen.getByRole("region", { name: "经济曲线" });
+    const first = within(economy).getByRole("button", { name: /轨道节点.*构造模型 A.*T1/ });
+    const second = within(economy).getByRole("button", { name: /轨道节点.*构造模型 B.*T1/ });
+    expect(first).not.toBe(second);
+    expect(first).toHaveAttribute("data-event-count", "1");
+    expect(second).toHaveAttribute("data-event-count", "1");
+    expect(first).toHaveTextContent("扩1");
+    fireEvent.change(screen.getByLabelText("曲线起始回合"), { target: { value: "3" } });
+    expect(within(economy).queryByRole("button", { name: /轨道节点/ })).not.toBeInTheDocument();
+    expect(within(experience).queryByRole("button", { name: /轨道节点/ })).not.toBeInTheDocument();
+    const power = screen.getByRole("region", { name: "战力曲线" });
+    const victory = within(power).getByRole("button", { name: /轨道节点.*构造模型 A.*T3/ });
+    expect(victory).toHaveAttribute("data-event-count", "2");
+    expect(victory).toHaveTextContent("首挑");
+    expect(power.querySelector(".curve-plot button")).toBeNull();
+});
+
 it("运行结束和检查点变化后立即追上最后一个回合，不因停止轮询而漏掉终态曲线", async () => {
     const { finish } = setup(false, true);
     expect(await screen.findByRole("heading", { name: "回合 3 对比" })).toBeVisible();
     await act(() => finish());
     expect(await screen.findByRole("heading", { name: "回合 4 对比" })).toBeVisible();
     expect(screen.getByRole("region", { name: "同回合数值与差值" })).toHaveTextContent("400");
+});
+
+it("相同风险合并但保留每路详情，共同回合按钮只定位实际已记录数值且遵守范围", async () => {
+    const warning = "跨版本执行：历史与当前规则不完全一致，不作同版本标准比较";
+    setup(false, false, [], {
+        a: { ...data([point(1), point(2), point(4)]), warning },
+        b: { ...data([point(1, 2), point(3, 2), { ...point(4, 2), gold_income: null }]), warning },
+    });
+    const values = await screen.findByRole("region", { name: "同回合数值与差值" });
+    await waitFor(() => expect(values).toHaveTextContent("800"));
+    const risk = screen.getByLabelText("曲线风险提示");
+    expect(risk.querySelector("summary")).toHaveTextContent(`2 个 run：${warning}`);
+    expect(risk).not.toHaveAttribute("open");
+    fireEvent.click(risk.querySelector("summary")!);
+    expect(within(risk).getByText(/构造模型 A/)).toBeVisible();
+    expect(within(risk).getByText(/构造模型 B/)).toBeVisible();
+    expect(screen.getByText("当前回合 4：1 / 2 路具备三项指标")).toBeVisible();
+    const common = screen.getByRole("button", { name: "最近共同已记录回合" });
+    fireEvent.click(common);
+    expect(screen.getByLabelText("定位对比回合")).toHaveValue(1);
+    expect(values).not.toHaveTextContent("差值未知");
+    fireEvent.click(screen.getByRole("button", { name: "全程 / 跟随最新" }));
+    expect(screen.getByLabelText("定位对比回合")).toHaveValue(4);
+    fireEvent.click(screen.getByRole("button", { name: "结算后余额" }));
+    fireEvent.click(common);
+    expect(screen.getByLabelText("定位对比回合")).toHaveValue(4);
+    fireEvent.change(screen.getByLabelText("曲线结束回合"), { target: { value: "3" } });
+    fireEvent.change(screen.getByLabelText("曲线起始回合"), { target: { value: "2" } });
+    expect(common).toBeDisabled();
+    expect(screen.getByText("当前范围内没有共同已记录的三项指标回合")).toBeVisible();
 });
 
 it("没有结算数据时显示原因，不画三张空图或假曲线", async () => {

@@ -243,6 +243,23 @@ it("从已展开模块恢复工作区后，返回总览不会丢失天赋搜索�
     expect(screen.getByRole("button", { name: "天赋图原始大小" })).toHaveTextContent("110%");
 });
 
+it("外部轨迹定位进入行动后，往返模型模块仍保留检索条件", () => {
+    const content = (activeModule: RunModule) => <Theme>
+        <RunWorkspace observation={observation} before={null} frames={[]} records={records}
+            activeModule={activeModule} onModule={() => {}} onFrame={() => {}}
+            actions={<label>整局检索条件<input aria-label="整局检索条件" defaultValue="" /></label>}
+            models={<p>对应模型调用</p>} />
+    </Theme>;
+    const view = render(content("inventory"));
+    // 对象轨迹与工具跳转通过受控属性切换模块，不经过工具栏的 open。
+    view.rerender(content("actions"));
+    fireEvent.change(screen.getByLabelText("整局检索条件"), { target: { value: "训练场" } });
+    view.rerender(content("models"));
+    expect(screen.getByText("对应模型调用")).toBeVisible();
+    view.rerender(content("actions"));
+    expect(screen.getByLabelText("整局检索条件")).toHaveValue("训练场");
+});
+
 it("行动和模型也在同一工作区展开，模块之间可直接切换", () => {
     render(<Harness />);
     fireEvent.click(screen.getByRole("button", { name: "展开最近行动" }));

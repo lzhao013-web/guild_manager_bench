@@ -56,8 +56,11 @@ export function RunWorkspace({
                       )!;
                 target.focus({ preventScroll: true });
             }
-        } else if (!document.activeElement?.closest(".workspace-module-toolbar")) {
-            heading.current!.focus({ preventScroll: true });
+        } else {
+            // 工具推理和对象轨迹也会从外部切换模块，统一在这里保留已访问内容。
+            setVisited((previous) => previous.includes(activeModule) ? previous : [...previous, activeModule]);
+            if (!document.activeElement?.closest(".workspace-module-toolbar"))
+                heading.current!.focus({ preventScroll: true });
         }
         previousModule.current = activeModule;
     }, [activeModule]);
@@ -66,7 +69,6 @@ export function RunWorkspace({
             returnFocus.current = document.activeElement as HTMLElement;
         if (module !== "actions" && module !== "models")
             setViews((previous) => openSceneView(previous, module, observation, selection, slot));
-        setVisited((previous) => (previous.includes(module) ? previous : [...previous, module]));
         onModule(module);
     }
     const mounted =

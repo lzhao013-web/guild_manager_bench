@@ -23,6 +23,16 @@ ARGUMENTS = {
     "monster_id": "monster",
 }
 REF_KINDS = {"member": "adventurer", "candidate": "recruit"}
+# 整局索引只保留查询规模、标量结果和小型战果，完整返回从所属回合按需读取。
+RESULT_FIELDS = (
+    "ok", "error", "event", "_llm_refs", "memo", "monster_refresh", "simulation_only", "forecast_only",
+    "gold", "experience_pool", "party_size", "party_size_limit", "turn", "max_turns", "current_turn",
+    "source", "kind", "detail", "start_turn", "end_turn", "total_matches", "offset", "limit", "next_offset",
+    "cursor", "next_cursor", "total_events", "matched_events", "record_count", "battle", "statistics",
+    "gold_cost", "can_afford", "refresh_number", "rank_score", "current_rank_score", "projected_rank_score",
+    "rank_score_delta", "operation_count",
+)
+RESULT_COLLECTIONS = tuple(collection for collection, _ in COLLECTIONS.values()) + ("events", "items", "battles", "per_adventurer")
 
 
 class TrajectoryIndex:
@@ -70,8 +80,6 @@ class TrajectoryIndex:
         name = event["name"]
         result = event.get("result") or {}
         after = result.get("_observation_after") or self.observation
-        if name.startswith(("get_", "preview_")):
-            return
         key = (name, event.get("call_id"))
         previous = self.pending.pop(key, None) if kind == "tool_result" else None
         if previous is None:
@@ -87,13 +95,18 @@ class TrajectoryIndex:
         args = arguments or {}
         subjects, names = self._subjects(name, args, result, self.observation, after)
         # 仅投影行动所需字段，不发送提示词、原始模型返回或完整局面。
-        compact = {k: result[k] for k in ("ok", "error", "event", "_llm_refs", "memo", "monster_refresh") if k in result}
+        compact = {k: result[k] for k in RESULT_FIELDS if k in result}
+        counts = {key: len(result[key]) for key in RESULT_COLLECTIONS if isinstance(result.get(key), list)}
+        if counts:
+            compact["_collection_counts"] = counts
+        if isinstance(result.get("preview"), dict):
+            compact["preview"] = {key: value for key, value in result["preview"].items() if key != "events"}
         output = action_output(result, self.observation, result.get("_observation_after") or {},
                                members=tuple(subject["id"] for subject in subjects if subject["kind"] == "member"))
         if output:
             compact["_action_output"] = output
         if "monsters" in result:
-            compact["monsters"] = [{key: item[key] for key in ("monster_id", "name", "stats", "reward", "traits", "tier") if key in item}
+            compact["monsters"] = [{key: item[key] for key in ("monster_id", "refresh_ref", "preserved", "name", "stats", "reward", "traits", "tier") if key in item}
                                    for item in result["monsters"]]
         if "turn_result" in result:
             compact["turn_result"] = {"battles": [
@@ -108,7 +121,8 @@ class TrajectoryIndex:
             "at": at, "lifecycle": self.attempt_states.get(attempt, "uncommitted"),
             "subjects": subjects, "names": used_names,
             "event": {"type": kind, "name": name, "result": compact,
-                      **({"arguments": arguments} if recorded_args else {})},
+                      **({"arguments": arguments} if recorded_args else {}),
+                      **({"content": event["content"].split("\n", 1)[0][:240]} if "content" in event else {})},
         }
         if previous is not None:
             self.rows[previous] = row

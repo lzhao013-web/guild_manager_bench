@@ -7,10 +7,13 @@ import type { ActionReturn } from "./actionReturns";
 import { stateChanges } from "./watchModel";
 import type { EventRecord, GameEntity } from "./types";
 import type { WatchFrame } from "./watchModel";
+import { isReadOnlyTool, isRefreshPreview, toolCallStatus } from "./toolCalls";
+export { isRefreshPreview } from "./toolCalls";
 
 export interface ActionEntry {
     kind: "action" | "query" | "system";
     frame: WatchFrame;
+    event: EventRecord["event"];
     start: number;
     title: string;
     status: "pending" | "succeeded" | "failed" | "recorded";
@@ -19,9 +22,6 @@ export interface ActionEntry {
     input: ActionInput;
     returned: ActionReturn;
     rolledBack: boolean;
-}
-export function isRefreshPreview(event: EventRecord["event"]): boolean {
-    return event.name === "refresh_monsters" && event.arguments?.preview === true;
 }
 export const ACTION_STATUS = { pending: "执行中", succeeded: "成功", failed: "失败", recorded: "已记录" };
 const WARNINGS = new Set(["retry", "turn_retry", "turn_failed", "run_failed", "worker_failed", "checkpoint_failed"]);
@@ -115,6 +115,9 @@ function querySummary(frame: WatchFrame): string {
         const names = items.slice(0, 3).map(item => item.name).filter(Boolean).join("、");
         return `返回 ${items.length} ${field[1]}${names ? `：${names}${items.length > 3 ? "等" : ""}` : ""}`;
     }
+    if (field && r._collection_counts?.[field[0]] != null) return `返回 ${r._collection_counts[field[0]]} ${field[1]}`;
+    if (e.name === "get_forecast" && r.start_turn != null) return `未来${r.kind === "recruits" ? "招募" : "怪物"} T${r.start_turn}—T${r.end_turn}，命中 ${fmt(r.total_matches)} 条，不是当前局面`;
+    if (e.name === "preview_team_power" && r.current_rank_score != null) return `当前战力 ${fmt(r.current_rank_score)} → 方案战力 ${fmt(r.projected_rank_score)}（变化 ${fmt(r.rank_score_delta)}），方案未执行`;
     if (e.name === "preview_battle" && r.preview) return `${r.preview.adventurer_name} 对 ${r.preview.monster_name}：模拟${battleResult(r.preview)}，不是实际讨伐`;
     if (e.name === "preview_team_power" && r.rank_score != null) return `试算评分 ${fmt(r.rank_score)}，未执行真实讨伐`;
     if (e.name === "preview_monster_refresh" || isRefreshPreview(e)) return "仅查看刷新候选，未刷新怪物或消耗金币";
@@ -128,15 +131,16 @@ export function describeAction(frame: WatchFrame, start = frame.cursor, call?: W
         : frame;
     const e = described.record.event, names = namesFor(described);
     const tool = e.type === "tool_call" || e.type === "tool_result";
-    const kind = !tool ? "system" : /^(get_|preview_)/.test(e.name) || isRefreshPreview(e) ? "query" : "action";
-    const status = e.type === "tool_call" ? "pending" : frame.failed ? "failed" : e.result?.ok === true ? "succeeded" : "recorded";
-    let title = tool ? readable((frame.failed ? "" : e.result?.event?.summary) || inferredTitle(described, names), names) : frame.title;
+    const kind = !tool ? "system" : isReadOnlyTool(e) ? "query" : "action";
+    const status = tool ? toolCallStatus(e) : frame.failed ? "failed" : "recorded";
+    const failed = status === "failed";
+    let title = tool ? readable((failed ? "" : e.result?.event?.summary) || inferredTitle(described, names), names) : frame.title;
     if (isRefreshPreview(e)) title = "预览怪物刷新";
-    let summary = frame.failed ? readable(String(e.result?.error || e.error || e.failure_reason || frame.summary), names) : "";
+    let summary = failed ? readable(String(e.result?.error || e.error || e.failure_reason || frame.summary || String(e.content || "").split("\n", 1)[0]), names) : "";
     const effects = tool && kind === "action" ? observedEffects(frame, names) : [];
     const returned = describeReturn(described);
     if (status === "pending") summary = "工具已发出，尚未记录执行结果";
-    else if (tool && !frame.failed) {
+    else if (tool && !failed) {
         if (kind === "query") summary = querySummary(described);
         else if (e.name === "write_memo" && e.result?.memo) {
             const memo = e.result.memo;
@@ -151,8 +155,8 @@ export function describeAction(frame: WatchFrame, start = frame.cursor, call?: W
             }
         }
     } else if (!tool) summary ||= RETRIES[e.reason] || frame.summary;
-    if (tool && !frame.failed && status !== "pending") summary ||= returned.summary;
-    return { kind, frame, start, title, status, summary, effects, input: describeInput(described, names), returned, rolledBack: false };
+    if (tool && !failed && status !== "pending") summary ||= returned.summary || String(e.content || "").split("\n", 1)[0];
+    return { kind, frame, event: e, start, title, status, summary, effects, input: describeInput(described, names), returned, rolledBack: false };
 }
 
 /** 展示层合并调用与结果；原始帧和游标不改动，回看仍定位到真实结果帧。 */
@@ -175,7 +179,7 @@ export function actionEntries(frames: WatchFrame[]): ActionEntry[] {
         entries.push(entry);
         if (e.type === "tool_call") pending.push({ entry: entries.length - 1, call: frame });
     }
-    if (rolledBack) for (const entry of entries) if (entry.kind === "action") entry.rolledBack = true;
+    if (rolledBack) for (const entry of entries) if (entry.kind !== "system") entry.rolledBack = true;
     return entries;
 }
 export function actionResult(entry: ActionEntry): string {

@@ -1,6 +1,10 @@
-import { describeAction, isRefreshPreview } from "./actionModel";
+import { describeAction } from "./actionModel";
+import { matchesTool, OPERATION_CATEGORIES, operationCategory, summarizeToolCalls, toolCallStatus } from "./toolCalls";
+import type { ToolCallStatus } from "./toolCalls";
 import type { Selection } from "./sceneModel";
 import type { WatchFrame, WatchPage } from "./watchModel";
+export { OPERATION_CATEGORIES, operationCategory } from "./toolCalls";
+export type { OperationCategory } from "./toolCalls";
 
 export interface TrajectoryRow {
     id: string;
@@ -31,51 +35,30 @@ export function historyAction(row: TrajectoryRow) {
         observation: null, before: null, score: null, call: null,
         failed: row.event.result?.ok === false, title: "", summary: "", names: row.names,
     };
-    return describeAction(frame);
+    return { ...describeAction(frame), rolledBack: row.lifecycle === "rolled_back" };
 }
 export function subjectRows(rows: TrajectoryRow[], subject: Selection) {
     return rows.filter(row => row.subjects.some(item => item.kind === subject.kind && item.id === subject.id));
 }
 export function confirmed(row: TrajectoryRow) {
-    return row.lifecycle === "confirmed" && row.event.result?.ok === true;
+    return row.lifecycle === "confirmed" && toolCallStatus(row.event) === "succeeded";
 }
-export const OPERATION_CATEGORIES = [
-    { id: "recruit", label: "招募", tools: ["recruit_adventurer"] },
-    { id: "upgrade", label: "天赋购买", tools: ["purchase_upgrade"] },
-    { id: "craft", label: "装备制作", tools: ["craft_equipment"] },
-    { id: "equipment", label: "穿戴 / 卸下", tools: ["equip_item", "unequip_item"] },
-    { id: "experience", label: "经验分配", tools: ["allocate_experience"] },
-    { id: "tactics", label: "战术配置", tools: ["configure_tactics"] },
-    { id: "turn", label: "结束回合", tools: ["end_turn"] },
-    { id: "other", label: "其它操作", tools: [] },
-] as const;
-export type OperationCategory = typeof OPERATION_CATEGORIES[number]["id"];
-export type TrajectoryState = "all" | "confirmed" | "uncommitted" | "failed" | "rolled_back";
-export function operationCategory(event: TrajectoryRow["event"]): OperationCategory | null {
-    // 当前索引按工具名前缀过滤查询，刷新预览则通过参数表达。
-    if (isRefreshPreview(event)) return null;
-    return OPERATION_CATEGORIES.find(category => category.tools.some(tool => tool === event.name))?.id || "other";
-}
+export type TrajectoryState = "all" | "confirmed" | "uncommitted" | "rolled_back" | ToolCallStatus;
 export function matchesOperation(row: TrajectoryRow, type: string): boolean {
-    const category = operationCategory(row.event);
-    if (category === null) return false;
-    if (type === "all") return true;
-    if (type.startsWith("category:")) return category === type.slice("category:".length);
-    return row.event.name === type;
+    return matchesTool(row.event, type);
 }
 export function matchesTrajectoryState(row: TrajectoryRow, state: TrajectoryState): boolean {
     if (state === "all") return true;
     if (state === "confirmed") return confirmed(row);
-    if (state === "failed") return row.event.result?.ok === false;
+    if (state === "failed" || state === "pending" || state === "succeeded" || state === "recorded") return toolCallStatus(row.event) === state;
     return row.lifecycle === state;
 }
 export function summarizeTrajectories(rows: TrajectoryRow[]) {
     const categories = OPERATION_CATEGORIES.map(category => ({ ...category, attempts: 0, confirmed: 0 }));
-    const states = { confirmed: 0, uncommitted: 0, failed: 0, rolled_back: 0 };
+    const states = { confirmed: 0, uncommitted: 0, failed: 0, rolled_back: 0, succeeded: 0, pending: 0, recorded: 0 };
     let total = 0;
     for (const row of rows) {
         const id = operationCategory(row.event);
-        if (id === null) continue;
         total += 1;
         const category = categories.find(item => item.id === id)!;
         category.attempts += 1;
@@ -83,7 +66,7 @@ export function summarizeTrajectories(rows: TrajectoryRow[]) {
         for (const state of Object.keys(states) as (keyof typeof states)[])
             if (matchesTrajectoryState(row, state)) states[state] += 1;
     }
-    return { total, categories, states };
+    return { total, categories, states, tools: summarizeToolCalls(rows.map(row => row.event)) };
 }
 export function objectActionTitle(row: TrajectoryRow, subject: Selection | undefined): string | undefined {
     if (subject?.kind !== "equipment") return;
@@ -97,5 +80,5 @@ export function objectActionTitle(row: TrajectoryRow, subject: Selection | undef
 }
 export function trajectorySearch(row: TrajectoryRow) {
     const entry = historyAction(row);
-    return [entry.title, entry.summary, ...entry.effects, ...row.subjects.flatMap(s => [s.name, s.id])].join(" ").toLowerCase();
+    return [row.event.name, JSON.stringify(row.event.arguments || {}), entry.title, entry.summary, ...entry.effects, ...row.subjects.flatMap(s => [s.name, s.id])].join(" ").toLowerCase();
 }

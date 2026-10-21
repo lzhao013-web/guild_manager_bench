@@ -2,43 +2,80 @@
 .workspace-main.is-curve-mode .workspace-heading { padding: 12px 24px 10px; }
 .workspace-main.is-curve-mode .workspace-heading h1 { font-size: 17px; margin: 0; }
 .workspace-main.is-curve-mode .workspace-heading > div { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; }
-.workspace-main.is-curve-mode .workspace-heading p { font-size: 11px; margin: 0; }
+.workspace-main.is-curve-mode .workspace-heading p { font-size: var(--wb-text-xs); margin: 0; }
 .workspace-main.is-curve-mode .workspace-footer { display: none; }
+.workspace-main.is-curve-mode > .curve-board { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; }
 .curve-board { margin: 0 24px 18px; min-width: 0; }
 .curve-selection-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-.curve-selection-bar > select { flex: 1; min-width: 0; max-width: 600px; font-size: 12px; }
+.curve-selection-bar > select { flex: 1; min-width: 0; max-width: 600px; font-size: var(--wb-text-sm); }
 .curve-back { display: inline-flex; gap: 5px; align-items: center; white-space: nowrap; }
 .curve-legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; margin-bottom: 10px; }
 .curve-legend > div { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 8px 10px; border: 1px solid var(--border); background: var(--gray-2); border-radius: 6px; }
 .curve-legend i, .curve-values th i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
 .curve-legend > div > span { flex: 1; min-width: 0; }
-.curve-legend strong { display: block; font-size: 12px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.curve-legend small { display: block; color: var(--gray-11); font-size: 10px; margin-top: 3px; }
+.curve-legend strong { display: block; font-size: var(--wb-text-sm); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.curve-legend small { display: block; color: var(--gray-11); font-size: var(--wb-text-xs); margin-top: 3px; }
 .curve-legend button { display: grid; place-items: center; color: var(--gray-11); background: none; border: 0; padding: 5px; }
-.curve-warning { font-size: 11px; line-height: 1.7; padding: 8px 12px; border: 1px solid var(--amber-6); background: var(--amber-3); color: var(--amber-11); border-radius: 5px; }
-.curve-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 11px; margin: 8px 0; color: var(--gray-11); }
+.curve-warning { font-size: var(--wb-text-xs); line-height: 1.7; padding: 8px 12px; border: 1px solid var(--amber-6); background: var(--amber-3); color: var(--amber-11); border-radius: 5px; }
+.curve-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: var(--wb-text-xs); margin: 8px 0; color: var(--gray-11); }
 .curve-controls label, .curve-values header label { display: inline-flex; gap: 8px; align-items: center; white-space: nowrap; flex-shrink: 0; }
-.curve-board .curve-controls input[type="number"], .curve-board .curve-values input[type="number"] { width: 80px; flex: 0 0 80px; min-height: 29px; padding: 4px 7px; font-size: 11px; }
+.curve-board .curve-controls input[type="number"], .curve-board .curve-values input[type="number"] { width: 80px; flex: 0 0 80px; min-height: 29px; padding: 4px 7px; font-size: var(--wb-text-xs); }
 .curve-mode { display: flex; border: 1px solid var(--border); border-radius: 5px; padding: 2px; margin-right: auto; }
-.curve-mode button { color: var(--gray-11); background: none; border: 0; border-radius: 3px; padding: 6px 10px; font-size: 11px; }
+.curve-mode button { color: var(--gray-11); background: none; border: 0; border-radius: 3px; padding: 6px 10px; font-size: var(--wb-text-xs); }
 .curve-mode button[aria-pressed="true"] { color: var(--accent-11); background: var(--accent-3); }
 .curve-charts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .curve-chart { min-width: 0; border: 1px solid var(--border); border-radius: 7px; background: var(--gray-2); }
 .curve-chart header { display: flex; align-items: baseline; flex-wrap: wrap; gap: 5px 10px; padding: 10px 12px 0; }
-.curve-chart h2 { margin: 0; font-size: 13px; }
-.curve-chart header span { font-size: 10px; color: var(--gray-11); }
-.curve-plot { height: clamp(140px, 22vh, 240px); }
+.curve-chart h2 { margin: 0; font-size: var(--wb-text-base); }
+.curve-chart header span { font-size: var(--wb-text-xs); color: var(--gray-11); }
+.curve-plot { position: relative; height: clamp(140px, 22vh, 240px); }
+.curve-marker-legend { margin-left: auto; color: var(--gray-11); font-size: var(--wb-text-xs); line-height: 1.4; }
+.curve-event-tracks { padding-block: 3px; border-top: 1px solid var(--border); }
+.curve-event-row { position: relative; height: 24px; }
+.curve-event-run { position: absolute; left: 10px; width: 28px; line-height: 24px; text-align: center; font: var(--wb-text-xs)/24px var(--wb-font-mono); }
+.curve-event-baseline { position: absolute; top: 50%; height: 1px; background: var(--gray-5); pointer-events: none; }
+.curve-event-cursor { position: absolute; inset-block: 0; border-left: 1px dashed var(--gray-8); pointer-events: none; }
+.curve-event-node { position: absolute; top: 0; translate: -50% 0; display: flex; align-items: center; justify-content: center; height: 24px; padding: 0; border: 0; border-radius: 2px; color: inherit; background: transparent; font: var(--wb-text-xs)/1 var(--wb-font-mono); cursor: pointer; }
+.curve-event-node > span { background: var(--gray-2); pointer-events: none; }
+.curve-event-node[aria-pressed="true"] { font-weight: 700; box-shadow: inset 0 -1px currentColor; }
+.curve-event-node:hover, .curve-event-node:focus-visible { background: var(--gray-3); }
+.curve-event-node:hover > span, .curve-event-node:focus-visible > span { background: var(--gray-3); }
+.curve-event-ticks { display: flex; align-items: center; flex-direction: column; gap: 3px; }
+.curve-event-tick { display: block; width: 2px; height: 5px; background: currentColor; }
+.curve-event-tick.is-challenge { width: 5px; height: 5px; border: 1px solid currentColor; background: transparent; }
+.curve-event-empty, .curve-events-empty { color: var(--gray-11); font-size: var(--wb-text-xs); line-height: 24px; }
+.curve-event-empty { position: relative; padding-inline: 4px; background: var(--gray-2); }
+.curve-events-empty { margin: 0; padding-inline: 12px; border-top: 1px solid var(--border); }
+.curve-event-node:focus-visible, .curve-milestone-list button:focus-visible { outline: 2px solid var(--accent-9); outline-offset: 1px; }
+.curve-event-popover { max-height: min(240px, var(--radix-popover-content-available-height)); overflow: auto; background: var(--gray-2); font-size: var(--wb-text-sm); line-height: 1.6; overflow-wrap: anywhere; }
+.curve-event-popover-heading { display: flex; align-items: flex-start; gap: 8px; }
+.curve-event-popover-heading strong { flex: 1; min-width: 0; font-size: var(--wb-text-xs); font-weight: 600; }
+.curve-event-popover-close { flex-shrink: 0; min-height: 24px; padding: 2px 6px; border: 1px solid var(--border); border-radius: 3px; background: var(--gray-2); color: var(--gray-11); font: inherit; font-size: var(--wb-text-xs); }
+.curve-event-popover ul { margin: 6px 0 0; padding-left: 18px; }
+.curve-event-popover li + li { margin-top: 4px; }
+.curve-event-popover p { margin: 6px 0 0; color: var(--gray-11); font-size: var(--wb-text-xs); }
+.curve-milestone-list { border-top: 1px solid var(--border); font-size: var(--wb-text-xs); }
+.curve-milestone-list > summary { padding: 5px 10px; color: var(--gray-11); cursor: pointer; }
+.curve-milestone-list ul { max-height: 150px; overflow: auto; scrollbar-width: thin; list-style: none; margin: 0; padding: 0 10px 6px; }
+.curve-milestone-list button { width: 100%; padding: 4px 0; border: 0; border-bottom: 1px solid var(--border); background: transparent; font: inherit; text-align: left; line-height: 1.6; overflow-wrap: anywhere; cursor: pointer; }
+.curve-selected-milestones { margin-top: 10px; border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; font-size: var(--wb-text-xs); background: var(--gray-2); }
+.curve-selected-milestones h2 { font-size: var(--wb-text-sm); margin: 0 0 5px; }
+.curve-selected-milestones ul { list-style: none; margin: 0; padding: 0; }
+.curve-selected-milestones li { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; padding: 3px 0; overflow-wrap: anywhere; }
+.curve-selected-milestones i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.curve-selected-milestones strong { font-weight: 500; }
+.curve-selected-milestones p { margin: 0; color: var(--gray-11); line-height: 1.6; }
 .curve-plot svg { display: block; width: 100%; height: 100%; border-radius: 0 0 7px 7px; touch-action: pan-y; }
 .curve-grid-line { stroke: var(--gray-6); stroke-width: 1; }
-.curve-axis { fill: var(--gray-11); font-size: 10px; }
+.curve-axis { fill: var(--gray-11); font-size: var(--wb-text-xs); }
 .curve-cursor { stroke: var(--gray-10); stroke-dasharray: 3 4; }
 .curve-values { border: 1px solid var(--border); border-radius: 7px; margin-top: 12px; background: var(--gray-2); overflow: hidden; }
-.curve-values > header { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 11px; }
-.curve-values h2 { margin: 0 auto 0 0; font-size: 12px; }
-.curve-values header > span { font-size: 10px; color: var(--gray-11); }
-.curve-values table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 12px; }
+.curve-values > header { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: var(--wb-text-xs); }
+.curve-values h2 { margin: 0 auto 0 0; font-size: var(--wb-text-sm); }
+.curve-values header > span { font-size: var(--wb-text-xs); color: var(--gray-11); }
+.curve-values table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: var(--wb-text-sm); }
 .curve-values th, .curve-values td { padding: 8px 12px; text-align: right; border-bottom: 1px solid var(--border); }
-.curve-values thead th { font-weight: 400; font-size: 10px; color: var(--gray-11); }
+.curve-values thead th { font-weight: 400; font-size: var(--wb-text-xs); color: var(--gray-11); }
 .curve-values th:first-child { width: 34%; text-align: left; }
 .curve-values tbody th { font-weight: 400; overflow-wrap: anywhere; }
 .curve-values tbody th i { margin-right: 8px; vertical-align: middle; }
@@ -46,11 +83,23 @@
 .curve-run-label > strong { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 400; }
 .curve-values .curve-run-label i { margin: 0; }
 .curve-values .curve-run-label small { flex-shrink: 0; margin: 0; white-space: nowrap; }
-.curve-values small { display: block; font-weight: 400; font-size: 10px; color: var(--gray-11); margin-top: 3px; }
-.curve-values td small { display: inline; margin: 0 0 0 9px; white-space: nowrap; }
-.curve-values td strong { font-family: ui-monospace, Consolas, monospace; font-weight: 500; }
+.curve-values small { display: block; font-weight: 400; font-size: var(--wb-text-xs); color: var(--gray-11); margin-top: 3px; }
+.curve-values td small { display: block; margin: 3px 0 0; white-space: nowrap; }
+.curve-values td strong { font-family: var(--wb-font-mono); font-weight: 500; }
 .curve-values tr:last-child th, .curve-values tr:last-child td { border-bottom: 0; }
-.curve-note { font-size: 10px; color: var(--gray-11); line-height: 1.8; margin: 10px 0 0; }
+.curve-warning-summary { margin: 10px 0; padding: 8px 12px; border: 1px solid var(--amber-6); border-radius: 5px; background: var(--amber-2); color: var(--amber-11); font-size: var(--wb-text-xs); }
+.curve-warning-summary > summary { cursor: pointer; line-height: 1.7; }
+.curve-warning-toggle { margin-left: 12px; text-decoration: underline; white-space: nowrap; }
+.curve-warning-summary ul { margin: 8px 0 0; padding-left: 20px; }
+.curve-warning-summary li { padding: 3px 0; overflow-wrap: anywhere; }
+.curve-common-turn { padding: 5px 9px; border: 1px solid var(--accent-7); border-radius: 4px; background: var(--accent-3); color: var(--accent-11); font-size: var(--wb-text-xs); white-space: nowrap; }
+.curve-coverage { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: var(--wb-text-xs); }
+.curve-note { font-size: var(--wb-text-xs); color: var(--gray-11); line-height: 1.8; margin: 10px 0 0; }
+@media (min-width: 901px) and (max-height: 800px) {
+    .curve-plot { height: 140px; }
+    .curve-chart header { padding-top: 8px; }
+    .curve-milestone-list > summary { padding-block: 4px; }
+}
 @media (max-width: 900px) {
     .curve-charts { grid-template-columns: 1fr; }
     .curve-values td small { display: block; margin: 3px 0 0; }
@@ -67,6 +116,6 @@
     .curve-values tr { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-bottom: 1px solid var(--border); }
     .curve-values th:first-child { grid-column: 1/-1; width: auto; }
     .curve-values td { min-width: 0; padding: 8px; text-align: left; }
-    .curve-values td::before { content: attr(data-label); display: block; color: var(--gray-11); font-size: 10px; margin-bottom: 5px; }
+    .curve-values td::before { content: attr(data-label); display: block; color: var(--gray-11); font-size: var(--wb-text-xs); margin-bottom: 5px; }
     .curve-values th, .curve-values td { border-bottom: 0; }
 }

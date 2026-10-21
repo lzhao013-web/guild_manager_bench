@@ -1,10 +1,11 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { TrajectoryOverview } from "./TrajectoryOverview";
+import { ToolCallSummary } from "./ToolCallSummary";
 import { ArrowSquareOut, ClockCounterClockwise, MagnifyingGlass, CaretDown } from "@phosphor-icons/react";
 import { ACTION_STATUS, actionSummary } from "./actionModel";
 import { inputPreview } from "./actionInputs";
-import { TOOLS } from "./model";
+import { TOOL_CALL_STATUS, toolCategoryLabel, summarizeToolCalls } from "./toolCalls";
 import type { Selection } from "./sceneModel";
 import { useTrajectories } from "./TrajectoryContext";
 import { confirmed, historyAction, LIFECYCLE, matchesOperation, matchesTrajectoryState, objectActionTitle, OPERATION_CATEGORIES, subjectRows, trajectorySearch } from "./trajectoryModel";
@@ -33,7 +34,7 @@ export function TrajectoryResult({ row, subject }: { row: TrajectoryRow; subject
             {title !== entry.title && <small>对应行动：{entry.title}</small>}
             <small>{actionSummary(entry)}</small>
             <small className="action-input-preview">输入 · {inputPreview(entry.input)}</small>
-            <span className="trajectory-tags"><span className={`action-status is-${entry.status}`}>{ACTION_STATUS[entry.status]}</span>
+            <span className="trajectory-tags"><span>{toolCategoryLabel(row.event)}</span><span className={`action-status is-${entry.status}`}>{ACTION_STATUS[entry.status]}</span>
                 <span>{LIFECYCLE[row.lifecycle]}</span>
                 {history.viewTurn != null && row.turn != null && row.turn > history.viewTurn && <span>后续回合</span>}
                 {row.subjects.filter(s => s.kind === "equipment").map(s => <span className="mono" key={s.id}>实例 {s.id}</span>)}
@@ -56,7 +57,7 @@ export function RunTrajectories({ detail }: { detail?: ReactNode }) {
         matchesOperation(row, type) && matchesTrajectoryState(row, state) &&
         (!from || row.turn != null && row.turn >= Number(from)) && (!to || row.turn != null && row.turn <= Number(to))
     ), [entries, search, type, state, from, to]);
-    const types = [...new Set(entries?.filter(row => matchesOperation(row, "all")).map(row => row.event.name))];
+    const tools = useMemo(() => summarizeToolCalls((entries || []).map(row => row.event)), [entries]);
     const lastPage = Math.max(0, Math.ceil(rows.length / 40) - 1);
     const current = Math.min(page, lastPage);
     useLayoutEffect(() => { if (viewport.current) viewport.current.scrollTop = 0; }, [search, type, state, from, to, current]);
@@ -74,18 +75,22 @@ export function RunTrajectories({ detail }: { detail?: ReactNode }) {
         <div className="trajectory-filters">
             <label className="trajectory-search"><MagnifyingGlass size={15} /><input aria-label="搜索整局行动" placeholder="天赋、装备、成员名称或 ID" value={search} onChange={e => change(() => setSearch(e.target.value))} /></label>
             <select aria-label="筛选轨迹操作" value={type} onChange={e => change(() => setType(e.target.value))}>
-                <option value="all">全部操作</option>
+                <option value="all">全部工具调用</option>
                 <optgroup label="操作类别">{OPERATION_CATEGORIES.map(category => <option key={category.id} value={`category:${category.id}`}>{category.label}</option>)}</optgroup>
-                <optgroup label="具体操作">{types.map(name => <option key={name} value={name}>{TOOLS[name] || name}</option>)}</optgroup>
+                <optgroup label="具体工具">{tools.map(tool => <option key={tool.name} value={tool.name}>{tool.label}（{tool.total}）</option>)}</optgroup>
             </select>
             <select aria-label="筛选轨迹状态" value={state} onChange={e => change(() => setState(e.target.value as TrajectoryState))}>
-                <option value="all">全部记录</option><option value="confirmed">已确认成功</option><option value="uncommitted">回合未提交</option><option value="rolled_back">已回滚</option><option value="failed">操作失败</option>
+                <option value="all">全部记录</option>
+                <optgroup label="执行结果">{Object.entries(TOOL_CALL_STATUS).map(([status, label]) => <option key={status} value={status}>{label}</option>)}</optgroup>
+                <optgroup label="回合状态"><option value="confirmed">已确认成功</option><option value="uncommitted">回合未提交</option><option value="rolled_back">已回滚</option></optgroup>
             </select>
             <label className="trajectory-range">回合<input aria-label="轨迹起始回合" type="number" min="1" value={from} onChange={e => change(() => setFrom(e.target.value))} /><span>至</span><input aria-label="轨迹结束回合" type="number" min="1" value={to} onChange={e => change(() => setTo(e.target.value))} /></label>
         </div>
         <HistoryState />
         <p className="trajectory-note">{history.data?.origin === "execution" ? "当前运行阶段" : "整局记录"} · {rows.length} 条匹配 · 包含续跑前历史，可能晚于当前观看位置</p>
-        <div className="trajectory-results" ref={viewport}>{rows.slice(current * 40, (current + 1) * 40).map(row => <TrajectoryResult key={row.id} row={row} />)}
+        <div className="trajectory-results" ref={viewport}>
+            {history.data && <ToolCallSummary tools={tools} selected={type} onTool={name => quickFilter(name)} label="整局工具汇总" />}
+            {rows.slice(current * 40, (current + 1) * 40).map(row => <TrajectoryResult key={row.id} row={row} />)}
             {!history.pending && !history.error && !rows.length && <p className="trajectory-note">没有匹配的已记录行动。缺失日志不能证明从未购买或制作。</p>}
         </div>
         {lastPage > 0 && <div className="trajectory-pagination"><button disabled={current === 0} onClick={() => setPage(current - 1)}>上一页</button><span>{current + 1} / {lastPage + 1}</span><button disabled={current === lastPage} onClick={() => setPage(current + 1)}>下一页</button></div>}
