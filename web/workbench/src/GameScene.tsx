@@ -24,7 +24,8 @@ import {
     MODULE_KIND,
 } from "./sceneNavigation";
 import type { SceneModule, SceneView } from "./sceneNavigation";
-import { Portrait, SlotIcon, Vital } from "./SceneParts";
+import { Portrait, Vital } from "./SceneParts";
+import { EquipmentIcon } from "./EquipmentIcon";
 import { MonsterBadges } from "./MonsterBadges";
 import { AdventurerStatus, adventurerFrame, adventurerStateText, monsterFrame } from "./UnitFrame";
 import { monsterClassification } from "./monsterModel";
@@ -265,7 +266,7 @@ export function GameScene({
                                             aria-label={`查看装备 ${item.name}`}
                                         >
                                             <span className="equipment-glyph">
-                                                <SlotIcon slot={item.slot!} size={30} />
+                                                <EquipmentIcon templateId={item.template_id} slot={item.slot!} size={42} />
                                             </span>
                                             <strong>{item.name}</strong>
                                             <span className="scene-note">
@@ -301,7 +302,7 @@ export function GameScene({
                         <div className="scene-equipment-grid">
                             {filteredRecipes!.map(recipe => <button key={recipe.recipe_id} className="scene-item-card scene-recipe-card" aria-label={`查看制作配方 ${recipe.output_name}`}
                                 onClick={() => inspect("recipe", recipe)}>
-                                <span className="equipment-glyph"><SlotIcon slot={recipe.output_slot} size={30} /></span>
+                                <span className="equipment-glyph"><EquipmentIcon templateId={recipe.output_template_id} slot={recipe.output_slot} size={42} /></span>
                                 <strong>{recipe.output_name}</strong><span className="scene-note">{SLOTS[recipe.output_slot] || recipe.output_slot}</span>
                                 <span className="candidate-price"><Coins size={13} />{fmt(recipe.gold_cost)}</span>
                                 <small className="scene-note">{materialText(recipe.material_costs) || "无需材料"}</small>

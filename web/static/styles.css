@@ -388,6 +388,11 @@ h2 { font-size: 15px; font-weight: 600; color: var(--text-secondary); }
 }
 
 /* ========== Avatar / Portrait ========== */
+.equipment-icon {
+  object-fit: contain;
+  image-rendering: pixelated;
+  vertical-align: middle;
+}
 .avatar {
   width: 52px;
   height: 52px;
@@ -1187,6 +1192,10 @@ details[open] > .adv-summary::before { transform: rotate(90deg); }
   font-size: 18px;
   width: 28px;
   height: 28px;
+}
+.slot-icon > .equipment-icon {
+  width: 22px;
+  height: 22px;
 }
 
 .slot-head {

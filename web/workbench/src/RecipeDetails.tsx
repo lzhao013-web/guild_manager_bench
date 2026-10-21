@@ -1,7 +1,8 @@
 import { ArrowSquareOut, Coins, Lock } from "@phosphor-icons/react";
 import { fmt } from "./model";
 import { MATERIALS, requirementLines, SLOTS } from "./sceneModel";
-import { SkillCards, SlotIcon, StatTiles } from "./SceneParts";
+import { SkillCards, StatTiles } from "./SceneParts";
+import { EquipmentIcon } from "./EquipmentIcon";
 import type { CraftingRecipe, Observation } from "./types";
 
 export function RecipeDetails({ recipe, observation, onInventory }: {
@@ -12,7 +13,7 @@ export function RecipeDetails({ recipe, observation, onInventory }: {
     const missing = requirementLines(recipe.missing);
     return <div className="scene-entity-detail recipe-detail">
         <div className="scene-entity-hero">
-            <div className="entity-item-glyph"><SlotIcon slot={recipe.output_slot} size={60} /></div>
+            <div className="entity-item-glyph"><EquipmentIcon templateId={recipe.output_template_id} slot={recipe.output_slot} size={72} /></div>
             <div><h3>{recipe.output_name}</h3><span className="scene-tag">{SLOTS[recipe.output_slot] || recipe.output_slot}</span>
                 <p className={recipe.can_craft ? "scene-positive" : "scene-note"}>{recipe.can_craft ? "当前满足制作条件" : "当前未满足制作条件"}</p>
                 <p className="entity-price"><Coins size={15} /> 当前费用 <b>{fmt(recipe.gold_cost)}</b> 金币

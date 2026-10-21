@@ -110,6 +110,12 @@ function slotIcon(slot) {
   return SLOT_ICON[slot] || "📦";
 }
 
+function equipmentIconHtml(templateId, slot) {
+  return templateId
+    ? `<img class="equipment-icon" src="/assets/icons/equipment/${encodeURIComponent(templateId)}.webp" alt="" width="32" height="32" loading="lazy" />`
+    : slotIcon(slot);
+}
+
 window.addEventListener("load", () => {
   $("newSessionButton").addEventListener("click", () => createSession());
   $("exportButton").addEventListener("click", () => exportSession());
@@ -722,7 +728,7 @@ function craftRowHtml(recipe) {
   return `
     <div class="row craft-row">
       <div class="row-title">
-        <span class="slot-icon">${slotIcon(recipe.output_slot)}</span>
+        <span class="slot-icon">${equipmentIconHtml(recipe.output_template_id, recipe.output_slot)}</span>
         <strong>${escapeHtml(recipe.name)}</strong>
         <span class="${recipe.can_craft ? "ok" : "danger"} small">${recipe.can_craft ? "可合成" : "资源不足"}</span>
       </div>
@@ -786,7 +792,7 @@ function equipRowHtml(item) {
   return `
     <div class="row equip-row">
       <div class="row-title">
-        <span class="slot-icon">${slotIcon(item.slot)}</span>
+        <span class="slot-icon">${equipmentIconHtml(item.template_id, item.slot)}</span>
         <strong>${escapeHtml(item.name)}</strong>
         <span class="small ${item.equipped_by ? "equip-equipped" : "muted"}">${equippedInfo}</span>
       </div>
@@ -1556,7 +1562,7 @@ function equipmentSlotCell(adventurer, slot) {
     return `
       <div class="slot-cell filled">
         <div class="inline slot-head">
-          <span class="slot-icon">${slotIcon(slot.slot)}</span>
+          <span class="slot-icon">${equipmentIconHtml(slot.item.template_id, slot.slot)}</span>
           <strong>${slotName(slot.slot)}</strong>
           <button type="button" ${disabled()} onclick="unequip('${adventurer.adventurer_id}', '${slot.slot}')">卸下</button>
         </div>

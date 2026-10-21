@@ -1,0 +1,350 @@
+[
+  {
+    "id": "iron_sword",
+    "name": "铁剑",
+    "slot": "main_hand",
+    "asset_id": "t1_heavy_sword"
+  },
+  {
+    "id": "oak_shield",
+    "name": "橡木盾",
+    "slot": "off_hand",
+    "asset_id": "oak_shield"
+  },
+  {
+    "id": "hunter_bow",
+    "name": "猎人长弓",
+    "slot": "two_hand",
+    "asset_id": "hunter_bow"
+  },
+  {
+    "id": "leather_armor",
+    "name": "皮甲",
+    "slot": "armor",
+    "asset_id": "t1_light_armor"
+  },
+  {
+    "id": "iron_helmet",
+    "name": "铁盔",
+    "slot": "helmet",
+    "asset_id": "iron_helmet"
+  },
+  {
+    "id": "swift_boots",
+    "name": "迅捷靴",
+    "slot": "boots",
+    "asset_id": "swift_boots"
+  },
+  {
+    "id": "focus_charm",
+    "name": "专注护符",
+    "slot": "accessory",
+    "asset_id": "focus_charm"
+  },
+  {
+    "id": "venom_dagger",
+    "name": "淬毒匕首",
+    "slot": "main_hand",
+    "asset_id": "venom_dagger"
+  },
+  {
+    "id": "ember_talisman",
+    "name": "余烬符坠",
+    "slot": "accessory",
+    "asset_id": "ember_talisman"
+  },
+  {
+    "id": "sundering_maul",
+    "name": "破甲重锤",
+    "slot": "two_hand",
+    "asset_id": "sundering_maul"
+  },
+  {
+    "id": "renewal_staff",
+    "name": "复苏木杖",
+    "slot": "two_hand",
+    "asset_id": "renewal_staff"
+  },
+  {
+    "id": "t1_heavy_sword",
+    "name": "铁剑",
+    "slot": "main_hand",
+    "asset_id": "t1_heavy_sword"
+  },
+  {
+    "id": "t1_heavy_shield",
+    "name": "兽骨盾",
+    "slot": "off_hand",
+    "asset_id": "t1_heavy_shield"
+  },
+  {
+    "id": "t1_heavy_armor",
+    "name": "链甲",
+    "slot": "armor",
+    "asset_id": "t1_heavy_armor"
+  },
+  {
+    "id": "t1_heavy_helmet",
+    "name": "爪冠盔",
+    "slot": "helmet",
+    "asset_id": "t1_heavy_helmet"
+  },
+  {
+    "id": "t1_heavy_boots",
+    "name": "厚皮靴",
+    "slot": "boots",
+    "asset_id": "t1_heavy_boots"
+  },
+  {
+    "id": "t1_light_bow",
+    "name": "猎弓",
+    "slot": "two_hand",
+    "asset_id": "t1_light_bow"
+  },
+  {
+    "id": "t1_light_armor",
+    "name": "皮甲",
+    "slot": "armor",
+    "asset_id": "t1_light_armor"
+  },
+  {
+    "id": "t1_light_helmet",
+    "name": "羽饰帽",
+    "slot": "helmet",
+    "asset_id": "t1_light_helmet"
+  },
+  {
+    "id": "t1_light_boots",
+    "name": "皮靴",
+    "slot": "boots",
+    "asset_id": "t1_light_boots"
+  },
+  {
+    "id": "t1_light_charm",
+    "name": "草药护符",
+    "slot": "accessory",
+    "asset_id": "t1_light_charm"
+  },
+  {
+    "id": "t1_staff",
+    "name": "学徒法杖",
+    "slot": "two_hand",
+    "asset_id": "t1_staff"
+  },
+  {
+    "id": "t1_prayer_beads",
+    "name": "疗愈符印",
+    "slot": "accessory",
+    "asset_id": "t1_prayer_beads"
+  },
+  {
+    "id": "t1_hunter_bracer",
+    "name": "猎手护腕",
+    "slot": "accessory",
+    "asset_id": "t1_hunter_bracer"
+  },
+  {
+    "id": "t2_heavy_sword",
+    "name": "秘银长剑",
+    "slot": "main_hand",
+    "asset_id": "t2_heavy_sword"
+  },
+  {
+    "id": "t2_heavy_shield",
+    "name": "秘银盾",
+    "slot": "off_hand",
+    "asset_id": "t2_heavy_shield"
+  },
+  {
+    "id": "t2_heavy_armor",
+    "name": "锁子甲",
+    "slot": "armor",
+    "asset_id": "t2_heavy_armor"
+  },
+  {
+    "id": "t2_heavy_helmet",
+    "name": "战盔",
+    "slot": "helmet",
+    "asset_id": "t2_heavy_helmet"
+  },
+  {
+    "id": "t2_heavy_boots",
+    "name": "秘银靴",
+    "slot": "boots",
+    "asset_id": "t2_heavy_boots"
+  },
+  {
+    "id": "t2_light_bow",
+    "name": "复合弓",
+    "slot": "two_hand",
+    "asset_id": "t2_light_bow"
+  },
+  {
+    "id": "t2_light_armor",
+    "name": "蛛丝甲",
+    "slot": "armor",
+    "asset_id": "t2_light_armor"
+  },
+  {
+    "id": "t2_light_helmet",
+    "name": "游侠盔",
+    "slot": "helmet",
+    "asset_id": "t2_light_helmet"
+  },
+  {
+    "id": "t2_light_boots",
+    "name": "附魔靴",
+    "slot": "boots",
+    "asset_id": "t2_light_boots"
+  },
+  {
+    "id": "t2_light_charm",
+    "name": "魔力护符",
+    "slot": "accessory",
+    "asset_id": "t2_light_charm"
+  },
+  {
+    "id": "t2_warhammer",
+    "name": "破甲战锤",
+    "slot": "two_hand",
+    "asset_id": "t2_warhammer"
+  },
+  {
+    "id": "t2_mage_orb",
+    "name": "法师宝珠",
+    "slot": "accessory",
+    "asset_id": "t2_mage_orb"
+  },
+  {
+    "id": "t2_arcane_robe",
+    "name": "奥术法袍",
+    "slot": "armor",
+    "asset_id": "t2_arcane_robe"
+  },
+  {
+    "id": "t2_sacred_robe",
+    "name": "圣佑法袍",
+    "slot": "armor",
+    "asset_id": "t2_sacred_robe"
+  },
+  {
+    "id": "t2_cannon_kit",
+    "name": "炮手弹药箱",
+    "slot": "accessory",
+    "asset_id": "t2_cannon_kit"
+  },
+  {
+    "id": "t2_blood_ring",
+    "name": "暗杀者戒指",
+    "slot": "accessory",
+    "asset_id": "t2_blood_ring"
+  },
+  {
+    "id": "t3_heavy_sword",
+    "name": "龙鳞大剑",
+    "slot": "main_hand",
+    "asset_id": "t3_heavy_sword"
+  },
+  {
+    "id": "t3_heavy_shield",
+    "name": "龙鳞盾",
+    "slot": "off_hand",
+    "asset_id": "t3_heavy_shield"
+  },
+  {
+    "id": "t3_heavy_armor",
+    "name": "龙鳞甲",
+    "slot": "armor",
+    "asset_id": "t3_heavy_armor"
+  },
+  {
+    "id": "t3_heavy_helmet",
+    "name": "龙骨盔",
+    "slot": "helmet",
+    "asset_id": "t3_heavy_helmet"
+  },
+  {
+    "id": "t3_heavy_boots",
+    "name": "龙鳞靴",
+    "slot": "boots",
+    "asset_id": "t3_heavy_boots"
+  },
+  {
+    "id": "t3_light_bow",
+    "name": "暗影长弓",
+    "slot": "two_hand",
+    "asset_id": "t3_light_bow"
+  },
+  {
+    "id": "t3_light_armor",
+    "name": "暗影外套",
+    "slot": "armor",
+    "asset_id": "t3_light_armor"
+  },
+  {
+    "id": "t3_light_helmet",
+    "name": "夜翼盔",
+    "slot": "helmet",
+    "asset_id": "t3_light_helmet"
+  },
+  {
+    "id": "t3_light_boots",
+    "name": "暗影靴",
+    "slot": "boots",
+    "asset_id": "t3_light_boots"
+  },
+  {
+    "id": "t3_light_charm",
+    "name": "龙心坠饰",
+    "slot": "accessory",
+    "asset_id": "t3_light_charm"
+  },
+  {
+    "id": "t3_dragon_greatsword",
+    "name": "龙牙巨剑",
+    "slot": "two_hand",
+    "asset_id": "t3_dragon_greatsword"
+  },
+  {
+    "id": "t3_wisdom_crown",
+    "name": "智慧之冠",
+    "slot": "helmet",
+    "asset_id": "t3_wisdom_crown"
+  },
+  {
+    "id": "t3_siege_cannon",
+    "name": "传奇火炮",
+    "slot": "two_hand",
+    "asset_id": "t3_siege_cannon"
+  },
+  {
+    "id": "t3_dragon_resolve",
+    "name": "龙魂战铠",
+    "slot": "armor",
+    "asset_id": "t3_dragon_resolve"
+  },
+  {
+    "id": "t2_elven_bow",
+    "name": "精灵长弓",
+    "slot": "two_hand",
+    "asset_id": "t2_elven_bow"
+  },
+  {
+    "id": "t3_windrunner_bow",
+    "name": "风行者之弓",
+    "slot": "two_hand",
+    "asset_id": "t3_windrunner_bow"
+  },
+  {
+    "id": "t2_shadow_blade",
+    "name": "影刃",
+    "slot": "main_hand",
+    "asset_id": "t2_shadow_blade"
+  },
+  {
+    "id": "t3_bombard_armor",
+    "name": "轰击胸甲",
+    "slot": "armor",
+    "asset_id": "t3_bombard_armor"
+  }
+]

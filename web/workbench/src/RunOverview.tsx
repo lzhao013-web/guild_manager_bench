@@ -4,7 +4,8 @@ import {
     Skull, Storefront, TreeStructure, UsersThree,
 } from "@phosphor-icons/react";
 import { fmt, modelEntries, time } from "./model";
-import { Portrait, SlotIcon, Vital } from "./SceneParts";
+import { Portrait, Vital } from "./SceneParts";
+import { EquipmentIcon } from "./EquipmentIcon";
 import { MonsterBadges } from "./MonsterBadges";
 import { AdventurerStatus, adventurerFrame, adventurerStateText, isLowHealth, monsterFrame } from "./UnitFrame";
 import { ModelCallStats } from "./ModelCallStats";
@@ -122,7 +123,7 @@ export function RunOverview({ observation, frames, records, onOpen, onFrame, liv
                         {previewInventory!.map((item) => (
                             <button key={item.instance_id} aria-label={`查看装备 ${item.name}`}
                                 onClick={() => onOpen("inventory", { kind: "equipment", id: item.instance_id! })}>
-                                <SlotIcon slot={item.slot!} size={17} /><strong title={item.name}>{item.name}</strong>
+                                <EquipmentIcon templateId={item.template_id} slot={item.slot!} size={17} /><strong title={item.name}>{item.name}</strong>
                                 <span>{item.equipped_by != null ? "已穿戴" : item.equipped_by === null ? "未穿戴" : "未记录"}</span>
                             </button>
                         ))}

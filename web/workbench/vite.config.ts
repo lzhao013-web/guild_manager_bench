@@ -1,12 +1,21 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
+import { fileURLToPath } from "node:url";
+import { searchForWorkspaceRoot } from "vite";
 
 export default defineConfig({
     root: "web/workbench",
     base: "/workbench/",
     plugins: [react()],
-    build: { outDir: "dist", emptyOutDir: true },
+    // 已打开的页面仍可能按需加载旧的带 hash 分包，构建时不能删除它们。
+    build: { outDir: "dist", emptyOutDir: false },
     server: {
+        fs: {
+            allow: [
+                searchForWorkspaceRoot(fileURLToPath(new URL(".", import.meta.url))),
+                fileURLToPath(new URL("../assets/icons/equipment", import.meta.url)),
+            ],
+        },
         proxy: Object.fromEntries(
             [
                 "/api",

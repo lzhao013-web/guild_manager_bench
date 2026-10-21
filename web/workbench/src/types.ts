@@ -61,6 +61,7 @@ export interface GameEntity {
 }
 export interface CraftingRecipe extends GameEntity {
     recipe_id: string;
+    output_template_id?: string;
     name: string;
     output_name: string;
     output_slot: string;

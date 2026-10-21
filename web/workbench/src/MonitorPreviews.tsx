@@ -2,7 +2,8 @@ import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowsOutSimple, Backpack, ListBullets, Storefront, TreeStructure } from "@phosphor-icons/react";
 import { businessPreviews, previewProgress } from "./businessModel";
 import { fmt } from "./model";
-import { Portrait, SlotIcon } from "./SceneParts";
+import { Portrait } from "./SceneParts";
+import { EquipmentIcon } from "./EquipmentIcon";
 import { actionSummary } from "./actionModel";
 import type { ActionEntry } from "./actionModel";
 import type { WatchFocus } from "./sceneNavigation";
@@ -75,7 +76,7 @@ export function MonitorPreviews({ observation, frame, frames, onFrame, onFocus }
                     {group.rows.slice(0, layout.rows).map(row => <button className={`business-row ${row.available ? "is-available" : ""}`} key={row.id}
                         aria-label={`查看${row.target.selection?.kind === "recipe" ? "制作配方" : row.target.selection?.kind === "candidate" ? "招募候选" : row.target.selection?.kind === "upgrade" ? "升级" : "装备"} ${row.name}`}
                         title={`${row.name} · ${row.value}\n${row.detail}`} disabled={!onFocus} onClick={() => onFocus?.(row.target)}>
-                        {row.portrait ? <Portrait id={row.portrait} name={row.name} /> : row.slot ? <SlotIcon slot={row.slot} size={16} /> : <TreeStructure size={14} />}
+                        {row.portrait ? <Portrait id={row.portrait} name={row.name} /> : row.slot ? <EquipmentIcon templateId={row.equipmentTemplateId} slot={row.slot} size={16} /> : <TreeStructure size={14} />}
                         <span><span className="business-row-main"><strong>{row.name}</strong><b>{row.value}</b></span>
                             {layout.details && row.detail && <small>{row.detail}</small>}</span>
                     </button>)}

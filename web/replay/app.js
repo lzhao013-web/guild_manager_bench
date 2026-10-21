@@ -1229,7 +1229,7 @@ function adventurerCard(a, refs) {
 function equipSlot(sl, refs) {
   const it=sl.item;
   return it
-    ? `<div class="equip-slot filled" title="${esc(it.name||sl.slot)}${refId(refs,'equipment',it.instance_id)||''}"><span class="slot-placeholder">${esc((it.name||sl.slot)[0])}</span></div>`
+    ? `<div class="equip-slot filled" title="${esc(it.name||sl.slot)}${refId(refs,'equipment',it.instance_id)||''}">${equipmentIconHtml(it)}</div>`
     : `<div class="equip-slot" title="${esc(sl.slot||'')}"><span class="slot-placeholder">${esc(slotIcon(sl.slot))}</span></div>`;
 }
 
@@ -1262,10 +1262,15 @@ function monsterCard(m, refs) {
 }
 
 function renderInventory(items, refs) { DOM.inventoryCards.innerHTML = items.length ? items.map(e=>inventoryCard(e,refs)).join('') : '<div class="empty-state"><span class="muted">无装备</span></div>'; }
+function equipmentIconHtml(item) {
+  return item.template_id
+    ? `<img class="equipment-icon" src="/assets/icons/equipment/${encodeURIComponent(item.template_id)}.webp" alt="" loading="lazy" />`
+    : `<span class="slot-placeholder">${esc((item.name||'?')[0])}</span>`;
+}
 function inventoryCard(eq, refs) {
   const rid=refId(refs,'equipment',eq.instance_id); const s=eq.stats||{}; const sk=eq.skills||[];
   return `<div class="entity-card" data-id="${esc(eq.instance_id)}">
-    <div class="card-header"><div class="avatar-slot equipment"><div class="avatar-placeholder">${esc((eq.name||'?')[0])}</div></div><div class="card-info"><div class="card-name">${esc(eq.name||'?')}</div><div class="card-subtitle">${esc(eq.slot||'')} · ${eq.equipped_by?'已装备':'空闲'}${rid?' · ID '+rid:''}</div></div></div>
+    <div class="card-header"><div class="avatar-slot equipment">${equipmentIconHtml(eq)}</div><div class="card-info"><div class="card-name">${esc(eq.name||'?')}</div><div class="card-subtitle">${esc(eq.slot||'')} · ${eq.equipped_by?'已装备':'空闲'}${rid?' · ID '+rid:''}</div></div></div>
     ${Object.keys(s).length?`<div class="card-stats">${Object.entries(s).map(([k,v])=>statCell(statLabel(k),v)).join('')}</div>`:''}
     ${sk.length?`<div class="skill-chips">${sk.map(sk=>`<span class="skill-chip">${esc(sk.name||sk.skill_id)}</span>`).join('')}</div>`:''}
   </div>`;

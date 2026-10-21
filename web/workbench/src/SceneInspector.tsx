@@ -3,7 +3,8 @@ import { ArrowSquareOut, CaretLeft, CaretRight, Lock, X } from "@phosphor-icons/
 import { fmt } from "./model";
 import { MATERIALS, SLOTS, resolveSubject, subjectId } from "./sceneModel";
 import type { Selection, SceneSubject } from "./sceneModel";
-import { Portrait, SkillCards, SlotIcon, StatTiles, Vital } from "./SceneParts";
+import { Portrait, SkillCards, StatTiles, Vital } from "./SceneParts";
+import { EquipmentIcon } from "./EquipmentIcon";
 import { MonsterBadges } from "./MonsterBadges";
 import { AdventurerStatus, adventurerFrame, adventurerStateText, monsterFrame } from "./UnitFrame";
 import type { CraftingRecipe, GameEntity, Observation, PartyMember } from "./types";
@@ -197,7 +198,7 @@ function MemberInspector({
                                         aria-pressed={selected?.slot === equipmentSlot.slot}
                                         onClick={() => setSlot(equipmentSlot.slot!)}
                                     >
-                                        <SlotIcon slot={equipmentSlot.slot!} size={24} />
+                                        <EquipmentIcon templateId={equipped?.template_id} slot={equipmentSlot.slot!} size={24} />
                                         <span>
                                             {SLOTS[equipmentSlot.slot!] || equipmentSlot.slot}
                                         </span>
@@ -249,7 +250,7 @@ function MemberInspector({
                     {selected && (
                         <section className="selected-equipment">
                             <header>
-                                <SlotIcon slot={selected.slot!} />
+                                <EquipmentIcon templateId={item?.template_id} slot={selected.slot!} size={20} />
                                 <h3>{item?.name || `${SLOTS[selected.slot!] || selected.slot}：${selected.blocked_by ? "已被占用" : "尚未装备"}`}</h3>
                             </header>
                             {item && <>
@@ -333,7 +334,7 @@ function EntityInspector({
                     <Portrait id={entity.template_id} name={entity.name!} />
                 ) : (
                     <div className="entity-item-glyph">
-                        <SlotIcon slot={entity.slot || "ultimate"} size={65} />
+                        <EquipmentIcon templateId={entity.template_id} slot={entity.slot || "ultimate"} size={80} />
                     </div>
                 )}
                 <div>
