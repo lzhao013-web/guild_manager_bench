@@ -21,6 +21,7 @@ from guild_manager_bench.api.workbench_lock import FileLease
 from guild_manager_bench.api.workbench_watch import WatchJournal
 from guild_manager_bench.api.monster_display import monster_stages
 from guild_manager_bench.game.presets import DataPreset
+from guild_manager_bench.bench.llm.recovery import RecoveryConfirmationRequired, inherited_config, inspect_recovery, read_recovery_archive, recoverable_turns
 
 ACTIVE = {"queued", "starting", "running", "stopping"}
 
@@ -163,14 +164,64 @@ class Workbench:
         job = self.get(job_id)
         return monster_stages(self.presets.get(job["config"]["preset"]))
 
+    def recovery_info(self, run_id: str) -> dict[str, Any]:
+        directory = self._archive(run_id)
+        try:
+            with FileLease(directory / "workbench.lock"):
+                replay, _ = read_recovery_archive(directory)
+                preset = replay.get("data", {}).get("preset")
+                if preset not in self.presets:
+                    raise ValueError("存档没有可用的原 preset，不能恢复")
+                plan = inspect_recovery(directory, self.presets[preset].data_dir, 1)
+        except OSError as exc:
+            raise ValueError("存档仍被工作进程占用或暂不可读，请等待原进程退出") from exc
+        agent = replay.get("agent", {})
+        safe = ("model", "base_url", "reasoning_effort", "effort", "thinking", "timeout", "temperature", "max_tokens", "max_output_tokens")
+        return {"run_id": run_id, "status": replay.get("status"), "preset": preset,
+                "agent": {"type": agent.get("type"), "config": {key: agent.get("config", {})[key] for key in safe if key in agent.get("config", {})}},
+                "config": inherited_config(replay), "max_rerun_turn": plan.max_rerun_turn,
+                "next_turn": recoverable_turns(replay)}
+
+    def _recovery_plans(self, request: CreateBatch):
+        locked = {identity for job in list(self.jobs.values()) if job["status"] in ACTIVE
+                  for identity in (job["archive_id"], job["config"].get("resume_run_id"), job["config"].get("rerun_run_id")) if identity}
+        plans = {}
+        for index, spec in enumerate(request.runs):
+            if spec.preset not in self.presets:
+                raise ValueError(f"未知 preset：{spec.preset}")
+            source = spec.resume_run_id or spec.rerun_run_id
+            if not source:
+                continue
+            if source in locked:
+                raise ValueError("这份存档已经有运行或排队中的任务")
+            directory = self._archive(source)
+            try:
+                with FileLease(directory / "workbench.lock"):
+                    plans[index] = inspect_recovery(directory, self.presets[spec.preset].data_dir, spec.rerun_from_turn)
+            except OSError as exc:
+                raise ValueError("存档仍被工作进程占用或暂不可读，请等待原进程退出") from exc
+            locked.add(source)
+        return plans
+
+    def check_recoveries(self, request: CreateBatch) -> dict[str, Any]:
+        return {"recoveries": [plan.public(index) for index, plan in self._recovery_plans(request).items()]}
+
     def create_batch(self, request: CreateBatch) -> dict[str, Any]:
         if self.failure:
             raise ValueError("调度器不可用，请检查服务日志后重启")
         if sum(job["status"] in ACTIVE for job in self.jobs.values()) + len(request.runs) > 128:
             raise ValueError("待处理任务最多 128 个，请等待现有任务完成")
-        locked = {j["archive_id"] for j in self.jobs.values() if j["status"] in ACTIVE and j["archive_id"]}
+        plans = self._recovery_plans(request)
+        required = []
+        for index, plan in plans.items():
+            try:
+                plan.authorize(request.runs[index].version_confirmation)
+            except RecoveryConfirmationRequired:
+                required.append(plan.public(index))
+        if required:
+            raise RecoveryConfirmationRequired(required)
         prepared = []
-        for spec in request.runs:
+        for index, spec in enumerate(request.runs):
             if spec.preset not in self.presets:
                 raise ValueError(f"未知 preset：{spec.preset}")
             payload = spec.model_dump(exclude={"api_key"})
@@ -183,26 +234,9 @@ class Workbench:
                     raise ValueError("API 配置已不存在，请重新选择配置或切换为自定义连接") from exc
                 payload.update(provider=connection['provider'], base_url=connection['base_url'], api_key=connection['api_key'],
                                model=spec.model or connection['model'], api_profile_name=connection['api_profile_name'])
-            if spec.resume_run_id:
-                if spec.resume_run_id in locked:
-                    raise ValueError("这份存档已经有运行或排队中的任务")
-                archive = self._archive(spec.resume_run_id)
-                try:
-                    with FileLease(archive / "workbench.lock"):
-                        replay = json.loads((archive / "replay.json").read_text(encoding="utf-8"))
-                except OSError as exc:
-                    raise ValueError("存档仍被工作进程占用或暂不可读，请等待原进程退出") from exc
-                if replay.get("status") == "completed":
-                    raise ValueError("已完成存档不能续跑，请复制配置创建新 run")
-                archived_preset = replay.get("data", {}).get("preset")
-                if archived_preset and archived_preset != spec.preset:
-                    raise ValueError("续跑必须选择原存档的 preset")
-                # 恢复评测参数，模型接入配置允许显式替换。协议仍由 runner 校验。
-                for key in ("objective", "max_tool_calls_per_turn", "max_empty_responses", "max_end_turn_attempts",
-                            "max_model_steps_per_turn", "max_turn_retries", "game_seed", "scoring_seed"):
-                    if key in replay.get("config", {}):
-                        payload[key] = replay["config"][key]
-                locked.add(spec.resume_run_id)
+            if index in plans:
+                payload.update(inherited_config(plans[index].replay))
+                payload["recovery_token"] = plans[index].token
             agent = _debug_agent(payload)
             effective = agent.config
             # 环境变量同样经过安全 URL 检查，不能把带认证的地址写入任务元数据。
@@ -289,7 +323,7 @@ class Workbench:
         preset = self.presets[payload["preset"]]
         request = {"payload": payload, "data_dir": str(preset.data_dir.resolve()), "data_source": preset.to_dict(),
                    "archive_root": str(self.archive_root.resolve()),
-                   "resume_dir": str(self._archive(payload["resume_run_id"])) if payload["resume_run_id"] else None}
+                   "resume_dir": str(self._archive(payload["resume_run_id"] or payload["rerun_run_id"])) if payload["resume_run_id"] or payload["rerun_run_id"] else None}
         kwargs = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt" else {"start_new_session": True}
         job.update(status="starting", started_at=timestamp())
         set_phase(job, "starting", timestamp())

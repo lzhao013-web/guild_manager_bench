@@ -77,7 +77,7 @@ def verify_resume_protocol(archive_dir: str | Path, current: Mapping[str, Any]) 
             raise ValueError(f"replay {key} differs or is unverified; resume with its original protocol")
 
 
-def run_frozen_full(agent, *, data_dir, config, session_id, event_sink, resume_archive_dir):
+def full_context(data_dir, config):
     runtime = full_runtime()
     frozen_data = FULL_ROOT / "data/presets/full"
     if _yaml_hashes(data_dir) != _yaml_hashes(frozen_data):
@@ -94,6 +94,15 @@ def run_frozen_full(agent, *, data_dir, config, session_id, event_sink, resume_a
     source = runtime.describe_data_source(frozen_data)
     source.update(protocol_metadata(frozen_data, definition, frozen_config, frozen=True))
     source.update(game_seed=definition.rules.seed, scoring_seed=definition.scoring.seed)
+    return runtime, frozen_data, frozen_config, source
+
+
+def run_frozen_full(agent, *, data_dir, config, session_id, event_sink, resume_archive_dir, recovery=None):
+    runtime, frozen_data, frozen_config, source = full_context(data_dir, config)
+    if recovery is not None:
+        recovery.validate(source)
+        return recovery.run_frozen(runtime, agent, data_dir=frozen_data, config=frozen_config, session_id=session_id,
+                                   event_sink=event_sink, resume_archive_dir=resume_archive_dir, data_source=source)
     if resume_archive_dir is not None:
         verify_resume_protocol(resume_archive_dir, source)
     # 适配器继续使用已有响应接口，冻结 runner 自行构造记录，不改模型请求。

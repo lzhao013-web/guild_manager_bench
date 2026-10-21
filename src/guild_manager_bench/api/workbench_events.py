@@ -32,11 +32,14 @@ def apply_event(job: dict[str, Any], event: dict[str, Any], now: str) -> None:
     job["updated_at"] = now
     if kind == "run_started":
         job["data"] = event.get("data", {})
+        if job["data"].get("protocol_status") == "mixed":
+            job["notice"] = "跨版本执行：历史与当前规则不完全一致，不作为同版本标准评测比较"
         job["effective_config"] = event.get("config", {})
         observe(job, event["observation"])
     elif kind == "run_archived":
         job["archive_id"] = event["archive"]["directory"].replace("\\", "/").rstrip("/").rsplit("/", 1)[-1]
     elif kind == "run_resumed":
+        job["archive_id"] = event["archive"]["directory"].replace("\\", "/").rstrip("/").rsplit("/", 1)[-1]
         restore_stats(job, event.get("stats", {}))
         observe(job, event["restored_observation"])
         job["last_score"] = event.get("last_rank_score")

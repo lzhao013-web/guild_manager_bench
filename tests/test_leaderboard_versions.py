@@ -46,6 +46,20 @@ def test_models_are_aggregated_only_within_preset_and_version(tmp_path):
         assert updated["boards"] == board["boards"]
 
 
+def test_cross_version_forced_runs_do_not_enter_standard_boards_or_totals(tmp_path):
+    source, output = tmp_path / "data", tmp_path / "out/board.json"
+    dump(source / "standard.json", replay("standard", score=100))
+    mixed = replay("forced", score=9999)
+    mixed["data"].update(protocol_status="mixed", protocol_hash="changed-during-recovery")
+    dump(source / "forced.json", mixed)
+    for incremental in (True, True, False):
+        build_leaderboard(source, output, incremental=incremental)
+        result = json.loads(output.read_text())
+        assert result["total_runs"] == 1
+        assert len(result["boards"]) == 1
+        assert result["boards"][0]["models"][0]["rank_score"]["mean"] == 100
+
+
 def test_same_version_with_changed_fingerprint_is_rejected(tmp_path):
     source = tmp_path / "data"
     a, b = replay("a"), replay("b")

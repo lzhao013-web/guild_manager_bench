@@ -30,11 +30,20 @@ class RunSpec(BaseModel):
     game_seed: int | None = None
     scoring_seed: int | None = None
     resume_run_id: str | None = Field(default=None, max_length=255)
+    rerun_run_id: str | None = Field(default=None, max_length=255)
+    rerun_from_turn: int | None = Field(default=None, ge=1, strict=True)
+    version_confirmation: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
     @model_validator(mode="after")
     def profile_connection(self):
         if self.profile_id and (self.base_url is not None or self.api_key is not None):
             raise ValueError("使用 API 配置时，地址和密钥由服务端配置提供，请勿同时传入")
+        if self.resume_run_id and self.rerun_run_id:
+            raise ValueError("续跑和分支重跑不能同时指定")
+        if bool(self.rerun_run_id) != (self.rerun_from_turn is not None):
+            raise ValueError("分支重跑必须同时指定来源存档和起始回合")
+        if self.version_confirmation and not (self.resume_run_id or self.rerun_run_id):
+            raise ValueError("版本确认仅适用于存档恢复")
         return self
 
     @field_validator("base_url")
@@ -50,7 +59,7 @@ class RunSpec(BaseModel):
             raise ValueError("服务地址不能包含认证信息、查询参数或片段，请使用 API Key 字段")
         return value.rstrip("/")
 
-    @field_validator("resume_run_id")
+    @field_validator("resume_run_id", "rerun_run_id")
     @classmethod
     def safe_run_id(cls, value: str | None) -> str | None:
         if value is not None and (

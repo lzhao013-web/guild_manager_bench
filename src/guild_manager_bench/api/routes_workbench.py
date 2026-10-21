@@ -24,6 +24,7 @@ from guild_manager_bench.api.model_catalog import (
     fetch_temporary_models,
 )
 from guild_manager_bench.api.workbench_models import CreateBatch, SchedulerSettings
+from guild_manager_bench.bench.llm.recovery import RecoveryConfirmationRequired
 
 
 def workbench_router(manager: Workbench) -> APIRouter:
@@ -186,10 +187,26 @@ def workbench_router(manager: Workbench) -> APIRouter:
         except ValueError:
             raise HTTPException(422, "轨迹格式不支持或所选位置已不存在，原日志保持不变") from None
 
+    @router.get("/recoveries/{run_id}")
+    async def recovery_info(run_id: str):
+        try:
+            return await asyncio.to_thread(manager.recovery_info, run_id)
+        except (ValueError, RuntimeError) as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @router.post("/batches/check", dependencies=[Depends(same_origin)])
+    async def check_recoveries(body: CreateBatch):
+        try:
+            return await asyncio.to_thread(manager.check_recoveries, body)
+        except (ValueError, RuntimeError) as exc:
+            raise HTTPException(422, str(exc)) from exc
+
     @router.post("/batches", dependencies=[Depends(same_origin)], status_code=201)
     async def create_batch(body: CreateBatch):
         try:
             return manager.create_batch(body)
+        except RecoveryConfirmationRequired as exc:
+            raise HTTPException(409, exc.detail) from exc
         except (ValueError, RuntimeError) as exc:
             # 配置错误在公开边界转换，不将凭证或内部堆栈发给浏览器。
             raise HTTPException(422, str(exc)) from exc

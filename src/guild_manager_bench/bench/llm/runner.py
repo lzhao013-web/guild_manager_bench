@@ -148,6 +148,7 @@ def run_llm_game(
     event_sink: EventSink | None = None,
     resume_archive_dir: str | Path | None = None,
     data_source: Mapping[str, Any] | None = None,
+    recovery=None,
 ) -> LlmGameRun:
     """运行一整局 LLM agent benchmark。"""
 
@@ -155,7 +156,10 @@ def run_llm_game(
         protocol_metadata, run_frozen_full, verify_resume_protocol,
     )
 
+    import sys
     config = config or LlmRunConfig()
+    if recovery is not None:
+        resume_archive_dir = recovery.directory
     data_source = (
         dict(data_source)
         if data_source is not None
@@ -164,17 +168,20 @@ def run_llm_game(
     if data_source.get("preset") == "full":
         return run_frozen_full(
             agent, data_dir=data_dir, config=config, session_id=session_id,
-            event_sink=event_sink, resume_archive_dir=resume_archive_dir,
+            event_sink=event_sink, resume_archive_dir=resume_archive_dir, recovery=recovery,
         )
     definition = _definition_for_config(data_dir, config)
     data_source = _data_source_with_effective_seeds(data_source, definition)
     data_source.update(protocol_metadata(data_dir, definition, config))
-    if resume_archive_dir is not None:
+    if recovery is not None:
+        recovery.validate(data_source)
+    elif resume_archive_dir is not None:
         verify_resume_protocol(resume_archive_dir, data_source)
     tools = GuildManagerTools(definition)
     resume = (
         None
         if resume_archive_dir is None
+        else recovery.restore(tools, sys.modules[__name__], data_source) if recovery is not None
         else _restore_from_replay_archive(tools, resume_archive_dir, data_source)
     )
     if resume is None:
@@ -188,13 +195,10 @@ def run_llm_game(
         session_id = resume["session_id"]
         traces = list(resume["traces"])
         memo_store = MemoStore(entries=list(resume["memo_entries"]))
-        archive_writer = _resume_archive(
-            config,
-            agent,
-            resume_archive_dir,
-            resume["replay"],
-            data_source,
-        )
+        if recovery is not None:
+            archive_writer = recovery.writer(sys.modules[__name__], config, agent, resume_archive_dir, resume["replay"], data_source)
+        else:
+            archive_writer = _resume_archive(config, agent, resume_archive_dir, resume["replay"], data_source)
         initial_observation = tools.get_observation(session_id)["observation"]
 
     _bind_agent_session(agent, session_id)

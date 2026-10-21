@@ -149,7 +149,10 @@ def test_resume_archive_lock_and_failed_batch_is_atomic(tmp_path):
         await m.start()
         archive = m.archive_root / "existing"
         archive.mkdir(parents=True)
-        (archive / "replay.json").write_text(json.dumps({"status": "interrupted", "data": {"preset": "default"}, "config": {}}))
+        from guild_manager_bench.bench.llm.runner import LlmRunConfig
+        from guild_manager_bench.bench.llm.recovery import runtime_context
+        source = runtime_context(m.presets["default"].data_dir, LlmRunConfig())[3]
+        (archive / "replay.json").write_text(json.dumps({"kind": "llm_replay", "session_id": "lock-test", "turns": [], "status": "interrupted", "data": source, "config": {}}))
         spec = RunSpec(preset="default", model="local-model", base_url="http://127.0.0.1:1/v1", resume_run_id="existing")
         try:
             with pytest.raises(ValueError, match="已经有"):

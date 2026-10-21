@@ -1660,6 +1660,8 @@ def _build_boards(runs: list[dict]) -> list[dict]:
     groups: dict[tuple[str, str], list[dict]] = {}
     for run in runs:
         run.update(run_version(run))
+        if run["protocol_status"] == "mixed":
+            continue
         key = (run.get("preset") or "unknown", run["benchmark_version"])
         groups.setdefault(key, []).append(run)
     boards = []
@@ -1720,13 +1722,13 @@ def build_leaderboard(data_dir: Path, output: Path, *, incremental: bool = True,
         raise ValueError("No valid completed replays found")
     boards = _build_boards(list(runs.values()))
     result = {"schema_version": 3, "generated_at": datetime.now().isoformat(timespec="seconds"),
-              "total_runs": len(runs), "boards": boards}
+              "total_runs": sum(board["total_runs"] for board in boards), "boards": boards}
     output.parent.mkdir(parents=True, exist_ok=True)
     temp = output.with_suffix(output.suffix + ".tmp")
     temp.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
     temp.replace(output)
     _save_cache(cache_path, new_cache)
-    print(f"OK {len(boards)} preset/version board(s), {len(runs)} run(s) -> {output}")
+    print(f"OK {len(boards)} preset/version board(s), {result['total_runs']} run(s) -> {output}")
     for board in boards:
         print(f"  {board['preset']} / {board['version']}: {board['total_runs']} runs")
 

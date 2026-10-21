@@ -21,6 +21,26 @@ def _scoring_pool():
     return ThreadPoolExecutor(max_workers=1)
 
 
+def recovery_history(turns: list[dict[str, Any]]) -> dict[str, Any]:
+    history = {"usage": {"input_tokens": None, "output_tokens": None, "reported": 0, "responses": 0}, "scores": []}
+    for turn in turns:
+        if turn.get("rank_score") is not None and turn.get("status") == "completed":
+            history["scores"].append({"turn": turn["turn"], "value": turn["rank_score"]})
+        for step in turn.get("steps", []):
+            if step.get("type") != "assistant":
+                continue
+            history["usage"]["responses"] += 1
+            usage = step.get("usage", {})
+            reported = False
+            for target, names in {"input_tokens": ("input_tokens", "prompt_tokens"), "output_tokens": ("output_tokens", "completion_tokens")}.items():
+                value = next((usage[name] for name in names if isinstance(usage.get(name), (int, float))), None)
+                if value is not None:
+                    history["usage"][target] = (history["usage"][target] or 0) + value
+                    reported = True
+            history["usage"]["reported"] += int(reported)
+    return history
+
+
 def main() -> int:
     from guild_manager_bench.api.routes_llm_debug import _debug_agent
     from guild_manager_bench.api.workbench import timestamp
@@ -28,29 +48,13 @@ def main() -> int:
     from guild_manager_bench.bench.llm import LlmRunConfig, run_llm_game
     from guild_manager_bench.bench.llm import runner
     from guild_manager_bench.bench import metrics
+    from guild_manager_bench.bench.llm.recovery import inspect_recovery
 
     directory = Path(sys.argv[1])
     request = json.loads(sys.stdin.readline())
     payload = request["payload"]
     secret = payload.get("api_key")
     history = {"usage": {"input_tokens": None, "output_tokens": None, "reported": 0, "responses": 0}, "scores": []}
-    if request["resume_dir"]:
-        replay = json.loads((Path(request["resume_dir"]) / "replay.json").read_text(encoding="utf-8"))
-        for turn in replay.get("turns", []):
-            if turn.get("rank_score") is not None and turn.get("status") == "completed":
-                history["scores"].append({"turn": turn["turn"], "value": turn["rank_score"]})
-            for step in turn.get("steps", []):
-                if step.get("type") != "assistant":
-                    continue
-                history["usage"]["responses"] += 1
-                usage = step.get("usage", {})
-                reported = False
-                for target, names in {"input_tokens": ("input_tokens", "prompt_tokens"), "output_tokens": ("output_tokens", "completion_tokens")}.items():
-                    value = next((usage[name] for name in names if isinstance(usage.get(name), (int, float))), None)
-                    if value is not None:
-                        history["usage"][target] = (history["usage"][target] or 0) + value
-                        reported = True
-                history["usage"]["reported"] += int(reported)
     stop = threading.Event()
 
     def control() -> None:
@@ -74,9 +78,12 @@ def main() -> int:
 
     def emit(event: dict[str, Any]) -> None:
         nonlocal lease
-        if event["type"] == "run_archived":
-            lease = FileLease(Path(event["archive"]["directory"]) / "workbench.lock")
-            lease.__enter__()
+        if event["type"] == "run_archived" or event["type"] == "run_resumed" and payload["rerun_run_id"]:
+            child_lease = FileLease(Path(event["archive"]["directory"]) / "workbench.lock")
+            child_lease.__enter__()
+            if lease is not None:
+                lease.__exit__()
+            lease = child_lease
         if event["type"] == "run_resumed":
             event = {**event, "workbench_history": history}
         record(event)
@@ -84,9 +91,16 @@ def main() -> int:
             raise StopRequested("用户请求停止运行")
 
     try:
+        recovery = None
         if request["resume_dir"]:
             lease = FileLease(Path(request["resume_dir"]) / "workbench.lock")
             lease.__enter__()
+            recovery = inspect_recovery(Path(request["resume_dir"]), request["data_dir"], payload["rerun_from_turn"])
+            if recovery.token != payload["recovery_token"]:
+                raise ValueError("排队期间存档或版本已变化，请重新提交并确认，尚未请求模型")
+            recovery.authorize(payload["version_confirmation"])
+            turns = [turn for turn in recovery.replay["turns"] if recovery.from_turn is None or turn["turn"] < recovery.from_turn]
+            history = recovery_history(turns)
         runner.ProcessPoolExecutor = _scoring_pool
         metrics.ProcessPoolExecutor = _scoring_pool
         if payload["preset"] == "full":
@@ -99,7 +113,7 @@ def main() -> int:
                   "max_model_steps_per_turn", "max_turn_retries", "game_seed", "scoring_seed")
         config = LlmRunConfig(**{key: payload[key] for key in fields if key in payload}, archive_dir=request["archive_root"])
         run = run_llm_game(agent, data_dir=request["data_dir"], config=config, event_sink=emit,
-                           resume_archive_dir=request["resume_dir"], data_source=request["data_source"])
+                           resume_archive_dir=request["resume_dir"], data_source=recovery.current if recovery is not None else request["data_source"], recovery=recovery)
         return 0 if run.status == "completed" else 1
     except StopRequested:
         record({"type": "worker_stopped"})

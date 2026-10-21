@@ -131,6 +131,7 @@ def _run_summary(path: Path) -> dict[str, Any] | None:
         "preset": data.get("preset") or _preset_from_data_dir(data.get("data_dir")),
         "model": agent_config.get("model"),
         "data_hash": data.get("data_hash"),
+        "protocol_status": data.get("protocol_status"),
         "score": score.get("score"),
         "rank_score": score.get("rank_score"),
         "adventurer_stats": game_actions.get("adventurer_stats") or [],
