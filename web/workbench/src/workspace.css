@@ -20,7 +20,7 @@
     flex-shrink: 0;
     min-height: 22px;
     margin-bottom: 6px;
-    font-size: 11px;
+    font-size: var(--wb-text-xs);
 }
 .workspace-main.is-focus-mode .focus-workspace > .spectator.run-detail {
     flex: 1;
@@ -41,7 +41,7 @@
 }
 .spectator-full .spectator-title h2 {
     margin: 0;
-    font-size: 13px;
+    font-size: var(--wb-text-base);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -61,7 +61,7 @@
 }
 .spectator-full .runtime-budget {
     margin: 0;
-    font-size: 10px;
+    font-size: var(--wb-text-xs);
 }
 .spectator-full .spectator-statusbar {
     display: flex;
@@ -95,7 +95,7 @@
     gap: 7px;
 }
 .spectator-full .spectator-resources b {
-    font-size: 14px;
+    font-size: var(--wb-text-md);
 }
 .spectator-full .spectator-materials > b {
     display: none;
@@ -210,13 +210,13 @@
 }
 .overview-module-heading h3 {
     margin: 0;
-    font-size: 12px;
+    font-size: var(--wb-text-sm);
     font-weight: 600;
     white-space: nowrap;
 }
 .overview-module-heading > small {
     margin-left: auto;
-    font-size: 11px;
+    font-size: var(--wb-text-xs);
     color: var(--gray-11);
     min-width: 0;
     white-space: nowrap;
@@ -272,7 +272,7 @@
     align-items: baseline;
 }
 .overview-party-grid strong {
-    font-size: 12px;
+    font-size: var(--wb-text-sm);
     font-weight: 500;
     min-width: 0;
     overflow: hidden;
@@ -281,7 +281,7 @@
 }
 .overview-member-level {
     color: var(--gray-11);
-    font-size: 10px;
+    font-size: var(--wb-text-xs);
     margin-left: auto;
     white-space: nowrap;
 }
@@ -289,7 +289,7 @@
     gap: 2px;
 }
 .overview-party-grid .scene-vital > div > span {
-    font-size: 10px;
+    font-size: var(--wb-text-xs);
 }
 .overview-party-grid .scene-vital > div > span > svg,
 .overview-party-grid .scene-no-portrait > span {
@@ -329,7 +329,7 @@
 }
 .overview-enemies strong,
 .overview-recruits strong {
-    font-size: 12px;
+    font-size: var(--wb-text-sm);
     font-weight: 500;
     overflow: hidden;
     white-space: nowrap;
@@ -337,7 +337,7 @@
 }
 .overview-enemies small,
 .overview-recruits small {
-    font-size: 11px;
+    font-size: var(--wb-text-xs);
     color: var(--gray-11);
     white-space: nowrap;
 }
@@ -361,7 +361,7 @@
 }
 .overview-item-rows strong,
 .overview-upgrade-rows strong {
-    font-size: 12px;
+    font-size: var(--wb-text-sm);
     font-weight: 500;
     min-width: 0;
     overflow: hidden;
@@ -371,7 +371,7 @@
 .overview-item-rows button > span,
 .overview-upgrade-rows button > span {
     margin-left: auto;
-    font-size: 11px;
+    font-size: var(--wb-text-xs);
     color: var(--gray-11);
     white-space: nowrap;
 }
@@ -414,14 +414,14 @@
     display: flex;
     justify-content: space-between;
     color: var(--gray-11);
-    font-size: 10px;
+    font-size: var(--wb-text-xs);
 }
 .overview-current-action > strong {
-    font-size: 13px;
+    font-size: var(--wb-text-base);
     font-weight: 600;
 }
 .overview-current-summary {
-    font-size: 11px;
+    font-size: var(--wb-text-xs);
     color: var(--gray-11);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -444,13 +444,13 @@
     color: var(--gray-12);
 }
 .overview-action-rows strong {
-    font-size: 12px;
+    font-size: var(--wb-text-sm);
     font-weight: 500;
 }
 .overview-action-rows time,
 .overview-action-rows button > span {
     color: var(--gray-11);
-    font-size: 11px;
+    font-size: var(--wb-text-xs);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -465,7 +465,7 @@
     background: var(--red-2);
 }
 .overview-model-excerpt {
-    font-size: 12px;
+    font-size: var(--wb-text-sm);
     line-height: 1.65;
     overflow: hidden;
     display: -webkit-box;
@@ -476,7 +476,7 @@
 }
 .overview-empty {
     color: var(--gray-11);
-    font-size: 12px;
+    font-size: var(--wb-text-sm);
     line-height: 1.6;
     padding: 4px 0;
 }
@@ -499,7 +499,7 @@
     border: 1px solid var(--accent-6);
     border-radius: 5px;
     padding: 6px 8px;
-    font-size: 11px;
+    font-size: var(--wb-text-xs);
     white-space: nowrap;
 }
 .workspace-module-divider {
@@ -507,7 +507,7 @@
     width: 1px;
     background: var(--gray-6);
 }
-.workspace-module-toolbar > h3 { font-size: 13px; }
+.workspace-module-toolbar > h3 { font-size: var(--wb-text-base); }
 .workspace-module-toolbar > label {
     display: flex;
     align-items: center;
@@ -516,11 +516,11 @@
 }
 .workspace-module-toolbar > label > span {
     color: var(--gray-11);
-    font-size: 11px;
+    font-size: var(--wb-text-xs);
     white-space: nowrap;
 }
 .workspace-module-toolbar select {
-    font-size: 11px;
+    font-size: var(--wb-text-xs);
     min-height: 30px;
     width: 140px;
     padding-block: 4px;
@@ -591,7 +591,7 @@
     width: 240px;
     min-width: 0;
     max-width: 100%;
-    font-size: 13px;
+    font-size: var(--wb-text-base);
     font-weight: 600;
     padding-block: 5px;
     min-height: 31px;
@@ -619,7 +619,7 @@
     padding: 5px;
 }
 .paperdoll-slot > svg { width: 18px; height: 18px; }
-.paperdoll-slot > strong { font-size: 11px; line-height: 1.4; }
+.paperdoll-slot > strong { font-size: var(--wb-text-xs); line-height: 1.4; }
 .scene-section-title { margin-bottom: 8px; }
 .scene-character-stats > .scene-stat-tiles {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -634,15 +634,15 @@
     padding-top: 10px;
 }
 .scene-skill-count > div { display: flex; align-items: baseline; gap: 5px; }
-.scene-skill-count b { font-size: 14px; }
+.scene-skill-count b { font-size: var(--wb-text-md); }
 .selected-equipment {
     margin: 0;
     padding: 0;
     border: 0;
 }
-.selected-equipment > header > h3 { font-size: 13px; }
+.selected-equipment > header > h3 { font-size: var(--wb-text-base); }
 .selected-equipment .scene-stat-tiles { margin-block: 10px; }
-.equipment-skills { font-size: 11px; line-height: 1.7; }
+.equipment-skills { font-size: var(--wb-text-xs); line-height: 1.7; }
 .equipment-skills > summary { cursor: pointer; color: var(--accent-11); }
 .scene-entity-hero {
     grid-template-columns: 80px minmax(0, 1fr);
@@ -709,12 +709,12 @@
     .overview-party-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
     .overview-party-grid > button { grid-template-columns: 28px minmax(0, 1fr); gap: 5px; padding: 2px; }
     .overview-party-grid .scene-portrait { height: 45px; }
-    .overview-party-grid strong { font-size: 11px; }
+    .overview-party-grid strong { font-size: var(--wb-text-xs); }
     .overview-member-level { display: none; }
     .overview-enemies { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .overview-action-rows button { grid-template-columns: 54px minmax(0, 1fr); }
     .overview-action-rows button > span { grid-column: 2; }
-    .overview-module-heading > small { font-size: 10px; }
+    .overview-module-heading > small { font-size: var(--wb-text-xs); }
     .workspace-module-toolbar { gap: 6px; padding-inline: 8px; }
     .workspace-module-toolbar > label > span,
     .workspace-module-toolbar > svg,

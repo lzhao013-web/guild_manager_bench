@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
 import App from "./App";
 import type { Job, Snapshot } from "./types";
 import { testArchive, testJob } from "./test-jobs";
@@ -37,6 +38,18 @@ it("多选运行进入统一曲线工作区，续跑使用同一个身份，并�
     fireEvent.click(within(board).getByRole("button", { name: "返回原工作区" }));
     expect(screen.getByRole("region", { name: "运行列表" })).toBeVisible();
     expect(screen.getAllByRole("row")).toHaveLength(3);
+});
+
+it("页脚明确注明 MiSans 使用并提供本地字体授权说明入口", () => {
+    setup([]);
+    expect(screen.getByRole("link", { name: "字体：MiSans" })).toHaveAttribute("href", "/workbench/fonts/NOTICE.txt");
+});
+
+it("固定外观不提供密度切换，也不受此前浏览器密度选择影响", () => {
+    localStorage.setItem("gmb.density.v1", JSON.stringify("compact"));
+    setup([]);
+    expect(screen.queryByRole("combobox", { name: "显示密度" })).not.toBeInTheDocument();
+    expect(document.querySelector(".radix-themes")).not.toHaveAttribute("data-density");
 });
 
 it("曲线书签中的选择优先于浏览器上次保存的选择", async () => {
@@ -104,8 +117,11 @@ it("无存档的启动失败仍可查看和重新创建，并会明确提醒失�
     expect(within(await screen.findByLabelText("运行结果通知")).getByRole("alert")).toHaveTextContent("失败");
     fireEvent.click(screen.getByRole("button", { name: "查看历史存档" }));
     expect(await screen.findByText("未生成存档")).toBeVisible();
+    fireEvent.click(screen.getByText("运行失败，查看原始错误"));
     expect(screen.getByText("构造启动失败")).toBeVisible();
-    expect(screen.getByRole("button", { name: "重新创建" })).toBeEnabled();
+    await userEvent.click(screen.getByRole("button", { name: /的更多操作/ }));
+    expect(screen.getByRole("menuitem", { name: "重新创建" })).toBeEnabled();
+    await userEvent.keyboard("{Escape}");
     expect(screen.getByRole("button", { name: "查看详情" })).toBeEnabled();
 });
 
@@ -128,9 +144,11 @@ it("续跑后 run 离开历史，批次仍只计为原实验的一局", async ()
     const old = testJob("old", { status: "interrupted" });
     const { update } = setup([old]);
     fireEvent.click(screen.getByRole("button", { name: "历史存档" }));
-    expect(await screen.findByRole("button", { name: "续跑" })).toBeEnabled();
+    await userEvent.click(await screen.findByRole("button", { name: /的更多操作/ }));
+    expect(screen.getByRole("menuitem", { name: "续跑" })).toBeEnabled();
+    await userEvent.keyboard("{Escape}");
     update([old, testJob("resumed", { status: "queued", created_at: "2026-10-18T11:00:00Z", batch_id: "resume-batch", batch_name: "不应成为新实验" })]);
-    await waitFor(() => expect(screen.queryByRole("button", { name: "续跑" })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("button", { name: /的更多操作/ })).not.toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "实验批次" }));
     expect(screen.getByRole("heading", { name: "原始实验" })).toBeVisible();
     expect(screen.queryByRole("heading", { name: "不应成为新实验" })).not.toBeInTheDocument();

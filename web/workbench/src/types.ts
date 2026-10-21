@@ -25,6 +25,9 @@ export interface RunConfig {
     game_seed: number | null;
     scoring_seed: number | null;
     resume_run_id?: string | null;
+    rerun_run_id?: string | null;
+    rerun_from_turn?: number | null;
+    version_confirmation?: string | null;
     credential_present?: boolean;
 }
 export interface ApiProfile {
@@ -163,4 +166,5 @@ export interface Archive {
     model: string;
     rank_score: number | null;
     failure_reason?: string;
+    protocol_status?: string | null;
 }

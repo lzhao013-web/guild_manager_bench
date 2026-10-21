@@ -4,6 +4,10 @@ import type { Job } from "./types";
 import type { WatchPage } from "./watchModel";
 import type { EventPage, EventRecord } from "./types";
 
+export class ApiError extends Error {
+    constructor(message: string, public status: number, public detail: unknown) { super(message); }
+}
+
 export async function api<T>(path: string, options?: RequestInit): Promise<T> {
     const response = await fetch(path, {
         ...options,
@@ -12,12 +16,13 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
     if (!response.ok) {
         const body = await response.json().catch(() => null);
         const detail = body?.detail;
-        throw new Error(
+        throw new ApiError(
             typeof detail === "string"
                 ? detail
                 : Array.isArray(detail)
                   ? detail.map((e: { msg: string }) => e.msg).join("，")
-                  : `请求失败（HTTP ${response.status}）`,
+                  : detail && typeof detail === "object" && "message" in detail ? String(detail.message) : `请求失败（HTTP ${response.status}）`,
+            response.status, detail,
         );
     }
     return response.json();

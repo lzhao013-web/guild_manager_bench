@@ -15,7 +15,7 @@
     padding: 0 5px;
     border: 1px solid transparent;
     border-radius: 4px;
-    font-size: 11px;
+    font-size: var(--wb-text-xs);
     font-weight: 650;
     white-space: nowrap;
     overflow: visible;
@@ -29,11 +29,11 @@
 .monster-role.role-elite { color: var(--violet-11); background: var(--violet-3); border-color: var(--violet-6); }
 .monster-role.role-boss { color: var(--amber-11); background: var(--amber-3); border-color: var(--amber-7); }
 .monster-stage.stage-unknown, .monster-role.role-unknown { color: var(--gray-11); background: var(--gray-3); }
-.monster-badges.is-compact { gap: 3px; line-height: 14px; }
-.monster-badges.is-compact > span { padding: 0 3px; gap: 2px; font-size: 10px; border-radius: 3px; }
+.monster-badges.is-compact { gap: 3px; line-height: 1.4; }
+.monster-badges.is-compact > span { padding: 0 3px; gap: 2px; font-size: var(--wb-text-xs); border-radius: 3px; }
 .monster-badges.is-compact svg { width: 10px; height: 10px; }
 .monitor-monster-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.monitor-monster-info > strong { font-size: 10px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.monitor-monster-info > strong { font-size: var(--wb-text-xs); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .monitor-monsters .monster-badges, .monitor-monsters .monster-badges > span { overflow: visible; }
 .monitor-monsters > button:not(.monitor-section-link):not(.monitor-more) { min-height: 31px; }
 .overview-enemies .monster-badges { gap: 3px; }

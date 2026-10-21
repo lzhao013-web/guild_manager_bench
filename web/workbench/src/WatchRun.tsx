@@ -24,6 +24,7 @@ import { Empty, JsonDetails, StatusBadge, Trend } from "./ui";
 import { WatchMonitor } from "./WatchMonitor";
 import { ModelCallStats } from "./ModelCallStats";
 import { ActionTimeline } from "./ActionTimeline";
+import type { ActionEntry } from "./actionModel";
 import { TrajectoryProvider } from "./TrajectoryContext";
 import type { TrajectoryPage } from "./trajectoryModel";
 import { RunWorkspace } from "./RunWorkspace";
@@ -43,6 +44,8 @@ import "./business-preview.css";
 
 export type { WatchPosition } from "./watchModel";
 export { livePosition } from "./watchModel";
+
+interface ModelReasoningTarget { call: number; title: string }
 
 export function WatchRun({
     job,
@@ -74,6 +77,7 @@ export function WatchRun({
     const following = position.attempt === null;
     const [utility, setUtility] = useState(false);
     const [historyRequested, setHistoryRequested] = useState(false);
+    const [reasoningTarget, setReasoningTarget] = useState<(ModelReasoningTarget & { page: WatchPage }) | null>(null);
     const [activeModule, setActiveModule] = useState<RunModule | null>(() => compact ? null : initialFocus?.module || null);
     const live = useLiveWatch(job);
     const history = useQuery({
@@ -90,6 +94,7 @@ export function WatchRun({
             onPosition({ ...position, frozen: history.data });
     }, [position, history.data, history.isFetching, onPosition]);
     const page = position.frozen || (following ? live.data : history.data);
+    const modelTarget = reasoningTarget && reasoningTarget.page === page ? reasoningTarget : undefined;
     const frames = useMemo(() => {
         const previous = page?.attempts
             .slice(
@@ -125,10 +130,18 @@ export function WatchRun({
     useEffect(() => () => navigation.current?.abort(), []);
     function chooseFrame(next: WatchFrame) {
         navigation.current?.abort();
+        setReasoningTarget(null);
         if (page) onPosition({ attempt: page.selected, cursor: next.cursor, frozen: page });
+    }
+    function showReasoning(entry: ActionEntry) {
+        if (!page || entry.frame.call === null) return;
+        chooseFrame(entry.frame);
+        setReasoningTarget({ call: entry.frame.call, title: entry.title, page });
+        setActiveModule("models");
     }
     async function locateTrajectory(attempt: number, cursor: number | null, origin: "archive" | "execution") {
         navigation.current?.abort();
+        setReasoningTarget(null);
         const controller = new AbortController();
         navigation.current = controller;
         try {
@@ -144,7 +157,10 @@ export function WatchRun({
         if (page?.origin) {
             try { await locateTrajectory(attempt, null, page.origin); }
             catch (error) { setLocationError((error as Error).message); }
-        } else onPosition({ attempt, cursor: null });
+        } else {
+            setReasoningTarget(null);
+            onPosition({ attempt, cursor: null });
+        }
     }
     function pause() {
         navigation.current?.abort();
@@ -153,6 +169,7 @@ export function WatchRun({
     }
     function returnLive() {
         navigation.current?.abort();
+        setReasoningTarget(null);
         setLocationError("");
         onPosition(livePosition);
     }
@@ -160,7 +177,7 @@ export function WatchRun({
     const loading = !page && (following ? live.isPending : history.isFetching);
     const actionsPanel = (
         <ActionTimeline frames={frames} frame={frame} active={actionsVisible} following={following}
-            rolledBack={selected?.status === "rolled_back"} onFrame={chooseFrame} onWholeRun={() => setHistoryRequested(true)}
+            rolledBack={selected?.status === "rolled_back"} onFrame={chooseFrame} onWholeRun={() => setHistoryRequested(true)} onModelReasoning={showReasoning}
             renderDetails={item => <LazyRecord key={item.cursor} jobId={job.id} record={item.record} label="原始事件与调用参数" active={actionsVisible} trajectory={page?.origin} />} />
     );
     const modelsPanel = (
@@ -171,6 +188,9 @@ export function WatchRun({
                 call={frame?.call ?? null}
                 active={activeModule === "models"}
                 live={following && isActive(job)}
+                reasoningTarget={modelTarget}
+                onClearTarget={() => setReasoningTarget(null)}
+                onReturnAction={() => { setReasoningTarget(null); setActiveModule("actions"); }}
                 trajectory={page?.origin}
             />
         </section>
@@ -470,6 +490,9 @@ function ModelPanel({
     call,
     active,
     live,
+    reasoningTarget,
+    onClearTarget,
+    onReturnAction,
     trajectory,
 }: {
     job: Job;
@@ -477,6 +500,9 @@ function ModelPanel({
     call: number | null;
     active: boolean;
     live: boolean;
+    reasoningTarget?: ModelReasoningTarget;
+    onClearTarget: () => void;
+    onReturnAction: () => void;
     trajectory?: "archive" | "execution";
 }) {
     const models = useMemo(() => modelEntries(records), [records]);
@@ -495,26 +521,45 @@ function ModelPanel({
     useLayoutEffect(() => {
         if (active && viewport.current) viewport.current.scrollTop = viewportScroll.current;
     }, [active]);
-    const model =
-        models.find((m) => m.key === effective) ||
-        models.find((m) => m.key === call) ||
-        models.at(-1);
+    const model = reasoningTarget
+        ? models.find((m) => m.key === reasoningTarget.call)
+        : models.find((m) => m.key === effective) || models.find((m) => m.key === call) || models.at(-1);
+    const reasoning = useRef<HTMLDetailsElement>(null);
     useLayoutEffect(() => {
         viewportScroll.current = 0;
         if (viewport.current) viewport.current.scrollTop = 0;
     }, [model?.key]);
+    useLayoutEffect(() => {
+        if (!active || !reasoningTarget || model?.key !== reasoningTarget.call || !reasoning.current || !viewport.current) return;
+        reasoning.current.open = true;
+        viewport.current.scrollTop += reasoning.current.getBoundingClientRect().top - viewport.current.getBoundingClientRect().top - 8;
+    }, [active, reasoningTarget, model?.key, model?.reasoning]);
+    const returnedTools = (model?.response as { tool_calls?: unknown[] } | undefined)?.tool_calls;
     const request = records.find((r) => r.cursor === model?.key);
     const response =
         model &&
         records.find((r) => r.event.type === "model_response" && r.event.step === model.step);
+    const reasoningPanel = model && (model.reasoning || reasoningTarget) && (
+        <details className="reasoning model-linked-reasoning" key={model.key} ref={reasoning}>
+            <summary>API 提供的推理文本或摘要</summary>
+            {model.reasoning ? <>
+                {reasoningTarget && returnedTools && returnedTools.length > 1 && <p className="model-reasoning-note">本次响应包含 {returnedTools.length} 个工具调用，共享以下 API 推理记录，日志没有逐工具的独立思考区间。</p>}
+                <pre>{model.reasoning}</pre>
+            </> : <p className="model-reasoning-note">该调用未记录可读的 API 推理文本或摘要，无法从正文或工具参数还原思考。仍可查看本次正文和已记录的输入、响应。</p>}
+        </details>
+    );
     return (
         <>
             <div className="spectator-column-title">
                 <h3>模型调用</h3>
                 <span>{models.length} 次</span>
             </div>
+            {reasoningTarget && <div className="model-reasoning-source" role="status">
+                <span>来自工具调用：<strong>{reasoningTarget.title}</strong></span>
+                <button onClick={onReturnAction}><CaretLeft size={13} />返回该工具</button>
+            </div>}
             {!model ? (
-                <p className="scene-empty">该位置尚未发出模型请求</p>
+                <p className="scene-empty">{reasoningTarget ? "该日志缺少关联模型调用记录，不能用其它调用代替。" : "该位置尚未发出模型请求"}</p>
             ) : (
                 <div
                     className="spectator-model-content"
@@ -526,7 +571,7 @@ function ModelPanel({
                     <select
                         aria-label="选择模型调用"
                         value={model.key}
-                        onChange={(e) => setChosen(Number(e.target.value))}
+                        onChange={(e) => { setChosen(Number(e.target.value)); onClearTarget(); }}
                     >
                         {models.map((entry, i) => (
                             <option key={entry.key} value={entry.key}>
@@ -542,6 +587,7 @@ function ModelPanel({
                         <span>配置强度 {job.config.reasoning_effort || "默认"}</span>
                     </div>
                     <ModelCallStats model={model} live={live && active && model === models.at(-1)} />
+                    {reasoningTarget && reasoningPanel}
                     {model.text ? (
                         <pre className="watch-model-text">{model.text}</pre>
                     ) : (
@@ -549,12 +595,7 @@ function ModelPanel({
                             {model.response ? "本次未返回正文，可能仅调用工具。" : "尚未收到正文。"}
                         </p>
                     )}
-                    {model.reasoning && (
-                        <details className="reasoning">
-                            <summary>API 提供的推理文本或摘要</summary>
-                            <pre>{model.reasoning}</pre>
-                        </details>
-                    )}
+                    {!reasoningTarget && reasoningPanel}
                     {model.response != null && (
                         <JsonDetails title="工具调用与用量" value={model.response} />
                     )}

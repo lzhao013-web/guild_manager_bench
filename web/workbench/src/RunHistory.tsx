@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Button } from "@radix-ui/themes";
-import { ArrowDown, ArrowSquareOut, ArrowUp, ArrowsDownUp, MagnifyingGlass } from "@phosphor-icons/react";
+import { Button, DropdownMenu } from "@radix-ui/themes";
+import { ArrowDown, ArrowSquareOut, ArrowUp, ArrowsDownUp, CaretDown, MagnifyingGlass } from "@phosphor-icons/react";
 import { api } from "./api";
 import { fmt } from "./model";
 import { HISTORY_COLUMNS, historyCreatedAt, historyPreset, historyRuns, historyStatus, sortHistoryRuns } from "./runCatalog";
@@ -9,11 +9,19 @@ import type { HistorySort, HistorySortField } from "./runCatalog";
 import { Empty } from "./ui";
 import type { Archive, Job } from "./types";
 
-export function RunHistory({ jobs, batchId, onBatchChange, onResume, onOpen, onClone, onWatch, onCompare }: {
+function failureSummary(error: string): string {
+    if (/benchmark_version differs|original protocol/i.test(error)) return "协议版本不一致";
+    if (/stream disconnected|stream closed before/i.test(error)) return "模型响应中断";
+    if (/HTTP 408|timed?\s*out|timeout/i.test(error)) return "请求超时";
+    return "运行失败，查看原始错误";
+}
+
+export function RunHistory({ jobs, batchId, onBatchChange, onResume, onRerun, onOpen, onClone, onWatch, onCompare }: {
     jobs: Job[];
     batchId: string;
     onBatchChange: (id: string) => void;
     onResume: (archive: Archive) => void;
+    onRerun?: (archive: Archive) => void;
     onOpen: (job: Job) => void;
     onClone: (job: Job) => void;
     onWatch: (jobs: Job[]) => void;
@@ -113,13 +121,18 @@ export function RunHistory({ jobs, batchId, onBatchChange, onResume, onOpen, onC
                                 <td><input type="checkbox" aria-label={`选择历史 ${job?.name || archive!.model || row.id}`}
                                     checked={checked.includes(row.id)}
                                     onChange={event => setChecked(ids => event.target.checked ? [...ids, row.id] : ids.filter(id => id !== row.id))} /></td>
-                                <td><strong>{job?.name || archive!.model || "未记录模型"}</strong>
-                                    <small className="archive-id">{job?.archive_id || archive?.run_id || "未生成存档"}</small>
-                                    {failure && <small className="history-error">{failure}</small>}
+                                <td className="archive-name"><strong title={job?.name || archive!.model}>{job?.name || archive!.model || "未记录模型"}</strong>
+                                    <small className="archive-id" title={job?.archive_id || archive?.run_id || undefined}>{job?.archive_id || archive?.run_id || "未生成存档"}</small>
+                                    {job?.config.rerun_run_id && <small className="archive-id" title={job.config.rerun_run_id}>从 T{job.config.rerun_from_turn} 分支 · 来源 {job.config.rerun_run_id}</small>}
+                                    {(job?.data.protocol_status === "mixed" || archive?.protocol_status === "mixed") && <small className="history-error">跨版本执行，不作同版本标准比较</small>}
+                                    {failure && <details className="history-failure">
+                                        <summary>{failureSummary(failure)}</summary>
+                                        <pre>{failure}</pre>
+                                    </details>}
                                 </td>
                                 <td>{historyPreset(row) || "未记录"}</td>
                                 <td>{historyStatus(row) || "未记录"}</td>
-                                <td className="mono">{job ? (job.turn == null ? "未开始" : `${job.turn} / ${job.max_turns}`) : archive!.turns}</td>
+                                <td className="mono turn-cell">{job ? (job.turn == null ? "未开始" : `${job.turn} / ${job.max_turns}`) : archive!.turns}</td>
                                 <td className="mono">{fmt(job ? job.last_score : archive!.rank_score)}</td>
                                 <td className="archive-created mono">{created ? <time dateTime={row.created_at} title={row.created_at}>
                                     {created.toLocaleDateString("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit" })}
@@ -127,10 +140,17 @@ export function RunHistory({ jobs, batchId, onBatchChange, onResume, onOpen, onC
                                 </time> : "未记录"}</td>
                                 <td><div className="archive-actions">
                                     {job && <Button highContrast size="1" variant="soft" onClick={() => onOpen(job)}>查看详情</Button>}
-                                    <Button highContrast size="1" variant="soft" onClick={() => onCompare([curveId(row)])}>查看曲线</Button>
-                                    {archive && <a href={`/replay/#run=${encodeURIComponent(archive.run_id)}`}>回放<ArrowSquareOut /></a>}
-                                    {archive && status !== "completed" && <Button highContrast size="1" variant="soft" disabled={!archive.preset} onClick={() => onResume(archive)}>续跑</Button>}
-                                    {!archive && job && <Button highContrast size="1" variant="soft" onClick={() => onClone(job)}>重新创建</Button>}
+                                    {!job && archive && <Button asChild highContrast size="1" variant="soft"><a href={`/replay/#run=${encodeURIComponent(archive.run_id)}`}>回放<ArrowSquareOut /></a></Button>}
+                                    <DropdownMenu.Root>
+                                        <DropdownMenu.Trigger><Button highContrast size="1" variant="ghost" aria-label={`${job?.name || archive!.model || row.id} 的更多操作`}>更多<CaretDown size={12} /></Button></DropdownMenu.Trigger>
+                                        <DropdownMenu.Content size="2" align="end">
+                                            <DropdownMenu.Item onSelect={() => onCompare([curveId(row)])}>查看曲线</DropdownMenu.Item>
+                                            {job && archive && <DropdownMenu.Item asChild><a href={`/replay/#run=${encodeURIComponent(archive.run_id)}`}>回放<ArrowSquareOut /></a></DropdownMenu.Item>}
+                                            {archive && onRerun && <DropdownMenu.Item disabled={!archive.preset} onSelect={() => onRerun(archive)}>从指定回合重跑</DropdownMenu.Item>}
+                                            {archive && status !== "completed" && <DropdownMenu.Item disabled={!archive.preset} onSelect={() => onResume(archive)}>续跑</DropdownMenu.Item>}
+                                            {!archive && job && <DropdownMenu.Item onSelect={() => onClone(job)}>重新创建</DropdownMenu.Item>}
+                                        </DropdownMenu.Content>
+                                    </DropdownMenu.Root>
                                 </div></td>
                             </tr>;
                         })}</tbody>

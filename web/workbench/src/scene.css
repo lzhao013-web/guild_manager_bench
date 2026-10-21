@@ -26,7 +26,7 @@
     border: 0;
     border-bottom: 2px solid transparent;
     white-space: nowrap;
-    font-size: 12px;
+    font-size: var(--wb-text-sm);
 }
 .scene-navigation button.active {
     color: var(--accent-11);
@@ -34,9 +34,7 @@
 }
 .scene-navigation button > span {
     font:
-        10px ui-monospace,
-        Consolas,
-        monospace;
+        var(--wb-text-xs) var(--wb-font-mono);
     padding: 2px 5px;
     background: var(--gray-4);
     border-radius: 4px;
@@ -62,11 +60,11 @@
     min-width: 0;
 }
 .scene-zone-heading h3 {
-    font-size: 13px;
+    font-size: var(--wb-text-base);
     white-space: nowrap;
 }
 .scene-zone-heading b {
-    font-size: 12px;
+    font-size: var(--wb-text-sm);
     color: var(--accent-11);
 }
 .scene-zone-heading b > span {
@@ -74,7 +72,7 @@
     color: var(--gray-11);
 }
 .scene-zone-heading > span {
-    font-size: 10px;
+    font-size: var(--wb-text-xs);
     color: var(--gray-11);
     text-align: right;
 }
@@ -126,7 +124,7 @@
 .member-change-label {
     position: absolute;
     padding: 4px 7px;
-    font-size: 10px;
+    font-size: var(--wb-text-xs);
     border-radius: 4px;
 }
 .member-level {
@@ -148,7 +146,7 @@
     gap: 8px;
 }
 .member-card-info > strong {
-    font-size: 12px;
+    font-size: var(--wb-text-sm);
     font-weight: 600;
     line-height: 1.5;
     overflow-wrap: anywhere;
@@ -163,7 +161,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 5px;
-    font-size: 10px;
+    font-size: var(--wb-text-xs);
 }
 .scene-vital > div > span {
     display: flex;
@@ -172,7 +170,7 @@
     color: var(--gray-11);
 }
 .scene-vital b {
-    font-size: 10px;
+    font-size: var(--wb-text-xs);
     font-weight: 500;
     white-space: nowrap;
 }
@@ -181,7 +179,7 @@
     font-weight: 400;
 }
 .scene-vital em {
-    font-size: 9px;
+    font-size: var(--wb-text-xs);
     margin-left: 5px;
     color: var(--accent-11);
     font-style: normal;
@@ -210,9 +208,7 @@
     flex-wrap: wrap;
     gap: 6px 10px;
     font:
-        10px/1.5 ui-monospace,
-        Consolas,
-        monospace;
+        var(--wb-text-xs)/1.5 var(--wb-font-mono);
     color: var(--gray-11);
 }
 .scene-mini-stats > span {
@@ -221,7 +217,7 @@
     gap: 3px;
 }
 .member-loadout {
-    font-size: 9px;
+    font-size: var(--wb-text-xs);
     color: var(--gray-11);
     border-top: 1px solid var(--border);
     padding-top: 6px;
@@ -240,11 +236,11 @@
     padding: 16px;
 }
 .scene-open-slot strong {
-    font-size: 12px;
+    font-size: var(--wb-text-sm);
     font-weight: 500;
 }
 .scene-open-slot > span {
-    font-size: 10px;
+    font-size: var(--wb-text-xs);
     color: var(--accent-11);
 }
 .scene-open-slot:hover {
@@ -261,7 +257,7 @@
     background: var(--gray-3);
 }
 .scene-no-portrait > span {
-    font-size: 10px;
+    font-size: var(--wb-text-xs);
 }
 .scene-enemy-zone {
     margin-top: 24px;
@@ -300,18 +296,18 @@
     padding: 9px;
 }
 .scene-monster-card strong {
-    font-size: 11px;
+    font-size: var(--wb-text-xs);
     line-height: 1.5;
 }
 .monster-tier {
-    font-size: 9px;
+    font-size: var(--wb-text-xs);
     color: var(--gray-11);
 }
 .scene-zone-empty,
 .scene-unavailable {
     padding: 35px 15px;
     color: var(--gray-11);
-    font-size: 12px;
+    font-size: var(--wb-text-sm);
     text-align: center;
 }
 .scene-unavailable {
@@ -327,7 +323,7 @@
     color: var(--gray-12);
 }
 .scene-unavailable p {
-    font-size: 12px;
+    font-size: var(--wb-text-sm);
 }
 .materials-trigger {
     padding: 3px 7px;
@@ -335,14 +331,14 @@
     border-radius: 4px;
     background: var(--accent-3);
     color: var(--accent-11);
-    font-size: 10px;
+    font-size: var(--wb-text-xs);
     white-space: nowrap;
 }
 .materials-popover {
     background: var(--gray-2) !important;
 }
 .materials-popover h3 {
-    font-size: 13px;
+    font-size: var(--wb-text-base);
     margin-bottom: 14px;
 }
 .material-tile-grid {
@@ -358,22 +354,22 @@
     padding: 9px;
     background: var(--gray-3);
     border-radius: 5px;
-    font-size: 11px;
+    font-size: var(--wb-text-xs);
 }
 .material-tile-grid svg {
     color: var(--gray-11);
 }
 .material-tile-grid b {
-    font-size: 12px;
+    font-size: var(--wb-text-sm);
     font-weight: 500;
 }
 .scene-note {
-    font-size: 11px;
+    font-size: var(--wb-text-xs);
     line-height: 1.7;
     color: var(--gray-11);
 }
 .scene-positive {
-    font-size: 12px;
+    font-size: var(--wb-text-sm);
     color: var(--accent-11);
 }
 .scene-inventory-toolbar {
@@ -419,7 +415,7 @@
     border-color: var(--accent-7);
 }
 .scene-item-card strong {
-    font-size: 12px;
+    font-size: var(--wb-text-sm);
 }
 .equipment-glyph {
     display: grid;
@@ -432,6 +428,17 @@
     border-radius: 8px;
     margin-bottom: 3px;
 }
+.equipment-icon {
+    display: inline-block;
+    flex-shrink: 0;
+    object-fit: contain;
+    image-rendering: pixelated;
+    vertical-align: middle;
+}
+.paperdoll-slot > .equipment-icon {
+    width: 18px;
+    height: 18px;
+}
 .scene-tag {
     display: inline-flex;
     align-items: center;
@@ -440,7 +447,7 @@
     background: var(--accent-3);
     color: var(--accent-11);
     border-radius: 4px;
-    font-size: 10px;
+    font-size: var(--wb-text-xs);
     font-weight: 500;
 }
 .scene-candidate-grid {
@@ -471,20 +478,18 @@
     padding: 12px;
 }
 .candidate-card-info strong {
-    font-size: 12px;
+    font-size: var(--wb-text-sm);
 }
 .candidate-price {
     display: flex;
     align-items: center;
     gap: 5px;
     font:
-        12px ui-monospace,
-        Consolas,
-        monospace;
+        12px var(--wb-font-mono);
     color: var(--amber-11);
 }
 .scene-availability {
-    font-size: 10px;
+    font-size: var(--wb-text-xs);
     color: var(--gray-11);
     display: flex;
     align-items: center;
@@ -514,7 +519,7 @@
 }
 .scene-object-controls > span {
     color: var(--gray-11);
-    font-size: 11px;
+    font-size: var(--wb-text-xs);
 }
 .scene-object-controls button {
     display: grid;
@@ -534,7 +539,7 @@
     align-items: center;
     gap: 5px;
     color: var(--gray-11);
-    font-size: 10px;
+    font-size: var(--wb-text-xs);
     padding-bottom: 15px;
     border-bottom: 1px solid var(--gray-5);
     margin-bottom: 16px;
@@ -548,9 +553,7 @@
 }
 .scene-member-status > b {
     font:
-        16px ui-monospace,
-        Consolas,
-        monospace;
+        16px var(--wb-font-mono);
 }
 .scene-inspect-tabs {
     display: flex;
@@ -563,7 +566,7 @@
     border: 0;
     border-bottom: 2px solid transparent;
     padding: 10px 0;
-    font-size: 12px;
+    font-size: var(--wb-text-sm);
     color: var(--gray-11);
 }
 .scene-inspect-tabs button.active {
@@ -602,7 +605,7 @@
     padding: 6px;
     color: #f3f6f6;
     background: #172123e8;
-    font-size: 11px;
+    font-size: var(--wb-text-xs);
     text-align: center;
     border-radius: 4px;
 }
@@ -629,10 +632,10 @@
     outline-offset: 1px;
 }
 .paperdoll-slot > span {
-    font-size: 10px;
+    font-size: var(--wb-text-xs);
 }
 .paperdoll-slot > strong {
-    font-size: 10px;
+    font-size: var(--wb-text-xs);
     font-weight: 500;
     line-height: 1.5;
     overflow-wrap: anywhere;
@@ -678,7 +681,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 12px;
+    font-size: var(--wb-text-sm);
 }
 .selected-equipment .scene-skill-grid {
     grid-template-columns: minmax(0, 1fr);
@@ -692,7 +695,7 @@
     border: 0;
     padding: 8px 0;
     color: var(--accent-11);
-    font-size: 11px;
+    font-size: var(--wb-text-xs);
 }
 .scene-section-title {
     display: flex;
@@ -702,14 +705,14 @@
     margin-bottom: 12px;
 }
 .scene-section-title h3 {
-    font-size: 12px;
+    font-size: var(--wb-text-sm);
 }
 .scene-section-title button {
     background: var(--gray-3);
     border: 1px solid var(--gray-6);
     color: var(--gray-11);
     border-radius: 4px;
-    font-size: 10px;
+    font-size: var(--wb-text-xs);
     padding: 5px 6px;
 }
 .scene-section-title button.active {
@@ -732,7 +735,7 @@
     display: flex;
     align-items: center;
     gap: 5px;
-    font-size: 10px;
+    font-size: var(--wb-text-xs);
     color: var(--gray-11);
 }
 .scene-stat-tiles dd {
@@ -744,7 +747,7 @@
     gap: 6px;
 }
 .scene-stat-tiles dd small {
-    font-size: 10px;
+    font-size: var(--wb-text-xs);
     color: var(--accent-11);
 }
 .scene-skill-count {
@@ -763,7 +766,7 @@
     font-weight: 500;
 }
 .scene-skill-count span {
-    font-size: 10px;
+    font-size: var(--wb-text-xs);
     color: var(--gray-11);
 }
 .scene-skill-grid {
@@ -801,18 +804,18 @@
     gap: 5px;
 }
 .scene-skill header strong {
-    font-size: 12px;
+    font-size: var(--wb-text-sm);
     font-weight: 500;
 }
 .scene-skill header div > span {
-    font-size: 10px;
+    font-size: var(--wb-text-xs);
     color: var(--gray-11);
 }
 .scene-skill header > .scene-tag {
     margin-left: auto;
 }
 .scene-skill > p {
-    font-size: 12px;
+    font-size: var(--wb-text-sm);
     line-height: 1.9;
     margin: 12px 0;
 }
@@ -820,14 +823,14 @@
     border-top: 1px solid var(--gray-5);
     padding-top: 10px;
     color: var(--gray-11);
-    font-size: 10px;
+    font-size: var(--wb-text-xs);
     line-height: 1.7;
 }
 .scene-tactics {
     margin-bottom: 18px;
 }
 .scene-tactics h3 {
-    font-size: 12px;
+    font-size: var(--wb-text-sm);
     margin-bottom: 12px;
 }
 .tactic-sequence {
@@ -840,14 +843,14 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    font-size: 11px;
+    font-size: var(--wb-text-xs);
     background: var(--accent-3);
     color: var(--accent-11);
     padding: 6px 9px;
     border-radius: 5px;
 }
 .tactic-sequence b {
-    font-family: ui-monospace, Consolas, monospace;
+    font-family: var(--wb-font-mono);
 }
 .scene-entity-hero {
     display: grid;
@@ -874,11 +877,11 @@
     border-radius: 8px;
 }
 .entity-description {
-    font-size: 14px;
+    font-size: var(--wb-text-md);
     line-height: 1.8;
 }
 .entity-price {
-    font-size: 12px;
+    font-size: var(--wb-text-sm);
 }
 .entity-price b {
     font-size: 17px;
@@ -889,14 +892,14 @@
     margin-bottom: 25px;
 }
 .scene-entity-detail > h3 {
-    font-size: 13px;
+    font-size: var(--wb-text-base);
     margin: 18px 0 12px;
 }
 .scene-rewards {
     display: flex;
     flex-wrap: wrap;
     gap: 7px 14px;
-    font-size: 11px;
+    font-size: var(--wb-text-xs);
 }
 .scene-rewards > span {
     color: var(--gray-11);
@@ -909,7 +912,7 @@
     display: flex;
     flex-direction: column;
     gap: 6px;
-    font-size: 11px;
+    font-size: var(--wb-text-xs);
     color: var(--amber-11);
 }
 .scene-missing > span {
@@ -923,7 +926,7 @@
     gap: 6px;
 }
 .upgrade-parent-links button {
-    font-size: 11px;
+    font-size: var(--wb-text-xs);
     padding: 6px 8px;
     background: var(--gray-3);
     color: var(--accent-11);
@@ -951,7 +954,7 @@
     }
     .scene-zone-heading > span {
         max-width: 115px;
-        font-size: 9px;
+        font-size: var(--wb-text-xs);
     }
     .scene-monster-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -961,7 +964,7 @@
         grid-template-columns: 48px minmax(0, 1fr);
     }
     .scene-monster-card .scene-mini-stats {
-        font-size: 9px;
+        font-size: var(--wb-text-xs);
         gap: 4px;
     }
     .scene-inventory-toolbar {
@@ -996,7 +999,7 @@
         gap: 10px;
     }
     .scene-member-status > b {
-        font-size: 12px;
+        font-size: var(--wb-text-sm);
     }
     .scene-skill-grid {
         grid-template-columns: minmax(0, 1fr);

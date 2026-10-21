@@ -9,7 +9,7 @@ import { testArchive, testJob } from "./test-jobs";
 import type { Archive, Job } from "./types";
 
 function setup(jobs: Job[], archives: Archive[]) {
-    const callbacks = { onResume: vi.fn(), onOpen: vi.fn(), onClone: vi.fn(), onWatch: vi.fn(), onCompare: vi.fn() };
+    const callbacks = { onRerun: vi.fn(), onResume: vi.fn(), onOpen: vi.fn(), onClone: vi.fn(), onWatch: vi.fn(), onCompare: vi.fn() };
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity, refetchInterval: false } } });
     client.setQueryData(["archives"], { runs: archives });
     function Harness({ items }: { items: Job[] }) {
@@ -21,6 +21,35 @@ function setup(jobs: Job[], archives: Archive[]) {
     const view = render(<Harness items={jobs} />);
     return { ...callbacks, client, updateJobs: (items: Job[]) => view.rerender(<Harness items={items} />) };
 }
+
+it("已完成存档可从指定回合重跑，但不提供原地续跑", async () => {
+    const archive = testArchive("completed-parent", { model: "已完成来源", status: "completed" });
+    const callbacks = setup([], [archive]);
+    await userEvent.click(screen.getByRole("button", { name: /的更多操作/ }));
+    expect(screen.queryByRole("menuitem", { name: "续跑" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("menuitem", { name: "从指定回合重跑" }));
+    expect(callbacks.onRerun).toHaveBeenCalledWith(archive);
+});
+
+it("历史列表只保留主入口，失败摘要不铺原始错误，更多菜单保留原操作", async () => {
+    const failure = 'HTTP 408: {"error":{"message":"stream disconnected before completion"}}';
+    const job = testJob("failed", { name: "中断模型", status: "failed", error: failure });
+    const archive = testArchive();
+    const callbacks = setup([job], [archive]);
+    const row = screen.getByRole("row", { name: /中断模型/ });
+    expect(within(row).getByRole("button", { name: "查看详情" })).toBeVisible();
+    expect(within(row).queryByRole("button", { name: "从指定回合重跑" })).not.toBeInTheDocument();
+    const raw = within(row).getByText(failure);
+    expect(raw).not.toBeVisible();
+    await userEvent.click(within(row).getByText("模型响应中断"));
+    expect(raw).toBeVisible();
+    await userEvent.click(within(row).getByRole("button", { name: "中断模型 的更多操作" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "查看曲线" }));
+    expect(callbacks.onCompare).toHaveBeenCalledWith([job.id]);
+    await userEvent.click(within(row).getByRole("button", { name: /的更多操作/ }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "续跑" }));
+    expect(callbacks.onResume).toHaveBeenCalledWith(archive);
+});
 
 function rowNames() {
     return screen.queryAllByRole("row").slice(1).map(row => within(row).getByRole("strong").textContent);

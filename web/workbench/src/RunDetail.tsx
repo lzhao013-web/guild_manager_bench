@@ -15,6 +15,9 @@ import { ACTION_STATUS, actionEntries, actionGroups, actionSummary, recentAction
 import type { ActionEntry } from "./actionModel";
 import { ActionResults } from "./ActionResultPanel";
 import { watchFrames } from "./watchModel";
+import { ToolCallFilters, ToolCallSummary } from "./ToolCallSummary";
+import { matchesTool, summarizeToolCalls, toolCategoryLabel } from "./toolCalls";
+import type { ToolCallStatus } from "./toolCalls";
 import "./actions.css";
 import {
     duration,
@@ -26,6 +29,7 @@ import {
 } from "./model";
 import { Empty, JsonDetails, Metric, StatusBadge, Trend } from "./ui";
 import { ModelCallStats } from "./ModelCallStats";
+import { RunNotices } from "./RunNotices";
 import type { Job } from "./types";
 
 export function RunDetail({
@@ -57,14 +61,20 @@ export function RunDetail({
     const watch = useLiveWatch(job);
     const frames = useMemo(() => watchFrames(watch.data?.records || []), [watch.data]);
     const entries = useMemo(() => actionEntries(frames), [frames]);
-    const groups = useMemo(() => actionGroups(entries), [entries]);
+    const [toolType, setToolType] = useState("all");
+    const [toolStatus, setToolStatus] = useState<"all" | ToolCallStatus>("all");
+    const tools = useMemo(() => summarizeToolCalls(entries.map(entry => entry.event)), [entries]);
+    const filtered = useMemo(() => entries.filter(entry => entry.kind === "system"
+        ? toolType === "all" && toolStatus === "all"
+        : matchesTool(entry.event, toolType) && (toolStatus === "all" || entry.status === toolStatus)), [entries, toolType, toolStatus]);
+    const groups = useMemo(() => actionGroups(filtered), [filtered]);
     const recent = useMemo(() => recentActions(frames), [frames]);
     const recentEntries = recent.actions.length ? recent.actions.slice(0, 5) : recent.queries.slice(-1);
     function renderAction(entry: ActionEntry) {
         return <article className={`action ${entry.status === "failed" ? "failed" : ""}`} key={entry.frame.cursor}>
-            <header><strong>{entry.title}</strong><span className={`action-status is-${entry.status}`}>{ACTION_STATUS[entry.status]}</span>
+            <header><strong>{entry.title}</strong>{entry.kind !== "system" && <span className="muted">{toolCategoryLabel(entry.event)}</span>}<span className={`action-status is-${entry.status}`}>{ACTION_STATUS[entry.status]}</span>
                 <span className="muted mono">{time(entry.frame.record.at)}</span></header>
-            {entry.rolledBack && <p className="action-rollback">本次尝试已回滚，不再生效</p>}
+            {entry.rolledBack && <p className="action-rollback">{entry.kind === "query" ? "所属尝试已回滚，查询仍反映当时状态" : "本次尝试已回滚，不再生效"}</p>}
             <ActionResults entry={entry} />
             <JsonDetails title="原始参数与返回" value={entry.frame.record.event} />
         </article>;
@@ -108,6 +118,7 @@ export function RunDetail({
                     </span>
                     <h2>{job.name}</h2>
                     <span className="muted">{job.batch_name}</span>
+                    <RunNotices key={job.id} config={job.config} data={job.data} />
                 </div>
                 <div className="icon-actions">
                     {onCurves && <button aria-label="查看运行曲线" title="查看经济、经验与战力曲线" onClick={onCurves}><ChartLineUp size={17} /></button>}
@@ -394,13 +405,16 @@ export function RunDetail({
                             {watch.error && <p className="error-text">行动同步失败：{watch.error.message}</p>}
                             <p className="field-help">当前回合的完整行动。查看其他回合可进入专注视图。</p>
                             {recent.queryOnly && <p className="field-help">目前只进行了 {recent.queries.length} 次查询，尚无经营动作。</p>}
+                            <ToolCallFilters tools={tools} type={toolType} status={toolStatus} onType={setToolType} onStatus={setToolStatus} scope="侧栏" />
+                            <ToolCallSummary tools={tools} selected={toolType} label="侧栏工具汇总" onTool={name => { setToolType(name); setToolStatus("all"); }} />
                             <div className="action-timeline">
-                                {groups.map(group => group.kind === "action" ? group.entries.map(renderAction) : <details className="action-group" key={group.entries[0].start}>
-                                    <summary>{group.kind === "query" ? `连续查询 · ${group.entries.length} 次` : `运行事件 · ${group.entries.length} 条`}</summary>
+                                {groups.map(group => group.kind !== "system" ? group.entries.map(renderAction) : <details className="action-group" key={group.entries[0].start}>
+                                    <summary>运行事件 · {group.entries.length} 条</summary>
                                     {group.entries.map(renderAction)}
                                 </details>)}
                             </div>
                             {!watch.isPending && !entries.length && <Empty title="尚无行动记录">模型执行工具后，会在这里按顺序展示。</Empty>}
+                            {entries.length > 0 && !filtered.length && <p className="field-help">没有匹配的调用记录。</p>}
                         </>}
                         {tab === "models" &&
                             (models.length ? (

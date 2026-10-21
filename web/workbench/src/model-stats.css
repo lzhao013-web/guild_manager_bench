@@ -6,14 +6,14 @@
     min-width: 0;
     padding: 8px 0;
     color: var(--gray-11);
-    font-size: 12px;
+    font-size: var(--wb-text-sm);
     line-height: 18px;
 }
 .model-call-stats > span { white-space: nowrap; }
 .model-call-stats b { color: var(--gray-12); font-weight: 550; font-variant-numeric: tabular-nums; }
 .model-call-stats small { font-size: inherit; }
 .model-call-stats .model-call-state { color: var(--accent-11); }
-.model-call-stats.is-compact { gap: 2px 9px; padding: 0; font-size: 10px; line-height: 15px; }
+.model-call-stats.is-compact { gap: 2px 9px; padding: 0; font-size: var(--wb-text-xs); line-height: 1.5; }
 .model-call-stats.is-compact .model-input-unit { display: none; }
 .overview-models .model-call-stats { margin-bottom: 5px; }
 .overview-models .overview-model-excerpt { margin: 0; }
@@ -22,5 +22,13 @@
 .monitor-model .model-call-stats > span { flex-shrink: 0; }
 .watch-monitor .monitor-model { max-height: 52px; }
 .monitor-model .monitor-model-excerpt { -webkit-line-clamp: 1; }
-.model-call-config { display: flex; flex-wrap: wrap; gap: 5px 12px; padding: 6px 0; font-size: 12px; color: var(--gray-11); }
+.model-call-config { display: flex; flex-wrap: wrap; gap: 5px 12px; padding: 6px 0; font-size: var(--wb-text-sm); color: var(--gray-11); }
 .model-call-config strong { color: var(--gray-12); font-weight: 550; }
+.model-reasoning-source { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px 12px; flex-shrink: 0; padding: 9px 12px; background: var(--accent-3); border-bottom: 1px solid var(--accent-6); font-size: var(--wb-text-sm); }
+.model-reasoning-source > span { min-width: 0; overflow-wrap: anywhere; }
+.model-reasoning-source strong { font-weight: 550; }
+.model-reasoning-source button { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; padding: 4px 7px; border: 1px solid var(--accent-7); border-radius: 4px; background: var(--color-surface); color: var(--accent-11); font: inherit; font-size: var(--wb-text-xs); cursor: pointer; }
+.model-linked-reasoning[open] { border-inline-start: 2px solid var(--accent-7); padding-inline-start: 10px; }
+.model-linked-reasoning > summary { cursor: pointer; }
+.spectator-models .model-linked-reasoning pre { max-height: none; overflow: visible; }
+.model-reasoning-note { white-space: normal; overflow-wrap: anywhere; color: var(--gray-11); font-size: var(--wb-text-sm); line-height: 1.7; margin: 8px 0; }

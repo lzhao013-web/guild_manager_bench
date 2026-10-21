@@ -39,6 +39,7 @@ import {
 import type { Draft } from "./model";
 import { defaultDraft, NewBatch } from "./NewBatch";
 import { RunDetail } from "./RunDetail";
+import { PageBoundary } from "./PageBoundary";
 import { buildRunCatalog, canonicalRunIds } from "./runCatalog";
 import { livePosition } from "./watchModel";
 import type { WatchPosition } from "./watchModel";
@@ -346,7 +347,7 @@ export default function App() {
             setStopping(false);
         }
     }
-    async function resume(archive: Archive) {
+    async function resume(archive: Archive, rerun = false) {
         setError("");
         try {
             const replay = await api<{
@@ -365,11 +366,19 @@ export default function App() {
                     };
                 };
                 config: Record<string, unknown>;
-            }>(`/api/llm/runs/${encodeURIComponent(archive.run_id)}/replay`);
+                max_rerun_turn: number;
+            }>(`/api/workbench/recoveries/${encodeURIComponent(archive.run_id)}`);
             create({
                 ...defaultDraft(archive.preset),
-                name: `续跑 ${archive.model || archive.run_id}`,
-                resume_run_id: archive.run_id,
+                name: `${rerun ? "分支重跑" : "续跑"} ${archive.model || archive.run_id}`,
+                resume_run_id: rerun ? undefined : archive.run_id,
+                rerun_run_id: rerun ? archive.run_id : undefined,
+                rerun_from_turn: rerun ? 1 : undefined,
+                rerun_max_turn: replay.max_rerun_turn,
+                objective: String(replay.config.objective ?? ""),
+                max_tool_calls_per_turn: Number(replay.config.max_tool_calls_per_turn ?? 20),
+                seeds: replay.config.game_seed == null ? "" : String(replay.config.game_seed),
+                scoring_seed: replay.config.scoring_seed == null ? "" : String(replay.config.scoring_seed),
                 efforts:
                     replay.agent?.config?.reasoning_effort ||
                     replay.agent?.config?.effort ||
@@ -759,12 +768,14 @@ export default function App() {
                                                     <ArrowLeft />
                                                     {focusOrigin === "watch" ? "返回多路观战" : section === "archives" ? "返回历史存档" : "返回运行列表"}
                                                 </button>
+                                                <PageBoundary key={selected.id} name="观战界面">
                                                 <Suspense fallback={<div className="skeleton-lines" aria-label="正在加载观战界面"><i /><i /><i /></div>}>
                                                 <WatchRun
                                                     key={selected.id}
                                                     {...watchProps(selected)}
                                                 />
                                                 </Suspense>
+                                                </PageBoundary>
                                             </div>
                                         ) : view === "watch" ? (
                                             <div className="watch-workspace">
@@ -829,7 +840,8 @@ export default function App() {
                                                         className={`watch-grid watch-count-${watching.length}`}
                                                     >
                                                         {watching.map((job) => (
-                                                            <Suspense key={job.id} fallback={<div className="skeleton-lines" aria-label="正在加载观战面板"><i /><i /><i /></div>}>
+                                                            <PageBoundary key={job.id} name={`${job.name}的观战面板`}>
+                                                            <Suspense fallback={<div className="skeleton-lines" aria-label="正在加载观战面板"><i /><i /><i /></div>}>
                                                             <WatchRun
                                                                 key={job.id}
                                                                 {...watchProps(
@@ -852,6 +864,7 @@ export default function App() {
                                                                 }}
                                                             />
                                                             </Suspense>
+                                                            </PageBoundary>
                                                         ))}
                                                     </div>
                                                 ) : (
@@ -1543,15 +1556,15 @@ export default function App() {
                                         )}
                                     </div>
                                 )}
-                                {section === "curves" && <Suspense fallback={<p className="muted">正在加载曲线工作区…</p>}>
+                                {section === "curves" && <PageBoundary name="曲线对比"><Suspense fallback={<p className="muted">正在加载曲线工作区…</p>}>
                                     <CurveBoard catalog={catalog} selectedIds={curveIds} onSelection={setCurveIds}
                                         onBack={curveOrigin ? () => { setSection(curveOrigin.section); setView(curveOrigin.view); setCurveOrigin(null); } : undefined} />
-                                </Suspense>}
+                                </Suspense></PageBoundary>}
                                 {section === "archives" && view === "list" && (
-                                    <Suspense fallback={<p className="muted">正在加载历史…</p>}>
-                                        <RunHistory jobs={jobs} onCompare={openCurves} batchId={batchId} onBatchChange={setBatchId} onResume={resume} onClone={clone} onOpen={job => openHistory(job)}
+                                    <PageBoundary name="历史存档"><Suspense fallback={<p className="muted">正在加载历史…</p>}>
+                                        <RunHistory jobs={jobs} onCompare={openCurves} batchId={batchId} onBatchChange={setBatchId} onResume={archive => void resume(archive)} onRerun={archive => void resume(archive, true)} onClone={clone} onOpen={job => openHistory(job)}
                                             onWatch={selected => { setWatchIds(selected.map(runKey)); setView("watch"); }} />
-                                    </Suspense>
+                                    </Suspense></PageBoundary>
                                 )}
                                 {section === "apis" && (
                                     <ApiProfilesPanel

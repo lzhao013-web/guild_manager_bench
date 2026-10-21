@@ -1,0 +1,61 @@
+.run-notices {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+.run-notice {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 24px;
+    padding: 2px 6px;
+    border: 1px solid var(--gray-6);
+    border-radius: 4px;
+    background: var(--gray-3);
+    color: var(--gray-11);
+    font: inherit;
+    font-size: var(--wb-text-xs);
+    line-height: 1.4;
+    white-space: nowrap;
+    cursor: pointer;
+}
+.run-notice:hover,
+.run-notice[aria-expanded="true"] { background: var(--gray-4); }
+.run-notice.is-warning {
+    border-color: var(--amber-7);
+    background: var(--amber-2);
+    color: var(--amber-11);
+}
+.run-notice.is-warning:hover,
+.run-notice.is-warning[aria-expanded="true"] { background: var(--amber-3); }
+.run-notice:focus-visible { outline: 2px solid var(--accent-8); outline-offset: 2px; }
+.run-notice-popover {
+    width: min(340px, calc(100vw - 24px));
+    max-height: var(--radix-popover-content-available-height);
+    overflow-y: auto;
+    background: var(--color-panel-solid);
+    font-size: var(--wb-text-xs);
+    line-height: 1.7;
+}
+.run-notice-popover > header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+.run-notice-popover > header button {
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--gray-11);
+    cursor: pointer;
+}
+.run-notice-popover > header button:hover { background: var(--gray-4); }
+.run-notice-popover > p { margin: 8px 0 0; overflow-wrap: anywhere; }

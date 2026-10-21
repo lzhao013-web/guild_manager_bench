@@ -25,7 +25,7 @@
     overflow-wrap: anywhere;
 }
 .spectator-title > .muted {
-    font-size: 11px;
+    font-size: var(--wb-text-xs);
     overflow-wrap: anywhere;
 }
 .spectator-runtime {
@@ -34,18 +34,18 @@
     align-items: center;
     gap: 8px 14px;
     padding: 0 20px 12px;
-    font-size: 11px;
+    font-size: var(--wb-text-xs);
     color: var(--gray-11);
 }
 .runtime-budget {
     margin-left: auto;
-    font-family: ui-monospace, Consolas, monospace;
+    font-family: var(--wb-font-mono);
 }
 .spectator-error {
     padding: 12px 20px;
     background: var(--red-3);
     color: var(--red-11);
-    font-size: 12px;
+    font-size: var(--wb-text-sm);
 }
 .spectator-error button {
     background: transparent;
@@ -64,7 +64,7 @@
     flex-wrap: wrap;
     gap: 8px 12px;
     padding: 8px 20px;
-    font-size: 11px;
+    font-size: var(--wb-text-xs);
     background: var(--accent-3);
     color: var(--accent-11);
     border-block: 1px solid var(--accent-6);
@@ -90,16 +90,14 @@
 }
 .spectator-resources span {
     color: var(--gray-11);
-    font-size: 11px;
+    font-size: var(--wb-text-xs);
     display: inline-flex;
     align-items: center;
     gap: 5px;
 }
 .spectator-resources b {
     font:
-        500 18px/1.4 ui-monospace,
-        Consolas,
-        monospace;
+        500 18px/1.4 var(--wb-font-mono);
     font-variant-numeric: tabular-nums;
     overflow-wrap: anywhere;
 }
@@ -108,7 +106,7 @@
     gap: 12px;
 }
 .spectator-materials b {
-    font-size: 11px;
+    font-size: var(--wb-text-xs);
     font-weight: 400;
 }
 .spectator-changes {
@@ -117,7 +115,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
-    font-size: 10px;
+    font-size: var(--wb-text-xs);
 }
 .spectator-changes > span:not(.muted) {
     color: var(--accent-11);
@@ -126,7 +124,7 @@
     padding: 2px 7px;
 }
 .spectator-notice {
-    font-size: 11px;
+    font-size: var(--wb-text-xs);
     color: var(--amber-11);
     padding: 0 20px 8px;
 }
@@ -172,7 +170,7 @@
     border-bottom: 2px solid transparent;
     background: none;
     color: var(--gray-11);
-    font-size: 11px;
+    font-size: var(--wb-text-xs);
     white-space: nowrap;
 }
 .spectator-review-tabs button.active,
@@ -193,11 +191,11 @@
     border-bottom: 1px solid var(--border);
 }
 .spectator-column-title h3 {
-    font-size: 12px;
+    font-size: var(--wb-text-sm);
     font-weight: 600;
 }
 .spectator-column-title > span {
-    font-size: 10px;
+    font-size: var(--wb-text-xs);
     color: var(--gray-11);
 }
 .spectator-timeline,
@@ -237,7 +235,7 @@
     color: var(--red-11);
 }
 .spectator-step .step-index {
-    font-size: 10px;
+    font-size: var(--wb-text-xs);
     color: var(--gray-11);
     min-width: 15px;
     padding-top: 2px;
@@ -248,11 +246,11 @@
     min-width: 0;
 }
 .spectator-step strong {
-    font-size: 11px;
+    font-size: var(--wb-text-xs);
     font-weight: 500;
 }
 .spectator-step small {
-    font-size: 10px;
+    font-size: var(--wb-text-xs);
     color: var(--gray-11);
     line-height: 1.6;
     overflow-wrap: anywhere;
@@ -264,14 +262,14 @@
     min-height: 0;
 }
 .spectator-model-content > .muted {
-    font-size: 10px;
+    font-size: var(--wb-text-xs);
     margin: 10px 0;
 }
 .spectator-models > .scene-empty {
     padding-inline: 16px;
 }
 .watch-model-text {
-    font-size: 12px;
+    font-size: var(--wb-text-sm);
     line-height: 1.9;
     font-family: inherit;
     margin: 12px 0;
@@ -279,13 +277,13 @@
 }
 .model-usage {
     color: var(--gray-11);
-    font-size: 10px;
+    font-size: var(--wb-text-xs);
     padding: 10px 0;
     border-top: 1px solid var(--border);
 }
 .spectator-selected-action {
     padding: 9px 20px;
-    font-size: 11px;
+    font-size: var(--wb-text-xs);
     max-height: 120px;
     overflow: auto;
     flex-shrink: 0;
@@ -317,11 +315,11 @@
 }
 .spectator-scrubber select {
     min-height: 32px;
-    font-size: 11px;
+    font-size: var(--wb-text-xs);
 }
 .scrubber-label {
     display: block;
-    font-size: 10px;
+    font-size: var(--wb-text-xs);
     color: var(--gray-11);
     margin-bottom: 4px;
 }
@@ -330,7 +328,7 @@
     align-items: center;
     gap: 8px;
     flex-shrink: 0;
-    font-size: 10px;
+    font-size: var(--wb-text-xs);
     color: var(--gray-11);
 }
 .spectator-step-controls button {
@@ -354,7 +352,7 @@
     align-items: center;
     white-space: nowrap;
     margin-left: auto;
-    font-size: 11px;
+    font-size: var(--wb-text-xs);
 }
 .watch-follow.active {
     border-color: var(--gray-7);
@@ -362,17 +360,17 @@
     color: var(--gray-12);
 }
 .spectator-footer .text-button {
-    font-size: 10px;
+    font-size: var(--wb-text-xs);
     color: var(--gray-11);
 }
 .spectator-footer-note {
     margin-left: auto;
-    font-size: 10px;
+    font-size: var(--wb-text-xs);
     color: var(--gray-11);
 }
 .spectator-utility {
     padding: 10px 20px 20px;
-    font-size: 11px;
+    font-size: var(--wb-text-xs);
     border-top: 1px solid var(--border);
     max-height: 350px;
     overflow: auto;
@@ -489,13 +487,13 @@
     display: flex;
 }
 .spectator-compact .spectator-materials b {
-    font-size: 10px;
+    font-size: var(--wb-text-xs);
 }
 .spectator-compact .spectator-selected-action {
     max-height: 90px;
 }
 .spectator-compact .spectator-title h2 {
-    font-size: 13px;
+    font-size: var(--wb-text-base);
 }
 .spectator-compact .spectator-footer {
     padding-block: 8px;
@@ -522,18 +520,18 @@
 .watch-count-3 .spectator-title h2,
 .watch-count-4 .spectator-title h2 {
     margin: 0;
-    font-size: 12px;
+    font-size: var(--wb-text-sm);
 }
 .watch-count-3 .spectator-runtime,
 .watch-count-4 .spectator-runtime {
     padding: 0 14px 7px;
-    font-size: 10px;
+    font-size: var(--wb-text-xs);
     gap: 5px 8px;
 }
 .watch-count-3 .spectator-viewpoint,
 .watch-count-4 .spectator-viewpoint {
     padding: 6px 14px;
-    font-size: 10px;
+    font-size: var(--wb-text-xs);
 }
 .watch-count-3 .spectator-resources,
 .watch-count-4 .spectator-resources {
@@ -582,7 +580,7 @@
         padding-inline: 14px;
     }
     .spectator-runtime {
-        font-size: 10px;
+        font-size: var(--wb-text-xs);
         gap: 7px;
     }
     .runtime-budget {
@@ -591,7 +589,7 @@
     }
     .spectator-viewpoint {
         padding-inline: 14px;
-        font-size: 10px;
+        font-size: var(--wb-text-xs);
         gap: 6px;
     }
     .spectator-viewpoint .viewpoint-action {
@@ -609,7 +607,7 @@
         font-size: 15px;
     }
     .spectator-resources .spectator-materials b {
-        font-size: 10px;
+        font-size: var(--wb-text-xs);
     }
     .spectator-changes,
     .spectator-notice {

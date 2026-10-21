@@ -16,6 +16,7 @@ export interface BusinessRow {
     target: WatchFocus;
     portrait?: string;
     slot?: string;
+    equipmentTemplateId?: string;
     available: boolean;
 }
 export interface BusinessGroup {
@@ -93,12 +94,12 @@ export function businessPreviews(observation: Observation | null) {
     }
     const items: BusinessRow[] = (stored || []).slice(0, 8).map(item => ({
         id: `item:${item.instance_id}`, name: item.name!, value: "未穿戴", detail: statsText(item.stats as Record<string, number> | undefined),
-        target: { module: "inventory", selection: { kind: "equipment", id: item.instance_id! } }, slot: item.slot, available: true,
+        target: { module: "inventory", selection: { kind: "equipment", id: item.instance_id! } }, slot: item.slot, equipmentTemplateId: item.template_id, available: true,
     }));
     const recipeRows: BusinessRow[] = orderedRecipes.slice(0, 8).map(item => ({
         id: `recipe:${item.recipe_id}`, name: item.output_name, value: item.can_craft ? "可制作" : "缺资源",
         detail: [purchaseCost(item), statsText(item.output_stats), ...requirementLines(item.missing)].filter(Boolean).join(" · "),
-        target: { module: "inventory", selection: { kind: "recipe", id: item.recipe_id } }, slot: item.output_slot, available: item.can_craft,
+        target: { module: "inventory", selection: { kind: "recipe", id: item.recipe_id } }, slot: item.output_slot, equipmentTemplateId: item.output_template_id, available: item.can_craft,
     }));
     // 可制作的高费用配方优先占摘要，闲装仍有独立计数入口。
     const equipment = [...recipeRows.filter(row => row.available), ...items, ...recipeRows.filter(row => !row.available)].slice(0, 8);

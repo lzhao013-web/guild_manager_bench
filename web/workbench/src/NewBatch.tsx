@@ -1,11 +1,21 @@
 import { useMemo, useState } from "react";
-import { Button, Dialog } from "@radix-ui/themes";
+import { AlertDialog, Button, Dialog } from "@radix-ui/themes";
 import { Plus, Trash, ArrowRight, FloppyDisk } from "@phosphor-icons/react";
-import { api } from "./api";
+import { api, ApiError } from "./api";
 import { expandDraft, safeTemplate } from "./model";
-import type { Draft, ModelRow } from "./model";
+import type { Draft, ModelRow, RunRequest } from "./model";
 import type { ApiProfile, Job } from "./types";
 import { ModelConnection } from "./ModelConnection";
+
+interface RecoveryCheck {
+    index: number;
+    run_id: string;
+    from_turn: number | null;
+    confirmation_token: string;
+    differences: { field: string; archived: string | number | null; current: string | number | null }[];
+}
+interface BatchBody { name: string; runs: RunRequest[] }
+const versionFields: Record<string, string> = { preset: "规则集", benchmark_version: "评测版本", protocol_hash: "运行协议", settings_hash: "评测参数", data_hash: "游戏数据", game_seed: "游戏种子", scoring_seed: "评分种子" };
 
 export const defaultDraft = (preset: string): Draft => ({
     name: "",
@@ -47,9 +57,11 @@ export function NewBatch({
     const [error, setError] = useState("");
     const [busy, setBusy] = useState(false);
     const [saved, setSaved] = useState(false);
+    const [confirmation, setConfirmation] = useState<{ body: BatchBody; recoveries: RecoveryCheck[] } | null>(null);
     const update = <K extends keyof Draft>(key: K, value: Draft[K]) => {
         setDraft((d) => ({ ...d, [key]: value }));
         setSaved(false);
+        setConfirmation(null);
     };
     const updateRow = (index: number, patch: Partial<ModelRow>) =>
         update(
@@ -65,7 +77,28 @@ export function NewBatch({
             return { runs: [], error: (cause as Error).message };
         }
     }, [draft]);
-    const resume = !!draft.resume_run_id;
+    const branch = !!draft.rerun_run_id;
+    const resume = !!draft.resume_run_id || branch;
+    async function enqueue(body: BatchBody) {
+        try {
+            const result = await api<{ jobs: Job[] }>("/api/workbench/batches", { method: "POST", body: JSON.stringify(body) });
+            onCreated(result.jobs);
+            setConfirmation(null);
+        } catch (cause) {
+            const detail = cause instanceof ApiError ? cause.detail as { code?: string; recoveries: RecoveryCheck[] } | null : null;
+            if (detail?.code === "version_confirmation_required") setConfirmation({ body, recoveries: detail.recoveries });
+            else { setConfirmation(null); setError((cause as Error).message); }
+        }
+    }
+    async function confirmVersion() {
+        if (!confirmation) return;
+        setBusy(true);
+        try {
+            await enqueue({ ...confirmation.body, runs: confirmation.body.runs.map((run, index) => ({ ...run,
+                version_confirmation: confirmation.recoveries.find(item => item.index === index)?.confirmation_token || run.version_confirmation,
+            })) });
+        } finally { setBusy(false); }
+    }
     async function submit(event: React.FormEvent) {
         event.preventDefault();
         if (preview.error) {
@@ -75,17 +108,13 @@ export function NewBatch({
         setBusy(true);
         setError("");
         try {
-            const result = await api<{ jobs: Job[] }>(
-                "/api/workbench/batches",
-                {
-                    method: "POST",
-                    body: JSON.stringify({
-                        name: draft.name.trim(),
-                        runs: preview.runs,
-                    }),
-                },
-            );
-            onCreated(result.jobs);
+            const body = { name: draft.name.trim(), runs: preview.runs };
+            if (resume) {
+                const check = await api<{ recoveries: RecoveryCheck[] }>("/api/workbench/batches/check", { method: "POST", body: JSON.stringify(body) });
+                const differences = check.recoveries.filter(item => item.differences.length);
+                if (differences.length) { setConfirmation({ body, recoveries: differences }); return; }
+            }
+            await enqueue(body);
         } catch (cause) {
             setError((cause as Error).message);
         } finally {
@@ -97,7 +126,7 @@ export function NewBatch({
             <div className="dialog-title">
                 <div>
                     <Dialog.Title>
-                        {resume ? "从检查点继续运行" : "新建实验批次"}
+                        {branch ? "从指定回合分支重跑" : resume ? "从检查点继续运行" : "新建实验批次"}
                     </Dialog.Title>
                     <Dialog.Description>
                         配置模型、展开参数组合，确认后加入服务端队列。
@@ -112,10 +141,15 @@ export function NewBatch({
             <form onSubmit={submit}>
                 {resume && (
                     <p className="callout">
-                        续跑 {draft.resume_run_id}。沿用存档中的评测参数，由
-                        runner 核对协议。未完成回合可能回滚。
+                        {branch ? `来源 ${draft.rerun_run_id}。创建独立 run，保留原记录，从指定回合开局重新调用模型。` : `续跑 ${draft.resume_run_id}。未完成回合可能回滚。`}
+                        沿用存档评测参数，版本不同会先要求确认。恢复会执行历史成功操作，跨版本局面可能与原记录不同。
                     </p>
                 )}
+                {branch && <label className="callout">重跑起始回合
+                    <input aria-label="重跑起始回合" type="number" min={1} max={draft.rerun_max_turn} required
+                        value={draft.rerun_from_turn ?? 1} onChange={event => update("rerun_from_turn", Number(event.target.value))} />
+                    <span> 可选 1 到 {draft.rerun_max_turn}。保留前 x−1 回合，从第 x 回合开局重新执行。</span>
+                </label>}
                 <div className="form-grid">
                     <label>
                         批次名称
@@ -429,6 +463,25 @@ export function NewBatch({
                     </Button>
                 </div>
             </form>
+            <AlertDialog.Root open={!!confirmation} onOpenChange={open => { if (!open && !busy) setConfirmation(null); }}>
+                <AlertDialog.Content maxWidth="620px">
+                    <AlertDialog.Title>存档版本与当前版本不一致</AlertDialog.Title>
+                    <AlertDialog.Description>强行执行会按当前规则恢复历史操作，局面可能变化，也可能无法恢复。结果会标记为跨版本执行，不作为同版本标准评测比较。取消不会加入队列或请求模型。</AlertDialog.Description>
+                    <div style={{ maxHeight: 300, overflow: "auto", overflowWrap: "anywhere", fontSize: 12 }}>
+                        {confirmation?.recoveries.map(item => <section key={item.index}>
+                            <h3>{item.run_id}{item.from_turn != null ? ` · 从 T${item.from_turn} 分支` : " · 续跑"}</h3>
+                            <dl>{item.differences.map(change => <div key={change.field} style={{ marginBlock: 8 }}>
+                                <dt>{versionFields[change.field] || change.field}</dt>
+                                <dd style={{ marginLeft: 12 }}>原记录：<code>{change.archived == null ? "未记录" : String(change.archived)}</code><br />当前：<code>{change.current == null ? "未记录" : String(change.current)}</code></dd>
+                            </div>)}</dl>
+                        </section>)}
+                    </div>
+                    <div className="dialog-footer">
+                        <AlertDialog.Cancel><Button type="button" variant="soft" color="gray" disabled={busy}>取消</Button></AlertDialog.Cancel>
+                        <Button type="button" highContrast color="amber" loading={busy} onClick={() => void confirmVersion()}>确认风险，强行执行</Button>
+                    </div>
+                </AlertDialog.Content>
+            </AlertDialog.Root>
         </Dialog.Content>
     );
 }

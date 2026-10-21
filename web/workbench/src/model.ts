@@ -127,6 +127,9 @@ export interface Draft {
     max_tokens: string;
     objective: string;
     resume_run_id?: string;
+    rerun_run_id?: string;
+    rerun_from_turn?: number;
+    rerun_max_turn?: number;
 }
 export interface RunRequest extends Omit<RunConfig, "objective"> {
     objective?: string;
@@ -211,12 +214,16 @@ export function expandDraft(draft: Draft): RunRequest[] {
                         ? { objective: draft.objective.trim() }
                         : {}),
                     resume_run_id: draft.resume_run_id || null,
+                    rerun_run_id: draft.rerun_run_id || null,
+                    rerun_from_turn: draft.rerun_run_id ? draft.rerun_from_turn : null,
                 })),
             ),
         ),
     );
-    if (draft.resume_run_id && result.length !== 1)
-        throw new Error("同一份存档只能创建一个续跑任务");
+    if ((draft.resume_run_id || draft.rerun_run_id) && result.length !== 1)
+        throw new Error(draft.resume_run_id ? "同一份存档只能创建一个续跑任务" : "一次分支重跑只能创建一个任务");
+    if (draft.rerun_run_id && (!Number.isInteger(draft.rerun_from_turn) || draft.rerun_from_turn! < 1 || draft.rerun_from_turn! > draft.rerun_max_turn!))
+        throw new Error("重跑起始回合不在可恢复范围内");
     return result;
 }
 
@@ -225,6 +232,9 @@ export function safeTemplate(draft: Draft): Draft {
     return {
         ...draft,
         resume_run_id: undefined,
+        rerun_run_id: undefined,
+        rerun_from_turn: undefined,
+        rerun_max_turn: undefined,
         rows: draft.rows.map((row) => ({
             profile_id: row.profile_id || null,
             provider: row.provider,

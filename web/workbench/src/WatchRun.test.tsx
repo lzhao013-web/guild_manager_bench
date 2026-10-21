@@ -130,8 +130,8 @@ const job = (id = "one"): Job => ({
     budget: null,
     recent_actions: [],
 });
-function setup(count = 1) {
-    let live = first;
+function setup(count = 1, initialPage = first) {
+    let live = initialPage;
     const requests: string[] = [];
     const onStop = vi.fn();
     const onFocus = vi.fn();
@@ -311,7 +311,7 @@ it("模型模块返回总览后不自动读取新调用的完整输入，重新�
     );
 });
 
-it("购买对象不会被资源差值盖掉，时间线合并调用结果并折叠查询，点击仍定位真实局面", async () => {
+it("购买对象不会被资源差值盖掉，时间线合并调用结果且逐条展示查询，点击仍定位真实局面", async () => {
     const { update, requests } = setup();
     await screen.findByText("验收剑士");
     const changed = { ...recruited, gold: 20 };
@@ -334,9 +334,12 @@ it("购买对象不会被资源差值盖掉，时间线合并调用结果并折�
     expect(screen.getByText("历史局面", { exact: true })).toBeVisible();
     expect(within(screen.getByLabelText("当前观看位置的资源")).getByText("20", { exact: true })).toBeVisible();
     expect(screen.getByRole("region", { name: "所选行动详情" })).toHaveTextContent("金币 60 → 20");
-    expect(within(timeline).getByText(/连续查询 · 2 次/)).toBeVisible();
-    for (const query of within(timeline).getAllByRole("button", { name: "定位行动 查看队伍" }))
-        expect(query.closest("details")).not.toHaveAttribute("open");
+    const queries = within(timeline).getAllByRole("button", { name: "定位行动 查看队伍" });
+    expect(queries).toHaveLength(2);
+    for (const query of queries) {
+        expect(query).toBeVisible();
+        expect(query.closest("details")).toBeNull();
+    }
     expect(requests.every(path => path.includes("/watch"))).toBe(true);
 });
 
@@ -349,6 +352,106 @@ it("操作前后的变化来自快照，零分不当作缺失，读取操作不�
     expect(stateChanges(recruited, recruited)).toEqual([]);
     expect(frames[0].observation).toEqual(initial);
     expect(frames[3].observation).toEqual(recruited);
+});
+
+async function openReasoningFromRecentTool(reasoning: string | undefined, multiple = false) {
+    const tools = multiple ? [{ name: "recruit_adventurer", call_id: "hire" }, { name: "get_party", call_id: "party" }] : [{ name: "recruit_adventurer", call_id: "hire" }];
+    const scenario: WatchPage = { ...first, cursor: 7, records: [
+        first.records[0], first.records[1],
+        record(3, { ...first.records[2].event, assistant_metadata: reasoning === undefined ? {} : { reasoning_content: reasoning }, tool_calls: tools }),
+        first.records[3], first.records[4],
+        record(6, { type: "model_request", turn: 1, step: 2 }),
+        record(7, { type: "model_response", turn: 1, step: 2, text: "不相关的新正文", assistant_metadata: { reasoning_content: "不相关的新调用推理" } }),
+    ] };
+    const controls = setup();
+    await screen.findByText("验收剑士");
+    await controls.update(scenario);
+    fireEvent.click(screen.getByRole("button", { name: "切换专注" }));
+    // 先手动查看其它模型调用，再从较早的工具跳转，不能沿用旧选择。
+    fireEvent.click(await screen.findByRole("button", { name: "展开模型输出" }));
+    expect(screen.getByLabelText("选择模型调用")).toHaveValue("6");
+    fireEvent.click(screen.getByRole("button", { name: "返回总览" }));
+    fireEvent.click(screen.getByRole("button", { name: "展开最近行动" }));
+    fireEvent.click(screen.getByRole("button", { name: "查看对应模型推理" }));
+    await screen.findByRole("heading", { name: "模型输出模块标题" });
+    return controls;
+}
+
+it("从较早工具直接定位所属模型推理，不跳到最新调用，返回后仍是该操作", async () => {
+    const { requests, onStop } = await openReasoningFromRecentTool("这段是已记录的招募调用 API 推理", true);
+    expect(screen.getByLabelText("选择模型调用")).toHaveValue("2");
+    const reasoning = screen.getByText("这段是已记录的招募调用 API 推理", { exact: true });
+    expect(reasoning).toBeVisible();
+    expect(reasoning.closest("details")).toHaveAttribute("open");
+    const body = within(screen.getByRole("region", { name: "所选位置的模型调用" })).getByText("先招募一位剑士。", { exact: true });
+    expect(reasoning.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    expect(screen.getByText(/本次响应包含 2 个工具调用，共享以下 API 推理记录/)).toBeVisible();
+    expect(screen.queryByText("不相关的新调用推理", { exact: true })).not.toBeInTheDocument();
+    expect(screen.getByText("历史局面", { exact: true })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "返回该工具" }));
+    expect(screen.getByRole("region", { name: "所选行动详情" })).toHaveTextContent("招募 验收剑士");
+    fireEvent.click(screen.getByRole("button", { name: "查看对应模型推理" }));
+    expect(screen.getByText("这段是已记录的招募调用 API 推理").closest("details")).toHaveAttribute("open");
+    expect(onStop).not.toHaveBeenCalled();
+    expect(requests.every(path => path.includes("/watch"))).toBe(true);
+});
+
+it("对应调用未保存 API 推理时明确说明，不拿正文或后一次推理替代", async () => {
+    await openReasoningFromRecentTool(undefined);
+    expect(screen.getByText(/该调用未记录可读的 API 推理文本或摘要/)).toBeVisible();
+    expect(screen.getByText(/该调用未记录可读的 API 推理文本或摘要/).closest("details")).toHaveAttribute("open");
+    expect(within(screen.getByRole("region", { name: "所选位置的模型调用" })).getByText("先招募一位剑士。", { exact: true })).toBeVisible();
+    expect(screen.queryByText("不相关的新调用推理", { exact: true })).not.toBeInTheDocument();
+});
+
+it("从工具定位后仍可手动选择其它模型调用，不被来源链接锁住", async () => {
+    setup(1, { ...first, cursor: 8, records: [
+        first.records[0], first.records[1],
+        record(3, { ...first.records[2].event, assistant_metadata: { reasoning_content: "第一次调用的已记录推理" } }),
+        first.records[3], first.records[4],
+        record(6, { type: "model_request", step: 2 }),
+        record(7, { type: "model_response", step: 2, text: "第二次调用正文", assistant_metadata: { reasoning_content: "第二次调用的已记录推理" } }),
+        record(8, { type: "tool_result", name: "write_memo", result: { ok: true, memo: { content: "构造备忘" } } }),
+    ] });
+    await screen.findByText("验收剑士");
+    fireEvent.click(screen.getByRole("button", { name: "切换专注" }));
+    fireEvent.click(await screen.findByRole("button", { name: "展开最近行动" }));
+    fireEvent.click(screen.getByRole("button", { name: "查看对应模型推理" }));
+    expect(screen.getByText("第二次调用的已记录推理", { exact: true })).toBeVisible();
+    fireEvent.change(screen.getByLabelText("选择模型调用"), { target: { value: "2" } });
+    expect(screen.getByLabelText("选择模型调用")).toHaveValue("2");
+    expect(screen.queryByRole("button", { name: "返回该工具" })).not.toBeInTheDocument();
+    const model = within(screen.getByRole("region", { name: "所选位置的模型调用" }));
+    const body = model.getByText("先招募一位剑士。", { exact: true });
+    const reasoning = model.getByText("第一次调用的已记录推理", { exact: true });
+    expect(body).toBeVisible();
+    expect(reasoning.closest("details")).not.toHaveAttribute("open");
+    expect(body.compareDocumentPosition(reasoning) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+});
+
+it("缺少模型关联的旧工具记录不能跳到附近的其它响应", async () => {
+    setup(1, { ...first, cursor: 7, records: [first.records[0],
+        record(6, { type: "model_response", step: 1, text: "未关联的正文", assistant_metadata: { reasoning_content: "未关联的推理" } }),
+        record(7, first.records[3].event),
+    ] });
+    await screen.findByText("验收剑士");
+    fireEvent.click(screen.getByRole("button", { name: "切换专注" }));
+    fireEvent.click(await screen.findByRole("button", { name: "展开最近行动" }));
+    expect(screen.getByRole("button", { name: "未记录模型关联" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "查看对应模型推理" })).not.toBeInTheDocument();
+});
+
+it("正在执行的工具也可以定位已返回的模型推理，不提前显示执行结果", async () => {
+    setup(1, { ...first, cursor: 6, records: [first.records[0], first.records[1],
+        record(3, { ...first.records[2].event, assistant_metadata: { reasoning_content: "待执行工具的构造 API 推理" } }),
+        record(6, { type: "tool_call", name: "recruit_adventurer", call_id: "pending", arguments: { candidate_id: 1 } }),
+    ] });
+    await screen.findByText("此时尚未招募冒险者");
+    fireEvent.click(screen.getByRole("button", { name: "切换专注" }));
+    fireEvent.click(await screen.findByRole("button", { name: "展开最近行动" }));
+    expect(screen.getByRole("region", { name: "执行结果" })).toHaveTextContent("尚未记录执行结果");
+    fireEvent.click(screen.getByRole("button", { name: "查看对应模型推理" }));
+    expect(screen.getByText("待执行工具的构造 API 推理", { exact: true })).toBeVisible();
 });
 
 it("终态事件结束评分提示，并使用实际返回的最终评分", () => {
