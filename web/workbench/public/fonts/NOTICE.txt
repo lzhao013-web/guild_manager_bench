@@ -1,0 +1,27 @@
+Guild Manager Bench 工作台字体说明
+
+本软件使用小米 MiSans 字体，以及 JetBrains Mono 字体。
+字体文件随本软件提供，供工作台界面使用，不单独分发或售卖字体。
+
+MiSans
+著作权人：小米科技有限责任公司（Xiaomi Inc.）
+来源：https://font.sec.miui.com/font/css?family=MiSans:400:Chinese_Simplify,Latin&display=swap
+官方介绍：https://hyperos.mi.com/font/zh/
+使用 400、500、600、700 字重的官方 WOFF2 文件和 unicode-range 分片。
+下载的字体二进制文件保持原样，没有改编、二次开发或自行裁剪字库。
+许可：MiSans 字体知识产权许可协议。
+完整协议随附于 misans/LICENSE.pdf。
+网页访问路径：/workbench/fonts/misans/LICENSE.pdf
+
+JetBrains Mono
+Copyright 2020 The JetBrains Mono Project Authors
+来源：https://github.com/JetBrains/JetBrainsMono/tree/v2.304/fonts/webfonts
+使用 v2.304 的 Regular、Medium、SemiBold、Bold 网页字体，文件保持原样。
+许可：SIL Open Font License, Version 1.1。
+版权声明和完整协议随附于 jetbrains-mono/OFL.txt。
+网页访问路径：/workbench/fonts/jetbrains-mono/OFL.txt
+
+维护
+在仓库根目录执行 python web/workbench/prepare_fonts.py 可重新获取官方资源及协议，
+并生成 web/workbench/src/fonts.css。本软件的浏览器运行过程仅加载本地字体，
+不向上述外部服务请求字体。font-display: swap 保留字体加载期间的系统字体显示。

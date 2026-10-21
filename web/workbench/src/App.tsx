@@ -1675,6 +1675,7 @@ export default function App() {
                     <footer className="workspace-footer">
                         <span>Guild Manager Bench</span>
                         <span>评测规则与运行管理分离</span>
+                        <a className="font-credit" href="/workbench/fonts/NOTICE.txt" target="_blank" rel="noreferrer" title="MiSans 与 JetBrains Mono 的来源及授权">字体：MiSans</a>
                         <a href="/legacy/">
                             旧版调试页
                             <ArrowSquareOut size={12} />
