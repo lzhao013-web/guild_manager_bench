@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from guild_manager_bench.api.workbench_events import apply_event
+from guild_manager_bench.api.workbench_events import apply_event, recovery_history
 from guild_manager_bench.api.workbench_lock import FileLease
 from guild_manager_bench.api.workbench_models import CreateBatch, RunSpec
 from guild_manager_bench.game.presets import resolve_data_source
@@ -26,6 +26,43 @@ def test_failed_attempt_is_not_terminal_and_missing_usage_is_not_zero(tmp_path):
         finally:
             await m.close()
     asyncio.run(scenario())
+
+
+def test_model_timing_accumulates_only_recorded_responses():
+    job = {"usage": {"input_tokens": None, "output_tokens": None, "reported": 0, "responses": 0},
+           "model_duration_ms": None}
+    apply_event(job, {"type": "model_response", "usage": {}}, "2026-10-18T00:00:00Z")
+    assert job["model_duration_ms"] is None
+    apply_event(job, {"type": "model_response", "timing": {"duration_ms": 0}}, "2026-10-18T01:00:00Z")
+    assert job["model_duration_ms"] == 0
+    apply_event(job, {"type": "model_response", "timing": {"duration_ms": 125.5}}, "2026-10-18T02:00:00Z")
+    apply_event(job, {"type": "model_response", "timing": {"duration_ms": 250}}, "2026-10-19T02:00:00Z")
+    assert job["model_duration_ms"] == 375.5
+
+
+def test_resume_replaces_inherited_metrics_then_counts_new_response_once():
+    history = recovery_history([
+        {"turn": 1, "status": "completed", "rank_score": 10, "steps": [
+            {"type": "assistant", "timing": {"duration_ms": 1000},
+             "usage": {"input_tokens": 100, "output_tokens": 20}},
+            {"type": "tool_result", "timing": {"duration_ms": 999}},
+        ]},
+        {"turn": 2, "status": "failed", "steps": [
+            {"type": "assistant", "timing": {"duration_ms": 250},
+             "usage": {"prompt_tokens": 200, "completion_tokens": 30}},
+        ]},
+    ])
+    job = {"usage": {"input_tokens": 99, "output_tokens": 9, "reported": 1, "responses": 1},
+           "model_duration_ms": 9000, "calls": 0, "tools": 0}
+    apply_event(job, {"type": "run_resumed", "archive": {"directory": "archive/run-a"},
+                     "restored_observation": {"turn": 2, "max_turns": 8}, "stats": {},
+                     "workbench_history": history}, "2026-10-20T00:00:00Z")
+    assert job["model_duration_ms"] == 1250
+    assert job["scores"] == [{"turn": 1, "value": 10}]
+    apply_event(job, {"type": "model_response", "timing": {"duration_ms": 500},
+                     "usage": {"input_tokens": 400, "output_tokens": 50}}, "2026-10-20T00:00:01Z")
+    assert job["model_duration_ms"] == 1750
+    assert job["usage"] == {"input_tokens": 700, "output_tokens": 100, "reported": 3, "responses": 3}
 
 
 def test_stopped_run_can_resume_same_archive_after_worker_releases_lease(tmp_path):

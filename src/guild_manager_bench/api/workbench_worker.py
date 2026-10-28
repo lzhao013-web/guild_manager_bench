@@ -10,6 +10,8 @@ import threading
 import time
 from typing import Any
 
+from guild_manager_bench.api.workbench_events import recovery_history
+
 
 class StopRequested(Exception):
     pass
@@ -21,30 +23,10 @@ def _scoring_pool():
     return ThreadPoolExecutor(max_workers=1)
 
 
-def recovery_history(turns: list[dict[str, Any]]) -> dict[str, Any]:
-    history = {"usage": {"input_tokens": None, "output_tokens": None, "reported": 0, "responses": 0}, "scores": []}
-    for turn in turns:
-        if turn.get("rank_score") is not None and turn.get("status") == "completed":
-            history["scores"].append({"turn": turn["turn"], "value": turn["rank_score"]})
-        for step in turn.get("steps", []):
-            if step.get("type") != "assistant":
-                continue
-            history["usage"]["responses"] += 1
-            usage = step.get("usage", {})
-            reported = False
-            for target, names in {"input_tokens": ("input_tokens", "prompt_tokens"), "output_tokens": ("output_tokens", "completion_tokens")}.items():
-                value = next((usage[name] for name in names if isinstance(usage.get(name), (int, float))), None)
-                if value is not None:
-                    history["usage"][target] = (history["usage"][target] or 0) + value
-                    reported = True
-            history["usage"]["reported"] += int(reported)
-    return history
-
-
 def main() -> int:
     from guild_manager_bench.api.routes_llm_debug import _debug_agent
     from guild_manager_bench.api.workbench import timestamp
-    from guild_manager_bench.api.workbench_lock import FileLease
+    from guild_manager_bench.api.workbench_lock import archive_lease
     from guild_manager_bench.bench.llm import LlmRunConfig, run_llm_game
     from guild_manager_bench.bench.llm import runner
     from guild_manager_bench.bench import metrics
@@ -54,7 +36,7 @@ def main() -> int:
     request = json.loads(sys.stdin.readline())
     payload = request["payload"]
     secret = payload.get("api_key")
-    history = {"usage": {"input_tokens": None, "output_tokens": None, "reported": 0, "responses": 0}, "scores": []}
+    history = recovery_history([])
     stop = threading.Event()
 
     def control() -> None:
@@ -79,10 +61,10 @@ def main() -> int:
     def emit(event: dict[str, Any]) -> None:
         nonlocal lease
         if event["type"] == "run_archived" or event["type"] == "run_resumed" and payload["rerun_run_id"]:
-            child_lease = FileLease(Path(event["archive"]["directory"]) / "workbench.lock")
+            child_lease = archive_lease(Path(event["archive"]["directory"]))
             child_lease.__enter__()
             if lease is not None:
-                lease.__exit__()
+                lease.__exit__(None, None, None)
             lease = child_lease
         if event["type"] == "run_resumed":
             event = {**event, "workbench_history": history}
@@ -93,7 +75,7 @@ def main() -> int:
     try:
         recovery = None
         if request["resume_dir"]:
-            lease = FileLease(Path(request["resume_dir"]) / "workbench.lock")
+            lease = archive_lease(Path(request["resume_dir"]))
             lease.__enter__()
             recovery = inspect_recovery(Path(request["resume_dir"]), request["data_dir"], payload["rerun_from_turn"])
             if recovery.token != payload["recovery_token"]:
@@ -124,7 +106,7 @@ def main() -> int:
     finally:
         journal.close()
         if lease is not None:
-            lease.__exit__()
+            lease.__exit__(None, None, None)
 
 
 if __name__ == "__main__":

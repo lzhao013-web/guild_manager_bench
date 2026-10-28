@@ -4,6 +4,34 @@ from __future__ import annotations
 from typing import Any
 
 
+def _accumulate_model_response(summary: dict[str, Any], response: dict[str, Any]) -> None:
+    usage = response.get("usage") or {}
+    summary["usage"]["responses"] += 1
+    has_usage = False
+    for target, names in {"input_tokens": ("input_tokens", "prompt_tokens"),
+                          "output_tokens": ("output_tokens", "completion_tokens")}.items():
+        value = next((usage[name] for name in names if isinstance(usage.get(name), (int, float))), None)
+        if value is not None:
+            summary["usage"][target] = (summary["usage"][target] or 0) + value
+            has_usage = True
+    summary["usage"]["reported"] += int(has_usage)
+    duration = (response.get("timing") or {}).get("duration_ms")
+    if isinstance(duration, (int, float)):
+        summary["model_duration_ms"] = (summary.get("model_duration_ms") or 0) + duration
+
+
+def recovery_history(turns: list[dict[str, Any]]) -> dict[str, Any]:
+    history = {"usage": {"input_tokens": None, "output_tokens": None, "reported": 0, "responses": 0},
+               "model_duration_ms": None, "scores": []}
+    for turn in turns:
+        if turn.get("rank_score") is not None and turn.get("status") == "completed":
+            history["scores"].append({"turn": turn["turn"], "value": turn["rank_score"]})
+        for step in turn.get("steps", []):
+            if step.get("type") == "assistant":
+                _accumulate_model_response(history, step)
+    return history
+
+
 def set_phase(job: dict[str, Any], phase: str, now: str) -> None:
     if job["phase"] != phase:
         job["phase"] = phase
@@ -45,6 +73,7 @@ def apply_event(job: dict[str, Any], event: dict[str, Any], now: str) -> None:
         job["last_score"] = event.get("last_rank_score")
         history = event["workbench_history"]
         job["usage"] = history["usage"]
+        job["model_duration_ms"] = history.get("model_duration_ms")
         job["scores"] = history["scores"]
     elif kind == "turn_started":
         observe(job, event["observation"])
@@ -56,16 +85,7 @@ def apply_event(job: dict[str, Any], event: dict[str, Any], now: str) -> None:
     elif kind in {"model_delta", "model_reasoning_delta", "tool_call_delta"}:
         set_phase(job, "receiving", now)
     elif kind == "model_response":
-        usage = event.get("usage") or {}
-        job["usage"]["responses"] += 1
-        has_usage = False
-        for target, names in {"input_tokens": ("input_tokens", "prompt_tokens"),
-                              "output_tokens": ("output_tokens", "completion_tokens")}.items():
-            value = next((usage[name] for name in names if isinstance(usage.get(name), (int, float))), None)
-            if value is not None:
-                job["usage"][target] = (job["usage"][target] or 0) + value
-                has_usage = True
-        job["usage"]["reported"] += int(has_usage)
+        _accumulate_model_response(job, event)
         job["last_response_ms"] = event.get("timing", {}).get("duration_ms")
     elif kind == "tool_call":
         set_phase(job, "executing_tool", now)

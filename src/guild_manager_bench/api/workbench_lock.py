@@ -1,6 +1,7 @@
 """进程退出时由操作系统释放的单机文件锁，不用 PID 猜测锁是否失效。"""
 from __future__ import annotations
 
+from contextlib import contextmanager
 import os
 from pathlib import Path
 
@@ -42,3 +43,20 @@ class FileLease:
             fcntl.flock(self.file.fileno(), fcntl.LOCK_UN)
         self.file.close()
         self.file = None
+
+
+@contextmanager
+def archive_gate(directory: Path):
+    directory = directory.resolve()
+    locks = directory.parent / ".locks"
+    if locks.resolve() != locks:
+        raise ValueError("存档锁目录不能使用链接")
+    locks.mkdir(exist_ok=True)
+    with FileLease(locks / f"{directory.name}.lock"):
+        yield
+
+
+@contextmanager
+def archive_lease(directory: Path):
+    with archive_gate(directory), FileLease(directory / "workbench.lock"):
+        yield

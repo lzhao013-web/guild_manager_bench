@@ -4,6 +4,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any, Callable
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -72,6 +73,56 @@ def test_list_runs_infers_preset_from_archived_data_dir(tmp_path: Path) -> None:
 
     assert response["runs"][0]["preset"] == "full"
     assert response["runs"][0]["adventurer_stats"][0]["adventurer_name"] == "先锋"
+
+
+def test_list_runs_reports_recorded_model_cost_without_double_counting(tmp_path: Path) -> None:
+    replay = _legacy_replay()
+    replay["turns"] = [{
+        "turn": 1,
+        "status": "completed",
+        "rank_score": 10,
+        "timing_usage": {"duration_ms": 1250, "input_tokens": 3000, "output_tokens": 500},
+        "steps": [
+            {"type": "assistant", "timing": {"duration_ms": 1000},
+             "usage": {"input_tokens": 1000, "output_tokens": 200}},
+            {"type": "tool_result", "timing": {"duration_ms": 9999}},
+            {"type": "assistant", "timing": {"duration_ms": 250},
+             "usage": {"prompt_tokens": 2000, "completion_tokens": 300}},
+        ],
+    }]
+    replay["stats"] = {"timing": {"total_duration_ms": 1250},
+                       "token_usage": {"input_tokens": 3000, "output_tokens": 500}}
+    path = _write_replay(tmp_path, "cost", replay)
+    before = path.read_bytes()
+
+    row = _call_route(tmp_path, "/api/llm/runs", "GET")["runs"][0]
+
+    assert row["model_duration_ms"] == 1250
+    assert row["usage"] == {"input_tokens": 3000, "output_tokens": 500,
+                            "reported": 2, "responses": 2}
+    assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize(("step", "duration", "input_tokens", "output_tokens"), [
+    ({"type": "assistant"}, None, None, None),
+    ({"type": "assistant", "timing": {"duration_ms": 0},
+      "usage": {"input_tokens": 0, "output_tokens": 0}}, 0, 0, 0),
+    ({"type": "assistant", "usage": {"input_tokens": 12}}, None, 12, None),
+])
+def test_list_runs_distinguishes_missing_metrics_from_zero(
+    tmp_path: Path, step: dict, duration, input_tokens, output_tokens,
+) -> None:
+    replay = _legacy_replay()
+    replay["turns"] = [{"turn": 1, "steps": [step]}]
+    replay["stats"] = {"timing": {"total_duration_ms": 0},
+                       "token_usage": {"input_tokens": 0, "output_tokens": 0}}
+    _write_replay(tmp_path, "old", replay)
+
+    row = _call_route(tmp_path, "/api/llm/runs", "GET")["runs"][0]
+
+    assert row["model_duration_ms"] == duration
+    assert row["usage"]["input_tokens"] == input_tokens
+    assert row["usage"]["output_tokens"] == output_tokens
 
 
 def test_rebuild_replay_fills_missing_step_observations(tmp_path: Path) -> None:

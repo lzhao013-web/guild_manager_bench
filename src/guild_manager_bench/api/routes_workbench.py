@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
 from guild_manager_bench.api.workbench import ACTIVE, Workbench
+from guild_manager_bench.api.history_deletion import ArchiveBusyError
 from guild_manager_bench.api.workbench_curves import CurveStore, empty_curves
 from guild_manager_bench.api.workbench_trajectories import TrajectoryStore
 from guild_manager_bench.api.routes_llm_archive import _run_directory
@@ -186,6 +187,29 @@ def workbench_router(manager: Workbench) -> APIRouter:
             raise HTTPException(503, "轨迹日志暂不可读，请稍后重试") from None
         except ValueError:
             raise HTTPException(422, "轨迹格式不支持或所选位置已不存在，原日志保持不变") from None
+
+    def delete_error(exc: Exception) -> HTTPException:
+        if isinstance(exc, KeyError):
+            return HTTPException(404, "存档或运行记录不存在")
+        if isinstance(exc, ArchiveBusyError):
+            return HTTPException(409, str(exc))
+        if isinstance(exc, ValueError):
+            return HTTPException(422, str(exc))
+        return HTTPException(503, "删除未完成，请刷新列表并检查目录权限。部分文件可能已移除。")
+
+    @router.delete("/archives/{run_id}", dependencies=[Depends(same_origin)])
+    async def delete_archive(run_id: str):
+        try:
+            return manager.delete_archive(run_id)
+        except (KeyError, ArchiveBusyError, ValueError, OSError) as exc:
+            raise delete_error(exc) from None
+
+    @router.delete("/jobs/{job_id}", dependencies=[Depends(same_origin)])
+    async def delete_job(job_id: str):
+        try:
+            return manager.delete_job(job_id)
+        except (KeyError, ArchiveBusyError, ValueError, OSError) as exc:
+            raise delete_error(exc) from None
 
     @router.get("/recoveries/{run_id}")
     async def recovery_info(run_id: str):

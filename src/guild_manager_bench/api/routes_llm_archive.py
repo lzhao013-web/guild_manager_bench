@@ -12,6 +12,7 @@ from fastapi.responses import Response
 import msgspec
 
 from guild_manager_bench.api.archive_io import read_archive_json, read_archive_response_bytes
+from guild_manager_bench.api.workbench_events import recovery_history
 from guild_manager_bench.bench.llm.runner import (
     rebuild_replay_observations,
     replay_observations_complete,
@@ -121,6 +122,7 @@ def _run_summary(path: Path) -> dict[str, Any] | None:
     game_actions = game_actions if isinstance(game_actions, dict) else {}
     agent = replay.get("agent")
     agent_config = (agent.get("config") if isinstance(agent, dict) else None) or {}
+    history = recovery_history(replay.get("turns", []))
     return {
         "run_id": path.parent.name,
         "created_at": replay.get("created_at"),
@@ -134,6 +136,8 @@ def _run_summary(path: Path) -> dict[str, Any] | None:
         "protocol_status": data.get("protocol_status"),
         "score": score.get("score"),
         "rank_score": score.get("rank_score"),
+        "model_duration_ms": history["model_duration_ms"],
+        "usage": history["usage"],
         "adventurer_stats": game_actions.get("adventurer_stats") or [],
         "has_observations": _replay_has_observations(replay),
     }

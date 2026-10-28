@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import signal
+import shutil
 import subprocess
 import sys
 from typing import Any
@@ -17,8 +18,9 @@ from guild_manager_bench.api.routes_llm_debug import _debug_agent
 from guild_manager_bench.api.api_profiles import ApiProfiles
 from guild_manager_bench.api.workbench_events import apply_event, set_phase
 from guild_manager_bench.api.workbench_models import CreateBatch, RunSpec, SchedulerSettings
-from guild_manager_bench.api.workbench_lock import FileLease
+from guild_manager_bench.api.workbench_lock import FileLease, archive_lease
 from guild_manager_bench.api.workbench_watch import WatchJournal
+from guild_manager_bench.api.history_deletion import ArchiveBusyError, history_directory, stage_history_deletion
 from guild_manager_bench.api.monster_display import monster_stages
 from guild_manager_bench.game.presets import DataPreset
 from guild_manager_bench.bench.llm.recovery import RecoveryConfirmationRequired, inherited_config, inspect_recovery, read_recovery_archive, recoverable_turns
@@ -167,7 +169,7 @@ class Workbench:
     def recovery_info(self, run_id: str) -> dict[str, Any]:
         directory = self._archive(run_id)
         try:
-            with FileLease(directory / "workbench.lock"):
+            with archive_lease(directory):
                 replay, _ = read_recovery_archive(directory)
                 preset = replay.get("data", {}).get("preset")
                 if preset not in self.presets:
@@ -196,7 +198,7 @@ class Workbench:
                 raise ValueError("这份存档已经有运行或排队中的任务")
             directory = self._archive(source)
             try:
-                with FileLease(directory / "workbench.lock"):
+                with archive_lease(directory):
                     plans[index] = inspect_recovery(directory, self.presets[spec.preset].data_dir, spec.rerun_from_turn)
             except OSError as exc:
                 raise ValueError("存档仍被工作进程占用或暂不可读，请等待原进程退出") from exc
@@ -262,6 +264,7 @@ class Workbench:
                 "config": public, "effective_config": {}, "data": {}, "archive_id": spec.resume_run_id,
                 "turn": None, "max_turns": None, "last_score": None, "scores": [], "calls": 0, "tools": 0,
                 "usage": {"input_tokens": None, "output_tokens": None, "reported": 0, "responses": 0},
+                "model_duration_ms": None,
                 "retries": 0, "tool_failures": 0, "recent_actions": [], "observation": None,
                 "budget": None, "error": None, "notice": None, "checkpoint_at": None, "checkpoint_error": None,
                 "cursor": 0, "outcome": None,
@@ -293,6 +296,41 @@ class Workbench:
                 pass
         self._save(job)
         return job
+
+    def delete_job(self, job_id: str) -> dict[str, Any]:
+        selected = self.get(job_id)
+        if selected["status"] in ACTIVE or job_id in self._processes:
+            raise ArchiveBusyError("请先停止任务，等待进程退出后再删除")
+        if selected["archive_id"]:
+            return self.delete_archive(selected["archive_id"])
+        return self._delete_history(None, [selected])
+
+    def delete_archive(self, run_id: str) -> dict[str, Any]:
+        archive = history_directory(self.archive_root, run_id)
+        def references_archive(identity: str | None) -> bool:
+            return identity is not None and (self.archive_root / identity).resolve() == archive
+
+        for job in self.jobs.values():
+            references = (job["archive_id"], job["config"].get("resume_run_id"), job["config"].get("rerun_run_id"))
+            if any(references_archive(identity) for identity in references) and (job["status"] in ACTIVE or job["id"] in self._processes):
+                raise ArchiveBusyError("存档正被排队或执行中的任务使用，请先停止任务")
+        related = [job for job in self.jobs.values() if references_archive(job["archive_id"])]
+        if not related and not (archive / "replay.json").is_file():
+            raise KeyError(run_id)
+        return self._delete_history(archive, related)
+
+    def _delete_history(self, archive: Path | None, related: list[dict[str, Any]]) -> dict[str, Any]:
+        executions = [history_directory(self.root, job["id"]) for job in related]
+        staged = stage_history_deletion(archive, executions)
+        deleted_ids = [job["id"] for job in related]
+        for identity in deleted_ids:
+            self.jobs.pop(identity)
+            self._payloads.pop(identity, None)
+            self._watch.pop(identity, None)
+            self._stopping_since.pop(identity, None)
+        for directory in staged:
+            shutil.rmtree(directory)
+        return {"deleted": True, "run_id": archive.name if archive is not None else None, "deleted_job_ids": deleted_ids}
 
     def _archive(self, run_id: str) -> Path:
         directory = (self.archive_root / run_id).resolve()
