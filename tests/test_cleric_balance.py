@@ -14,18 +14,18 @@ def divine_guard():
     return next(s for s in unlock.skills if s.skill_id == "divine_guard")
 
 
-def test_divine_guard_reduces_defense_and_preserves_trigger_and_offense(divine_guard):
+def test_divine_guard_keeps_defense_and_smaller_offense_in_the_low_hp_window(divine_guard):
     assert divine_guard.kind == "passive"
     assert divine_guard.condition.condition_type == "self_hp_pct_lte"
-    assert divine_guard.condition.value == 0.8
+    assert divine_guard.condition.value == 0.72
     assert [(e.effect_type, e.stat, e.value, e.target) for e in divine_guard.effects] == [
-        ("stat_multiplier", "defense", 1.5, "self"),
-        ("stat_multiplier", "attack", 1.5, "self"),
-        ("stat_multiplier", "speed", 1.2, "self"),
+        ("stat_multiplier", "defense", 1.6, "self"),
+        ("stat_multiplier", "attack", 1.15, "self"),
+        ("stat_multiplier", "speed", 1.15, "self"),
     ]
 
 
-@pytest.mark.parametrize("hp,expected_damage", [(80, 30), (81, 20)])
+@pytest.mark.parametrize("hp,expected_damage", [(72, 23), (73, 20)])
 def test_divine_guard_attack_bonus_at_hp_boundary(divine_guard, hp, expected_damage):
     cleric = Combatant(
         "cleric",
@@ -41,7 +41,7 @@ def test_divine_guard_attack_bonus_at_hp_boundary(divine_guard, hp, expected_dam
     assert result.events[0].damage == expected_damage
 
 
-@pytest.mark.parametrize("hp,expected_hp", [(80, 55), (81, 51)])
+@pytest.mark.parametrize("hp,expected_hp", [(72, 48), (73, 43)])
 def test_divine_guard_defense_multiplier_at_hp_boundary(divine_guard, hp, expected_hp):
     cleric = Combatant(
         "cleric",

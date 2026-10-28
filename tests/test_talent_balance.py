@@ -98,10 +98,12 @@ def test_current_character_and_equipment_actives_precede_recovery_talents(defini
     ("emergency_care", "plague_mage", "hellhound", "normal", 42),
     ("mana_reflux", "spellshot_mage", "orc_warrior", "boss", 43),
 ])
-def test_recorded_recovery_regressions_remain_winnable(definition, node_id, class_id, monster_id, tier, seed):
-    # 固定复现前期机制实验，免费提供必要前置，不代表正常经营可在T10买到。
+def test_recovery_talents_preserve_legacy_finisher_regressions(definition, node_id, class_id, monster_id, tier, seed):
+    # 固定旧版角色技能，隔离检验自动回复不会抢占原有致胜动作。
+    # 新版职业可能改变该对位的胜负，不用它冒充当前职业平衡或T10经营可达性证据。
     d = replace(definition, rules=replace(definition.rules, seed=seed))
-    template = next(item for item in d.content.recruitable_adventurers if item.template_id == class_id)
+    legacy = load_game_definition("data/presets/full")
+    template = next(item for item in legacy.content.recruitable_adventurers if item.template_id == class_id)
     hero = AdventurerState(
         adventurer_id="hero", name=template.name, template_id=class_id,
         base_stats=template.base_stats, resources=CombatResources.full(template.base_stats),

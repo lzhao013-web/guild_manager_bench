@@ -28,12 +28,12 @@ copyreg.pickle(MappingProxyType, _pickle_mappingproxy)
 
 @dataclass(frozen=True, slots=True)
 class AdventurerScoreBreakdown:
-    """单个冒险者在终局评分匹配中的贡献。"""
+    """冒险者评分记录。正式贡献使用 rank_score，不使用旧 average_score。"""
 
     adventurer_id: str
     name: str
     assignments: int
-    average_score: float
+    average_score: float  # 旧 Arena 均分，仅保留归档兼容，不用于平衡或排名。
     win_rate: float
     rank_score: float = 0.0
     rank_score_share: float = 0.0
@@ -53,9 +53,13 @@ class AdventurerScoreBreakdown:
 
 @dataclass(frozen=True, slots=True)
 class ScoreReport:
-    """终局 Arena 评分结果。"""
+    """终局评分结果，以 rank_score 为唯一主指标。
 
-    score: float
+    score 是已弃用的 0–100 分 Arena 汇总指标，容易封顶。
+    仅为历史存档兼容保留，不用于平衡、排名或替代缺失的 rank_score。
+    """
+
+    score: float  # Deprecated: 旧 Arena 分，不是 rank_score。
     rank_score: float
     mode: str
     seed: int
@@ -154,7 +158,10 @@ def score_final_state(
     *,
     waves: int | None = None,
 ) -> ScoreReport:
-    """通过固定 Arena 大量模拟评估终局队伍战力。"""
+    """计算终局正式 rank_score，并保留旧 score 字段以兼容历史存档。
+
+    平衡和模型比较使用 rank_score。旧 score 及 average_score 不作强度依据。
+    """
 
     rules = definition.scoring
     wave_count = waves if waves is not None else rules.waves

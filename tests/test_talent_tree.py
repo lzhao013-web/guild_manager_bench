@@ -172,22 +172,27 @@ def test_advanced_inherits_full_except_talents_and_documented_balance_overrides(
     assert len(added_equipment) == 10
     assert all(t.slot == "ultimate" for t in added_equipment)
 
+    full_skills = {
+        skill.skill_id: skill
+        for template in full.content.recruitable_adventurers
+        for skill in (*template.skills, *(s for unlock in template.level_skill_unlocks for s in unlock.skills))
+    }
+    # 仅放行已明确列出的开发版职业改动，解锁等级、成长及其他技能不变。
+    overrides = {
+        "minor_heal", "soothing_light", "holy_strike", "divine_guard",
+        "necrotic_blast", "withering_touch", "epidemic", "shadow_form",
+    }
     normalized = []
     for template in advanced.content.recruitable_adventurers:
-        if template.template_id == "cleric":
-            unlocks = tuple(
-                replace(unlock, skills=tuple(
-                    replace(skill, effects=tuple(
-                        replace(effect, value={"attack": 1.9, "defense": 2.2}[effect.stat])
-                        if effect.stat in ("attack", "defense") else effect
-                        for effect in skill.effects
-                    )) if skill.skill_id == "divine_guard" else skill
-                    for skill in unlock.skills
-                ))
-                for unlock in template.level_skill_unlocks
-            )
-            template = replace(template, level_skill_unlocks=unlocks)
-        normalized.append(template)
+        unlocks = tuple(replace(unlock, skills=tuple(
+            full_skills[skill.skill_id] if skill.skill_id in overrides else skill
+            for skill in unlock.skills
+        )) for unlock in template.level_skill_unlocks)
+        base_skills = tuple(
+            full_skills[skill.skill_id] if skill.skill_id in overrides else skill
+            for skill in template.skills
+        )
+        normalized.append(replace(template, skills=base_skills, level_skill_unlocks=unlocks))
     assert tuple(normalized) == full.content.recruitable_adventurers
 
 

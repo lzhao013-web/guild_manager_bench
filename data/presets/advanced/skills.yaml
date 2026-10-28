@@ -73,42 +73,58 @@ skills:
   - id: ultimate_spellshot
     name: 终极·星陨
     kind: active
-    condition: {type: always}
+    condition:
+      type: all
+      conditions:
+        - {type: action_index_gte, value: 5}
+        - {type: self_mp_pct_gte, value: 0.42}
     effects:
-      - {type: atk_ratio_damage, value: 2.1}
-      - {type: true_damage, value: 35}
-    mp_cost: 16
-    priority: 30
+      - {type: atk_ratio_damage, value: 2.55}
+      - {type: true_damage, value: 45}
+    mp_cost: 17
+    priority: 15
 
   - id: ultimate_cannoneer
     name: 终极·歼灭
     kind: active
-    condition: {type: always}
+    condition:
+      type: all
+      conditions:
+        - {type: target_hp_pct_lte, value: 0.85}
+        - {type: self_mp_pct_gte, value: 0.25}
     effects:
-      - {type: atk_ratio_damage, value: 1.5}
-      - {type: true_damage, value: 35}
-    mp_cost: 8
-    priority: 25
+      - {type: atk_ratio_damage, value: 1.85}
+      - {type: true_damage, value: 45}
+    mp_cost: 11
+    priority: 8
 
   - id: ultimate_knight
     name: 终极·绝壁
     kind: active
-    condition: {type: self_hp_pct_lte, value: 0.6}
+    condition:
+      type: all
+      conditions:
+        - {type: self_hp_pct_lte, value: 0.85}
+        - {type: action_index_gte, value: 3}
     effects:
-      - {type: heal_percent, value: 0.3, target: self}
+      - {type: true_damage, value: 110}
+      - {type: atk_ratio_damage, value: 1.5}
+      - {type: heal_percent, value: 0.22, target: self}
       - type: apply_status
         target: self
         status:
           id: ultimate_bastion
           name: 绝壁
-          duration: 8
+          duration: 12
           polarity: positive
           effects:
-            - {type: heal_percent, value: 0.03, target: self}
-            - {type: stat_multiplier, stat: attack, value: 1.3, target: self}
+            - {type: heal_percent, value: 0.06, target: self}
+            - {type: stat_bonus, stat: attack, value: 55, target: self}
+            - {type: stat_multiplier, stat: defense, value: 1.50, target: self}
+            - {type: stat_multiplier, stat: speed, value: 1.60, target: self}
     free: true
     once_per_battle: true
-    priority: 35
+    priority: 8
 
   - id: ultimate_monk
     name: 终极·无我
@@ -133,63 +149,129 @@ skills:
   - id: ultimate_jester
     name: 终极·千刃
     kind: active
-    condition: {type: action_index_gte, value: 8}
+    condition:
+      type: all
+      conditions:
+        - {type: action_index_gte, value: 6}
+        - {type: self_mp_pct_gte, value: 0.45}
     effects:
-      - {type: damage_multiplier, value: 1.1}
-      - {type: damage_multiplier, value: 1.1}
-      - {type: damage_multiplier, value: 1.1}
-      - {type: damage_multiplier, value: 1.1}
+      - {type: atk_ratio_damage, value: 1.5}
+      - type: apply_status
+        target: target
+        status:
+          id: thousand_blades_break
+          name: 千刃裂甲
+          duration: 8
+          polarity: negative
+          effects:
+            - {type: stat_multiplier, stat: defense, value: 0.45, target: self}
+            - {type: true_damage, value: 35}
+      - type: apply_status
+        target: self
+        status:
+          id: thousand_blades_dance
+          name: 千刃乱舞
+          duration: 8
+          polarity: positive
+          effects:
+            - {type: stat_multiplier, stat: attack, value: 1.40, target: self}
+            - {type: stat_multiplier, stat: speed, value: 1.25, target: self}
+    mp_cost: 10
+    free: true
     once_per_battle: true
-    priority: 35
+    priority: 9
 
   - id: ultimate_cleric
     name: 终极·晨曦
     kind: active
-    condition: {type: self_hp_pct_lte, value: 0.45}
+    condition:
+      type: all
+      conditions:
+        - {type: action_index_gte, value: 5}
+        - type: any
+          conditions:
+            - {type: self_hp_pct_lte, value: 0.70}
+            - {type: self_mp_pct_lte, value: 0.55}
     effects:
-      - {type: heal_percent, value: 0.4, target: self}
-      - {type: mp_restore, value: 12, target: self}
+      - {type: heal_percent, value: 0.35, target: self}
+      - {type: mp_restore_percent, value: 0.40, minimum: 18, target: self}
+      - type: apply_status
+        target: self
+        status:
+          id: ultimate_dawn_radiance
+          name: 晨曦圣辉
+          duration: 6
+          polarity: positive
+          effects:
+            - {type: stat_multiplier, stat: attack, value: 1.45, target: self}
+            - {type: stat_multiplier, stat: defense, value: 1.25, target: self}
     free: true
     once_per_battle: true
-    priority: 35
+    priority: 14
 
   - id: ultimate_plague
     name: 终极·疫潮
     kind: active
-    condition: {type: action_index_lte, value: 6}
+    condition:
+      type: all
+      conditions:
+        - {type: action_index_gte, value: 5}
+        - {type: target_hp_pct_lte, value: 0.88}
+        - {type: self_mp_pct_gte, value: 0.35}
     effects:
-      - {type: atk_ratio_damage, value: 1.0}
+      - {type: atk_ratio_damage, value: 1.20}
       - type: apply_status
+        target: target
         status:
           id: ultimate_plague_status
           name: 疫潮
           duration: 8
           polarity: negative
           effects:
-            - {type: true_damage, value: 55}
-    mp_cost: 12
+            - {type: true_damage, value: 38}
+            - {type: stat_multiplier, stat: attack, value: 0.88, target: self}
+    mp_cost: 16
     free: true
     once_per_battle: true
-    priority: 35
+    priority: 14
 
   - id: ultimate_bloodfiend
     name: 终极·血月
     kind: active
-    condition: {type: self_hp_pct_lte, value: 0.6}
+    condition:
+      type: all
+      conditions:
+        - {type: self_hp_pct_lte, value: 0.65}
+        - {type: self_mp_pct_gte, value: 0.40}
+        - {type: action_index_gte, value: 4}
     effects:
-      - {type: heal_percent, value: 0.35, target: self}
+      - {type: atk_ratio_damage, value: 1.8}
+      - {type: true_damage, value: 45}
+      - {type: heal_percent, value: 0.15, target: self}
+      - type: apply_status
+        target: target
+        status:
+          id: blood_moon_curse
+          name: 血月侵蚀
+          duration: 8
+          polarity: negative
+          effects:
+            - {type: stat_multiplier, stat: defense, value: 0.55, target: self}
       - type: apply_status
         target: self
         status:
           id: ultimate_blood_moon
           name: 血月
-          duration: 5
+          duration: 8
           polarity: positive
           effects:
-            - {type: stat_multiplier, stat: attack, value: 1.35, target: self}
+            - {type: heal_percent, value: 0.07, target: self}
+            - {type: stat_multiplier, stat: attack, value: 1.50, target: self}
+            - {type: stat_multiplier, stat: speed, value: 1.25, target: self}
+    mp_cost: 8
     free: true
     once_per_battle: true
-    priority: 35
+    priority: 8
 
   # ===== Guild Talents =====
   - id: talent_assault
@@ -313,16 +395,11 @@ skills:
   - id: minor_heal
     name: 治愈术
     kind: active
-    condition:
-      type: self_hp_pct_lte
-      value: 0.75
+    condition: {type: self_hp_pct_lte, value: 0.85}
     effects:
-      - type: heal
-        value: 30
-        target: self
-    mp_cost: 8
-    priority: 20
-    free: true
+      - {type: heal, value: 35, target: self}
+    mp_cost: 9
+    priority: 22
 
   # --- 吸血魔 ---
   - id: blood_drain
@@ -360,13 +437,12 @@ skills:
     name: 暗影形态
     kind: passive
     condition:
-      type: action_index_lte
-      value: 12
+      type: all
+      conditions:
+        - {type: action_index_lte, value: 10}
+        - {type: self_mp_pct_gte, value: 0.45}
     effects:
-      - type: stat_multiplier
-        stat: defense
-        value: 3.2
-        target: self
+      - {type: stat_multiplier, stat: defense, value: 2.60, target: self}
 
   - id: plague_curse
     name: 瘟疫诅咒
@@ -568,16 +644,10 @@ skills:
   - id: soothing_light
     name: 净化之光
     kind: active
-    condition:
-      type: self_hp_pct_lte
-      value: 0.85
+    condition: {type: self_hp_pct_lte, value: 0.65}
     effects:
-      - type: heal_percent
-        value: 0.20
-        target: self
-      - type: mp_restore
-        value: 4
-        target: self
+      - {type: heal_percent, value: 0.22, target: self}
+      - {type: mp_restore, value: 5, target: self}
     mp_cost: 7
     priority: 15
     free: true
@@ -585,37 +655,31 @@ skills:
   - id: holy_strike
     name: 神圣打击
     kind: active
-    condition:
-      type: always
+    condition: {type: self_mp_pct_gte, value: 0.40}
     effects:
-      - type: damage_multiplier
-        value: 1.5
-      - type: true_damage
-        value: 18
-      - type: atk_ratio_damage
-        value: 0.6
-    mp_cost: 6
+      - {type: damage_multiplier, value: 1.45}
+      - {type: true_damage, value: 16}
+      - {type: atk_ratio_damage, value: 0.75}
+      - type: apply_status
+        target: self
+        status:
+          id: holy_infusion
+          name: 神圣灌注
+          duration: 2
+          polarity: positive
+          effects:
+            - {type: stat_multiplier, stat: attack, value: 1.35, target: self}
+    mp_cost: 10
     priority: 10
 
   - id: divine_guard
     name: 神圣守护
     kind: passive
-    condition:
-      type: self_hp_pct_lte
-      value: 0.8
+    condition: {type: self_hp_pct_lte, value: 0.72}
     effects:
-      - type: stat_multiplier
-        stat: defense
-        value: 1.5
-        target: self
-      - type: stat_multiplier
-        stat: attack
-        value: 1.5
-        target: self
-      - type: stat_multiplier
-        stat: speed
-        value: 1.2
-        target: self
+      - {type: stat_multiplier, stat: defense, value: 1.60, target: self}
+      - {type: stat_multiplier, stat: attack, value: 1.15, target: self}
+      - {type: stat_multiplier, stat: speed, value: 1.15, target: self}
 
   # ───────────────────────────────────────
   # --- 连击师(原小丑) ---
@@ -811,42 +875,35 @@ skills:
   - id: withering_touch
     name: 枯萎之触
     kind: active
-    condition:
-      type: always
+    condition: {type: action_index_lte, value: 4}
     effects:
       - type: apply_status
         target: target
         status:
           id: wither
           name: 虚弱
-          duration: 4
+          duration: 5
           polarity: negative
           effects:
-            - type: stat_multiplier
-              stat: attack
-              value: 0.65
-              target: self
-            - type: stat_multiplier
-              stat: defense
-              value: 0.75
-              target: self
-            - type: stat_multiplier
-              stat: speed
-              value: 0.75
-              target: self
+            - {type: stat_multiplier, stat: attack, value: 0.65, target: self}
+            - {type: stat_multiplier, stat: defense, value: 0.75, target: self}
+            - {type: stat_multiplier, stat: speed, value: 0.75, target: self}
     mp_cost: 5
-    priority: 12
+    priority: 24
     free: true
+    once_per_battle: true
 
   - id: epidemic
     name: 疫病蔓延
     kind: active
     condition:
-      type: action_index_lte
-      value: 5
+      type: all
+      conditions:
+        - {type: action_index_gte, value: 3}
+        - {type: action_index_lte, value: 9}
+        - {type: self_mp_pct_gte, value: 0.40}
     effects:
-      - type: atk_ratio_damage
-        value: 0.8
+      - {type: atk_ratio_damage, value: 0.95}
       - type: apply_status
         target: target
         status:
@@ -856,26 +913,21 @@ skills:
           polarity: negative
           stack_mode: add_duration
           effects:
-            - type: true_damage
-              value: 36
-    mp_cost: 8
-    priority: 22
+            - {type: true_damage, value: 25}
+    mp_cost: 14
+    priority: 12
     once_per_battle: true
     free: true
 
   - id: necrotic_blast
     name: 死灵爆发
     kind: active
-    condition:
-      type: target_hp_pct_lte
-      value: 0.5
+    condition: {type: always}
     effects:
-      - type: damage_multiplier
-        value: 1.8
-      - type: true_damage
-        value: 20
-    mp_cost: 10
-    priority: 12
+      - {type: damage_multiplier, value: 1.45}
+      - {type: true_damage, value: 15}
+    mp_cost: 14
+    priority: 20
 
   # ===== Early Monster Skills =====
   - id: shaman_spark

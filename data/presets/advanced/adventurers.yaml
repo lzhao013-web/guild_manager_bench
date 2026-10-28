@@ -117,8 +117,8 @@ recruitable_adventurers:
       - level: 9
         skills: [mana_dump]
 
-  # ═══ 5. 神官 — 后期不死之身 ═══
-  # 回血超越DoT，后期REC极高。但爆发型怪物可以秒杀。
+  # ═══ 5. 神官 — 后期续航与法力驱动输出 ═══
+  # 治疗负责基础生存，神圣打击依赖法力储备与灌注。配置需权衡治疗和输出。
   - id: cleric
     name: 神官
     recruit_gold: 50
@@ -266,7 +266,7 @@ recruitable_adventurers:
         skills: [siege_cannon]
 
   # ═══ 10. 瘟疫法师 — 后期疫病术士 ═══
-  # 前期只有弱收割，后期获得疫病爆发和暗影防御后才成型。
+  # 前期用死灵爆发，后期需安排减益与毒伤窗口，并保留维持暗影形态的法力。
   - id: plague_mage
     name: 瘟疫法师
     recruit_gold: 50

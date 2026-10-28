@@ -25,22 +25,22 @@ def test_prayer_beads_only_adds_existing_sustain_stats(prayer_beads):
     )
 
 
-@pytest.mark.parametrize("class_id,level,mp,expected_skill", [
-    ("cleric", 1, 8, "minor_heal"),
-    ("cleric", 1, 7, None),
-    ("cleric", 3, 7, "soothing_light"),
-    ("cleric", 3, 6, None),
-    ("cleric", 6, 6, "holy_strike"),
-    ("cleric", 6, 5, None),
-    ("ascetic_monk", 6, 5, None),
+@pytest.mark.parametrize("class_id,level,hp,mp,expected_skill", [
+    ("cleric", 1, 70, 9, "minor_heal"),
+    ("cleric", 1, 70, 8, None),
+    ("cleric", 3, 60, 7, "soothing_light"),
+    ("cleric", 3, 60, 6, None),
+    ("cleric", 6, 100, 10, "holy_strike"),
+    ("cleric", 6, 100, 9, None),
+    ("ascetic_monk", 6, 70, 5, None),
 ])
-def test_prayer_beads_does_not_add_or_change_combat_actions(definition, prayer_beads, class_id, level, mp, expected_skill):
+def test_prayer_beads_does_not_inject_skills(definition, prayer_beads, class_id, level, hp, mp, expected_skill):
     template = next(a for a in definition.content.recruitable_adventurers if a.template_id == class_id)
     skills = template.skills + tuple(
         skill for unlock in template.level_skill_unlocks if unlock.level <= level for skill in unlock.skills
     )
     stats = CombatStats(hp=100, mp=20, attack=10, defense=0, speed=100, recovery=0)
-    resources = CombatResources(70, mp)
+    resources = CombatResources(hp, mp)
     foe = Combatant("foe", CombatStats(hp=1000, mp=0, attack=1, defense=0, speed=1, recovery=0))
     baseline = run_auto_battle(Combatant("hero", stats, resources, skills), foe, max_actions=1)
     equipped = run_auto_battle(
