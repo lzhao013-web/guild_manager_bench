@@ -20,7 +20,8 @@ def main() -> None:
     serve_parser.add_argument("--port", type=int, default=8000)
 
     bl_parser = subparsers.add_parser("build-leaderboard", help="构建排行榜数据")
-    bl_parser.add_argument(
+    bl_sources = bl_parser.add_mutually_exclusive_group()
+    bl_sources.add_argument(
         "--data-dir", type=Path,
         default=Path("web/leaderboard/data"),
         help="replay JSON 文件目录 (默认: web/leaderboard/data)",
@@ -30,7 +31,9 @@ def main() -> None:
         default=Path("web/leaderboard/leaderboard_data.json"),
         help="输出文件路径 (默认: web/leaderboard/leaderboard_data.json)",
     )
-    bl_parser.add_argument("--full-rebuild", action="store_true", help="忽略解析缓存，保留已发布历史明细")
+    bl_sources.add_argument("--selection", type=Path,
+                           help="按 JSON 收录清单构建，移除未选运行，不按协议状态过滤")
+    bl_parser.add_argument("--full-rebuild", action="store_true", help="忽略解析缓存")
     bl_parser.add_argument("--run-dir", type=Path, action="append", default=[],
                            help="额外正式存档目录，递归读取 replay.json，可重复指定")
 
@@ -54,7 +57,7 @@ def main() -> None:
     run_parser.add_argument("--scoring-seed", type=int, default=None, help="评分随机种子")
     run_parser.add_argument("--archive-dir", default="runs/llm", help="存档目录 (默认: runs/llm，设为 none 禁用存档)")
     run_parser.add_argument("--resume", default=None, help="从指定存档目录续跑 (传入 archive run 目录路径)")
-    run_parser.add_argument("--max-tool-calls-per-turn", type=int, default=20, help="每回合最大非 end_turn 工具调用次数 (默认: 20)")
+    run_parser.add_argument("--max-tool-calls-per-turn", type=int, default=20, help="每回合收费工具调用预算，end_turn 和开发版 execute_plan 免费 (默认: 20)")
     reasoning = run_parser.add_mutually_exclusive_group()
     reasoning.add_argument(
         "--reasoning-effort", default=None,
@@ -92,8 +95,10 @@ def main() -> None:
             run_parser.error("--quiet / --json 不能与模型文本展示选项同时使用")
         _run(args)
     elif args.command == "build-leaderboard":
+        if args.selection is not None and args.run_dir:
+            bl_parser.error("--selection 不能与 --run-dir 同时使用")
         _build_leaderboard(args.data_dir, args.output, full_rebuild=args.full_rebuild,
-                           run_dirs=tuple(args.run_dir))
+                           run_dirs=tuple(args.run_dir), selection=args.selection)
     elif args.command == "serve-leaderboard":
         _serve_leaderboard(args.host, args.port, args.directory)
 
@@ -187,30 +192,32 @@ def _serve(data_dir: str, preset: str | None, host: str, port: int) -> None:
 
 
 def _build_leaderboard(data_dir: Path, output: Path, *, full_rebuild: bool = False,
-                       run_dirs: tuple[Path, ...] = ()) -> None:
+                       run_dirs: tuple[Path, ...] = (), selection: Path | None = None) -> None:
     """构建排行榜数据文件。"""
-    from guild_manager_bench.bench.leaderboard import build_leaderboard
-
-    build_leaderboard(data_dir.resolve(), output.resolve(), incremental=not full_rebuild,
-                      run_dirs=tuple(path.resolve() for path in run_dirs))
+    if selection is not None:
+        from guild_manager_bench.bench.leaderboard_selection import build_selected_leaderboard
+        build_selected_leaderboard(selection, output.resolve(), incremental=not full_rebuild)
+    else:
+        from guild_manager_bench.bench.leaderboard import build_leaderboard
+        build_leaderboard(data_dir.resolve(), output.resolve(), incremental=not full_rebuild,
+                          run_dirs=tuple(path.resolve() for path in run_dirs))
 
 
 def _serve_leaderboard(host: str, port: int, directory: Path) -> None:
     """启动排行榜静态文件服务。"""
-    import functools
-    import http.server
+    import uvicorn
+    from fastapi import FastAPI
+    from fastapi.staticfiles import StaticFiles
 
     directory = directory.resolve()
     if not directory.is_dir():
         print(f"Error: {directory} is not a directory")
         raise SystemExit(1)
-    handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(directory))
-    with http.server.HTTPServer((host, port), handler) as httpd:
-        print(f"Leaderboard → http://{host}:{port}")
-        try:
-            httpd.serve_forever()
-        except KeyboardInterrupt:
-            print("\nStopped.")
+    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+    app.mount("/assets", StaticFiles(directory=directory.parent / "assets"), name="assets")
+    app.mount("/", StaticFiles(directory=directory, html=True), name="leaderboard")
+    print(f"Leaderboard → http://{host}:{port}")
+    uvicorn.run(app, host=host, port=port)
 
 
 if __name__ == "__main__":

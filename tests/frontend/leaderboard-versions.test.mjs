@@ -35,3 +35,19 @@ test('legacy versions explicitly disclose unverified protocol', () => {
   assert.match(versionLabel(data.boards[0]), /未核验/);
   assert.match(versionLabel(data.boards[1]), /已冻结/);
 });
+
+test('selected boards use the declared default and do not claim a shared protocol', () => {
+  const selected = {
+    schema_version: 3,
+    default_board: { preset: 'advanced', version: 'current' },
+    boards: [
+      { preset: 'full', version: 'history', label: '历史数据', selection_mode: 'manual', total_runs: 97, models: [] },
+      { preset: 'advanced', version: 'current', label: '当前数据', selection_mode: 'manual', total_runs: 10, models: [] },
+    ],
+  };
+  assert.equal(selectBoard(selected).preset, 'advanced');
+  assert.equal(selectBoard(selected, 'full').version, 'history');
+  assert.equal(versionLabel(selectBoard(selected)), '当前数据');
+  assert.doesNotMatch(versionLabel(selectBoard(selected)), /冻结|核验|指纹/);
+  assert.throws(() => selectBoard(selected, 'full', 'current'), /没有/);
+});

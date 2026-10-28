@@ -47,6 +47,7 @@ CLAUDE.MD
 # Leaderboard data (users drop replay.json here)
 web/leaderboard/data/
 web/leaderboard/.build_cache.json
+web/leaderboard/.selection_cache.json
 
 # Simulation scripts
 sim_*.py

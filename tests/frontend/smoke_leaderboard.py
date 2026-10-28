@@ -46,6 +46,8 @@ def leaderboard_fixture() -> dict:
         {"preset": "full", "version": "legacy-test", "protocol_status": "unverified", "models": models[:1], "total_runs": 3},
         {"preset": "advanced", "version": "snapshot-test", "protocol_status": "recorded",
          "models": [{**models[0], "model": "进阶模型"}], "total_runs": 3},
+        {"preset": "advanced", "version": "current", "label": "当前数据", "selection_mode": "manual",
+         "models": [{**models[0], "model": "收录模型 / high", "reasoning_effort": "high"}], "total_runs": 3},
     ]}
 
 
@@ -82,8 +84,9 @@ def check_interactions(page, base: str, width: int, screenshots: Path | None) ->
     if width > 640:
         assert_sticky_header(page)
     else:
-        expect(row.locator(".score-cell .mobile-label")).to_be_visible()
-        expect(row.locator(".output-cell .mobile-label")).to_be_visible()
+        expect(page.locator(".ranking-table thead")).to_be_visible()
+        expect(page.locator(".ranking-table .column-resize-handle").first).to_be_visible()
+        assert page.locator("#cardListContainer").evaluate("element => element.scrollWidth > element.clientWidth")
 
     page.evaluate("""() => {
         window.savedTable = document.querySelector('.ranking-table');
@@ -182,6 +185,17 @@ def check_protocol_switching(page, base: str) -> None:
     expect(page.locator('.model-card')).to_have_count(28)
     expect(page.locator('.model-card input:checked')).to_have_count(0)
     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+    page.locator('#presetSelect').select_option('advanced')
+    page.locator('#versionSelect').select_option('current')
+    expect(page.locator('.model-name')).to_have_text('收录模型 / high')
+    expect(page.locator('#boardPickerLabel')).to_have_text('数据集')
+    expect(page.locator('#protocolNotice')).to_have_text('按收录清单展示，分数保持原值。')
+    expect(page.locator('#rankingScope')).to_contain_text('当前榜单')
+    page.reload()
+    expect(page.locator('#versionSelect')).to_have_value('current')
+    page.locator('#presetSelect').select_option('full')
+    expect(page.locator('#boardPickerLabel')).to_have_text('评测版本')
+    expect(page.locator('.model-card')).to_have_count(28)
 
 
 def check_animations(page, base: str, width: int) -> None:

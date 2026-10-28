@@ -4,7 +4,9 @@
 
 模型需要在有限回合内招募冒险者、分配经验、打造装备、购买升级并安排战斗，最终根据队伍的终局战斗力获得评分。项目提供人工操作页面、LLM benchmark runner、运行存档、回放和排行榜。
 
-开发版 `advanced` 的后期挑战、特殊核心和终极技能规则见 [固定挑战与终极印记](docs/endgame-challenges.md)。T30出现固定挑战，T35仅用于最终整备，冻结 `full v1` 不受影响。
+**评分约定：终局平衡和模型比较统一使用正式 `rank_score`。旧 0–100 分 `score` 与成员 `average_score` 已弃用为评价依据，仅保留历史兼容，不用于前端评分展示。** 原型等权的单体分也不能替代 rank，详见 [评分口径](docs/scoring.md)。
+
+开发版 `advanced` 的后期挑战、特殊核心和终极技能规则见 [固定挑战与终极印记](docs/endgame-challenges.md)。T30出现固定挑战，每种职业最多成功通关一个挑战，T35仅用于最终整备。冻结 `full v1` 不受影响。
 
 开发版还支持[手动刷新怪物](docs/monster-refresh.md)：可锁定目标、免费预览下一候选，再支付金币刷新。基础价格配置在preset中，同回合每次实刷翻倍，不影响未来自然刷新。
 
@@ -108,7 +110,7 @@ GOOGLE_API_KEY=your-api-key
 GOOGLE_BASE_URL=https://generativelanguage.googleapis.com/v1beta
 # 可选：单次响应输出上限和超时秒数
 GOOGLE_MAX_TOKENS=32768
-GOOGLE_TIMEOUT=180
+GOOGLE_TIMEOUT=600
 ```
 
 ```powershell
@@ -294,9 +296,11 @@ uv run guild-manager run --preset advanced --archive-dir runs/advanced
 uv run guild-manager serve --preset advanced
 ```
 
-完整节点、成本和结算规则见 [Advanced 天赋树](docs/talent-tree.md)。full 的提示词、工具、引擎、评分器和数据已冻结，advanced 的后续改动不会改变 full 正式运行。新的存档记录协议与配置指纹，排行榜按 preset 与版本分组。缺少协议证据的旧存档标记为 `legacy-*`，不自动归入 `v1`。续跑必须使用相同协议，旧局请使用其原始代码快照。详见 [评测协议与版本](docs/benchmark-protocols.md)。
+`advanced` 已接入 T12 起开放、整局共享 6 点额度的付费材料兑换，不新增 preset。规则只写入工具说明，回合摘要只加状态行，不增加系统提示词教程。沿用现有协议指纹区分变更前后的版本，整体平衡仍待验证。规则及限制见[材料兑换设计](docs/material-exchange-design.md)。
 
-advanced 还提供按需查询的[战斗记录与未来刷新工具](docs/information-tools.md)，以及[战力方案试算与技能配置](docs/tactical-tools.md)。查询使用普通工具调用额度，不自动把完整日志或未来刷新表加入回合提示词。
+完整节点、成本和结算规则见 [Advanced 天赋树](docs/talent-tree-expansion-plan.md)。full 的提示词、工具、引擎、评分器和数据已冻结，advanced 的后续改动不会改变 full 正式运行。新的存档记录协议与配置指纹，排行榜按 preset 与版本分组。缺少协议证据的旧存档标记为 `legacy-*`，不自动归入 `v1`。续跑必须使用相同协议，旧局请使用其原始代码快照。详见 [评测协议与版本](docs/benchmark-protocols.md)。
+
+advanced 还提供按需查询的[战斗记录与未来刷新工具](docs/information-tools.md)，以及[方案试算、执行与技能配置](docs/tactical-tools.md)。开发版 `default`、`advanced` 全回合可试算准备方案，终局前不计算战力。试算扣1次，凭据执行免费，但提交时剩余预算必须不少于方案步数。查询使用普通工具调用额度，不自动把完整日志或未来刷新表加入回合提示词。神官、瘟疫法师与七种印记的法力门槛、行动窗口和默认优先级见[职业培养与印记配置](docs/advanced-combat-builds.md)，仅作用于开发版 `advanced`。
 
 游戏数据位于 `data/presets/<preset_name>/`，主要包含：
 
@@ -314,13 +318,14 @@ skills.yaml             技能定义
 ## 回放与排行榜
 
 ```powershell
-uv run guild-manager build-leaderboard
-# 可重复指定 --run-dir，将独立目录中的已完成正式运行纳入发布。
-uv run guild-manager build-leaderboard --run-dir runs/advanced-model-comparison/20261004-122921
+# 先编辑 selection.json 选择要发布的运行，再构建。
+uv run guild-manager build-leaderboard --selection web/leaderboard/selection.json
 uv run guild-manager serve-leaderboard
 ```
 
-排行榜顶部选择 preset 和评测版本，排名、均值、运行明细和曲线只使用当前分组。URL 保留选择，便于分享。构建保留已发布但源文件不在目录中的历史运行，不自动重算旧分数。`--full-rebuild` 只禁用解析缓存，不删除历史明细。
+排行榜默认显示 advanced，可切换 full 历史数据。收录由清单决定，不按运行的协议状态过滤；advanced 与 full 不混排。模型按记录的思考强度区分，原始版本信息留在运行详情中，不重算分数。删掉清单中的条目后重建，不会从旧输出或缓存补回该条目，也不会删除原始存档。`--full-rebuild` 可忽略解析缓存。
+
+原来的目录扫描方式仍可用：`build-leaderboard --run-dir <目录> --output <另一个输出文件>`，按 preset 与协议版本分组，并保留该输出中已有的历史明细。两种来源方式不能同时使用。清单格式和筛选方法见 [排行榜构建](docs/leaderboard.md)。
 
 启动主服务后，可以在 `/replay/` 加载本地 `replay.json`，或浏览 `runs/llm` 下的运行存档。
 
@@ -384,10 +389,10 @@ uv run guild-manager serve-leaderboard
 
 ### 排行榜
 
-将待统计的 replay JSON 放入 `web/leaderboard/data/`，然后构建并查看排行榜：
+按 [排行榜构建](docs/leaderboard.md) 编辑收录清单，然后构建并查看：
 
 ```powershell
-uv run guild-manager build-leaderboard
+uv run guild-manager build-leaderboard --selection web/leaderboard/selection.json
 uv run guild-manager serve-leaderboard
 ```
 

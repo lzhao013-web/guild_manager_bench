@@ -10,6 +10,25 @@
 // DOM Helpers
 // ============================================================================
 import { selectBoard, versionLabel } from './boards.mjs';
+import { enhanceResizableTable } from '../assets/table-resize.mjs';
+import { keepRankingHeader } from './sticky-table-head.mjs';
+import { createDisclosureState, runPanelKey } from './disclosures.mjs';
+import { renderDevelopment, renderRunUpgrades, renderTactics, skillDetailText, skillKind,
+  slotLabel, statModifierText, statLabel } from './details.mjs';
+
+let disposeRankingSizing = null;
+let disposeRankingHeader = null;
+let disposeComparisonSizing = null;
+const RANKING_COLUMNS = [
+  { id: 'select', label: '选择对比', minWidth: 44 },
+  { id: 'rank', label: '排名', minWidth: 56 },
+  { id: 'model', label: '模型 / 备注', minWidth: 160 },
+  { id: 'score', label: '平均段位积分', minWidth: 110 },
+  { id: 'runs', label: '运行', minWidth: 64 },
+  { id: 'tokens', label: '输出 Tokens', minWidth: 90 },
+  { id: 'duration', label: '耗时', minWidth: 90 },
+  { id: 'details', label: '详情', minWidth: 64 },
+];
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
@@ -49,13 +68,6 @@ function fmtTimestamp(ts) {
   const m = ts.match(/^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})/);
   if (!m) return ts;
   return `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}:${m[6]}`;
-}
-
-function shortRunId(value) {
-  if (!value) return '';
-  const text = String(value);
-  if (text.length <= 24) return text;
-  return `${text.slice(0, 12)}…${text.slice(-8)}`;
 }
 
 function renderModelNote(modelName) {
@@ -190,6 +202,7 @@ let _leaderboardSort = 'rank';
 let _activeTab = 'leaderboard';
 let _comparisonModels = new Set();
 let _expandedModels = new Set();
+const _detailPanels = createDisclosureState();
 let _modelBadges = new Map();
 let _adventurerTooltipRaf = null; // scroll/resize 重定位的 rAF 节流句柄
 const _adventurerTooltipDetails = new Map();
@@ -260,9 +273,15 @@ function toolLabel(name) {
     purchase_upgrade: '购买升级',
     allocate_experience: '分配经验',
     recruit_adventurer: '招募冒险者',
-    dismiss_adventurer: '遣散冒险者',
+    dismiss_adventurer: '解雇冒险者',
     write_memo: '写备忘录',
-    preview_team_power: '预览战力',
+    preview_team_power: '方案试算',
+    execute_plan: '执行方案',
+    get_forecast: '查询未来刷新',
+    get_battle_log: '查看战斗日志',
+    configure_tactics: '配置战术',
+    refresh_monsters: '刷新讨伐目标',
+    preview_monster_refresh: '预览目标刷新',
     equip_item: '装备物品',
     unequip_item: '卸下装备',
     end_turn: '结束回合',
@@ -375,6 +394,8 @@ function comparisonCurveRuns(data) {
 }
 
 function renderComparisonSummary() {
+  disposeComparisonSizing?.();
+  disposeComparisonSizing = null;
   const models = [..._comparisonModels].map(name => _leaderboardData.models.find(m => m.model === name));
   if (!models.length) {
     $('#comparisonSummary').innerHTML = '<div class="empty-state"><h2>还没有可对比的模型</h2><p>返回排行榜选择模型后，再查看指标与成长曲线。</p></div>';
@@ -389,7 +410,7 @@ function renderComparisonSummary() {
     { label: '平均工具调用', value: m => m.efficiency?.tool_calls?.mean, format: fmtInt },
     { label: '战斗胜率', value: m => m.game_quality?.battle_win_rate, format: fmtPct },
   ];
-  $('#comparisonSummary').innerHTML = '<div class="comparison-table-wrap"><table class="comparison-table"><caption class="sr-only">所选模型的聚合指标对比</caption><thead><tr><th scope="col">表现概览<span class="comparison-unit">每次运行的聚合结果</span></th>' +
+  $('#comparisonSummary').innerHTML = '<div class="comparison-table-wrap"><table id="leaderboard-comparison-table" class="comparison-table"><caption class="sr-only">所选模型的聚合指标对比</caption><thead><tr><th scope="col">表现概览<span class="comparison-unit">每次运行的聚合结果</span></th>' +
     models.map(m => '<th scope="col"><span class="comparison-model"><span class="curve-color-dot" style="background:' + curveColor(m.model) + '"></span>' + esc(m.model) +
     '</span><span class="comparison-unit">全榜 #' + m.rank + ' · ' + (m.runs === 1 ? '单次结果' : m.runs + ' 次运行') + '</span></th>').join('') + '</tr></thead><tbody>' +
     metrics.map(metric => {
@@ -401,6 +422,11 @@ function renderComparisonSummary() {
           return '<td' + (best != null && value === best ? ' class="comparison-best"' : '') + '>' + (metric.format(value) ?? '—') + '</td>';
         }).join('') + '</tr>';
     }).join('') + '</tbody></table></div>';
+  disposeComparisonSizing = enhanceResizableTable($('#leaderboard-comparison-table'), {
+    key: 'leaderboard-comparison',
+    columns: [{ id: 'metric', label: '表现概览，每次运行的聚合结果', minWidth: 140 },
+      ...models.map(m => ({ id: `model:${m.model}`, label: `${m.model}，全榜第 ${m.rank}，${m.runs} 次运行`, minWidth: 160 }))],
+  });
 }
 
 function filterCurveLegend() {
@@ -637,6 +663,12 @@ function updateLeaderboardSearchState(visibleCount, totalCount) {
 }
 
 function renderLeaderboardCards(data) {
+  const container = $('#cardListContainer');
+  _detailPanels.capture(container, JSON.stringify([data.preset, data.version]));
+  disposeRankingHeader?.();
+  disposeRankingHeader = null;
+  disposeRankingSizing?.();
+  disposeRankingSizing = null;
   const query = normalizeSearchText(_leaderboardSearchQuery.trim());
   const visible = data.models.filter(m => modelMatchesSearch(m, query) &&
     (_leaderboardFilter === 'all' || (_leaderboardFilter === 'reference') === isExcludedFromBadges(m)));
@@ -658,7 +690,6 @@ function renderLeaderboardCards(data) {
   _adventurerTooltipDetails.clear();
   _adventurerTooltipSeq = 0;
   updateLeaderboardSearchState(visible.length, data.models.length);
-  const container = $('#cardListContainer');
   if (!visible.length) {
     container.innerHTML = '<div class="empty-state"><span class="empty-symbol" aria-hidden="true">⌕</span><h3>' +
       (data.models.length ? '没有找到匹配的模型' : '还没有评测结果') +
@@ -666,11 +697,13 @@ function renderLeaderboardCards(data) {
     return;
   }
   const topScore = Math.max(...data.models.map(m => m.rank_score?.mean ?? 0));
-  container.innerHTML = '<table class="ranking-table"><caption class="sr-only">模型表现排行榜，默认按平均段位积分排序</caption>' +
+  container.innerHTML = '<table id="leaderboard-ranking-table" class="ranking-table"><caption class="sr-only">模型表现排行榜，默认按平均段位积分排序</caption>' +
     '<colgroup><col class="col-select"><col class="col-rank"><col class="col-model"><col class="col-score"><col class="col-runs"><col class="col-output"><col class="col-duration"><col class="col-expand"></colgroup>' +
     '<thead><tr><th scope="col"><span class="sr-only">选择对比</span></th><th scope="col">排名</th><th scope="col">模型 / 备注</th>' +
     '<th scope="col" class="numeric">平均段位积分</th><th scope="col" class="numeric">运行</th><th scope="col" class="numeric">输出 Tokens</th><th scope="col" class="numeric">耗时</th><th scope="col"><span class="sr-only">详情</span></th></tr></thead>' +
     '<tbody>' + visible.map((m, index) => renderCard(m, { topScore, index })).join('') + '</tbody></table>';
+  disposeRankingSizing = enhanceResizableTable($('#leaderboard-ranking-table'), { key: 'leaderboard-ranking', columns: RANKING_COLUMNS });
+  disposeRankingHeader = keepRankingHeader($('#leaderboard-ranking-table'));
   $$('.model-card').forEach(card => {
     if (_expandedModels.has(_cardModels[Number(card.dataset.cardIdx)].model)) toggleCardExpanded(card, true, { animate: false });
   });
@@ -686,7 +719,9 @@ function renderLeaderboardCards(data) {
 function ensureCardDetailRendered(card) {
   if (card.dataset.detailLoaded === 'true') return;
   const m = _cardModels[Number(card.dataset.cardIdx)];
-  card.nextElementSibling.querySelector('.card-detail').innerHTML = renderCardDetail(m);
+  const content = card.nextElementSibling.querySelector('.card-detail');
+  content.innerHTML = renderCardDetail(m);
+  _detailPanels.restore(content);
   card.dataset.detailLoaded = 'true';
 }
 
@@ -758,6 +793,10 @@ function initCardInteractions() {
     const toggle = e.target.closest('[data-action="toggle-detail"]');
     if (toggle) toggleCardExpanded(toggle.closest('.model-card'));
   });
+  container.addEventListener('toggle', e => {
+    _detailPanels.remember(e.target);
+    if (!e.target.open) hideAdventurerTooltip();
+  }, true);
   container.addEventListener('change', e => {
     const checkbox = e.target.closest('[data-compare-model]');
     if (!checkbox) return;
@@ -767,7 +806,7 @@ function initCardInteractions() {
     updateComparisonTray();
     syncViewUrl();
   });
-  container.addEventListener('keydown', e => {
+  document.addEventListener('keydown', e => {
     if (e.key === 'Escape') hideAdventurerTooltip();
   });
   document.addEventListener('pointerdown', e => {
@@ -791,7 +830,12 @@ function initCardInteractions() {
   });
   container.addEventListener('focusin', (e) => {
     const anchor = e.target.closest('[data-adventurer-tooltip]');
-    if (anchor) showAdventurerTooltip(anchor);
+    if (anchor) requestAnimationFrame(() => {
+      if (document.activeElement === anchor) {
+        anchor.scrollIntoView({block:'nearest', inline:'nearest', behavior:'instant'});
+        showAdventurerTooltip(anchor);
+      }
+    });
   });
   container.addEventListener('focusout', (e) => {
     if (e.target.closest('[data-adventurer-tooltip]')) scheduleAdventurerTooltipHide();
@@ -923,51 +967,20 @@ function renderCard(m, ctx = {}) {
 // 卡片详情（懒渲染）：聚合指标 + 运行明细，首次展开时才调用
 function renderCardDetail(m) {
   const runDetails = Array.isArray(m.run_details) ? m.run_details : [];
-  const latestRun = runDetails[0] || {};
   const rs = m.rank_score;
   const dismissals = runDetails.reduce((sum, run) => sum + (run.tool_calls?.by_name_detail?.dismiss_adventurer?.total ?? run.tool_calls?.by_name?.dismiss_adventurer ?? 0), 0);
   const quality = dismissals > 0 ? { ...m.game_quality, dismissals } : m.game_quality || {};
 
-  // Detail rows（结构化数据，传给 renderAggregateList 分组渲染）
-  const details = [];
-  if (rs) {
-    details.push({ label: 'Rank Score · 最佳', value: fmtRankScore(rs.best) || '—' });
-    details.push({ label: 'Rank Score · 均值', value: fmtRankScore(rs.mean) || '—' });
-    details.push({ label: 'Rank Score · 中位', value: fmtRankScore(rs.median) || '—' });
-  }
-  if (m.last_run) {
-    details.push({ label: '最近运行', value: fmtTimestamp(m.last_run) });
-  }
-  if (latestRun.preset) {
-    details.push({ label: 'Preset', value: latestRun.preset });
-  }
-  if (latestRun.benchmark_version) {
-    details.push({ label: '评测版本', value: latestRun.benchmark_version });
-  }
-  if (latestRun.protocol_hash) {
-    details.push({ label: '协议指纹', value: latestRun.protocol_hash });
-  }
-  if (latestRun.game_seed != null) {
-    details.push({ label: 'Game Seed', value: fmtInt(latestRun.game_seed) });
-  }
-  if (latestRun.scoring_seed != null) {
-    details.push({ label: 'Scoring Seed', value: fmtInt(latestRun.scoring_seed) });
-  }
-  if (latestRun.data_hash) {
-    details.push({ label: 'Data Hash', value: latestRun.data_hash });
-  }
+  const scoreSummary = rs ? `<div class="metric-group"><div class="metric-group-title">段位表现</div><dl class="metric-group-cells">${[
+    metricCell('均值', fmtRankScore(rs.mean) ?? '—'),
+    metricCell('最佳', fmtRankScore(rs.best) ?? '—'),
+    metricCell('中位', fmtRankScore(rs.median) ?? '—'),
+  ].join('')}</dl></div>` : '';
 
   return `
     <div class="detail-model-heading"><h3>${esc(m.model)}</h3>${renderBadges(_modelBadges.get(m.model))}</div>
     ${_modelNotes[m.model] ? `<p class="detail-note">${esc(_modelNotes[m.model])}</p>` : ''}
-    <div class="metrics-row">${renderEfficiencySection(m.efficiency || {})}${renderGameQualitySection(quality)}</div>
-    <div class="detail-section">
-      <div class="detail-title">
-        <span>聚合指标</span>
-        <span class="detail-count">${details.length} 项</span>
-      </div>
-      ${renderAggregateList(details)}
-    </div>
+    <div class="metrics-row">${scoreSummary}${renderEfficiencySection(m.efficiency || {})}${renderGameQualitySection(quality)}</div>
     ${renderRunDetails(runDetails)}`;
 }
 
@@ -1021,43 +1034,22 @@ function renderGameQualitySection(gq) {
     </div>`;
 }
 
-// 聚合指标 → 按类别分组：战力 / 时间 / 配置
-function renderAggregateList(details) {
-  const groups = { combat: [], timing: [], config: [] };
-  for (const d of details) {
-    if (d.label.startsWith('Rank Score')) groups.combat.push(d);
-    else if (d.label === '最近运行') groups.timing.push(d);
-    else groups.config.push(d);
-  }
-  return `
-    <div class="aggregate-list">
-      ${renderAggregateGroup('combat', '战力', groups.combat, d => d.label === 'Rank Score · 最佳')}
-      ${renderAggregateGroup('timing', '时间', groups.timing)}
-      ${renderAggregateGroup('config', '配置', groups.config)}
-    </div>
-  `;
+function foldPanel(key, title, body, count) {
+  if (!body) return '';
+  return `<details class="run-section-fold" data-fold-key="${esc(key)}"><summary><span>${esc(title)}</span>${count == null ? '' : `<span class="detail-count">${esc(count)}</span>`}</summary><div class="run-fold-body">${body}</div></details>`;
 }
 
-function renderAggregateGroup(tone, name, rows, isPrimary) {
+function renderRunConfiguration(run) {
+  const rows = [
+    ['运行ID', run.run_id], ['会话ID', run.session_id], ['环境', run.preset],
+    ['评测版本', run.benchmark_version], ['思考强度', run.reasoning_effort],
+    ['游戏种子', run.game_seed], ['评分种子', run.scoring_seed],
+    ['协议指纹', run.protocol_hash], ['设置指纹', run.settings_hash], ['数据哈希', run.data_hash],
+    ['评分模式', ({arena_fixed:'固定竞技场',endgame_arena:'终局竞技场'})[run.score_mode] || run.score_mode],
+    ['段位来源', ({final_observation:'终局记录',game_state:'游戏状态'})[run.rank_score_source] || run.rank_score_source],
+  ].filter(([,value]) => value != null && value !== '');
   if (!rows.length) return '';
-  const rowsHtml = rows.map((r) => {
-    const cls = isPrimary && isPrimary(r) ? ' aggregate-row primary' : ' aggregate-row';
-    return `
-      <div class="${cls}">
-        <span class="aggregate-label">${esc(r.label)}</span>
-        <span class="aggregate-value" title="${esc(r.value)}">${esc(r.value)}</span>
-      </div>
-    `;
-  }).join('');
-  return `
-    <div class="aggregate-group tone-${tone}">
-      <div class="aggregate-group-head">
-        <span class="aggregate-group-name">${esc(name)}</span>
-        <span class="aggregate-group-count">${rows.length}</span>
-      </div>
-      <div class="aggregate-rows">${rowsHtml}</div>
-    </div>
-  `;
+  return `<dl class="run-config-grid">${rows.map(([label,value]) => `<div><dt>${esc(label)}</dt><dd>${esc(String(value))}</dd></div>`).join('')}</dl>`;
 }
 
 function metricCell(label, value, opts = {}) {
@@ -1095,15 +1087,10 @@ function renderRunCard(run, num, total) {
     ? `${run.party_size}/${run.party_size_limit ?? '—'}`
     : '—';
 
-  // 战力（只剩 Rank Score,主指标独占）
-  const combatStats = [
-    runStat('Rank Score', fmtRankScore(run.rank_score), true),
-  ];
-
   // 效率（按可用性展示）
   const effStats = [];
-  if (tu.input_tokens) effStats.push(runStat('Input', fmtInt(tu.input_tokens)));
-  if (tu.output_tokens) effStats.push(runStat('Output', fmtInt(tu.output_tokens)));
+  if (tu.input_tokens != null) effStats.push(runStat('输入Token', fmtInt(tu.input_tokens)));
+  if (tu.output_tokens != null) effStats.push(runStat('输出Token', fmtInt(tu.output_tokens)));
   if (timing.total_seconds) effStats.push(runStat('耗时', fmtDuration(timing.total_seconds)));
   if (tc.total) effStats.push(runStat('操作数', fmtInt(tc.total)));
 
@@ -1116,39 +1103,29 @@ function renderRunCard(run, num, total) {
     resultStats.push(runStat('战斗', `${ga.battles_won}/${ga.battles_total}`));
   }
   if (ga.total_gold_earned != null) resultStats.push(runStat('金币', fmtInt(ga.total_gold_earned)));
-  if (ga.total_experience_earned != null) resultStats.push(runStat('EXP', fmtInt(ga.total_experience_earned)));
-  if (defeatedText) resultStats.push(runStat('击败 Boss', defeatedText));
+  if (ga.total_experience_earned != null) resultStats.push(runStat('经验', fmtInt(ga.total_experience_earned)));
+  if (defeatedText) resultStats.push(runStat('最强击败目标', defeatedText));
   const upgrades = Array.isArray(run.upgrades) ? run.upgrades : [];
   if (upgrades.length) resultStats.push(runStat('升级', `${upgrades.length} 项`));
-
-  // Footer tags
-  const tags = [];
-  if (run.preset) tags.push(run.preset);
-  if (run.benchmark_version) tags.push(run.benchmark_version);
-  if (run.game_seed != null) tags.push(`game ${fmtInt(run.game_seed)}`);
-  if (run.scoring_seed != null) tags.push(`score ${fmtInt(run.scoring_seed)}`);
-  if (run.score_mode) tags.push(run.score_mode);
-  if (run.rank_score_source) tags.push(`rank ${run.rank_score_source}`);
 
   const toolBreakdown = renderToolBreakdown(tc);
   const contributors = renderRankContributors(run.rank_score_per_adventurer);
   const adventurerResults = renderAdventurerResults(ga.adventurer_stats);
   const upgradeList = renderRunUpgrades(upgrades);
 
-  const numLabel = total > 1 ? `Run ${num}/${total}` : 'Run';
+  const numLabel = total > 1 ? `运行 ${num}/${total}` : '运行';
 
   return `
-    <div class="run-card">
-      <div class="run-card-header">
+    <details class="run-card" data-fold-key="${esc(runPanelKey(run, 'run'))}">
+      <summary class="run-card-header" title="${esc(run.run_id || run.session_id || '')}">
         <span class="run-num">${esc(numLabel)}</span>
         <span class="run-time">${esc(fmtTimestamp(run.created_at))}</span>
-        <span class="run-id" title="${esc(run.run_id || run.session_id || '')}">${esc(shortRunId(run.run_id || run.session_id || ''))}</span>
-      </div>
+        <span class="run-summary-score">段位 ${esc(fmtRankScore(run.rank_score) ?? '未记录')}</span>
+        <span class="run-summary-duration">耗时 ${esc(fmtDuration(timing.total_seconds) ?? '未记录')}</span>
+        ${run.development ? `<span class="run-summary-challenges">挑战 ${esc(run.development.challenges.defeated)}${run.development.challenges.total == null ? '' : `/${esc(run.development.challenges.total)}`}</span>` : ''}
+      </summary>
+      <div class="run-card-content">
       <div class="run-card-body">
-        <div class="run-group tone-combat">
-          <div class="run-group-name">战力</div>
-          <div class="run-stats">${combatStats.join('')}</div>
-        </div>
         ${effStats.length ? `
         <div class="run-group tone-eff">
           <div class="run-group-name">效率</div>
@@ -1160,31 +1137,18 @@ function renderRunCard(run, num, total) {
           <div class="run-stats">${resultStats.join('')}</div>
         </div>` : ''}
       </div>
-      ${upgradeList ? `
-      <div class="run-card-section">
-        <div class="run-section-title">已购买升级</div>
-        ${upgradeList}
-      </div>` : ''}
-      ${toolBreakdown ? `
-      <div class="run-card-section">
-        <div class="run-section-title">工具调用</div>
-        ${toolBreakdown}
-      </div>` : ''}
+      ${renderDevelopment(run.development, runPanelKey(run, 'events'))}
+      ${foldPanel(runPanelKey(run, 'upgrades'), '已购天赋 · 记录成本', upgradeList, `${upgrades.length}项`)}
+      ${foldPanel(runPanelKey(run, 'tools'), '工具调用', toolBreakdown, `${toolBreakdownItems(tc).length}种`)}
       ${contributors ? `
       <div class="run-card-section">
-        <div class="run-section-title">Rank 贡献者</div>
+        <div class="run-section-title">段位贡献</div>
         ${contributors}
       </div>` : ''}
-      ${adventurerResults ? `
-      <div class="run-card-section">
-        <div class="run-section-title">冒险者累计战绩</div>
-        ${adventurerResults}
-      </div>` : ''}
-      ${tags.length ? `
-      <div class="run-card-footer">
-        ${tags.map((t) => `<span class="run-tag">${esc(t)}</span>`).join('')}
-      </div>` : ''}
-    </div>
+      ${foldPanel(runPanelKey(run, 'battles'), '冒险者累计战绩', adventurerResults, `${ga.adventurer_stats?.length}条`)}
+      ${foldPanel(runPanelKey(run, 'config'), '运行配置与指纹', renderRunConfiguration(run))}
+      </div>
+    </details>
   `;
 }
 
@@ -1198,41 +1162,6 @@ function runStat(label, value, primary = false) {
       <div class="run-stat-value" title="${esc(display)}">${esc(display)}</div>
     </div>
   `;
-}
-
-function renderRunUpgrades(upgrades) {
-  if (!Array.isArray(upgrades) || !upgrades.length) return '';
-  return `
-    <div class="upgrade-list">
-      ${upgrades.map((upgrade) => {
-        const name = upgrade.name || upgrade.upgrade_id || '未知升级';
-        const description = upgrade.description || '';
-        const cost = upgrade.gold_cost != null ? `${fmtInt(upgrade.gold_cost)} 金币` : '';
-        return `
-          <div class="upgrade-item" title="${esc(description)}">
-            <div class="upgrade-item-head">
-              <span class="upgrade-item-name">${esc(name)}</span>
-              ${cost ? `<span class="upgrade-item-cost">${esc(cost)}</span>` : ''}
-            </div>
-            <div class="upgrade-item-effect">${esc(upgradeEffectText(upgrade))}</div>
-          </div>`;
-      }).join('')}
-    </div>`;
-}
-
-function upgradeEffectText(upgrade) {
-  const parts = [];
-  const stats = statModifierText(upgrade.stats);
-  if (stats !== '无属性加成') parts.push(stats);
-  if (Number(upgrade.party_size_bonus) > 0) {
-    parts.push(`队伍上限 +${upgrade.party_size_bonus}`);
-  }
-  const skills = Array.isArray(upgrade.skills) ? upgrade.skills : [];
-  const skillNames = skills
-    .map((skill) => skill?.name || skill?.skill_id)
-    .filter(Boolean);
-  if (skillNames.length) parts.push(`技能：${skillNames.join('、')}`);
-  return parts.join(' · ') || upgrade.description || '已解锁';
 }
 
 function toolBreakdownItems(toolCalls) {
@@ -1258,15 +1187,8 @@ function toolBreakdownItems(toolCalls) {
 function renderToolBreakdown(toolCalls) {
   const items = toolBreakdownItems(toolCalls);
   if (!items.length) return '';
-  return `
-    <div class="tool-chips">
-      ${items.slice(0, 12).map((item) => `
-        <span class="tool-chip" title="${esc(item.name)}">
-          <span class="tool-chip-name">${esc(toolLabel(item.name))}</span>
-          <span class="tool-chip-count">${esc(fmtInt(item.total))}</span>
-          ${item.failed ? `<span class="tool-chip-fail">失败 ${esc(fmtInt(item.failed))}</span>` : ''}
-        </span>`).join('')}
-    </div>`;
+  const chips = items.map(item => `<span class="tool-chip" title="${esc(item.name)}"><span class="tool-chip-name">${esc(toolLabel(item.name))}</span><span class="tool-chip-count">${esc(fmtInt(item.total))}</span>${item.failed ? `<span class="tool-chip-fail">失败 ${esc(fmtInt(item.failed))}</span>` : ''}</span>`);
+  return `<div class="tool-chips">${chips.join('')}</div>`;
 }
 
 function rankContributorItems(values) {
@@ -1330,7 +1252,7 @@ function renderAdventurerResults(values) {
         <div class="adventurer-result">
           <strong>${esc(item.adventurer_name || item.adventurer_id || '?')}</strong>
           <span>${esc(fmtInt(item.cumulative_battles_won || 0))} 胜 / ${esc(fmtInt(item.cumulative_battles_lost || 0))} 负</span>
-          <em>金币 ${esc(fmtInt(item.cumulative_gold_earned || 0))} · EXP ${esc(fmtInt(item.cumulative_experience_earned || 0))}</em>
+          <em>金币 ${esc(fmtInt(item.cumulative_gold_earned || 0))} · 经验 ${esc(fmtInt(item.cumulative_experience_earned || 0))}</em>
         </div>
       `).join('')}
     </div>`;
@@ -1364,7 +1286,12 @@ function showAdventurerTooltip(anchor) {
 
 function scheduleAdventurerTooltipHide() {
   cancelAdventurerTooltipHide();
-  _adventurerTooltipHideTimer = window.setTimeout(hideAdventurerTooltip, 120);
+  _adventurerTooltipHideTimer = window.setTimeout(() => {
+    const tooltip = $('#adventurerTooltip');
+    const focused = document.activeElement;
+    if (focused?.dataset.adventurerTooltip === tooltip?.dataset.anchor || tooltip?.contains(focused)) return;
+    hideAdventurerTooltip();
+  }, 120);
 }
 
 function cancelAdventurerTooltipHide() {
@@ -1405,20 +1332,14 @@ function positionAdventurerTooltip(anchor, tooltip) {
     return;
   }
   tooltip.style.visibility = 'hidden';
-  tooltip.style.left = `${margin}px`;
-  tooltip.style.top = `${margin}px`;
-
+  const above = Math.max(0, rect.top - margin - gap);
+  const below = Math.max(0, window.innerHeight - margin - rect.bottom - gap);
+  const placeBelow = below >= above;
+  tooltip.style.maxHeight = `${placeBelow ? below : above}px`;
   const width = tooltip.offsetWidth;
   const height = tooltip.offsetHeight;
-  let left = rect.left + rect.width / 2 - width / 2;
-  left = Math.max(margin, Math.min(left, window.innerWidth - width - margin));
-
-  let top = rect.bottom + gap;
-  if (top + height > window.innerHeight - margin) {
-    top = Math.max(margin, rect.top - height - gap);
-  }
-  top = Math.max(margin, Math.min(top, window.innerHeight - height - margin));
-
+  const left = Math.max(margin, Math.min(rect.left + rect.width / 2 - width / 2, window.innerWidth - width - margin));
+  const top = placeBelow ? rect.bottom + gap : rect.top - height - gap;
   tooltip.style.left = `${left}px`;
   tooltip.style.top = `${top}px`;
   tooltip.style.visibility = 'visible';
@@ -1428,6 +1349,7 @@ function renderAdventurerTooltip(adventurer) {
   const stats = adventurer.effective_stats || {};
   const baseStats = adventurer.base_stats || {};
   const resources = adventurer.resources || {};
+  const disabled = new Set(adventurer.tactics?.disabled_skills || []);
   const equipment = (adventurer.equipment_slots || []).filter((slot) => slot?.item);
   const skills = Array.isArray(adventurer.skills) ? adventurer.skills : [];
   const hpText = `${fmtInt(resources.current_hp) || '—'} / ${fmtInt(stats.hp) || '—'}`;
@@ -1437,7 +1359,7 @@ function renderAdventurerTooltip(adventurer) {
     <div class="adventurer-tooltip-head">
       <div>
         <strong>${esc(adventurer.name || adventurer.adventurer_id || '未知冒险者')}</strong>
-        <span>Lv.${esc(String(adventurer.level ?? '—'))} · ${esc(adventurer.template_id || '未知职业')}</span>
+        <span title="${esc(adventurer.template_id || '')}">Lv.${esc(String(adventurer.level ?? '—'))}</span>
       </div>
       <div class="adventurer-tooltip-resources">
         <span>HP ${esc(hpText)}</span>
@@ -1445,18 +1367,19 @@ function renderAdventurerTooltip(adventurer) {
       </div>
     </div>
     <section class="adventurer-tooltip-section">
-      <h4>最终属性 <span>括号内为基础值</span></h4>
+      <h4>战前属性 <span>括号内为基础值</span></h4>
       <div class="adventurer-tooltip-stats">
         ${['hp', 'mp', 'attack', 'defense', 'speed', 'recovery', 'mp_recovery']
           .map((key) => renderAdventurerStat(key, stats[key], baseStats[key]))
           .join('')}
       </div>
     </section>
+    ${renderTactics(adventurer.tactics)}
     <section class="adventurer-tooltip-section">
       <h4>装备 <span>${equipment.length} 件</span></h4>
       <div class="adventurer-tooltip-list">
         ${equipment.length
-          ? equipment.map((slot) => renderAdventurerEquipment(slot)).join('')
+          ? equipment.map((slot) => renderAdventurerEquipment(slot, disabled)).join('')
           : '<div class="adventurer-tooltip-empty">无装备</div>'}
       </div>
     </section>
@@ -1481,7 +1404,7 @@ function renderAdventurerStat(key, effective, base) {
     </div>`;
 }
 
-function renderAdventurerEquipment(slot) {
+function renderAdventurerEquipment(slot, disabled) {
   const item = slot.item || {};
   const skills = Array.isArray(item.skills) ? item.skills : [];
   return `
@@ -1493,7 +1416,7 @@ function renderAdventurerEquipment(slot) {
       <p>${esc(statModifierText(item.stats))}</p>
       ${skills.map((skill) => `
         <div class="adventurer-tooltip-item-skill">
-          <strong>装备技能 · ${esc(skill.name || skill.skill_id || '未知技能')}</strong>
+          <strong>${skillKind(skill)} · ${esc(skill.name || skill.skill_id || '未知技能')}${disabled.has(skill.skill_id) ? ' · 已停用' : ''}</strong>
           <span>${esc(skillDetailText(skill))}</span>
         </div>`).join('')}
     </div>`;
@@ -1504,108 +1427,20 @@ function renderAdventurerSkill(skill) {
     <div class="adventurer-tooltip-skill">
       <div>
         <strong>${esc(skill.name || skill.skill_id || '未知技能')}</strong>
-        <span>${skill.kind === 'active' ? '主动' : '被动'}</span>
+        <span>${skillKind(skill)}</span>
       </div>
       <p>${esc(skillDetailText(skill))}</p>
     </div>`;
-}
-
-function skillDetailText(skill) {
-  const parts = [];
-  if (skill.mp_cost > 0) parts.push(`消耗 ${skill.mp_cost} MP`);
-  if (skill.free) parts.push('即时（附赠普攻）');
-  if (skill.once_per_battle) parts.push('每场限一次');
-  const condition = skillConditionText(skill.condition);
-  if (condition) parts.push(`条件：${condition}`);
-  const effects = Array.isArray(skill.effects) ? skill.effects : [];
-  effects.map(skillEffectText).filter(Boolean).forEach((text) => parts.push(text));
-  return parts.join('，') || '无额外说明';
-}
-
-function skillConditionText(condition) {
-  if (!condition || condition.type === 'always') return '';
-  const pct = condition.value == null ? null : `${Math.round(condition.value * 100)}%`;
-  const labels = {
-    self_hp_pct_lte: `自身HP ≤ ${pct}`,
-    self_hp_pct_gte: `自身HP ≥ ${pct}`,
-    target_hp_pct_lte: `目标HP ≤ ${pct}`,
-    target_hp_pct_gte: `目标HP ≥ ${pct}`,
-    self_mp_pct_lte: `自身MP ≤ ${pct}`,
-    self_mp_pct_gte: `自身MP ≥ ${pct}`,
-    target_mp_pct_lte: `目标MP ≤ ${pct}`,
-    target_mp_pct_gte: `目标MP ≥ ${pct}`,
-    action_index_lte: `行动序号 ≤ ${condition.value}`,
-    action_index_gte: `行动序号 ≥ ${condition.value}`,
-  };
-  if (labels[condition.type]) return labels[condition.type];
-  const nested = Array.isArray(condition.conditions) ? condition.conditions : [];
-  if (condition.type === 'all') return nested.map(skillConditionText).filter(Boolean).join(' 且 ');
-  if (condition.type === 'any') return nested.map(skillConditionText).filter(Boolean).join(' 或 ');
-  return condition.type || '';
-}
-
-function skillEffectText(effect) {
-  if (!effect || typeof effect !== 'object') return '';
-  if (effect.type === 'damage_multiplier') return `伤害 ×${effect.value}`;
-  if (effect.type === 'damage_bonus') return `伤害 +${effect.value}`;
-  if (effect.type === 'true_damage') return `真实伤害 ${effect.value}`;
-  if (effect.type === 'self_damage') return `自身受伤 ${effect.value}`;
-  if (effect.type === 'heal') return `治疗 ${effect.value} HP`;
-  if (effect.type === 'heal_percent') return `治疗 ${Math.round(effect.value * 100)}% 最大HP`;
-  if (effect.type === 'mp_restore') return `${effect.target === 'self' ? '自身' : '目标'}恢复 ${effect.value} MP`;
-  if (effect.type === 'stat_bonus') return `${statLabel(effect.stat)} ${signedNumber(effect.value)}`;
-  if (effect.type === 'stat_multiplier') return `${statLabel(effect.stat)} ×${effect.value}`;
-  if (effect.type === 'apply_status' && effect.status) {
-    const status = effect.status;
-    const duration = status.duration ? ` ${status.duration}回合` : '';
-    const effects = (status.effects || []).map(skillEffectText).filter(Boolean).join('，');
-    return `施加状态 ${status.name || ''}${duration}${effects ? `（${effects}）` : ''}`;
-  }
-  return `${effect.type || '效果'}${effect.value != null ? ` ${effect.value}` : ''}`;
-}
-
-function statModifierText(stats) {
-  const values = Object.entries(stats || {}).filter(([, value]) => Number(value) !== 0);
-  return values.length
-    ? values.map(([key, value]) => `${statLabel(key)} ${signedNumber(value)}`).join(' · ')
-    : '无属性加成';
-}
-
-function signedNumber(value) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return String(value);
-  return number > 0 ? `+${number}` : String(number);
-}
-
-function statLabel(key) {
-  return {
-    hp: 'HP',
-    mp: 'MP',
-    attack: '攻击',
-    defense: '防御',
-    speed: '速度',
-    recovery: '回血',
-    mp_recovery: '回魔',
-  }[key] || key || '属性';
-}
-
-function slotLabel(slot) {
-  return {
-    main_hand: '右手',
-    off_hand: '左手',
-    two_hand: '双手',
-    hand: '单手',
-    boots: '鞋子',
-    helmet: '头盔',
-    armor: '护甲',
-    accessory: '饰品',
-  }[slot] || slot || '装备';
 }
 
 // ============================================================================
 // Error Display
 // ============================================================================
 function showError(msg) {
+  disposeRankingHeader?.();
+  disposeRankingHeader = null;
+  disposeRankingSizing?.();
+  disposeRankingSizing = null;
   $('#loadingState')?.remove();
   $('#leaderboardMain').innerHTML = `
     <div class="error-state">
@@ -1653,15 +1488,26 @@ function renderProtocolPicker() {
   $('#versionSelect').value = _leaderboardData.version;
   $('#presetSelect').disabled = false;
   $('#versionSelect').disabled = false;
-  $('#protocolNotice').textContent = _leaderboardData.protocol_status === 'unverified'
-    ? '历史运行按已知数据版本归类，尚未核验完整评测协议。不与冻结版本混排，分数保持原值。'
-    : '只显示当前 preset 与版本的运行。排名、统计和曲线对比均不跨版本聚合。';
+  const selected = _leaderboardData.selection_mode === 'manual';
+  $('#boardPickerLabel').textContent = selected ? '数据集' : '评测版本';
+  $('#protocolNotice').textContent = selected
+    ? '按收录清单展示，分数保持原值。'
+    : _leaderboardData.protocol_status === 'unverified'
+      ? '历史运行按已知数据版本归类，尚未核验完整评测协议。不与冻结版本混排，分数保持原值。'
+      : '只显示当前 preset 与版本的运行。排名、统计和曲线对比均不跨版本聚合。';
+  $('#rankingScope').textContent = selected
+    ? '仅在当前榜单内排名 · 分数条相对于本榜最高均分'
+    : '仅在当前 preset 与版本内排名 · 分数条相对于该版本最高均分';
+  $('#aggregationMethod').textContent = selected
+    ? '按收录清单分组，以模型及思考强度的平均段位积分排名。单次结果仅代表该次表现；展开详情可查看各次成绩与原始配置。'
+    : '仅聚合同一 preset、同一评测版本内的完成运行，按模型平均段位积分排名。单次结果仅代表该次表现；展开详情可查看各次成绩与配置。';
 }
 
 function switchProtocol(preset, version) {
   _leaderboardData = selectBoard(_allBoardsData, preset, version);
   _comparisonModels.clear();
   _expandedModels.clear();
+  _detailPanels.reset();
   _curveRunSelection = {};
   _adventurerTooltipDetails.clear();
   if (_curveChart) { _curveChart.destroy(); _curveChart = null; }

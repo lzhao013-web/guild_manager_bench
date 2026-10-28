@@ -121,7 +121,7 @@ def test_leaderboard_preserves_precomputed_rank_and_run_details(tmp_path: Path) 
     model = data["boards"][0]["models"][0]
     assert model["model"] == "test-model"
     assert model["rank_score"]["best"] == expected["score"]["rank_score"]
-    assert model["run_details"][0]["run_id"] == "replay"
+    assert model["run_details"][0]["run_id"] == tmp_path.name
     assert model["run_details"][0]["score"] == 12.34
     assert model["run_details"][0]["rank_score"] == expected["score"]["rank_score"]
     assert model["run_details"][0]["rank_score_per_adventurer"]

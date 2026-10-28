@@ -30,7 +30,7 @@ from typing import Any
 from guild_manager_bench.bench.protocols import run_version
 
 # Incremental build cache version — bump when _extract_run_info schema changes.
-_CACHE_VERSION = 12
+_CACHE_VERSION = 14
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -110,10 +110,19 @@ def _extract_run_info(replay: dict, *, source_path: Path | None = None) -> dict 
         _count_turn_tool_calls(turns_list),
     )
 
+    from guild_manager_bench.bench.leaderboard_development import development_summary
+
     return {
-        "run_id": source_path.stem if source_path is not None else replay.get("session_id", ""),
+        "development": development_summary(turns_list, final_observation)
+        if "defeated_challenge_ids" in final_observation else None,
+        "run_id": (source_path.parent.name if source_path.name == "replay.json" else source_path.stem)
+        if source_path is not None else replay.get("session_id", ""),
         "session_id": replay.get("session_id"),
         "model": model,
+        "model_name": model,
+        "reasoning_effort": replay["agent"]["config"].get(
+            "reasoning_effort", replay["agent"]["config"].get("effort")
+        ),
         "score": score_data.get("score"),
         "rank_score": score_data.get("rank_score"),
         "rank_score_source": score_data.get("rank_score_source"),
@@ -1737,6 +1746,8 @@ def _run_detail(run: dict) -> dict:
     return {
         "run_id": run.get("run_id"),
         "session_id": run.get("session_id"),
+        "model_name": run.get("model_name", run.get("model")),
+        "reasoning_effort": run.get("reasoning_effort"),
         "created_at": run.get("created_at"),
         "updated_at": run.get("updated_at"),
         "score": run.get("score"),
@@ -1768,6 +1779,7 @@ def _run_detail(run: dict) -> dict:
         "timing": run.get("timing"),
         "tool_calls": run.get("tool_calls"),
         "game_actions": run.get("game_actions"),
+        "development": run.get("development"),
     }
 
 
@@ -1846,6 +1858,13 @@ def _adventurer_detail(adventurer: dict) -> dict:
         "base_stats": _dict_or_none(adventurer.get("base_stats")),
         "effective_stats": _dict_or_none(adventurer.get("effective_stats")),
         "resources": _dict_or_none(adventurer.get("resources")),
+        **({"tactics": {
+            "skill_priority": list(adventurer["tactics"]["skill_priority"]),
+            "disabled_skills": list(adventurer["tactics"]["disabled_skills"]),
+            "available_active_skills": [
+                _skill_detail(skill) for skill in adventurer["tactics"]["available_active_skills"]
+            ],
+        }} if isinstance(adventurer.get("tactics"), dict) else {}),
         "skills": [
             _skill_detail(skill)
             for skill in skills
@@ -1894,6 +1913,7 @@ def _skill_detail(skill: dict) -> dict:
         "priority": skill.get("priority"),
         "once_per_battle": skill.get("once_per_battle"),
         "free": skill.get("free"),
+        **({"trigger": skill["trigger"]} if "trigger" in skill else {}),
     }
 
 
@@ -1903,6 +1923,8 @@ def _unlocked_upgrades(final_observation: dict) -> list[dict] | None:
     if not isinstance(upgrades, list):
         return None
 
+    names = {item["upgrade_id"]: item.get("name") or item["upgrade_id"]
+             for item in upgrades if isinstance(item, dict) and "upgrade_id" in item}
     result = []
     for upgrade in upgrades:
         if not isinstance(upgrade, dict) or upgrade.get("unlocked") is not True:
@@ -1913,6 +1935,13 @@ def _unlocked_upgrades(final_observation: dict) -> list[dict] | None:
                 "name": upgrade.get("name"),
                 "description": upgrade.get("description"),
                 "gold_cost": upgrade.get("gold_cost"),
+                **{key: upgrade[key] for key in (
+                    "experience_cost", "material_costs", "branch", "tier", "required_upgrade_ids",
+                    "exclusive_upgrade_ids", "craft_gold_discount_percent", "hunt_experience_bonus_percent",
+                    "hunt_gold_bonus_percent", "elite_boss_gold_bonus_percent", "monster_refresh_discount_percent",
+                ) if key in upgrade},
+                **{field + "_names": [names.get(identity, identity) for identity in upgrade[field]]
+                   for field in ("required_upgrade_ids", "exclusive_upgrade_ids") if field in upgrade},
                 "stats": _dict_or_none(upgrade.get("stats")),
                 "party_size_bonus": upgrade.get("party_size_bonus"),
                 "skills": [
