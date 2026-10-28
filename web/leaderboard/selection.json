@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "default_board": {
+    "preset": "advanced",
+    "version": "current"
+  },
+  "boards": [
+    {
+      "preset": "advanced",
+      "version": "current",
+      "label": "当前数据",
+      "sources": [
+        {
+          "replay": "../../runs/llm/20261021-174500-786482_deepseek-v4.1-flash/replay.json"
+        },
+        {
+          "replay": "../../runs/llm/20261021-174545-271993_qwen-3-8-flash-next-hipfire_xhigh/replay.json"
+        },
+        {
+          "replay": "../../runs/llm/20261021-175806-560936_gpt-6-astra/replay.json"
+        },
+        {
+          "replay": "../../runs/llm/20261021-221003-351152_qwen-3-8-flash-next-halogen_xhigh/replay.json"
+        },
+        {
+          "replay": "../../runs/llm/20261021-223437-693041_mimo-v2.6-pro/replay.json"
+        },
+        {
+          "replay": "../../runs/llm/20261021-223541-703108_glm-5.3-flash/replay.json"
+        },
+        {
+          "replay": "../../runs/llm/20261021-223612-639374_glm-5.3/replay.json"
+        },
+        {
+          "replay": "../../runs/llm/20261021-232635-823476_gpt-6.1-sol/replay.json"
+        },
+        {
+          "replay": "../../runs/llm/20261021-232706-641132_gpt-6-astra/replay.json"
+        },
+        {
+          "replay": "../../runs/llm/20261022-010829-351970_gpt-6.1-sol/replay.json"
+        }
+      ]
+    },
+    {
+      "preset": "full",
+      "version": "history",
+      "label": "历史数据",
+      "sources": [
+        {
+          "published": "full_history.json"
+        }
+      ]
+    }
+  ]
+}
