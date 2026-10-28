@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { expandDraft, fmt, modelEntries, safeTemplate } from "./model";
+import { expandDraft, fmt, modelEntries } from "./model";
 import { defaultDraft } from "./NewBatch";
 import type { EventRecord } from "./types";
 
@@ -43,15 +43,12 @@ describe("实验参数契约", () => {
             }),
         ).toThrow("64");
     });
-    it("凭证可以随启动请求发送，但不能写进模板，包括 URL 夹带的凭证", () => {
+    it("凭证可以随启动请求发送，但服务地址不能夹带凭证", () => {
         const draft = defaultDraft("full");
         draft.rows[0].api_key = "private-value";
         expect(expandDraft(draft)[0].api_key).toBe("private-value");
-        expect(JSON.stringify(safeTemplate(draft))).not.toContain(
-            "private-value",
-        );
         draft.rows[0].base_url = "https://example.test/v1?key=private-value";
-        expect(() => safeTemplate(draft)).toThrow("认证信息");
+        expect(() => expandDraft(draft)).toThrow("认证信息");
     });
     it("同一存档不能批量复制续跑", () => {
         expect(() =>

@@ -2,6 +2,16 @@ import { TOOLS } from "./model";
 import { OPERATION_CATEGORIES, TOOL_CALL_STATUS } from "./toolCalls";
 import type { ToolCallCount, ToolCallStatus } from "./toolCalls";
 import "./tool-calls.css";
+import { ResizableTable } from "./ResizableTable";
+
+const SUMMARY_COLUMNS = [
+    { id: "tool", label: "工具", minWidth: 120 },
+    { id: "total", label: "次数", minWidth: 60 },
+    { id: "succeeded", label: "成功", minWidth: 60 },
+    { id: "failed", label: "失败", minWidth: 60 },
+    { id: "pending", label: "执行中", minWidth: 76 },
+    { id: "recorded", label: "结果未明", minWidth: 90 },
+];
 
 export function ToolCallFilters({ tools, type, status, onType, onStatus, scope }: {
     tools: ToolCallCount[];
@@ -35,13 +45,13 @@ export function ToolCallSummary({ tools, selected, onTool, label }: {
     return <details className="tool-call-summary">
         <summary>按工具汇总 · {tools.length} 种 · {tools.reduce((total, tool) => total + tool.total, 0)} 次调用</summary>
         <section aria-label={label}>
-            <table><thead><tr><th>工具</th><th>次数</th><th>成功</th><th>失败</th><th>执行中</th><th>结果未明</th></tr></thead>
+            <ResizableTable storageKey={`tool-summary:${label}`} columns={SUMMARY_COLUMNS}><thead><tr><th>工具</th><th>次数</th><th>成功</th><th>失败</th><th>执行中</th><th>结果未明</th></tr></thead>
                 <tbody>{tools.map(tool => <tr key={tool.name}>
                     <th scope="row"><button aria-label={`筛选工具 ${tool.label}`} aria-pressed={selected === tool.name}
                         title={tool.name} onClick={() => onTool(tool.name)}>{tool.label}</button></th>
                     <td>{tool.total}</td><td>{tool.succeeded}</td><td>{tool.failed}</td><td>{tool.pending}</td><td>{tool.recorded}</td>
                 </tr>)}</tbody>
-            </table>
+            </ResizableTable>
             {!tools.length && <p>尚无已记录的工具调用。</p>}
         </section>
     </details>;

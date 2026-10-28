@@ -8,6 +8,7 @@ import { Portrait, Vital } from "./SceneParts";
 import { MonsterBadges } from "./MonsterBadges";
 import { AdventurerStatus, adventurerFrame, adventurerStateText, isLowHealth, monsterFrame } from "./UnitFrame";
 import { ModelCallStats } from "./ModelCallStats";
+import { MaterialExchangeStatus } from "./MaterialExchangeStatus";
 import { monsterClassification } from "./monsterModel";
 import { StatusBadge } from "./ui";
 import { MonitorPreviews } from "./MonitorPreviews";
@@ -72,7 +73,7 @@ export function WatchMonitor({ job, page, live, frame, frames, records, position
                 <div className="monitor-buttons">
                     {onPin && <button aria-label={pinned ? "取消关注此 run" : "关注此 run"} title={pinned ? "取消关注" : "关注"} aria-pressed={pinned} onClick={onPin}><PushPin size={14} weight={pinned ? "fill" : "regular"} /></button>}
                     {isActive(job) && <button className="monitor-stop" aria-label={job.status === "queued" ? "取消排队" : job.status === "stopping" ? "停止中" : "停止运行"} title="停止运行" disabled={job.status === "stopping"} onClick={() => onStop(job)}><Stop size={14} /></button>}
-                    {onFocus && <button aria-label="专注查看" title="专注查看完整局面" onClick={() => inspect()}><ArrowsOutSimple size={15} /></button>}
+                    {onFocus && <button className="monitor-focus" aria-label="专注查看" title="专注查看完整局面" onClick={() => inspect()}><ArrowsOutSimple size={15} /><span>专注</span></button>}
                     {onClose && <button aria-label="关闭详情" title="移出观战" onClick={onClose}><X size={15} /></button>}
                 </div>
             </header>
@@ -84,6 +85,7 @@ export function WatchMonitor({ job, page, live, frame, frames, records, position
                 <span title={`金币 ${fmt(observation?.gold)}`}><Coins size={12} /><b>{observation ? short(observation.gold) : "未知"}</b></span>
                 <span title={`经验池 ${fmt(observation?.experience_pool)}`}><Sparkle size={12} /><b>{observation ? short(observation.experience_pool) : "未知"}</b></span>
                 <button title="查看完整编队" aria-label="展开编队" disabled={!onFocus} onClick={() => inspect({ module: "party" })}><UsersThree size={12} />{observation ? `${observation.adventurers.length}/${observation.party_size_limit}` : "未知"}{observation && observation.adventurers.length > 6 ? "（显示6位）" : ""}</button>
+                {observation?.material_exchange && <MaterialExchangeStatus turn={observation.turn} exchange={observation.material_exchange} />}
             </div>
             {loading ? <div className="monitor-empty" aria-label="正在读取观战历史">正在读取局面…</div> : !page?.records.length ? (
                 <div className="monitor-empty">{job.status === "queued" ? "等待任务开始" : "尚无观战事件"}<small>任务初始化后显示真实局面</small></div>

@@ -14,7 +14,7 @@ interface HistoryContext {
     locationError: string;
     viewTurn: number | null;
     selectedCursor?: number;
-    locate: (row: TrajectoryRow) => void;
+    locate: (row: TrajectoryRow) => Promise<boolean>;
     refresh: () => void;
 }
 const Context = createContext<HistoryContext | null>(null);
@@ -45,8 +45,10 @@ export function TrajectoryProvider({ job, enabled, viewTurn, selectedCursor, onL
         setLocationError("");
         try {
             await onLocate(row.attempt, row.cursor, query.data!.origin);
+            return true;
         } catch (error) {
             setLocationError((error as Error).message);
+            return false;
         } finally {
             setLocating(false);
         }

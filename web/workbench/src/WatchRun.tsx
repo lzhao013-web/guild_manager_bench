@@ -2,7 +2,6 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@radix-ui/themes";
 import {
-    ArrowSquareOut,
     ArrowsOutSimple,
     Copy,
     PushPin,
@@ -30,9 +29,11 @@ import type { TrajectoryPage } from "./trajectoryModel";
 import { RunWorkspace } from "./RunWorkspace";
 import type { RunModule, WatchFocus } from "./sceneNavigation";
 import { SceneMaterials } from "./SceneMaterials";
+import { MaterialExchangeStatus } from "./MaterialExchangeStatus";
 import {
     ATTEMPT_STATUS,
     attemptLabel,
+    isWatchEvent,
     livePosition,
     watchFrames,
 } from "./watchModel";
@@ -76,7 +77,7 @@ export function WatchRun({
 }) {
     const following = position.attempt === null;
     const [utility, setUtility] = useState(false);
-    const [historyRequested, setHistoryRequested] = useState(false);
+    const [historyRequested, setHistoryRequested] = useState(initialFocus?.actionView === "timeline" || initialFocus?.actionView === "search");
     const [reasoningTarget, setReasoningTarget] = useState<(ModelReasoningTarget & { page: WatchPage }) | null>(null);
     const [activeModule, setActiveModule] = useState<RunModule | null>(() => compact ? null : initialFocus?.module || null);
     const live = useLiveWatch(job);
@@ -102,8 +103,8 @@ export function WatchRun({
                 page.attempts.findIndex((a) => a.id === page.selected),
             )
             .reverse()
-            .find((a) => a.score !== null);
-        return watchFrames(page?.records || [], previous?.score ?? null, page?.monster_stages);
+            .find((a) => a.score !== null && a.status !== "rolled_back");
+        return watchFrames(page?.records || [], previous?.score ?? null, page?.monster_stages, previous?.rank_contributions ?? null);
     }, [page]);
     const frame =
         position.cursor == null
@@ -112,7 +113,9 @@ export function WatchRun({
     const index = frame ? frames.indexOf(frame) : -1;
     const selected = page?.attempts.find((a) => a.id === page.selected);
     const latest = live.data?.attempts.at(-1);
-    const hasNew = !!position.frozen && !!live.data && live.data.cursor > (position.frozen.live_cursor ?? position.frozen.cursor);
+    const frozenCursor = position.frozen?.live_cursor ?? position.frozen?.cursor;
+    const hasNew = frozenCursor !== undefined && !!live.data?.records.some(record =>
+        record.cursor > frozenCursor && isWatchEvent(record.event));
     const cutoff = following ? Infinity : (position.cursor ?? Infinity);
     const modelRecords = useMemo(
         () => (page?.records || []).filter((r) => r.cursor <= cutoff),
@@ -176,7 +179,7 @@ export function WatchRun({
     const failure = live.error || history.error;
     const loading = !page && (following ? live.isPending : history.isFetching);
     const actionsPanel = (
-        <ActionTimeline frames={frames} frame={frame} active={actionsVisible} following={following}
+        <ActionTimeline frames={frames} frame={frame} active={actionsVisible} following={following} initialView={initialFocus?.actionView}
             rolledBack={selected?.status === "rolled_back"} onFrame={chooseFrame} onWholeRun={() => setHistoryRequested(true)} onModelReasoning={showReasoning}
             renderDetails={item => <LazyRecord key={item.cursor} jobId={job.id} record={item.record} label="原始事件与调用参数" active={actionsVisible} trajectory={page?.origin} />} />
     );
@@ -222,26 +225,28 @@ export function WatchRun({
                     </span>
                 </div>
                 {runtime}
-                <div className="icon-actions">
-                    {onCurves && <button aria-label="查看运行曲线" title="在统一工作区查看经济、经验与战力" onClick={onCurves}><ChartLineUp size={17} /></button>}
-                    {onPin && (
-                        <button
-                            title={pinned ? "取消关注" : "关注此 run"}
-                            aria-label={pinned ? "取消关注" : "关注此 run"}
-                            aria-pressed={pinned}
-                            onClick={onPin}
-                        >
-                            <PushPin weight={pinned ? "fill" : "regular"} />
+                <div className="detail-actions" role="group" aria-label="运行操作">
+                    {onFocus && (
+                        <button className="detail-action is-primary" onClick={() => onFocus()}>
+                            <ArrowsOutSimple size={16} />专注查看
                         </button>
                     )}
-                    {onFocus && (
-                        <button title="专注查看" aria-label="专注查看" onClick={() => onFocus()}>
-                            <ArrowsOutSimple />
+                    {onCurves && (
+                        <button className="detail-action" aria-label="查看运行曲线" title="在统一工作区查看经济、经验与战力" onClick={onCurves}>
+                            <ChartLineUp size={16} />曲线
+                        </button>
+                    )}
+                    {onPin && (
+                        <button className="detail-action"
+                            title={pinned ? "取消关注" : "关注此 run"}
+                            aria-label={pinned ? "取消关注" : "关注此 run"}
+                            aria-pressed={pinned} onClick={onPin}>
+                            <PushPin size={16} weight={pinned ? "fill" : "regular"} />{pinned ? "已关注" : "关注"}
                         </button>
                     )}
                     {onClose && (
-                        <button title="关闭详情" aria-label="关闭详情" onClick={onClose}>
-                            <X />
+                        <button className="detail-close" title="关闭详情" aria-label="关闭详情" onClick={onClose}>
+                            <X size={17} />
                         </button>
                     )}
                 </div>
@@ -317,6 +322,9 @@ export function WatchRun({
                             </span>
                             <b>{fmt(frame?.score)}</b>
                         </div>
+                        {observation?.material_exchange && <div className="spectator-materials">
+                            <MaterialExchangeStatus turn={observation.turn} exchange={observation.material_exchange} />
+                        </div>}
                         <SceneMaterials materials={observation?.materials} />
                     </div>
                     </div>
@@ -337,6 +345,7 @@ export function WatchRun({
                     )}
                     <RunWorkspace
                             observation={observation}
+                            contributions={frame?.rank_contributions ?? null}
                             before={frame?.before ?? null}
                             frames={visibleFrames}
                             records={modelRecords}
@@ -461,20 +470,6 @@ export function WatchRun({
                         {job.tool_failures}
                     </p>
                     <Trend points={job.scores} large />
-                    {job.archive_id && (
-                        <div className="artifact-links">
-                            <a href={`/replay/#run=${encodeURIComponent(job.archive_id)}`}>
-                                打开完整回放
-                                <ArrowSquareOut />
-                            </a>
-                            <a
-                                href={`/replay/profile.html?run=${encodeURIComponent(job.archive_id)}`}
-                            >
-                                查看经营画像
-                                <ArrowSquareOut />
-                            </a>
-                        </div>
-                    )}
                     <JsonDetails title="请求配置（不含凭证）" value={job.config} />
                     <JsonDetails title="实际评测配置" value={job.effective_config} />
                 </section>

@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import type { Archive } from "./types";
-import { buildRunCatalog, canonicalRunIds, historyPreset, historyRuns, sortHistoryRuns } from "./runCatalog";
+import { buildRunCatalog, canonicalRunIds, historyMetrics, historyPreset, historyRuns, sortHistoryRuns } from "./runCatalog";
 import type { HistorySort } from "./runCatalog";
 import { testArchive, testJob } from "./test-jobs";
 
@@ -8,17 +8,26 @@ it("同一存档只保留最新状态，顺序不依赖 UUID，也不重复累�
     const first = testJob("zzz-first", { status: "interrupted" });
     const resumed = testJob("aaa-resumed", {
         created_at: "2026-10-18T11:00:00Z", status: "completed", turn: 35, last_score: 2290.3388,
-        batch_id: "resume-batch", batch_name: "续跑批次",
+        batch_id: "resume-batch", batch_name: "续跑批次", model_duration_ms: 1250,
         usage: { input_tokens: 4000, output_tokens: 800, reported: 4, responses: 4 },
     });
     const catalog = buildRunCatalog([resumed, first]);
     expect(catalog.runs).toHaveLength(1);
     expect(catalog.runs[0]).toMatchObject({ id: "aaa-resumed", status: "completed", turn: 35, last_score: 2290.3388, batch_id: first.batch_id, batch_name: first.batch_name, created_at: first.created_at });
     expect(catalog.runs[0].usage.output_tokens).toBe(800);
+    expect(historyMetrics(historyRuns(catalog.runs, [testArchive()])[0])).toMatchObject({ duration_ms: 1250, total_tokens: 4800 });
     expect(catalog.byId.get(first.id)).toBe(catalog.byId.get(resumed.id));
     expect(canonicalRunIds([resumed.id, first.id, "removed"], catalog)).toEqual([first.id]);
     expect(historyRuns(catalog.runs, [testArchive()])).toHaveLength(1);
     expect(first.status).toBe("interrupted");
+});
+
+it("受控run使用当前Token统计，旧工作台缺失累计耗时时读取存档，不相加", () => {
+    const job = testJob("old-managed", { status: "completed", usage: { input_tokens: null, output_tokens: 80, reported: 1, responses: 2 } });
+    const archive = testArchive("same-archive", { model_duration_ms: 1200, usage: { input_tokens: 999, output_tokens: 999, reported: 1, responses: 1 } });
+    const row = historyRuns([job], [archive])[0];
+    expect(historyMetrics(row)).toEqual({ duration_ms: 1200, input_tokens: null, output_tokens: 80, total_tokens: null });
+    expect(historyMetrics({ ...row, job: { ...job, model_duration_ms: 0 } }).duration_ms).toBe(0);
 });
 
 it("同名模型的不同存档、尚未生成存档的不同 run 都不能合并", () => {

@@ -3,7 +3,7 @@ import { matchesTool, operationCategory, summarizeToolCalls, toolCallStatus } fr
 
 it("所有工具包含查询、预览、旧式刷新及未注册工具，均可匹配并按名称汇总", () => {
     const names = ["get_crafting", "get_inventory", "get_upgrades", "get_recruitment", "get_events", "get_forecast", "get_battle_log",
-        "preview_battle", "preview_team_power", "preview_monster_refresh", "refresh_monsters", "write_memo", "dismiss_adventurer", "future_custom_tool"];
+        "preview_battle", "preview_team_power", "preview_monster_refresh", "refresh_monsters", "execute_plan", "write_memo", "dismiss_adventurer", "future_custom_tool"];
     const events = names.map(name => ({ type: "tool_result", name, result: { ok: true } }));
     events.push({ type: "tool_result", name: "refresh_monsters", arguments: { preview: true }, result: { ok: true } } as typeof events[number]);
     const tools = summarizeToolCalls(events);
@@ -13,6 +13,10 @@ it("所有工具包含查询、预览、旧式刷新及未注册工具，均可�
     expect(operationCategory(events.at(-1)!)).toBe("preview");
     expect(operationCategory(events.find(event => event.name === "future_custom_tool")!)).toBe("other");
     expect(operationCategory({ type: "tool_result", name: "write_memo" })).toBe("memo");
+    const plan = { type: "tool_result", name: "execute_plan" };
+    expect(operationCategory(plan)).toBe("plan");
+    expect(matchesTool(plan, "category:plan")).toBe(true);
+    expect(summarizeToolCalls([plan])[0].label).toBe("执行方案");
 });
 
 it("执行状态互斥，明确工具文本可确认旧查询成功，缺结果不能虚构成功", () => {

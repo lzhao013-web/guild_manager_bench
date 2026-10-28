@@ -13,10 +13,19 @@ vi.mock("./RunDetail", () => ({ RunDetail: ({ job, onFocus }: { job: Job; onFocu
 function setup(jobs: Job[], url = "/") {
     history.replaceState(null, "", url);
     let data: Snapshot = { jobs, settings: { max_parallel: 2, per_endpoint: 2 }, presets: ["default"], scheduler_error: null };
-    vi.spyOn(globalThis, "fetch").mockImplementation(async input => {
+    let archives = [testArchive()];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
         const path = String(input);
+        if (init?.method === "DELETE") {
+            const jobId = path.split("/").at(-1)!;
+            const runId = data.jobs.find(job => job.id === jobId)!.archive_id;
+            const removed = data.jobs.filter(job => job.archive_id === runId).map(job => job.id);
+            data = { ...data, jobs: data.jobs.filter(job => !removed.includes(job.id)) };
+            archives = archives.filter(archive => archive.run_id !== runId);
+            return new Response(JSON.stringify({ deleted: true, run_id: runId, deleted_job_ids: removed }));
+        }
         if (path === "/api/workbench") return new Response(JSON.stringify(data));
-        if (path === "/api/llm/runs") return new Response(JSON.stringify({ runs: [testArchive()] }));
+        if (path === "/api/llm/runs") return new Response(JSON.stringify({ runs: archives }));
         if (path === "/api/workbench/api-profiles") return new Response(JSON.stringify({ profiles: [] }));
         throw new Error(`未预期请求 ${path}`);
     });
@@ -25,6 +34,61 @@ function setup(jobs: Job[], url = "/") {
     render(<QueryClientProvider client={client}><App /></QueryClientProvider>);
     return { client, update: (next: Job[]) => act(() => { data = { ...data, jobs: next }; client.setQueryData(["workbench"], data); }) };
 }
+
+it("运行列表显示累计模型耗时，续跑不重复相加，零值和缺失有区别", () => {
+    setup([
+        testJob("old", { status: "interrupted", model_duration_ms: 120000 }),
+        testJob("new", { name: "续跑耗时样例", created_at: "2026-10-19T11:00:00Z", model_duration_ms: 180000 }),
+        testJob("zero", { name: "零耗时样例", archive_id: "zero", model_duration_ms: 0 }),
+        testJob("missing", { name: "缺失耗时样例", archive_id: "missing" }),
+    ]);
+    expect(screen.getByRole("columnheader", { name: "累计耗时" })).toHaveAttribute("title", expect.stringContaining("模型调用累计"));
+    expect(screen.getAllByRole("columnheader")[4]).toHaveTextContent("累计耗时");
+    const duration = (name: string) => screen.getByRole("button", { name }).closest("tr")!.querySelector(".run-duration");
+    expect(duration("续跑耗时样例")).toHaveTextContent("3 分 0 秒");
+    expect(duration("零耗时样例")).toHaveTextContent("0 ms");
+    expect(duration("缺失耗时样例")).toHaveTextContent("未记录");
+});
+
+it("详情面板用边缘分隔条调整宽度，沿用宽度记忆，不再显示滑块", async () => {
+    localStorage.setItem("gmb.inspector-width.v1", "520");
+    setup([testJob("resize")], "/?run=resize");
+    const handle = screen.getByRole("separator", { name: "调整详情面板宽度" });
+    expect(screen.queryByText("面板宽度")).not.toBeInTheDocument();
+    expect(screen.queryByRole("slider")).not.toBeInTheDocument();
+    expect(handle).toHaveAttribute("aria-valuenow", "520");
+    fireEvent.keyDown(handle, { key: "ArrowLeft" });
+    expect(document.querySelector(".runs-layout")).toHaveStyle("--inspector-width: 536px");
+    expect(localStorage.getItem("gmb.inspector-width.v1")).toBe("536");
+    fireEvent.click(screen.getByRole("button", { name: "专注查看" }));
+    await screen.findByRole("region", { name: "专注 run" });
+    fireEvent.click(screen.getByRole("button", { name: "返回运行列表" }));
+    expect(screen.getByRole("separator", { name: "调整详情面板宽度" })).toHaveAttribute("aria-valuenow", "536");
+});
+
+it("运行统计并入标题，仍可筛选队列与存档异常、进入并发设置", () => {
+    setup([
+        testJob("running", { name: "执行样例", archive_id: "running" }),
+        testJob("queued", { name: "排队样例", archive_id: "queued", status: "queued" }),
+        testJob("attention", { name: "异常样例", archive_id: "attention", checkpoint_error: "写入失败" }),
+    ]);
+    const summary = screen.getByRole("group", { name: "运行统计" });
+    expect(summary.closest(".workspace-heading")).toContainElement(screen.getByRole("heading", { name: "运行中心" }));
+    expect(within(summary).getByRole("button", { name: "执行中 2" })).toBeVisible();
+    const queued = within(summary).getByRole("button", { name: "等待队列 1" });
+    fireEvent.click(queued);
+    expect(queued).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByLabelText("筛选运行状态")).toHaveValue("queued");
+    expect(screen.getByRole("button", { name: "排队样例" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "执行样例" })).not.toBeInTheDocument();
+    fireEvent.click(within(summary).getByRole("button", { name: "存档异常 1" }));
+    expect(screen.getByLabelText("筛选运行状态")).toHaveValue("attention");
+    expect(screen.getByRole("button", { name: "异常样例" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "排队样例" })).not.toBeInTheDocument();
+    fireEvent.click(within(summary).getByRole("button", { name: "调整并发设置" }));
+    expect(screen.getByRole("heading", { name: "调度设置" })).toBeVisible();
+    expect(screen.queryByRole("group", { name: "运行统计" })).not.toBeInTheDocument();
+});
 
 it("多选运行进入统一曲线工作区，续跑使用同一个身份，并能返回运行列表", async () => {
     const old = testJob("original", { status: "interrupted" });
@@ -40,9 +104,64 @@ it("多选运行进入统一曲线工作区，续跑使用同一个身份，并�
     expect(screen.getAllByRole("row")).toHaveLength(3);
 });
 
-it("页脚明确注明 MiSans 使用并提供本地字体授权说明入口", () => {
-    setup([]);
-    expect(screen.getByRole("link", { name: "字体：MiSans" })).toHaveAttribute("href", "/workbench/fonts/NOTICE.txt");
+it("移除模板、批次和旧版入口，保留排行榜，字体授权收进设置", async () => {
+    localStorage.setItem("gmb.batch.v1", JSON.stringify("removed-batch"));
+    setup([testJob("visible")]);
+    expect(screen.getByRole("button", { name: testJob("visible").name })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "模型模板" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "实验批次" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "筛选批次" })).not.toBeInTheDocument();
+    expect(screen.queryByText("任务由本机服务独立执行")).not.toBeInTheDocument();
+    expect(screen.queryByText("评测规则与运行管理分离")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "字体：MiSans" })).not.toBeInTheDocument();
+    expect(document.querySelector('a[href^="/legacy"], a[href^="/replay"]')).toBeNull();
+    expect(screen.getByRole("link", { name: /排行榜/ })).toHaveAttribute("href", "/leaderboard/");
+    fireEvent.click(screen.getByRole("button", { name: "调度设置" }));
+    await userEvent.click(screen.getByText("字体授权"));
+    expect(screen.getByText(/本软件使用小米 MiSans/)).toBeVisible();
+    expect(screen.getByRole("link", { name: "版权与许可证" })).toHaveAttribute("href", "/workbench/fonts/NOTICE.txt");
+});
+
+it("批量删除逐项清理关注、观战、曲线和列表缓存，不影响未选中的运行", async () => {
+    localStorage.setItem("gmb.pins.v1", JSON.stringify(["a", "b", "other"]));
+    localStorage.setItem("gmb.watch.v1", JSON.stringify(["a", "b", "other"]));
+    localStorage.setItem("gmb.curves.v1", JSON.stringify(["a", "archive:archive-a", "b", "archive:archive-b", "other"]));
+    const { client } = setup([
+        testJob("a", { name: "批删 A", status: "completed", archive_id: "archive-a" }),
+        testJob("b", { name: "批删 B", status: "completed", archive_id: "archive-b" }),
+        testJob("other", { name: "保留运行", archive_id: "other-archive" }),
+    ], "/?section=archives");
+    await userEvent.click(await screen.findByLabelText("选择历史 批删 A"));
+    await userEvent.click(screen.getByLabelText("选择历史 批删 B"));
+    await userEvent.click(screen.getByRole("button", { name: "删除选中" }));
+    await userEvent.click(screen.getByRole("button", { name: "确认删除" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+    expect(screen.queryByText("批删 A")).not.toBeInTheDocument();
+    expect(screen.queryByText("批删 B")).not.toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem("gmb.pins.v1")!)).toEqual(["other"]);
+    expect(JSON.parse(localStorage.getItem("gmb.watch.v1")!)).toEqual(["other"]);
+    expect(JSON.parse(localStorage.getItem("gmb.curves.v1")!)).toEqual(["other"]);
+    expect(client.getQueryData<Snapshot>(["workbench"])!.jobs.map(job => job.id)).toEqual(["other"]);
+});
+
+it("删除存档后清理续跑身份、关注、观战、曲线和列表缓存", async () => {
+    localStorage.setItem("gmb.pins.v1", JSON.stringify(["old", "new"]));
+    localStorage.setItem("gmb.watch.v1", JSON.stringify(["old", "new"]));
+    localStorage.setItem("gmb.curves.v1", JSON.stringify(["old", "archive:same-archive", "other"]));
+    const { client } = setup([
+        testJob("old", { status: "interrupted" }),
+        testJob("new", { status: "completed", created_at: "2026-10-18T11:00:00Z" }),
+    ], "/?section=archives&run=old");
+    await userEvent.click(await screen.findByRole("button", { name: /的更多操作/ }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "删除存档" }));
+    await userEvent.click(screen.getByRole("button", { name: "确认删除" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+    expect(await screen.findByText("没有匹配的历史 run")).toBeVisible();
+    expect(JSON.parse(localStorage.getItem("gmb.pins.v1")!)).toEqual([]);
+    expect(JSON.parse(localStorage.getItem("gmb.watch.v1")!)).toEqual([]);
+    expect(JSON.parse(localStorage.getItem("gmb.curves.v1")!)).toEqual(["other"]);
+    expect(client.getQueryData<Snapshot>(["workbench"])!.jobs).toEqual([]);
+    expect(location.search).not.toContain("run=");
 });
 
 it("固定外观不提供密度切换，也不受此前浏览器密度选择影响", () => {
@@ -140,7 +259,7 @@ it("两次轮询之间已失败的续跑也会提醒，通知不占主画面且�
     expect(screen.getByRole("button", { name: "返回历史存档" })).toBeVisible();
 });
 
-it("续跑后 run 离开历史，批次仍只计为原实验的一局", async () => {
+it("续跑后 run 离开历史，运行中心显示最新任务，不恢复批次入口", async () => {
     const old = testJob("old", { status: "interrupted" });
     const { update } = setup([old]);
     fireEvent.click(screen.getByRole("button", { name: "历史存档" }));
@@ -149,8 +268,7 @@ it("续跑后 run 离开历史，批次仍只计为原实验的一局", async ()
     await userEvent.keyboard("{Escape}");
     update([old, testJob("resumed", { status: "queued", created_at: "2026-10-18T11:00:00Z", batch_id: "resume-batch", batch_name: "不应成为新实验" })]);
     await waitFor(() => expect(screen.queryByRole("button", { name: /的更多操作/ })).not.toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: "实验批次" }));
-    expect(screen.getByRole("heading", { name: "原始实验" })).toBeVisible();
-    expect(screen.queryByRole("heading", { name: "不应成为新实验" })).not.toBeInTheDocument();
-    expect(screen.getByText(/1 个 run/)).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: /^运行中心/ }));
+    expect(screen.getAllByRole("row")).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: "实验批次" })).not.toBeInTheDocument();
 });

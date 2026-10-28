@@ -19,7 +19,7 @@ const READ_TOOLS = new Set([
 const WRITE_TOOLS = new Set([
   'craft_equipment', 'purchase_upgrade', 'allocate_experience',
   'recruit_adventurer', 'dismiss_adventurer', 'equip_item', 'unequip_item',
-  'end_turn',
+  'end_turn', 'exchange_materials',
 ]);
 
 const NOTICE_TOOLS = new Set(['write_memo']);
@@ -64,7 +64,7 @@ const DOM = {
   btnNextTurn: $('#btnNextTurn'), btnLast: $('#btnLast'), speedSelect: $('#speedSelect'),
   stepBarFill: $('#stepBarFill'),
   ovTurn: $('#ovTurn'), ovMaxTurn: $('#ovMaxTurn'), ovGold: $('#ovGold'), ovExp: $('#ovExp'),
-  ovMaterials: $('#ovMaterials'), ovParty: $('#ovParty'), ovScore: $('#ovScore'), ovRank: $('#ovRank'),
+  ovMaterials: $('#ovMaterials'), ovParty: $('#ovParty'), ovRank: $('#ovRank'),
   ovStats: $('#ovStats'),
   actionToast: $('#actionToast'), battleOverlay: $('#battleOverlay'), battleStage: $('#battleStage'),
   chartOverlay: $('#chartOverlay'), rankChartCanvas: $('#rankChart'), btnRankChart: $('#btnRankChart'), chartClose: $('#chartClose'),
@@ -1119,7 +1119,7 @@ function renderTimeline() {
 // ============================================================================
 function renderOverview() {
   const obs = getEffectiveObservation();
-  if (!obs) { DOM.ovTurn.textContent='—';DOM.ovMaxTurn.textContent='—';DOM.ovGold.textContent='—';DOM.ovExp.textContent='—';DOM.ovMaterials.textContent='—';DOM.ovParty.textContent='—';DOM.ovScore.textContent='—';DOM.ovStats.textContent='—'; return; }
+  if (!obs) { DOM.ovTurn.textContent='—';DOM.ovMaxTurn.textContent='—';DOM.ovGold.textContent='—';DOM.ovExp.textContent='—';DOM.ovMaterials.textContent='—';DOM.ovParty.textContent='—';DOM.ovRank.textContent='—';DOM.ovStats.textContent='—'; return; }
   DOM.ovTurn.textContent = obs.turn||(S.currentTurnIdx+1);
   DOM.ovMaxTurn.textContent = obs.max_turns||'—';
   DOM.ovGold.textContent = fmt(obs.gold);
@@ -1130,7 +1130,6 @@ function renderOverview() {
     ? matEntries.map(([k,v]) => `<span class="mat-chip" title="${esc(matLabel(k))}">${matIcon(k)}${fmt(v)}</span>`).join(' ')
     : '<span class="muted">无材料</span>';
   const advs = obs.adventurers||[]; DOM.ovParty.textContent = `${advs.length}/${obs.party_size_limit||'?'}`;
-  if (S.replay&&S.replay.score) { DOM.ovScore.textContent = S.replay.score.total_score||S.replay.score.score||'—'; } else { DOM.ovScore.textContent='—'; }
   // Per-turn rank score with fallback to overall
   const curTurn = currentTurn();
   const turnRank = curTurn && curTurn.rank_score != null ? Math.round(curTurn.rank_score) : (S.replay&&S.replay.score&&S.replay.score.rank_score!=null ? Math.round(S.replay.score.rank_score) : null);
@@ -1617,6 +1616,7 @@ function toolLabel(name) {
     preview_battle: '预览战斗',
     preview_team_power: '预览战力',
     craft_equipment: '制作装备',
+    exchange_materials: '兑换材料',
     purchase_upgrade: '购买升级',
     allocate_experience: '分配经验',
     recruit_adventurer: '招募冒险者',

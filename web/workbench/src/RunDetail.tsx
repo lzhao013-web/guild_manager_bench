@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@radix-ui/themes";
 import {
-    ArrowSquareOut,
     ArrowsOutSimple,
     Copy,
     PushPin,
@@ -9,6 +8,7 @@ import {
     X,
     ArrowDown,
     ChartLineUp,
+    ClockCounterClockwise,
 } from "@phosphor-icons/react";
 import { useEvents, useLiveWatch } from "./api";
 import { ACTION_STATUS, actionEntries, actionGroups, actionSummary, recentActions } from "./actionModel";
@@ -31,6 +31,7 @@ import { Empty, JsonDetails, Metric, StatusBadge, Trend } from "./ui";
 import { ModelCallStats } from "./ModelCallStats";
 import { RunNotices } from "./RunNotices";
 import type { Job } from "./types";
+import type { WatchFocus } from "./sceneNavigation";
 
 export function RunDetail({
     job,
@@ -49,7 +50,7 @@ export function RunDetail({
     onClone: (job: Job) => void;
     onCurves?: () => void;
     onClose?: () => void;
-    onFocus?: () => void;
+    onFocus?: (target?: WatchFocus) => void;
     onPin?: () => void;
     pinned?: boolean;
 }) {
@@ -117,37 +118,33 @@ export function RunDetail({
                         RUN / {(job.archive_id || job.id).slice(0, 22)}
                     </span>
                     <h2>{job.name}</h2>
-                    <span className="muted">{job.batch_name}</span>
                     <RunNotices key={job.id} config={job.config} data={job.data} />
                 </div>
-                <div className="icon-actions">
-                    {onCurves && <button aria-label="查看运行曲线" title="查看经济、经验与战力曲线" onClick={onCurves}><ChartLineUp size={17} /></button>}
-                    {onPin && (
-                        <button
-                            title={pinned ? "取消关注" : "关注此 run"}
-                            aria-label={pinned ? "取消关注" : "关注此 run"}
-                            aria-pressed={pinned}
-                            onClick={onPin}
-                        >
-                            <PushPin weight={pinned ? "fill" : "regular"} />
+                <div className="detail-actions" role="group" aria-label="运行操作">
+                    {onFocus && (
+                        <><button className="detail-action is-primary" onClick={() => onFocus()}>
+                            <ArrowsOutSimple size={16} />专注查看
+                        </button>
+                        <button className="detail-action" onClick={() => onFocus({ module: "actions", actionView: "timeline" })} title="按回合阅读整局操作">
+                            <ClockCounterClockwise size={16} />整局时间线
+                        </button></>
+                    )}
+                    {onCurves && (
+                        <button className="detail-action" aria-label="查看运行曲线" title="查看经济、经验与战力曲线" onClick={onCurves}>
+                            <ChartLineUp size={16} />曲线
                         </button>
                     )}
-                    {onFocus && (
-                        <button
-                            title="专注查看"
-                            aria-label="专注查看"
-                            onClick={onFocus}
-                        >
-                            <ArrowsOutSimple />
+                    {onPin && (
+                        <button className="detail-action"
+                            title={pinned ? "取消关注" : "关注此 run"}
+                            aria-label={pinned ? "取消关注" : "关注此 run"}
+                            aria-pressed={pinned} onClick={onPin}>
+                            <PushPin size={16} weight={pinned ? "fill" : "regular"} />{pinned ? "已关注" : "关注"}
                         </button>
                     )}
                     {onClose && (
-                        <button
-                            title="关闭详情"
-                            aria-label="关闭详情"
-                            onClick={onClose}
-                        >
-                            <X />
+                        <button className="detail-close" title="关闭详情" aria-label="关闭详情" onClick={onClose}>
+                            <X size={17} />
                         </button>
                     )}
                 </div>
@@ -508,18 +505,6 @@ export function RunDetail({
                                 <div className="artifact-links">
                                     {job.archive_id ? (
                                         <>
-                                            <a
-                                                href={`/replay/#run=${encodeURIComponent(job.archive_id)}`}
-                                            >
-                                                打开单局回放
-                                                <ArrowSquareOut />
-                                            </a>
-                                            <a
-                                                href={`/replay/profile.html?run=${encodeURIComponent(job.archive_id)}`}
-                                            >
-                                                查看经营画像
-                                                <ArrowSquareOut />
-                                            </a>
                                             <a
                                                 href={`/api/llm/runs/${encodeURIComponent(job.archive_id)}/replay`}
                                                 download={`${job.archive_id}.json`}

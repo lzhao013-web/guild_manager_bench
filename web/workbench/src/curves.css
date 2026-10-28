@@ -3,7 +3,6 @@
 .workspace-main.is-curve-mode .workspace-heading h1 { font-size: 17px; margin: 0; }
 .workspace-main.is-curve-mode .workspace-heading > div { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; }
 .workspace-main.is-curve-mode .workspace-heading p { font-size: var(--wb-text-xs); margin: 0; }
-.workspace-main.is-curve-mode .workspace-footer { display: none; }
 .workspace-main.is-curve-mode > .curve-board { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; }
 .curve-board { margin: 0 24px 18px; min-width: 0; }
 .curve-selection-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
@@ -111,11 +110,6 @@
     .curve-legend { grid-template-columns: 1fr; }
     .curve-mode { width: 100%; margin-right: 0; }
     .curve-mode button { flex: 1; }
-    .curve-values thead { display: none; }
-    .curve-values table, .curve-values tbody { display: block; }
-    .curve-values tr { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-bottom: 1px solid var(--border); }
-    .curve-values th:first-child { grid-column: 1/-1; width: auto; }
-    .curve-values td { min-width: 0; padding: 8px; text-align: left; }
-    .curve-values td::before { content: attr(data-label); display: block; color: var(--gray-11); font-size: var(--wb-text-xs); margin-bottom: 5px; }
-    .curve-values th, .curve-values td { border-bottom: 0; }
+    .curve-values table { min-width: 560px; }
+    .curve-values th, .curve-values td { padding: 8px; }
 }

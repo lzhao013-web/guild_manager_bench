@@ -30,6 +30,20 @@
 .monitor-buttons button:hover { background: var(--gray-4); color: var(--gray-12); }
 .monitor-buttons button[aria-pressed="true"] { color: var(--accent-11); }
 .monitor-buttons .monitor-stop { color: var(--red-11); }
+.monitor-buttons .monitor-focus {
+    display: inline-flex;
+    gap: 4px;
+    width: auto;
+    height: 26px;
+    padding: 3px 7px;
+    margin-inline: 3px;
+    background: var(--accent-12);
+    color: var(--accent-1);
+    font-size: var(--wb-text-xs);
+    font-weight: 600;
+    white-space: nowrap;
+}
+.monitor-buttons .monitor-focus:hover { background: var(--accent-11); color: var(--accent-1); }
 .monitor-metrics { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 4px 9px; border-block: 1px solid var(--gray-5); font-size: var(--wb-text-xs); color: var(--gray-11); background: var(--gray-3); }
 .monitor-metrics > span, .monitor-metrics > button { display: inline-flex; align-items: center; gap: 4px; min-width: 0; white-space: nowrap; }
 .monitor-metrics b { font-weight: 500; color: var(--gray-12); font-variant-numeric: tabular-nums; }
@@ -144,7 +158,7 @@
 .workspace-main.is-watch-mode .workspace-header { min-height: 46px; height: 46px; flex-shrink: 0; }
 .workspace-main.is-watch-mode .workspace-heading { padding: 5px 16px; min-height: 38px; flex-shrink: 0; }
 .workspace-main.is-watch-mode .workspace-heading h1 { font-size: var(--wb-text-md); line-height: 22px; }
-.workspace-main.is-watch-mode .workspace-heading p, .workspace-main.is-watch-mode .summary-strip, .workspace-main.is-watch-mode > .workspace-footer { display: none; }
+.workspace-main.is-watch-mode .summary-strip { display: none; }
 .workspace-main.is-watch-mode .view-switch button { padding: 5px 9px; font-size: var(--wb-text-xs); }
 .is-watch-mode .watch-workspace { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; padding: 4px 12px 10px; }
 .is-watch-mode .watch-toolbar { flex-shrink: 0; margin: 0 0 6px; gap: 8px; }

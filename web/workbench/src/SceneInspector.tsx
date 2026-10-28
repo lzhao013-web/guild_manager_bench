@@ -1,4 +1,7 @@
 import { useState } from "react";
+import { Tooltip } from "@radix-ui/themes";
+import { MemberContribution, contributionNote } from "./MemberContribution";
+import type { RankContributions } from "./watchModel";
 import { ArrowSquareOut, CaretLeft, CaretRight, Lock, X } from "@phosphor-icons/react";
 import { fmt } from "./model";
 import { MATERIALS, SLOTS, resolveSubject, subjectId } from "./sceneModel";
@@ -15,6 +18,7 @@ import type { Talent } from "./talentModel";
 
 export function SceneInspector({
     observation,
+    contributions = null,
     collection,
     selection,
     onSelect,
@@ -22,6 +26,7 @@ export function SceneInspector({
     onInventory,
 }: {
     observation: Observation;
+    contributions?: RankContributions | null;
     collection: SceneSubject[];
     selection: Selection | null;
     onSelect: (selection: Selection) => void;
@@ -100,7 +105,7 @@ export function SceneInspector({
                 </header>
                 <ObjectTrajectories subject={selection} />
                 {selection.kind === "member" ? (
-                    <MemberInspector member={subject as PartyMember} onInventory={onInventory} />
+                    <MemberInspector member={subject as PartyMember} contributions={contributions} onInventory={onInventory} />
                 ) : selection.kind === "recipe" ? (
                     <RecipeDetails recipe={subject as CraftingRecipe} observation={observation} onInventory={onInventory} />
                 ) : selection.kind === "upgrade" ? (
@@ -123,9 +128,11 @@ export function SceneInspector({
 }
 function MemberInspector({
     member,
+    contributions,
     onInventory,
 }: {
     member: PartyMember;
+    contributions: RankContributions | null;
     onInventory: (slot: string) => void;
 }) {
     const [tab, setTab] = useState("equipment");
@@ -158,6 +165,11 @@ function MemberInspector({
                     max={member.effective_stats.mp}
                     mana
                 />
+            </div>
+            <div className="scene-member-contribution">
+                <Tooltip content={contributionNote(member.adventurer_id, contributions)}>
+                    <span tabIndex={0}><MemberContribution adventurerId={member.adventurer_id} contributions={contributions} /></span>
+                </Tooltip>
             </div>
             <nav className="scene-inspect-tabs" aria-label="角色详情内容">
                 <button
@@ -198,11 +210,11 @@ function MemberInspector({
                                         aria-pressed={selected?.slot === equipmentSlot.slot}
                                         onClick={() => setSlot(equipmentSlot.slot!)}
                                     >
-                                        <EquipmentIcon templateId={equipped?.template_id} slot={equipmentSlot.slot!} size={24} />
-                                        <span>
+                                        <EquipmentIcon templateId={equipped?.template_id} slot={equipmentSlot.slot!} size={equipped ? 36 : 24} />
+                                        {!equipped && <span>
                                             {SLOTS[equipmentSlot.slot!] || equipmentSlot.slot}
-                                        </span>
-                                        <strong>
+                                        </span>}
+                                        <strong title={equipped?.name}>
                                             {equipped?.name ||
                                                 (blocked
                                                     ? `被${blocked === "hand" ? "单手装备" : SLOTS[blocked] || blocked}占用`
@@ -319,7 +331,7 @@ function EntityInspector({
     observation: Observation;
     onSelect: (selection: Selection) => void;
 }) {
-    const stats = (entity.stats || entity.base_stats) as Record<string, number> | undefined;
+    const stats = (entity.effective_stats || entity.stats || entity.base_stats) as Record<string, number> | undefined;
     const owner = entity.equipped_by
         ? observation.adventurers.find((member) => member.adventurer_id === entity.equipped_by)
         : undefined;
@@ -395,7 +407,8 @@ function EntityInspector({
                     )}
                 </div>
             </div>
-            <h3>{kind === "monster" || kind === "candidate" ? "当前快照属性" : "属性加成"}</h3>
+            <h3>{kind === "candidate" ? (entity.effective_stats ? "Lv1入队面板" : "初始基础属性") : kind === "monster" ? "当前快照属性" : "属性加成"}</h3>
+            {kind === "candidate" && Boolean(entity.effective_stats) && <p className="scene-note">含公会直接属性加成，条件效果在战斗中生效。</p>}
             <StatTiles stats={stats} modifier={kind === "equipment"} />
             <h3>技能效果</h3>
             <SkillCards skills={entity.skills as GameEntity[] | undefined} />

@@ -72,7 +72,7 @@ export function businessPreviews(observation: Observation | null) {
         id: "recruitment", title: "招募候选", note: `${recruitable} 可招募 / ${candidates.length} 位`, target: { module: "recruitment" },
         rows: [...candidates].sort((a, b) => Number(b.can_recruit === true) - Number(a.can_recruit === true)).slice(0, 8).map(item => ({
             id: item.candidate_id as string, name: item.name!, value: `金币 ${fmt(item.recruit_gold as number)}`,
-            detail: [item.can_recruit === true ? "当前满足招募条件" : requirementLines(item.missing as Record<string, unknown> | undefined).join(" · ") || "条件未记录", statsText(item.base_stats as Record<string, number> | undefined)].filter(Boolean).join(" · "),
+            detail: [item.can_recruit === true ? "当前满足招募条件" : requirementLines(item.missing as Record<string, unknown> | undefined).join(" · ") || "条件未记录", statsText((item.effective_stats || item.base_stats) as Record<string, number> | undefined)].filter(Boolean).join(" · "),
             target: { module: "recruitment", selection: { kind: "candidate", id: item.candidate_id as string } },
             portrait: item.template_id, available: item.can_recruit === true,
         })),

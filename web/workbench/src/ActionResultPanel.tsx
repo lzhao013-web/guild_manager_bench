@@ -4,6 +4,7 @@ import { actionResult } from "./actionModel";
 import type { ActionEntry } from "./actionModel";
 import { returnLabel } from "./actionReturns";
 import type { ReturnTable } from "./actionReturns";
+import { ResizableTable } from "./ResizableTable";
 
 const ENUMS: Record<string, string> = { left_win: "冒险者胜利", right_win: "怪物胜利", draw: "平局", actual: "真实战斗", preview: "模拟预览", left: "冒险者方", right: "怪物方" };
 function ReturnedValue({ value, fieldKey = "" }: { value: unknown; fieldKey?: string }) {
@@ -23,11 +24,13 @@ function ResultTable({ data }: { data: ReturnTable }) {
     const current = Math.min(page, Math.max(0, Math.ceil(matches.length / count) - 1));
     return <section className="action-return-table" aria-label={data.title}>
         <header><h4>{data.title}</h4>{data.rows.length > count && <input type="search" aria-label={`筛选${data.title}`} placeholder="筛选已返回内容" value={search} onChange={event => { setSearch(event.target.value); setPage(0); setExpanded(null); }} />}<span>{search ? `${matches.length} / ` : ""}{data.rows.length} 条</span></header>
-        {matches.length ? <table><thead><tr>{data.columns.map(column => <th scope="col" key={column}>{column}</th>)}</tr></thead>
+        {matches.length ? <ResizableTable scroll storageKey={`action-return:${data.title}:${JSON.stringify([...data.columns].sort())}`}
+            columns={data.columns.map(column => ({ id: column, label: column, minWidth: 100 }))}>
+            <thead><tr>{data.columns.map(column => <th scope="col" key={column}>{column}</th>)}</tr></thead>
             <tbody>{matches.slice(current * count, (current + 1) * count).map(({ row, index }) => {
                 return <ResultRow key={index} row={row} record={data.records[index]} columns={data.columns.length}
                     expanded={expanded === index} onExpand={() => setExpanded(expanded === index ? null : index)} />;
-            })}</tbody></table> : <p className="muted">{data.rows.length ? "没有匹配的已返回内容。" : "本次实际返回空列表。"}</p>}
+            })}</tbody></ResizableTable> : <p className="muted">{data.rows.length ? "没有匹配的已返回内容。" : "本次实际返回空列表。"}</p>}
         {matches.length > count && <div className="return-pagination">
             <button type="button" disabled={current === 0} onClick={() => { setPage(current - 1); setExpanded(null); }}>上一页</button>
             <span>已记录返回 · {current + 1} / {Math.ceil(matches.length / count)}</span>

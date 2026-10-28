@@ -3,12 +3,17 @@ import type { EventRecord, Observation } from "./types";
 import { withMonsterStages } from "./monsterModel";
 import type { MonsterStages } from "./monsterModel";
 
+export interface RankContributions {
+    turn: number;
+    scores: Record<string, number>;
+}
 export interface WatchAttempt {
     id: number;
     turn: number | null;
     attempt: number;
     status: string;
     score: number | null;
+    rank_contributions?: RankContributions | null;
     actions: number;
     at: string;
     updated_at: string;
@@ -40,6 +45,7 @@ export interface WatchFrame {
     failed: boolean;
     call: number | null;
     names?: Record<string, string>;
+    rank_contributions?: RankContributions | null;
 }
 export const ATTEMPT_STATUS: Record<string, string> = {
     running: "进行中", scoring: "评分中", completed: "已完成",
@@ -53,10 +59,14 @@ const TITLES: Record<string, string> = {
     checkpoint_failed: "检查点保存失败", worker_failed: "工作进程失败", worker_stopped: "任务已停止",
     run_completed: "运行已完成", run_failed: "运行失败",
 };
-export function watchFrames(records: WatchRecord[], initialScore: number | null = null, stages: MonsterStages = {}): WatchFrame[] {
+export function isWatchEvent(event: EventRecord["event"]): boolean {
+    return event.type in TITLES || event.type === "tool_result";
+}
+export function watchFrames(records: WatchRecord[], initialScore: number | null = null, stages: MonsterStages = {}, initialContributions: RankContributions | null = null): WatchFrame[] {
     const frames: WatchFrame[] = [];
     let observation: Observation | null = null;
     let score: number | null = initialScore;
+    let contributions = initialContributions;
     let call: number | null = null;
     for (const record of records) {
         const e = record.event;
@@ -65,17 +75,22 @@ export function watchFrames(records: WatchRecord[], initialScore: number | null 
         if (e.type === "run_resumed") {
             observation = withMonsterStages(e.restored_observation, stages);
             score = e.last_rank_score ?? null;
+            contributions = e.last_adventurer_rank_scores ?? null;
         }
         if (e.type === "tool_result" && e.result?._observation_after) observation = withMonsterStages(e.result._observation_after, stages);
-        if (e.type === "turn_scored") score = e.rank_score;
+        if (e.type === "turn_scored") {
+            score = e.rank_score;
+            contributions = e.adventurer_rank_scores == null ? null : { turn: e.turn, scores: e.adventurer_rank_scores };
+        }
         if ((e.type === "run_completed" || e.type === "run_failed") && e.score?.rank_score != null) score = e.score.rank_score;
         if (e.type === "model_request") call = record.cursor;
-        if (!(e.type in TITLES) && e.type !== "tool_result") continue;
+        if (!isWatchEvent(e)) continue;
         const title = e.type === "tool_call" ? `执行：${TOOLS[e.name] || e.name}`
             : e.type === "tool_result" ? (TOOLS[e.name] || e.name) : TITLES[e.type];
         const summary = e.result?.error || e.result?.event?.summary || e.reason || e.error || e.failure_reason ||
             (e.type === "tool_result" ? String(e.content || "").split("\n")[0].slice(0, 240) : "");
         frames.push({ cursor: record.cursor, record, observation, before, score, title, summary,
+            rank_contributions: contributions,
             failed: e.result?.ok === false || ["turn_failed", "run_failed", "worker_failed", "checkpoint_failed"].includes(e.type), call });
     }
     return frames;
@@ -89,6 +104,8 @@ export function stateChanges(before: Observation | null, after: Observation | nu
     };
     add("金币", before.gold, after.gold);
     add("经验池", before.experience_pool, after.experience_pool);
+    if (before.material_exchange && after.material_exchange)
+        add("兑换剩余额度", before.material_exchange.remaining_points, after.material_exchange.remaining_points);
     for (const material of new Set([...Object.keys(before.materials), ...Object.keys(after.materials)]))
         add(material, before.materials[material] || 0, after.materials[material] || 0);
     for (const member of after.adventurers) {

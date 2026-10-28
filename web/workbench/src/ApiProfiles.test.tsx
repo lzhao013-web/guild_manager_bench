@@ -11,7 +11,6 @@ import { expect, it, vi } from "vitest";
 import { NewBatch, defaultDraft } from "./NewBatch";
 import { ModelPicker } from "./ModelPicker";
 import { ApiProfilesPanel } from "./ApiProfiles";
-import { safeTemplate } from "./model";
 import type { ApiProfile } from "./types";
 
 const profile: ApiProfile = {
@@ -52,7 +51,6 @@ it("选择保存的 API、从模型目录选择，再提交凭证引用而不是
                     }}
                     profiles={[profile]}
                     onCreated={created}
-                    onSave={vi.fn()}
                 />
             </Dialog.Root>
         </Theme>,
@@ -106,7 +104,6 @@ it("自定义连接保存后立即可选，清除浏览器表单中的密钥", a
                     presets={["default"]}
                     initial={draft}
                     onCreated={vi.fn()}
-                    onSave={vi.fn()}
                     onProfileSaved={saved}
                 />
             </Dialog.Root>
@@ -201,20 +198,6 @@ it("切换配置时丢弃旧的模型列表响应", async () => {
     ).not.toBeInTheDocument();
 });
 
-it("浏览器模板保存配置 ID，但不保存 API Key", () => {
-    const draft = defaultDraft("default");
-    draft.rows[0] = {
-        profile_id: profile.id,
-        provider: profile.provider,
-        base_url: profile.base_url,
-        model: profile.default_model!,
-        api_key: "must-not-persist",
-    };
-    const stored = safeTemplate(draft);
-    expect(stored.rows[0].profile_id).toBe(profile.id);
-    expect(JSON.stringify(stored)).not.toContain("must-not-persist");
-});
-
 it("续跑选择其它 API 时保留原存档模型，而不是悄悄换成配置默认模型", () => {
     const draft = {
         ...defaultDraft("default"),
@@ -230,7 +213,6 @@ it("续跑选择其它 API 时保留原存档模型，而不是悄悄换成配�
                     initial={draft}
                     profiles={[profile]}
                     onCreated={vi.fn()}
-                    onSave={vi.fn()}
                 />
             </Dialog.Root>
         </Theme>,
@@ -252,7 +234,6 @@ it("读取中的配置不被误报为删除，也不显示已改用环境密钥"
                     initial={draft}
                     profilesLoading
                     onCreated={vi.fn()}
-                    onSave={vi.fn()}
                 />
             </Dialog.Root>
         </Theme>,
@@ -275,7 +256,6 @@ it("配置列表失败时保留引用并报错，不把连接悄悄改成自定�
                     initial={draft}
                     profilesError="连接失败"
                     onCreated={vi.fn()}
-                    onSave={vi.fn()}
                 />
             </Dialog.Root>
         </Theme>,

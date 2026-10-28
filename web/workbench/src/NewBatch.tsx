@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
 import { AlertDialog, Button, Dialog } from "@radix-ui/themes";
-import { Plus, Trash, ArrowRight, FloppyDisk } from "@phosphor-icons/react";
+import { Plus, Trash, ArrowRight } from "@phosphor-icons/react";
 import { api, ApiError } from "./api";
-import { expandDraft, safeTemplate } from "./model";
+import { expandDraft } from "./model";
 import type { Draft, ModelRow, RunRequest } from "./model";
 import type { ApiProfile, Job } from "./types";
 import { ModelConnection } from "./ModelConnection";
@@ -26,7 +26,7 @@ export const defaultDraft = (preset: string): Draft => ({
     repeats: 1,
     max_tool_calls_per_turn: 20,
     scoring_seed: "",
-    timeout: 180,
+    timeout: 600,
     temperature: "",
     max_tokens: "",
     objective: "",
@@ -36,7 +36,6 @@ export function NewBatch({
     presets,
     initial,
     onCreated,
-    onSave,
     profiles = [],
     onProfileSaved,
     profilesLoading = false,
@@ -45,7 +44,6 @@ export function NewBatch({
     presets: string[];
     initial?: Draft;
     onCreated: (jobs: Job[]) => void;
-    onSave: (draft: Draft) => void;
     profiles?: ApiProfile[];
     profilesLoading?: boolean;
     profilesError?: string;
@@ -56,11 +54,9 @@ export function NewBatch({
     );
     const [error, setError] = useState("");
     const [busy, setBusy] = useState(false);
-    const [saved, setSaved] = useState(false);
     const [confirmation, setConfirmation] = useState<{ body: BatchBody; recoveries: RecoveryCheck[] } | null>(null);
     const update = <K extends keyof Draft>(key: K, value: Draft[K]) => {
         setDraft((d) => ({ ...d, [key]: value }));
-        setSaved(false);
         setConfirmation(null);
     };
     const updateRow = (index: number, patch: Partial<ModelRow>) =>
@@ -108,7 +104,7 @@ export function NewBatch({
         setBusy(true);
         setError("");
         try {
-            const body = { name: draft.name.trim(), runs: preview.runs };
+            const body = { name: draft.name.trim() || "运行", runs: preview.runs };
             if (resume) {
                 const check = await api<{ recoveries: RecoveryCheck[] }>("/api/workbench/batches/check", { method: "POST", body: JSON.stringify(body) });
                 const differences = check.recoveries.filter(item => item.differences.length);
@@ -126,11 +122,9 @@ export function NewBatch({
             <div className="dialog-title">
                 <div>
                     <Dialog.Title>
-                        {branch ? "从指定回合分支重跑" : resume ? "从检查点继续运行" : "新建实验批次"}
+                        {branch ? "从指定回合分支重跑" : resume ? "从检查点继续运行" : "新建运行"}
                     </Dialog.Title>
-                    <Dialog.Description>
-                        配置模型、展开参数组合，确认后加入服务端队列。
-                    </Dialog.Description>
+                    <Dialog.Description className="visually-hidden">配置模型和运行参数。</Dialog.Description>
                 </div>
                 <Dialog.Close>
                     <Button highContrast variant="soft" color="gray">
@@ -151,16 +145,6 @@ export function NewBatch({
                     <span> 可选 1 到 {draft.rerun_max_turn}。保留前 x−1 回合，从第 x 回合开局重新执行。</span>
                 </label>}
                 <div className="form-grid">
-                    <label>
-                        批次名称
-                        <input
-                            required
-                            maxLength={120}
-                            value={draft.name}
-                            onChange={(e) => update("name", e.target.value)}
-                            placeholder="例如：相同种子下比较推理强度"
-                        />
-                    </label>
                     <label>
                         数据 preset
                         <select
@@ -244,7 +228,7 @@ export function NewBatch({
                         选择已保存 API
                         配置即可复用密钥。自定义连接的密钥仅用于本次执行，点击“保存此
                         API
-                        配置”才会保存到系统凭证库。浏览器模板和任务配置均不保存密钥。
+                        配置”才会保存到系统凭证库。任务配置不保存密钥。
                     </p>
                 </section>
                 {resume && (
@@ -417,9 +401,6 @@ export function NewBatch({
                         </p>
                     ) : (
                         <>
-                            <p>
-                                按全局和服务端点并发上限调度。关闭页面不会停止运行。
-                            </p>
                             <div className="preview-list">
                                 {preview.runs.map((run, i) => (
                                     <span key={i}>
@@ -438,20 +419,6 @@ export function NewBatch({
                     </p>
                 )}
                 <div className="dialog-footer">
-                    <Button
-                        highContrast
-                        type="button"
-                        variant="soft"
-                        color="gray"
-                        disabled={!!preview.error}
-                        onClick={() => {
-                            onSave(safeTemplate(draft));
-                            setSaved(true);
-                        }}
-                    >
-                        <FloppyDisk />
-                        {saved ? "已保存无凭证模板" : "保存为模板"}
-                    </Button>
                     <Button
                         highContrast
                         type="submit"

@@ -22,7 +22,7 @@ const LABELS: Record<string, string> = {
     preview: "仅预览", content: "备忘内容", key: "备忘名称", limit: "数量上限", battle_id: "战斗记录",
     since_sequence: "起始事件序号", kind: "预告类型", start_turn: "起始回合", end_turn: "结束回合",
     name_contains: "名称包含", material: "材料", tier: "阶级", entry_index: "条目序号", detail: "详细程度",
-    operations: "试算操作", type: "操作类型",
+    operations: "试算操作", type: "操作类型", material_id: "兑换材料", quantity: "兑换份数",
 };
 const TARGETS: Record<string, string> = {
     adventurer_id: "adventurer", candidate_id: "recruit", monster_id: "monster", locked_monster_ids: "monster",
@@ -73,8 +73,8 @@ export function describeInput(frame: WatchFrame, names: Map<string, string>): Ac
         if (typeof raw === "boolean") return { kind: "scalar", text: raw ? "是（true）" : "否（false）", original: null, children: [] };
         const original = String(raw);
         const target = Object.hasOwn(TARGETS, key) ? TARGETS[key] : undefined;
-        const text = target ? actionTarget(frame, target, raw, names) : key === "slot" ? Object.hasOwn(SLOTS, original) ? SLOTS[original] : original : key === "material" ? Object.hasOwn(MATERIALS, original) ? MATERIALS[original] : original : original || '空字符串 ""';
-        return { kind: "scalar", text, original: text !== original && (target != null || key === "slot" || key === "material") ? original : null, children: [] };
+        const text = target ? actionTarget(frame, target, raw, names) : key === "slot" ? Object.hasOwn(SLOTS, original) ? SLOTS[original] : original : (key === "material" || key === "material_id") ? Object.hasOwn(MATERIALS, original) ? MATERIALS[original] : original : original || '空字符串 ""';
+        return { kind: "scalar", text, original: text !== original && (target != null || key === "slot" || (key === "material" || key === "material_id")) ? original : null, children: [] };
     }
     return { state: "recorded", value: value(raw, "") };
 }

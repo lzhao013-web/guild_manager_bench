@@ -146,6 +146,22 @@ it("旧战斗没有胜负字段时标为未知，不把缺字段当成战败", (
     expect(entry.summary).not.toContain("失败");
 });
 
+it("全局方案试算不伪造战力，凭据执行与重复提交展示不同结果", () => {
+    const entries = actionEntries(watchFrames([initial,
+        rec(2, { type: "tool_result", name: "preview_team_power", result: {
+            ok: true, simulation_only: true, operation_count: 2, plan_id: "p1", required_calls: 2, remaining_calls: 3, can_execute: true,
+        } }),
+        rec(3, { type: "tool_result", name: "execute_plan", result: { ok: true, operation_count: 2, already_executed: false } }),
+        rec(4, { type: "tool_result", name: "execute_plan", result: { ok: true, operation_count: 2, already_executed: true } }),
+    ]));
+    expect(entries[1]).toMatchObject({ kind: "query", title: "方案试算" });
+    expect(entries[1].summary).toContain("不估算战力");
+    expect(entries[1].summary).not.toContain("未知");
+    expect(entries[2]).toMatchObject({ kind: "action", title: "执行方案" });
+    expect(entries[2].summary).toContain("已执行 2 步方案，不扣调用预算");
+    expect(entries[3].summary).toContain("本次未重复执行");
+});
+
 it("回滚保留当时的成功事实，但所有本次经营动作都标记不再生效", () => {
     const entries = actionEntries(watchFrames([initial, purchase, rec(4, { type: "turn_retry", reason: "构造回滚原因" })]));
     expect(entries[1]).toMatchObject({ status: "succeeded", rolledBack: true });

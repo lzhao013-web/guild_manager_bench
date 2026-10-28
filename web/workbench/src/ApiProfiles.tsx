@@ -12,7 +12,16 @@ import { api } from "./api";
 import { PROVIDERS } from "./ModelConnection";
 import { ModelPicker } from "./ModelPicker";
 import { Empty } from "./ui";
+import { ResizableTable } from "./ResizableTable";
 import type { ApiProfile, Provider } from "./types";
+
+const PROFILE_COLUMNS = [
+    { id: "name", label: "配置 / 服务地址", minWidth: 160 },
+    { id: "provider", label: "协议", minWidth: 100 },
+    { id: "model", label: "默认模型", minWidth: 140 },
+    { id: "key", label: "API Key 状态", minWidth: 90 },
+    { id: "actions", label: "操作", minWidth: 260 },
+];
 
 export const readApiProfiles = () =>
     api<{ profiles: ApiProfile[] }>("/api/workbench/api-profiles");
@@ -147,7 +156,7 @@ export function ApiProfilesPanel({
                 </div>
             ) : visible.length ? (
                 <div className="api-profile-table-wrap">
-                    <table className="run-table api-profile-table">
+                    <ResizableTable className="run-table api-profile-table" storageKey="api-profiles" columns={PROFILE_COLUMNS}>
                         <thead>
                             <tr>
                                 <th>配置 / 服务地址</th>
@@ -222,7 +231,7 @@ export function ApiProfilesPanel({
                                 </tr>
                             ))}
                         </tbody>
-                    </table>
+                    </ResizableTable>
                 </div>
             ) : profiles.length ? (
                 <Empty
@@ -288,7 +297,7 @@ export function ApiProfilesPanel({
                     </AlertDialog.Title>
                     <AlertDialog.Description>
                         删除配置及其系统凭证引用。已经加入队列的 run
-                        不受影响，引用此配置的浏览器模板需要重新选择连接。
+                        不受影响。
                     </AlertDialog.Description>
                     <div className="dialog-footer">
                         <AlertDialog.Cancel>
@@ -546,7 +555,7 @@ function ProfileEditor({
                 )}
                 <div className="dialog-footer">
                     <span className="field-help">
-                        Key 仅在编辑窗口中读取，不写入浏览器本地存储或模板。
+                        Key 不写入浏览器本地存储。
                     </span>
                     <Button highContrast type="submit" loading={busy} disabled={cannotSave}>
                         保存 API 配置

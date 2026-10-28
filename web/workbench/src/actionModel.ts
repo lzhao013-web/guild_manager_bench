@@ -120,6 +120,7 @@ function querySummary(frame: WatchFrame): string {
     if (e.name === "preview_team_power" && r.current_rank_score != null) return `当前战力 ${fmt(r.current_rank_score)} → 方案战力 ${fmt(r.projected_rank_score)}（变化 ${fmt(r.rank_score_delta)}），方案未执行`;
     if (e.name === "preview_battle" && r.preview) return `${r.preview.adventurer_name} 对 ${r.preview.monster_name}：模拟${battleResult(r.preview)}，不是实际讨伐`;
     if (e.name === "preview_team_power" && r.rank_score != null) return `试算评分 ${fmt(r.rank_score)}，未执行真实讨伐`;
+    if (e.name === "preview_team_power" && r.operation_count != null) return `试算 ${r.operation_count} 步，方案未执行，不估算战力`;
     if (e.name === "preview_monster_refresh" || isRefreshPreview(e)) return "仅查看刷新候选，未刷新怪物或消耗金币";
     if (e.name === "get_battle_log" && r.battle) return `${r.battle.adventurer_name} 对 ${r.battle.monster_name}的已有战斗记录`;
     return "";

@@ -10,6 +10,7 @@ import type { RunCatalog } from "./runCatalog";
 import type { Archive } from "./types";
 import { STATUS } from "./model";
 import { Empty } from "./ui";
+import { ResizableTable } from "./ResizableTable";
 import "./curves.css";
 
 const curveNumber = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 4 });
@@ -104,7 +105,10 @@ export function CurveBoard({ catalog, selectedIds, onSelection, onBack }: {
             <div className="curve-charts">{metrics.map(metric => <CurvePlot key={metric.title} title={metric.title} note={metric.note} metric={metric.key} series={series} from={from} to={to} turn={turn} onTurn={setLocated} />)}</div>
             <section className="curve-values" aria-label="同回合数值与差值">
                 <header><h2>回合 {turn} 对比</h2><label>定位回合 <input aria-label="定位对比回合" type="number" min={from} max={to} value={turn} onChange={event => setLocated(Math.max(from, Math.min(to, Number(event.target.value))))} /></label><span>悬停图表或用方向键联动，差值相对首个 run</span></header>
-                <table><thead><tr><th>Run / 模型</th>{metrics.map(metric => <th key={metric.key}>{metric.note}</th>)}</tr></thead>
+                <ResizableTable storageKey="curves" scroll columns={[
+                    { id: "run", label: "Run / 模型", minWidth: 160 },
+                    ...metrics.map(metric => ({ id: metric.key, label: metric.note, minWidth: 120 })),
+                ]}><thead><tr><th>Run / 模型</th>{metrics.map(metric => <th key={metric.key}>{metric.note}</th>)}</tr></thead>
                     <tbody>{selected.map((choice, index) => {
                         const point = queries[index].data?.points.find(point => point.turn === turn);
                         const baseline = queries[0].data?.points.find(point => point.turn === turn);
@@ -113,7 +117,7 @@ export function CurveBoard({ catalog, selectedIds, onSelection, onBack }: {
                                 <strong>{value == null ? "未记录" : curveNumber.format(value)}</strong><small>{index === 0 ? "基准" : value != null && base != null ? `差值 ${value > base ? "+" : ""}${curveNumber.format(value - base)}` : "差值未知"}</small>
                             </td>; })}</tr>;
                     })}</tbody>
-                </table>
+                </ResizableTable>
             </section>
             <section className="curve-selected-milestones" aria-label="所选回合关键节点">
                 <h2>T{turn} 关键节点</h2>
@@ -122,7 +126,7 @@ export function CurveBoard({ catalog, selectedIds, onSelection, onBack }: {
                 </li>)}</ul> : <p>本回合没有可核实的关键节点记录。</p>}
                 {series.some(run => run.data.milestones === undefined) && <p role="status">部分曲线接口尚未提供关键节点信息，请在运行结束后重启 Web 服务并刷新。</p>}
             </section>
-            <p className="curve-note">节点只表示该回合发生的事件，不表示它是曲线变化的唯一原因。旧日志证据不足时不推测。这里展示全程已记录的结算曲线，不随观战历史位置回退。缺失回合断线，不外推。奖励记录有缺口时，后续累计值保持未记录。累计收入仅计讨伐奖励，不扣制作、招募或经验分配，不代表持有余额。</p>
+            <details className="curve-note"><summary>数据口径</summary><p>节点只表示该回合发生的事件，不表示它是曲线变化的唯一原因。旧日志证据不足时不推测。这里展示全程已记录的结算曲线，不随观战历史位置回退。缺失回合断线，不外推。奖励记录有缺口时，后续累计值保持未记录。累计收入仅计讨伐奖励，不扣制作、招募或经验分配，不代表持有余额。</p></details>
         </>}
     </section>;
 }

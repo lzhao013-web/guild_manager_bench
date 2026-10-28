@@ -7,11 +7,12 @@ import { MODULE_NAMES, emptySceneView, openSceneView } from "./sceneNavigation";
 import type { RunModule, SceneModule, SceneViews } from "./sceneNavigation";
 import type { Selection } from "./sceneModel";
 import type { Observation } from "./types";
-import type { WatchFrame, WatchRecord } from "./watchModel";
+import type { RankContributions, WatchFrame, WatchRecord } from "./watchModel";
 import "./workspace.css";
 
 export function RunWorkspace({
     observation,
+    contributions = null,
     before,
     frames,
     records,
@@ -24,6 +25,7 @@ export function RunWorkspace({
     live = false,
 }: {
     observation: Observation | null;
+    contributions?: RankContributions | null;
     before: Observation | null;
     frames: WatchFrame[];
     records: WatchRecord[];
@@ -137,6 +139,7 @@ export function RunWorkspace({
                     ) : (
                         <GameScene
                             observation={observation}
+                            contributions={contributions}
                             before={before}
                             module={module as SceneModule}
                             view={views[module] || emptySceneView}

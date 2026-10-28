@@ -30,6 +30,18 @@ it("优先预览满足条件的具体对象，并同时保留未穿戴装备与�
     expect(observation.recruit_candidates![0].candidate_id).toBe("costly");
 });
 
+it("招募摘要采用入队面板，旧快照保留基础属性", () => {
+    const base = { attack: 12 };
+    const value = { ...observation, recruit_candidates: [
+        { ...observation.recruit_candidates![1], base_stats: base, effective_stats: { attack: 21 } },
+        { ...observation.recruit_candidates![0], base_stats: base },
+    ] };
+    const rows = businessPreviews(value).groups[0].rows;
+    expect(rows[0].detail).toContain("攻击 +21");
+    expect(rows[1].detail).toContain("攻击 +12");
+    expect(base.attack).toBe(12);
+});
+
 it("编队已满时不重复展开招募卡，把详细预览空间让给升级与装备", () => {
     const full: Observation = { ...observation, party_size_limit: 1,
         adventurers: [{ adventurer_id: "one", name: "验收成员", template_id: "foot_knight", level: 1, resources: { current_hp: 100, current_mp: 0 }, effective_stats: { hp: 100, mp: 0 } }],

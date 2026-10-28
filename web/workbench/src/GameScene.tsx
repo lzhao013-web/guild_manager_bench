@@ -1,5 +1,8 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
 import type { CSSProperties } from "react";
+import { Tooltip } from "@radix-ui/themes";
+import { MemberContribution, contributionNote } from "./MemberContribution";
+import type { RankContributions } from "./watchModel";
 import {
     Backpack,
     Check,
@@ -37,6 +40,7 @@ import "./scene.css";
 export function GameScene({
     observation,
     before = null,
+    contributions = null,
     module,
     view,
     onView,
@@ -45,6 +49,7 @@ export function GameScene({
 }: {
     observation: Observation | null;
     before?: Observation | null;
+    contributions?: RankContributions | null;
     module: SceneModule;
     view: SceneView;
     onView: (view: SceneView) => void;
@@ -192,6 +197,7 @@ export function GameScene({
                                         key={member.adventurer_id}
                                         member={member}
                                         before={before}
+                                        contributions={contributions}
                                         onClick={() => inspect("member", member)}
                                     />
                                 ))}
@@ -334,6 +340,7 @@ export function GameScene({
                                                     <Coins size={14} />
                                                     {fmt(candidate.recruit_gold as number)}
                                                 </span>
+                                                <span className="scene-note">{candidate.effective_stats ? "Lv1面板 · 含公会直接加成" : "初始基础属性"}</span>
                                                 <ItemStats item={candidate} />
                                                 <span
                                                     className={`scene-availability ${candidate.can_recruit ? "available" : ""}`}
@@ -379,6 +386,7 @@ export function GameScene({
                     >
                         <SceneInspector
                             observation={observation}
+                            contributions={contributions}
                             collection={collection!}
                             selection={selection}
                             onSelect={select}
@@ -395,16 +403,19 @@ export function GameScene({
 function MemberCard({
     member,
     before,
+    contributions,
     onClick,
 }: {
     member: PartyMember;
     before: Observation | null;
+    contributions: RankContributions | null;
     onClick: () => void;
 }) {
     const previous = before?.adventurers.find((m) => m.adventurer_id === member.adventurer_id);
     const changes = memberChanges(member, before);
     const equipped = member.equipment_slots?.filter((slot) => slot.item != null).length;
     return (
+        <Tooltip content={contributionNote(member.adventurer_id, contributions)}>
         <button
             className={`scene-member-card spectator-member actor-frame ${changes.length ? "has-change" : ""}`}
             {...adventurerFrame(member)}
@@ -420,6 +431,7 @@ function MemberCard({
             </div>
             <div className="member-card-info">
                 <strong>{member.name}</strong>
+                <MemberContribution adventurerId={member.adventurer_id} contributions={contributions} />
                 <Vital
                     label="生命"
                     value={member.resources.current_hp}
@@ -460,10 +472,11 @@ function MemberCard({
                 </span>
             </div>
         </button>
+        </Tooltip>
     );
 }
 function ItemStats({ item }: { item: GameEntity }) {
-    const stats = (item.stats || item.base_stats) as Record<string, number> | undefined;
+    const stats = (item.effective_stats || item.stats || item.base_stats) as Record<string, number> | undefined;
     return (
         <div className="scene-mini-stats">
             {stats ? (

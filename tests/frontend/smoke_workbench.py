@@ -57,14 +57,13 @@ def main():
             expect(page.get_by_role("heading", name="运行中心", exact=True)).to_be_visible()
             expect(page.get_by_text("从第一组实验开始", exact=True)).to_be_visible()
             page.get_by_role("button", name="新建实验", exact=True).first.click()
-            page.get_by_label("批次名称", exact=True).fill("浏览器验收样例（非真实评测）")
             page.get_by_label("数据 preset", exact=True).select_option("default")
             page.get_by_label("模型名称", exact=True).fill("slow-ui")
             page.get_by_label("服务地址", exact=True).fill(url)
             page.get_by_label("API Key", exact=True).fill("browser-test-key")
             page.get_by_label("每个组合重复次数").fill("3")
             expect(page.get_by_text("3 RUNS", exact=True)).to_be_visible()
-            page.get_by_role("button", name="保存为模板", exact=True).click()
+            expect(page.get_by_role("button", name="保存为模板", exact=True)).to_have_count(0)
             assert "browser-test-key" not in page.evaluate("JSON.stringify(localStorage)")
             page.get_by_role("button", name="加入队列", exact=True).click()
             expect(page.locator('.run-table tbody tr')).to_have_count(3)
@@ -156,12 +155,10 @@ def main():
             expect(page.get_by_role('button', name='返回历史存档', exact=True)).to_be_visible()
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
             page.get_by_role('button', name='返回历史存档', exact=True).click()
-            page.get_by_role('button', name='实验批次', exact=True).click()
-            expect(page.get_by_role('heading', name='实验批次', exact=True)).to_be_visible()
-            expect(page.locator('.batch-row')).to_have_count(1)
-            expect(page.locator('.batch-info')).to_contain_text('3 个 run')
-            page.get_by_role('button', name='模型模板', exact=True).click()
-            expect(page.get_by_role('button', name='使用模板', exact=True)).to_be_visible()
+            expect(page.get_by_role('button', name='实验批次', exact=True)).to_have_count(0)
+            expect(page.get_by_role('button', name='模型模板', exact=True)).to_have_count(0)
+            expect(page.locator('a[href^="/legacy"], a[href^="/replay"]')).to_have_count(0)
+            expect(page.get_by_role('link', name='排行榜', exact=True)).to_be_visible()
             browser.close()
         if '--lighthouse' in sys.argv:
             environment = {**os.environ, 'CHROME_PATH': r'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe'}
@@ -173,7 +170,7 @@ def main():
             report = json.loads(report_path.read_text(encoding='utf-8'))
             print('Lighthouse:', {name: category['score'] for name, category in report['categories'].items()})
         assert not errors, errors
-        print(f"工作台验收通过：并行、排队、停止、终态转历史、通知、保留详情、真实续跑不重复、旧链接定位、批次不重复计数、凭证隔离、明暗主题与窄屏。截图：{directory}")
+        print(f"工作台验收通过：并行、排队、停止、终态转历史、通知、保留详情、真实续跑不重复、旧链接定位、移除批次与模板、凭证隔离、明暗主题与窄屏。截图：{directory}")
     finally:
         server.should_exit = True
         thread.join(timeout=15)

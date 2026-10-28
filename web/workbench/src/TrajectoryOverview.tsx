@@ -23,6 +23,7 @@ export function TrajectoryOverview({ type, state, onCategory, onState, onAll }: 
     const history = useTrajectories()!;
     const entries = history.data?.entries;
     const summary = useMemo(() => summarizeTrajectories(entries || []), [entries]);
+    const totalPlanSteps = summary.categories.reduce((total, category) => total + category.planSteps, 0);
     const loaded = history.data !== undefined;
     const count = (value: number) => loaded ? value : "…";
     return <section className="trajectory-overview" aria-label="整局工具调用概览" aria-busy={!loaded && history.pending}>
@@ -42,14 +43,21 @@ export function TrajectoryOverview({ type, state, onCategory, onState, onAll }: 
             </div>
         </header>
         <div className="trajectory-category-totals" role="group" aria-label="按工具类别筛选">
-            {summary.categories.map(category => <button key={category.id} className={loaded && category.attempts === 0 ? "is-zero" : ""}
-                aria-label={`查看${category.label}记录`} aria-pressed={type === `category:${category.id}`} disabled={!loaded}
-                title={`查看已记录的${category.label}记录，并清除其它筛选。尝试包含失败、未提交和回滚，已确认只计成功且未被回滚的已提交调用，不代表实际收益。`}
-                onClick={() => onCategory(category.id)}>
-                <strong>{category.label}</strong>
-                <span><b className="mono">{count(category.attempts)}</b><small>次调用</small><em>已确认 {count(category.confirmed)}</em></span>
-            </button>)}
+            {summary.categories.map(category => {
+                const isPlan = category.id === "plan";
+                const operations = category.attempts + (isPlan ? 0 : category.planSteps);
+                const confirmedCount = category.confirmed + (isPlan ? 0 : category.planConfirmed);
+                const title = isPlan
+                    ? `共 ${category.attempts} 次执行方案调用，包含 ${totalPlanSteps} 步子操作。已确认 ${category.confirmed} 次方案调用。子操作已计入各自类别，本卡片不重复累加。点击查看对应记录并清除其它筛选。`
+                    : `共 ${operations} 次${category.label}操作，其中直接调用 ${category.attempts} 次、方案子操作 ${category.planSteps} 步。已确认 ${confirmedCount} 次，其中直接调用 ${category.confirmed} 次、方案子操作 ${category.planConfirmed} 步。点击查看对应记录并清除其它筛选。`;
+                return <button key={category.id} className={loaded && operations === 0 ? "is-zero" : ""}
+                    aria-label={`查看${category.label}记录`} aria-pressed={type === `category:${category.id}`} disabled={!loaded}
+                    title={title} onClick={() => onCategory(category.id)}>
+                    <strong>{category.label}</strong>
+                    <span><b className="mono">{count(operations)}</b><small>{isPlan ? "次方案" : "次操作"}</small><em>已确认 {count(confirmedCount)}</em></span>
+                </button>;
+            })}
         </div>
-        <p>概览不随搜索变化 · 包含全部查询与预览，不代表实际收益 · 执行状态与回合状态可能重叠</p>
+        <p>类别计数含方案子操作，悬浮可查看来源 · 顶部总次数、状态计数和工具汇总仍按原始调用统计 · 不代表实际收益 · 状态可能重叠</p>
     </section>;
 }

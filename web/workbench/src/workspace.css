@@ -13,9 +13,6 @@
     min-height: 46px;
     padding: 7px 18px;
 }
-.workspace-main.is-focus-mode .workspace-footer {
-    display: none;
-}
 .workspace-main.is-focus-mode .focus-workspace > .back-button {
     flex-shrink: 0;
     min-height: 22px;
@@ -610,7 +607,7 @@
     align-items: start;
 }
 .paperdoll {
-    grid-template-columns: minmax(70px, 1fr) minmax(80px, 1.15fr) minmax(70px, 1fr);
+    grid-template-columns: minmax(90px, 1.25fr) minmax(70px, 1fr) minmax(90px, 1.25fr);
     grid-template-rows: repeat(4, minmax(52px, auto));
     gap: 6px;
 }

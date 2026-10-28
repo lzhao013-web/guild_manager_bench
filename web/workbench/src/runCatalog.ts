@@ -60,12 +60,26 @@ export function historyPreset(row: HistoryRun): string {
     return row.job?.config.preset || row.archive?.preset || "";
 }
 
+export function historyMetrics(row: HistoryRun) {
+    const usage = row.job ? row.job.usage : row.archive?.usage;
+    const input = usage?.input_tokens ?? null;
+    const output = usage?.output_tokens ?? null;
+    return {
+        duration_ms: row.job?.model_duration_ms ?? row.archive?.model_duration_ms ?? null,
+        input_tokens: input,
+        output_tokens: output,
+        total_tokens: input == null || output == null ? null : input + output,
+    };
+}
+
 export const HISTORY_COLUMNS = {
     name: { label: "Run / 模型", initial: "asc" },
     preset: { label: "Preset", initial: "asc" },
     status: { label: "当前状态", initial: "asc" },
     turns: { label: "进度", initial: "desc" },
     score: { label: "Rank Score", initial: "desc" },
+    duration: { label: "耗时", initial: "desc" },
+    tokens: { label: "Token", initial: "desc" },
     created_at: { label: "创建时间", initial: "desc" },
 } as const;
 export type HistorySortField = keyof typeof HISTORY_COLUMNS;
@@ -90,6 +104,8 @@ function historySortValue(row: HistoryRun, field: HistorySortField): string | nu
         case "preset": return historyPreset(row) || null;
         case "status": return historyStatus(row) || null;
         case "score": return row.job ? row.job.last_score : row.archive!.rank_score;
+        case "duration": return historyMetrics(row).duration_ms;
+        case "tokens": return historyMetrics(row).total_tokens;
         case "turns": return row.job ? row.job.turn : row.archive!.turns;
         case "name": return row.job?.name || row.archive?.model || null;
     }

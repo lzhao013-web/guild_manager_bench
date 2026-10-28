@@ -9,7 +9,8 @@ import type { Job, Observation } from "./types";
 
 const initial: Observation = { gold: 100, experience_pool: 0, materials: {}, adventurers: [], party_size_limit: 3, turn: 1, max_turns: 8 };
 const rec = (cursor: number, event: WatchRecord["event"]): WatchRecord => ({ cursor, after: cursor - 1, at: "2026-10-19T10:00:00Z", event });
-function setup(records: WatchRecord[], rawRecords: WatchRecord[] = [], job: Job = testJob("sidebar", { status: "completed", cursor: 10 })) {
+function setup(records: WatchRecord[], rawRecords: WatchRecord[] = [], job: Job = testJob("sidebar", { status: "completed", cursor: 10 }),
+    actions: Pick<Parameters<typeof RunDetail>[0], "onCurves" | "onPin" | "onFocus" | "onClose" | "pinned"> = {}) {
     const requests: string[] = [];
     const page: WatchPage = { cursor: 10, selected: 1, attempts: [], records };
     vi.spyOn(globalThis, "fetch").mockImplementation(async input => {
@@ -20,9 +21,37 @@ function setup(records: WatchRecord[], rawRecords: WatchRecord[] = [], job: Job 
     });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
     render(<QueryClientProvider client={client}><Theme><RunDetail job={job}
-        onStop={vi.fn()} onClone={vi.fn()} /></Theme></QueryClientProvider>);
+        onStop={vi.fn()} onClone={vi.fn()} {...actions} /></Theme></QueryClientProvider>);
     return requests;
 }
+
+it.each([false, true])("运行操作显示文字，关注状态为 %s 时按钮仍执行原有操作", pinned => {
+    const actions = { onCurves: vi.fn(), onFocus: vi.fn(), onPin: vi.fn(), onClose: vi.fn(), pinned };
+    setup([], [], testJob("controls"), actions);
+    const group = screen.getByRole("group", { name: "运行操作" });
+    const focus = within(group).getByRole("button", { name: "专注查看" });
+    expect(focus).toHaveTextContent("专注查看");
+    expect(focus).toHaveClass("is-primary");
+    const curves = within(group).getByRole("button", { name: "查看运行曲线" });
+    expect(curves).toHaveTextContent("曲线");
+    const pin = within(group).getByRole("button", { name: pinned ? "取消关注" : "关注此 run" });
+    expect(pin).toHaveTextContent(pinned ? "已关注" : "关注");
+    expect(pin).toHaveAttribute("aria-pressed", String(pinned));
+    const close = within(group).getByRole("button", { name: "关闭详情" });
+    expect(close).toHaveTextContent("");
+    fireEvent.click(focus);
+    fireEvent.click(curves);
+    fireEvent.click(pin);
+    fireEvent.click(close);
+    for (const callback of [actions.onFocus, actions.onCurves, actions.onPin, actions.onClose]) expect(callback).toHaveBeenCalledOnce();
+});
+
+it("侧栏提供整局时间线直达入口，不改变后台运行", () => {
+    const onFocus = vi.fn();
+    setup([], [], testJob("timeline-shortcut"), { onFocus });
+    fireEvent.click(screen.getByRole("button", { name: "整局时间线" }));
+    expect(onFocus).toHaveBeenCalledWith({ module: "actions", actionView: "timeline" });
+});
 
 it("运行列表侧栏也保留具体对象与影响，不再被原始 600 事件窗口和连续查询覆盖", async () => {
     const requests = setup([

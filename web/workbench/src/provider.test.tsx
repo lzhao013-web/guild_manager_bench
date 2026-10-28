@@ -22,7 +22,6 @@ it.each([true, false])(
                         presets={["default"]}
                         initial={draft}
                         onCreated={created}
-                        onSave={vi.fn()}
                     />
                 </Dialog.Root>
             </Theme>,
@@ -54,7 +53,6 @@ it("续跑更换接口后可以修正推理强度，不会被隐藏字段困住"
                     presets={["default"]}
                     initial={draft}
                     onCreated={vi.fn()}
-                    onSave={vi.fn()}
                 />
             </Dialog.Root>
         </Theme>,

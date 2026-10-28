@@ -37,6 +37,9 @@ export const RETURN_LABELS: Record<string, string> = {
     statistics: "战斗统计", basic_attack_events: "独立普攻次数", skill_uses: "技能释放次数", direct_damage: "直接伤害",
     status_damage_taken: "自身状态伤害", healing_received: "实际收到的治疗", left: "冒险者方", right: "怪物方",
     rank_score: "试算战力", simulation_only: "仅模拟", can_afford: "费用是否满足", monster_refresh: "怪物刷新状态",
+    plan_id: "方案凭据", operation_count: "方案步数", required_calls: "执行所需最低预算余额",
+    remaining_calls: "当前剩余预算", can_execute: "当前可执行", already_executed: "已提交，本次未重复执行",
+    current_rank_score: "当前真实战力", projected_rank_score: "方案战力", rank_score_delta: "战力变化",
     next_gold_cost: "下次刷新费用", content: "备忘正文", count: "备忘数量", dropped_oldest: "已丢弃旧备忘数量",
 };
 export const returnLabel = (key: string) => Object.hasOwn(RETURN_LABELS, key) ? RETURN_LABELS[key] : key;
@@ -119,8 +122,9 @@ export function describeReturn(frame: WatchFrame): ActionReturn {
     if (Array.isArray(r.equipment_inventory)) { used.add("equipment_inventory"); equipment(r.equipment_inventory, "返回的装备库存"); }
     if (Array.isArray(r.global_upgrades)) { used.add("global_upgrades"); upgrades(r.global_upgrades, "返回的天赋与升级"); }
     if (Array.isArray(r.recruit_candidates)) {
-        used.add("recruit_candidates"); table("返回的招募候选", ["候选", "招募费用", "资格", "基础属性"], r.recruit_candidates, item => [
-            item.name || item.candidate_id, price(item), flag(item.can_recruit, "可招募", requirementLines(item.missing).join(" · ") || "条件未满足"), returnStats(item.base_stats),
+        used.add("recruit_candidates"); table("返回的招募候选", ["候选", "招募费用", "资格", "属性"], r.recruit_candidates, item => [
+            item.name || item.candidate_id, price(item), flag(item.can_recruit, "可招募", requirementLines(item.missing).join(" · ") || "条件未满足"),
+            [item.effective_stats ? "Lv1面板（含公会直接加成）" : "基础属性", returnStats(item.effective_stats || item.base_stats)].join("\n"),
         ]);
     }
     if (Array.isArray(r.crafting_recipes)) {
@@ -171,7 +175,8 @@ export function describeReturn(frame: WatchFrame): ActionReturn {
     }
     view.fields = { ...view.fields, ...Object.fromEntries(Object.entries(r).filter(([key]) => !used.has(key) && !key.startsWith("_"))) };
     const resultNames = (items: Record<string, any>[]) => items.map(item => item.name || item.adventurer_id || item.instance_id || item.upgrade_id).join("、");
-    if (event.name === "recruit_adventurer" && returnedMembers.length) view.summary = `招募到 ${resultNames(returnedMembers)}${returnedMembers[0].level != null ? `，等级 ${returnedMembers[0].level}` : ""}`;
+    if (event.name === "execute_plan" && r.operation_count != null) view.summary = r.already_executed ? "方案已提交，本次未重复执行" : `已执行 ${r.operation_count} 步方案，不扣调用预算`;
+    else if (event.name === "recruit_adventurer" && returnedMembers.length) view.summary = `招募到 ${resultNames(returnedMembers)}${returnedMembers[0].level != null ? `，等级 ${returnedMembers[0].level}` : ""}`;
     else if (event.name === "craft_equipment" && output.equipment_inventory?.length) view.summary = `实际制成 ${resultNames(output.equipment_inventory)}，实例 ${output.equipment_inventory.map((item: any) => item.instance_id).join("、")}`;
     else if (event.name === "purchase_upgrade" && output.global_upgrades?.length) view.summary = `本次已解锁 ${resultNames(output.global_upgrades)}`;
     else if (event.name === "dismiss_adventurer" && output.dismissed_adventurers?.length) view.summary = `已解雇 ${resultNames(output.dismissed_adventurers)}`;

@@ -8,11 +8,11 @@ import { inputPreview } from "./actionInputs";
 import { TOOL_CALL_STATUS, toolCategoryLabel, summarizeToolCalls } from "./toolCalls";
 import type { Selection } from "./sceneModel";
 import { useTrajectories } from "./TrajectoryContext";
-import { confirmed, historyAction, LIFECYCLE, matchesOperation, matchesTrajectoryState, objectActionTitle, OPERATION_CATEGORIES, subjectRows, trajectorySearch } from "./trajectoryModel";
+import { confirmed, historyAction, LIFECYCLE, matchesOperation, matchesTrajectoryState, objectActionTitle, OPERATION_CATEGORIES, planSteps, subjectRows, trajectorySearch } from "./trajectoryModel";
 import type { OperationCategory, TrajectoryRow, TrajectoryState } from "./trajectoryModel";
 import "./trajectories.css";
 
-function HistoryState() {
+export function HistoryState() {
     const history = useTrajectories()!;
     return <>
         {history.pending && <p className="trajectory-note">正在读取整局轨迹…</p>}
@@ -28,7 +28,7 @@ export function TrajectoryResult({ row, subject }: { row: TrajectoryRow; subject
     const instances = row.subjects.filter(item => item.kind === "equipment" && (subject?.kind !== "equipment" || item.id === subject.id)).map(item => item.id).join("、");
     return <button className={`trajectory-result ${row.lifecycle} ${entry.status}`} disabled={history.locating}
         aria-pressed={history.selectedCursor === row.cursor}
-        aria-label={`查看轨迹 回合${row.turn ?? "未知"} ${title}${instances ? ` / 实例 ${instances}` : ""}`} onClick={() => history.locate(row)}>
+        aria-label={`查看轨迹 回合${row.turn ?? "未知"} ${title}${instances ? ` / 实例 ${instances}` : ""}${row.planStep ? ` / 方案第${row.planStep.index}/${row.planStep.total}步` : ""}`} onClick={() => history.locate(row)}>
         <span className="trajectory-when"><b>第 {row.turn ?? "未知"} 回合</b><small>操作 {row.ordinal}</small></span>
         <span className="trajectory-content"><strong>{title}</strong>
             {title !== entry.title && <small>对应行动：{entry.title}</small>}
@@ -36,6 +36,7 @@ export function TrajectoryResult({ row, subject }: { row: TrajectoryRow; subject
             <small className="action-input-preview">输入 · {inputPreview(entry.input)}</small>
             <span className="trajectory-tags"><span>{toolCategoryLabel(row.event)}</span><span className={`action-status is-${entry.status}`}>{ACTION_STATUS[entry.status]}</span>
                 <span>{LIFECYCLE[row.lifecycle]}</span>
+                {row.planStep && <span>方案第 {row.planStep.index} / {row.planStep.total} 步 · 点击查看所属方案</span>}
                 {history.viewTurn != null && row.turn != null && row.turn > history.viewTurn && <span>后续回合</span>}
                 {row.subjects.filter(s => s.kind === "equipment").map(s => <span className="mono" key={s.id}>实例 {s.id}</span>)}
             </span>
@@ -52,12 +53,14 @@ export function RunTrajectories({ detail }: { detail?: ReactNode }) {
     const [page, setPage] = useState(0);
     const viewport = useRef<HTMLDivElement>(null);
     const entries = history.data?.entries;
-    const rows = useMemo(() => (entries || []).filter(row =>
+    const searchable = useMemo(() => (entries || []).flatMap(row => [row, ...planSteps(row)]), [entries]);
+    const rows = useMemo(() => searchable.filter(row =>
         (!search.trim() || trajectorySearch(row).includes(search.trim().toLowerCase())) &&
         matchesOperation(row, type) && matchesTrajectoryState(row, state) &&
         (!from || row.turn != null && row.turn >= Number(from)) && (!to || row.turn != null && row.turn <= Number(to))
-    ), [entries, search, type, state, from, to]);
+    ), [searchable, search, type, state, from, to]);
     const tools = useMemo(() => summarizeToolCalls((entries || []).map(row => row.event)), [entries]);
+    const searchableTools = useMemo(() => summarizeToolCalls(searchable.map(row => row.event)), [searchable]);
     const lastPage = Math.max(0, Math.ceil(rows.length / 40) - 1);
     const current = Math.min(page, lastPage);
     useLayoutEffect(() => { if (viewport.current) viewport.current.scrollTop = 0; }, [search, type, state, from, to, current]);
@@ -75,9 +78,9 @@ export function RunTrajectories({ detail }: { detail?: ReactNode }) {
         <div className="trajectory-filters">
             <label className="trajectory-search"><MagnifyingGlass size={15} /><input aria-label="搜索整局行动" placeholder="天赋、装备、成员名称或 ID" value={search} onChange={e => change(() => setSearch(e.target.value))} /></label>
             <select aria-label="筛选轨迹操作" value={type} onChange={e => change(() => setType(e.target.value))}>
-                <option value="all">全部工具调用</option>
+                <option value="all">全部记录（含方案子操作）</option>
                 <optgroup label="操作类别">{OPERATION_CATEGORIES.map(category => <option key={category.id} value={`category:${category.id}`}>{category.label}</option>)}</optgroup>
-                <optgroup label="具体工具">{tools.map(tool => <option key={tool.name} value={tool.name}>{tool.label}（{tool.total}）</option>)}</optgroup>
+                <optgroup label="具体工具（含方案子操作）">{searchableTools.map(tool => <option key={tool.name} value={tool.name}>{tool.label}（{tool.total}条记录）</option>)}</optgroup>
             </select>
             <select aria-label="筛选轨迹状态" value={state} onChange={e => change(() => setState(e.target.value as TrajectoryState))}>
                 <option value="all">全部记录</option>
@@ -87,7 +90,7 @@ export function RunTrajectories({ detail }: { detail?: ReactNode }) {
             <label className="trajectory-range">回合<input aria-label="轨迹起始回合" type="number" min="1" value={from} onChange={e => change(() => setFrom(e.target.value))} /><span>至</span><input aria-label="轨迹结束回合" type="number" min="1" value={to} onChange={e => change(() => setTo(e.target.value))} /></label>
         </div>
         <HistoryState />
-        <p className="trajectory-note">{history.data?.origin === "execution" ? "当前运行阶段" : "整局记录"} · {rows.length} 条匹配 · 包含续跑前历史，可能晚于当前观看位置</p>
+        <p className="trajectory-note">{history.data?.origin === "execution" ? "当前运行阶段" : "整局记录"} · {rows.length} 条匹配{searchable.length > (entries?.length || 0) && "（含方案子操作，不另计工具调用）"} · 包含续跑前历史，可能晚于当前观看位置</p>
         <div className="trajectory-results" ref={viewport}>
             {history.data && <ToolCallSummary tools={tools} selected={type} onTool={name => quickFilter(name)} label="整局工具汇总" />}
             {rows.slice(current * 40, (current + 1) * 40).map(row => <TrajectoryResult key={row.id} row={row} />)}

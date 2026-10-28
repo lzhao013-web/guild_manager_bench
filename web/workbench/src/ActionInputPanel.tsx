@@ -1,14 +1,19 @@
 import type { ActionInput, InputValue } from "./actionInputs";
+import { ResizableTable } from "./ResizableTable";
 
 function Value({ value }: { value: InputValue }) {
     if (value.kind === "array" && value.children.length) {
         if (value.children.every(field => field.value.kind === "object")) {
             const columns = [...new Map(value.children.flatMap(row => row.value.children.map(field => [field.key, field.label] as const)))];
-            if (columns.length) return <table className="action-input-table"><thead><tr><th scope="col">序号</th>{columns.map(([key, label]) => <th scope="col" key={key}>{label} <code>{key}</code></th>)}</tr></thead>
+            if (columns.length) return <ResizableTable className="action-input-table" scroll
+                storageKey={`action-input:${JSON.stringify(columns.map(([key]) => key).sort())}`}
+                columns={[{ id: "row", label: "序号", minWidth: 56 },
+                    ...columns.map(([key, label]) => ({ id: `field:${key}`, label: `${label} ${key}`, minWidth: 100 }))]}>
+                <thead><tr><th scope="col">序号</th>{columns.map(([key, label]) => <th scope="col" key={key}>{label} <code>{key}</code></th>)}</tr></thead>
                 <tbody>{value.children.map((row, i) => <tr key={row.key}><th scope="row">{row.label.startsWith("派遣") ? row.label : i + 1}</th>{columns.map(([key]) => {
                     const field = row.value.children.find(field => field.key === key);
                     return <td key={key}>{field ? <Value value={field.value} /> : "未提供"}</td>;
-                })}</tr>)}</tbody></table>;
+                })}</tr>)}</tbody></ResizableTable>;
         }
         return <ol className="action-input-list">{value.children.map(field => <li key={field.key}><Value value={field.value} /></li>)}</ol>;
     }

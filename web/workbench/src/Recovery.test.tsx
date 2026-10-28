@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { Dialog, Theme } from "@radix-ui/themes";
 import { expect, it, vi } from "vitest";
 import { NewBatch, defaultDraft } from "./NewBatch";
-import { expandDraft, safeTemplate } from "./model";
+import { expandDraft } from "./model";
 import { buildRunCatalog } from "./runCatalog";
 import { testJob } from "./test-jobs";
 
@@ -12,7 +12,7 @@ const changed = (confirmation_token = token) => ({ index: 0, run_id: "original",
 const draft = () => ({ ...defaultDraft("default"), name: "分支测试", rerun_run_id: "original", rerun_from_turn: 3, rerun_max_turn: 8 });
 function form() {
     const created = vi.fn();
-    render(<Theme><Dialog.Root open><NewBatch presets={["default"]} initial={draft()} onCreated={created} onSave={vi.fn()} /></Dialog.Root></Theme>);
+    render(<Theme><Dialog.Root open><NewBatch presets={["default"]} initial={draft()} onCreated={created} /></Dialog.Root></Theme>);
     return created;
 }
 
@@ -65,12 +65,9 @@ it("检查后版本再次变化会再次要求确认，不能静默沿用旧确�
     expect(tokens).toEqual([token, "b".repeat(64)]);
 });
 
-it("分支不能批量展开，模板去掉来源与起点，分支和原 run 保持独立身份", () => {
+it("分支不能批量展开，分支和原 run 保持独立身份", () => {
     expect(() => expandDraft({ ...draft(), repeats: 2 })).toThrow("一个任务");
     expect(() => expandDraft({ ...draft(), rerun_from_turn: 9 })).toThrow("可恢复范围");
-    const template = safeTemplate(draft());
-    expect(template.rerun_run_id).toBeUndefined();
-    expect(template.rerun_from_turn).toBeUndefined();
     const parent = testJob("parent", { archive_id: "original" });
     const branch = testJob("branch", { archive_id: "child", config: { ...parent.config, resume_run_id: null, rerun_run_id: "original", rerun_from_turn: 3 } });
     expect(buildRunCatalog([parent, branch]).runs).toHaveLength(2);

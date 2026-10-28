@@ -1,0 +1,41 @@
+.resizable-table > thead > tr > th {
+  position: relative;
+  padding-right: 14px;
+}
+.resizable-table[data-column-sized] {
+  table-layout: fixed;
+  min-width: 0;
+}
+.resizable-table[data-column-sized] > thead > tr > th,
+.resizable-table[data-column-sized] > tbody > tr > th,
+.resizable-table[data-column-sized] > tbody > tr > td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.resizable-table[data-column-sized] > thead > tr > th:has(> input[type="checkbox"]),
+.resizable-table[data-column-sized] > tbody > tr > td:has(> input[type="checkbox"]) { text-overflow: clip; }
+.column-resize-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  width: 10px;
+  cursor: col-resize;
+  touch-action: none;
+}
+.column-resize-handle::after {
+  content: "";
+  position: absolute;
+  inset: 3px 1px 3px auto;
+  width: 2px;
+  background: var(--table-resize-color);
+  opacity: 0;
+}
+.column-resize-handle:hover::after,
+.column-resize-handle:focus-visible::after,
+.is-column-resizing .column-resize-handle::after { opacity: 1; }
+.column-resize-handle:focus-visible { outline: 1px solid var(--table-resize-color); outline-offset: -1px; }
+.resizable-table.is-column-resizing { cursor: col-resize; user-select: none; }
+.column-table-scroll { min-width: 0; max-width: 100%; overflow-x: auto; }
+@media (max-width: 767px) { .column-resize-handle { width: 14px; } }

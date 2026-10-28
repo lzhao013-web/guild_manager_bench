@@ -628,7 +628,8 @@ function renderRecruitment(obs) {
           </div>
         </div>
       </div>
-      ${candidateStats(candidate.base_stats)}
+      <div class="small muted">${candidate.effective_stats ? "Lv1面板 · 含公会直接属性加成" : "初始基础属性"}</div>
+      ${candidateStats(candidate.effective_stats || candidate.base_stats)}
       <div class="recruit-section">
         <div class="recruit-section-label">属性成长</div>
         <div class="small muted">${statModifierText(candidate.stat_growth_per_level)}</div>
@@ -2682,13 +2683,13 @@ function renderToolResultInline(tool, toolName) {
 const MUTATING_TOOL_NAMES = new Set([
   "craft_equipment", "purchase_upgrade", "allocate_experience",
   "recruit_adventurer", "dismiss_adventurer", "equip_item",
-  "unequip_item", "end_turn", "write_memo",
+  "unequip_item", "end_turn", "write_memo", "exchange_materials",
 ]);
 
 const REPLAY_STATE_MUTATING_TOOL_NAMES = new Set([
   "craft_equipment", "purchase_upgrade", "allocate_experience",
   "recruit_adventurer", "dismiss_adventurer", "equip_item",
-  "unequip_item", "end_turn",
+  "unequip_item", "end_turn", "exchange_materials",
 ]);
 
 function isMutatingTool(name) {
@@ -3246,7 +3247,6 @@ function updateLoadedRunMetadata(runId, replay) {
   if (!run || !replay || typeof replay !== "object") return;
   run.has_observations = hasReplayObservations(replay);
   if (replay.score && typeof replay.score === "object") {
-    run.score = replay.score.score;
     run.rank_score = replay.score.rank_score;
   }
 }
@@ -3519,19 +3519,10 @@ function renderTurnTimingUsage(tu) {
 }
 
 function formatScore(score) {
-  if (!score || typeof score !== "object") {
+  if (!score || typeof score !== "object" || score.rank_score == null) {
     return "";
   }
-  const hasScore = score.score !== undefined && score.score !== null;
-  const hasRank = score.rank_score !== undefined && score.rank_score !== null;
-  if (!hasScore && !hasRank) {
-    return "";
-  }
-  let text = hasScore ? `得分 ${score.score}` : "";
-  if (score.rank_score !== undefined && score.rank_score !== null) {
-    text += `${text ? " · " : ""}段位 ${Math.round(score.rank_score)}`;
-  }
-  return text;
+  return `段位 ${Math.round(score.rank_score)}`;
 }
 
 function renderRunSummary(entry) {
@@ -3807,6 +3798,7 @@ function toolLabel(name) {
     preview_battle: "预览战斗",
     preview_team_power: "预览战力",
     craft_equipment: "制作装备",
+    exchange_materials: "兑换材料",
     purchase_upgrade: "购买升级",
     allocate_experience: "分配经验",
     recruit_adventurer: "招募冒险者",

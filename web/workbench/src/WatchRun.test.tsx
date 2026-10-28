@@ -130,7 +130,7 @@ const job = (id = "one"): Job => ({
     budget: null,
     recent_actions: [],
 });
-function setup(count = 1, initialPage = first) {
+function setup(count = 1, initialPage = first, historyPage = first) {
     let live = initialPage;
     const requests: string[] = [];
     const onStop = vi.fn();
@@ -154,7 +154,7 @@ function setup(count = 1, initialPage = first) {
                 }),
                 { status: 200 },
             );
-        return new Response(JSON.stringify(path.includes("attempt=") ? first : live), {
+        return new Response(JSON.stringify(path.includes("attempt=") ? historyPage : live), {
             status: 200,
         });
     });
@@ -202,6 +202,83 @@ function setup(count = 1, initialPage = first) {
     };
 }
 
+it("编队贡献来自所选位置之前的结算，回看旧回合不使用未来或已回滚的贡献", async () => {
+    const attempt = first.attempts[0];
+    const attempts = [
+        { ...attempt, id: 10, turn: 1, score: 100, rank_contributions: { turn: 1, scores: { a1: 100 } } },
+        { ...attempt, id: 15, turn: 1, score: 999, status: "rolled_back", rank_contributions: { turn: 1, scores: { a1: 999 } } },
+        { ...attempt, id: 20, turn: 2, score: 200, rank_contributions: { turn: 2, scores: { a1: 200 } } },
+        { ...attempt, id: 30, turn: 3, score: 300, rank_contributions: { turn: 3, scores: { a1: 300 } } },
+    ];
+    const page = (turn: number, id: number): WatchPage => ({ cursor: id + 2, selected: id, attempts, records: [
+        record(id, { type: "turn_started", turn, observation: { ...recruited, turn } }),
+        record(id + 1, { type: "tool_result", name: "end_turn", result: { ok: true, _observation_after: { ...recruited, turn: turn + 1 } } }),
+        record(id + 2, { type: "turn_scored", turn, rank_score: turn * 100, adventurer_rank_scores: { a1: turn * 100 } }),
+    ] });
+    setup(1, page(3, 30), page(2, 20));
+    fireEvent.click(await screen.findByRole("button", { name: "专注查看" }));
+    fireEvent.click(await screen.findByRole("button", { name: "展开编队" }));
+    const detail = () => screen.getByRole("region", { name: "验收剑士 的详情" });
+    expect(within(detail()).getByText("300", { exact: true })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "上一步" }));
+    fireEvent.click(screen.getByRole("button", { name: "上一步" }));
+    await waitFor(() => expect(within(detail()).getByText("200", { exact: true })).toBeVisible());
+    fireEvent.change(screen.getByLabelText("选择观战回合"), { target: { value: "20" } });
+    await waitFor(() => expect(screen.getByText("回合 2")).toBeVisible());
+    fireEvent.click(screen.getByRole("button", { name: "上一步" }));
+    fireEvent.click(screen.getByRole("button", { name: "上一步" }));
+    await waitFor(() => expect(within(detail()).getByText("100", { exact: true })).toBeVisible());
+    expect(within(detail()).queryByText("200", { exact: true })).not.toBeInTheDocument();
+    expect(within(detail()).queryByText("999", { exact: true })).not.toBeInTheDocument();
+});
+
+it("兑换额度跟随所选历史位置，不使用当前任务或未来状态", async () => {
+    const before: Observation = { ...initial, turn: 12, max_turns: 35,
+        material_exchange: { from_turn: 12, point_limit: 6, used_points: 0, remaining_points: 6 } };
+    const after: Observation = { ...before, gold: 20, materials: { spider_silk: 2 },
+        material_exchange: { ...before.material_exchange!, used_points: 4, remaining_points: 2 } };
+    const page: WatchPage = { ...first, cursor: 2, records: [
+        record(1, { type: "turn_started", turn: 12, observation: before }),
+        record(2, { type: "tool_result", turn: 12, name: "exchange_materials",
+            arguments: { material_id: "spider_silk", quantity: 2 }, result: { ok: true, _observation_after: after } }),
+    ] };
+    setup(1, page, page);
+    expect(await screen.findByLabelText("材料兑换状态")).toHaveTextContent("剩余额度2/6点");
+    expect(stateChanges(before, after)).toContain("兑换剩余额度 -4");
+    fireEvent.change(screen.getByRole("slider", { name: "选择观战步骤" }), { target: { value: "0" } });
+    expect(screen.getByLabelText("材料兑换状态")).toHaveTextContent("剩余额度6/6点");
+    fireEvent.click(screen.getByRole("button", { name: /返回实时/ }));
+    expect(screen.getByLabelText("材料兑换状态")).toHaveTextContent("剩余额度2/6点");
+    fireEvent.click(screen.getByRole("button", { name: "专注查看" }));
+    expect(await screen.findByLabelText("材料兑换状态")).toHaveTextContent("剩余额度2/6点");
+    expect(within(screen.getByRole("region", { name: "最近行动概览" })).getByText("兑换材料", { exact: true })).toBeVisible();
+});
+
+it.each([
+    [11, 0, "未开放（T12起）"],
+    [35, 6, "额度已用尽（0/6点）"],
+] as const)("兑换状态在 T%s 按存档规则展示", async (turn, used, label) => {
+    const observation = { ...initial, turn, material_exchange: { from_turn: 12, point_limit: 6, used_points: used, remaining_points: 6-used } };
+    const page = { ...first, cursor: 1, records: [record(1, { type: "turn_started", turn, observation })] };
+    setup(1, page, page);
+    expect(await screen.findByLabelText("材料兑换状态")).toHaveTextContent(label);
+});
+
+it("旧版观战没有兑换信息时不虚构额度", async () => {
+    setup();
+    await screen.findByText("验收剑士");
+    expect(screen.queryByLabelText("材料兑换状态")).not.toBeInTheDocument();
+});
+
+it("多路面板明确显示专注入口，点击后进入完整局面", async () => {
+    const { onFocus } = setup();
+    const focus = await screen.findByRole("button", { name: "专注查看" });
+    expect(focus).toHaveTextContent("专注");
+    fireEvent.click(focus);
+    expect(onFocus).toHaveBeenCalledWith(undefined);
+    expect(await screen.findByRole("region", { name: "单局总览" })).toBeVisible();
+});
+
 it("点击历史行动同步局面，后台新事件不会改变已冻结的位置，返回实时后追上", async () => {
     const { update, requests } = setup();
     await screen.findByText("验收剑士");
@@ -217,6 +294,68 @@ it("点击历史行动同步局面，后台新事件不会改变已冻结的位�
     expect(screen.getByText("验收剑士")).toBeVisible();
     expect(within(screen.getByLabelText("当前观看位置的资源")).getByText("25")).toBeVisible();
     expect(requests.every((path) => path.includes("/watch"))).toBe(true);
+});
+
+it("暂停后流式正文、思考和工具参数不提示新事件，实际工具行动仍提示且不改变历史局面", async () => {
+    let page: WatchPage = { ...first, attempts: [{ ...first.attempts[0], status: "running", score: null }], records: [
+        ...first.records.slice(0, 4), record(5, { type: "model_request", turn: 1, step: 2 }),
+    ] };
+    const { update } = setup(1, page);
+    await screen.findByText("验收剑士");
+    fireEvent.click(screen.getByRole("button", { name: "暂停跟随" }));
+    for (const type of ["model_reasoning_delta", "model_delta", "tool_call_delta"]) {
+        const cursor = page.cursor + 1;
+        page = { ...page, cursor, records: type === "tool_call_delta" ? page.records
+            : [...page.records, record(cursor, { type, text: "流式输出尚未结束" })] };
+        await update(page);
+        expect(screen.getByRole("button", { name: "返回实时" })).toBeVisible();
+        expect(screen.getByText("历史局面", { exact: true })).toBeVisible();
+    }
+    const cursor = page.cursor;
+    await update({ ...page, cursor: cursor + 3, records: [...page.records,
+        record(cursor + 1, { type: "model_response", turn: 1, step: 2, tool_calls: [{ id: "buy", name: "purchase_upgrade", arguments: { upgrade_id: "training" } }] }),
+        record(cursor + 2, { type: "tool_call", name: "purchase_upgrade", call_id: "buy", arguments: { upgrade_id: "training" } }),
+        record(cursor + 3, { type: "tool_result", name: "purchase_upgrade", call_id: "buy", result: { ok: true, _observation_after: { ...recruited, gold: 25 } } }),
+    ] });
+    expect(await screen.findByRole("button", { name: "返回实时（有新事件）" })).toBeVisible();
+    expect(within(screen.getByLabelText("当前观看位置的资源")).getByText("60", { exact: true })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "返回实时（有新事件）" }));
+    expect(within(screen.getByLabelText("当前观看位置的资源")).getByText("25", { exact: true })).toBeVisible();
+});
+
+it("跟随时流式思考只更新模型输出，不把行动时间线拉到底，实际工具行动仍自动跟随", async () => {
+    const pending: WatchPage = { ...first, attempts: [{ ...first.attempts[0], status: "running", score: null }], records: [
+        ...first.records.slice(0, 4), record(5, { type: "model_request", turn: 1, step: 2 }),
+    ] };
+    const { update } = setup(1, pending);
+    fireEvent.click(await screen.findByRole("button", { name: "专注查看" }));
+    fireEvent.click(await screen.findByRole("button", { name: "展开最近行动" }));
+    const timeline = document.querySelector<HTMLDivElement>(".spectator-timeline-scroll")!;
+    Object.defineProperty(timeline, "scrollHeight", { configurable: true, value: 900 });
+    timeline.scrollTop = 100;
+    fireEvent.scroll(timeline);
+    const streaming: WatchPage = { ...pending, cursor: 7, records: [
+        ...pending.records, record(6, { type: "model_reasoning_delta", text: "仍在权衡下一步操作" }),
+        record(7, { type: "model_delta", text: "仍在生成的正文" }),
+    ] };
+    await update(streaming);
+    await screen.findByText("仍在生成的正文", { exact: true });
+    expect(timeline.scrollTop).toBe(100);
+    expect(screen.getByRole("button", { name: "暂停跟随" })).toBeVisible();
+    fireEvent.change(screen.getByLabelText("切换展开模块"), { target: { value: "models" } });
+    fireEvent.click(screen.getByText("API 提供的推理文本或摘要"));
+    expect(screen.getByText("仍在权衡下一步操作", { exact: true })).toBeVisible();
+    expect(screen.getByRole("option", { name: "调用 2 / 尚无完整响应" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("切换展开模块"), { target: { value: "actions" } });
+    timeline.scrollTop = 100;
+    fireEvent.scroll(timeline);
+    await update({ ...streaming, cursor: 10, records: [...streaming.records,
+        record(8, { type: "model_response", turn: 1, step: 2, text: "仍在生成的正文", assistant_metadata: { reasoning_content: "仍在权衡下一步操作" }, tool_calls: [{ id: "memo", name: "write_memo", arguments: { content: "完成思考" } }] }),
+        record(9, { type: "tool_call", name: "write_memo", call_id: "memo", arguments: { content: "完成思考" } }),
+        record(10, { type: "tool_result", name: "write_memo", call_id: "memo", result: { ok: true, memo: { content: "完成思考" } } }),
+    ] });
+    expect(await within(screen.getByRole("region", { name: "观战行动时间线" })).findByRole("button", { name: "定位行动 记录备忘" })).toBeVisible();
+    expect(timeline.scrollTop).toBe(900);
 });
 
 it("两路独立跟随，进入专注再返回保留原位置", async () => {

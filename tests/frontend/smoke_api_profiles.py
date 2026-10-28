@@ -79,8 +79,8 @@ def main():
             )
             assert page.get_by_label("API Key", exact=True).count() == 0
             expect(page.get_by_label("模型名称", exact=True)).to_have_value("discovered-model")
-            page.get_by_label("批次名称", exact=True).fill("复用配置验收（非真实模型）")
-            page.get_by_role("button", name="保存为模板", exact=True).click()
+            expect(page.get_by_label("批次名称", exact=True)).to_have_count(0)
+            expect(page.get_by_role("button", name="保存为模板", exact=True)).to_have_count(0)
             page.get_by_role("button", name="加入队列", exact=True).click()
             wait_until(
                 lambda: (

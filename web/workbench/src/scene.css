@@ -151,6 +151,18 @@
     line-height: 1.5;
     overflow-wrap: anywhere;
 }
+.member-contribution {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--gray-11);
+    font-size: var(--wb-text-xs);
+}
+.member-contribution > b { color: var(--gray-12); font-weight: 500; white-space: nowrap; }
+.contribution-hint { display: inline-flex; color: var(--gray-11); cursor: help; }
+.scene-member-contribution { margin: -4px 0 10px; }
+.scene-member-contribution > span { display: inline-flex; border-radius: 3px; }
+.scene-member-contribution > span:focus-visible { outline: 2px solid var(--accent-8); outline-offset: 3px; }
 .scene-vital {
     display: grid;
     gap: 4px;
@@ -435,7 +447,7 @@
     image-rendering: pixelated;
     vertical-align: middle;
 }
-.paperdoll-slot > .equipment-icon {
+.paperdoll-slot.vacant > .equipment-icon {
     width: 18px;
     height: 18px;
 }
@@ -623,9 +635,20 @@
     min-width: 0;
 }
 .paperdoll-slot.equipped {
+    flex-direction: row;
+    gap: 6px;
     border-color: var(--accent-6);
     color: var(--accent-11);
     background: var(--accent-2);
+    text-align: center;
+}
+.paperdoll-slot.equipped > svg {
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+}
+.paperdoll-slot.equipped > strong {
+    min-width: 0;
 }
 .paperdoll-slot.selected {
     outline: 2px solid var(--accent-8);

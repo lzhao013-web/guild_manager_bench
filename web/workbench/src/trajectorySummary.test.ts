@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { historyAction, matchesOperation, matchesTrajectoryState, operationCategory, summarizeTrajectories } from "./trajectoryModel";
+import { confirmed, historyAction, matchesOperation, matchesTrajectoryState, operationCategory, planSteps, summarizeTrajectories, trajectorySearch } from "./trajectoryModel";
 import type { TrajectoryRow } from "./trajectoryModel";
 
 function records() {
@@ -66,10 +66,36 @@ it("旧式刷新预览和实刷均可统计筛选，只读预览不混同付费�
     expect(matchesOperation(refresh, "category:refresh")).toBe(true);
     expect(historyAction(preview)).toMatchObject({ kind: "query", title: "预览怪物刷新", summary: "仅查看刷新候选，未刷新怪物或消耗金币" });
 });
+it("方案步骤共享真实位置与生命周期，独立检索输入，不继承整批对象或改变原记录", () => {
+    const parent: TrajectoryRow = { ...records()[0], names: { hero: "伊莲", sword: "青铜剑" }, subjects: [{ kind: "recipe", id: "sword", name: "青铜剑" }],
+        event: { type: "tool_result", name: "execute_plan", result: { ok: true, events: [
+            { action: { type: "craft", recipe_id: "sword" }, summary: "制作青铜剑" },
+            { action: { type: "allocate_experience", adventurer_id: "hero", amount: 20 }, summary: "分配经验" },
+        ] } } };
+    const before = structuredClone(parent);
+    const steps = planSteps(parent);
+    expect(steps.map(step => step.event.name)).toEqual(["craft_equipment", "allocate_experience"]);
+    expect(steps[1]).toMatchObject({ attempt: parent.attempt, ordinal: parent.ordinal, cursor: parent.cursor, turn: parent.turn, planStep: { index: 2, total: 2 } });
+    expect(trajectorySearch(steps[1])).toContain("伊莲");
+    expect(trajectorySearch(steps[1])).toContain("hero");
+    expect(trajectorySearch(steps[1])).not.toContain("青铜剑");
+    expect(confirmed(planSteps({ ...parent, lifecycle: "rolled_back" })[0])).toBe(false);
+    expect(matchesTrajectoryState(planSteps({ ...parent, lifecycle: "uncommitted" })[0], "uncommitted")).toBe(true);
+    const summary = summarizeTrajectories([parent]);
+    expect(summary.total).toBe(1);
+    expect(summary.states.confirmed).toBe(1);
+    expect(summary.tools).toMatchObject([{ name: "execute_plan", total: 1 }]);
+    expect(summary.categories.find(category => category.id === "craft")).toMatchObject({ attempts: 0, confirmed: 0, planSteps: 1, planConfirmed: 1 });
+    const rolledBack = summarizeTrajectories([{ ...parent, lifecycle: "rolled_back" }]);
+    expect(rolledBack.categories.find(category => category.id === "craft")).toMatchObject({ planSteps: 1, planConfirmed: 0 });
+    expect(parent).toEqual(before);
+});
 it("已读取的空日志可得到零计数，不能修改原始数据或虚构成功", () => {
     const summary = summarizeTrajectories([]);
     expect(summary.total).toBe(0);
-    expect(summary.categories).toHaveLength(13);
+    expect(summary.categories).toHaveLength(15);
+    expect(summary.categories.find(category => category.id === "plan")).toMatchObject({ attempts: 0, confirmed: 0 });
+    expect(summary.categories.find(category => category.id === "exchange")).toMatchObject({ attempts: 0, confirmed: 0 });
     expect(summary.tools).toEqual([]);
     expect(summary.categories.every(category => category.attempts === 0 && category.confirmed === 0)).toBe(true);
 });

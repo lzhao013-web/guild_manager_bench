@@ -1,5 +1,8 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { RunTrajectories } from "./RunTrajectories";
+import { RunTimeline } from "./RunTimeline";
+import type { ActionView } from "./sceneNavigation";
+import type { TrajectoryRow } from "./trajectoryModel";
 import { useTrajectories } from "./TrajectoryContext";
 import type { ReactNode } from "react";
 import { ACTION_STATUS, actionEntries, actionGroups, actionSummary, describeAction, recentActions } from "./actionModel";
@@ -14,7 +17,7 @@ import { ArrowSquareOut } from "@phosphor-icons/react";
 import type { WatchFrame } from "./watchModel";
 import "./actions.css";
 
-export function ActionTimeline({ frames, frame, active, following, rolledBack, onFrame, renderDetails, onWholeRun, onModelReasoning }: {
+export function ActionTimeline({ frames, frame, active, following, rolledBack, onFrame, renderDetails, onWholeRun, onModelReasoning, initialView = "turn" }: {
     frames: WatchFrame[];
     frame: WatchFrame | undefined;
     active: boolean;
@@ -24,9 +27,10 @@ export function ActionTimeline({ frames, frame, active, following, rolledBack, o
     renderDetails: (frame: WatchFrame) => ReactNode;
     onWholeRun?: () => void;
     onModelReasoning?: (entry: ActionEntry) => void;
+    initialView?: ActionView;
 }) {
     const history = useTrajectories();
-    const [wholeRun, setWholeRun] = useState(false);
+    const [view, setView] = useState<ActionView>(initialView);
     const entries = useMemo(() => actionEntries(frames), [frames]);
     const [toolType, setToolType] = useState("all");
     const [toolStatus, setToolStatus] = useState<"all" | ToolCallStatus>("all");
@@ -54,7 +58,7 @@ export function ActionTimeline({ frames, frame, active, following, rolledBack, o
             node.scrollTop += selected.getBoundingClientRect().top - node.getBoundingClientRect().top - 8;
         } else node.scrollTop = following ? node.scrollHeight : scroll.current;
         previousFrame.current = frame?.cursor;
-    }, [active, frame?.cursor, filtered, following, wholeRun]);
+    }, [active, frame?.cursor, toolType, toolStatus, following, view]);
     function row(entry: ActionEntry) {
         const isSelected = entry.frame.cursor === frame?.cursor || entry.start === frame?.cursor;
         return <button key={entry.frame.cursor} aria-label={`定位行动 ${entry.title}`} aria-pressed={isSelected}
@@ -70,8 +74,9 @@ export function ActionTimeline({ frames, frame, active, following, rolledBack, o
         </button>;
     }
     const mode = history && <nav className="trajectory-mode" aria-label="行动查看范围">
-        <button aria-pressed={!wholeRun} onClick={() => setWholeRun(false)}>所选回合</button>
-        <button aria-pressed={wholeRun} onClick={() => { setWholeRun(true); onWholeRun?.(); }}>整局检索</button>
+        <button aria-pressed={view === "turn"} onClick={() => setView("turn")}>所选回合</button>
+        <button aria-pressed={view === "timeline"} onClick={() => { setView("timeline"); onWholeRun?.(); }}>整局时间线</button>
+        <button aria-pressed={view === "search"} onClick={() => { setView("search"); onWholeRun?.(); }}>整局检索</button>
     </nav>;
     const detail = <section className="action-detail" aria-label="所选行动详情">
         {selected ? <>
@@ -91,7 +96,11 @@ export function ActionTimeline({ frames, frame, active, following, rolledBack, o
             {renderDetails(selected.frame)}
         </> : <p className="scene-empty">选择一条行动查看对象、结果和局面变化</p>}
     </section>;
-    if (wholeRun) return <div className="action-whole-workspace">{mode}<RunTrajectories detail={detail} /></div>;
+    async function inspect(row: TrajectoryRow) {
+        if (await history!.locate(row)) setView("turn");
+    }
+    if (view === "timeline") return <div className="action-whole-workspace">{mode}<RunTimeline onInspect={row => void inspect(row)} active={active} /></div>;
+    if (view === "search") return <div className="action-whole-workspace">{mode}<RunTrajectories detail={detail} /></div>;
     return <div className="action-workspace">
         <section className="spectator-timeline" aria-label="观战行动时间线">
             <div className="spectator-column-title"><h3>行动时间线</h3><span>{actions.length} 次操作 · {queries.length} 次查询</span></div>

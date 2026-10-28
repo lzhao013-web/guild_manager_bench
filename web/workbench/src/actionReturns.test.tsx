@@ -35,6 +35,19 @@ it("招募、制作与天赋直接展示实际结果对象，不再只返回成�
     expect(recruited.returned.tables.some(table => table.title.includes("实际战术"))).toBe(false);
 });
 
+it("招募查询展示入队面板，并保留旧返回的基础属性标签", () => {
+    const action = entry("get_recruitment", { recruit_candidates: [
+        { candidate_id: "new", name: "新候选", recruit_gold: 40, can_recruit: true,
+            base_stats: { attack: 12 }, effective_stats: { attack: 21 } },
+        { candidate_id: "old", name: "旧候选", recruit_gold: 40, can_recruit: true,
+            base_stats: { attack: 12 } },
+    ] });
+    const rows = action.returned.tables[0].rows;
+    expect(rows[0][3]).toContain("Lv1面板（含公会直接加成）");
+    expect(rows[0][3]).toContain("攻击 21");
+    expect(rows[1][3]).toBe("基础属性\n攻击 12");
+});
+
 it("查询使用本次返回而非当前快照，空返回不从已有队伍补人", () => {
     const empty = entry("get_party", { adventurers: [], experience_pool: 0 });
     const { rerender } = render(<ActionResults entry={empty} />);

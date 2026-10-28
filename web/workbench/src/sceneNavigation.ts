@@ -4,8 +4,10 @@ import { subjectId, subjects } from "./sceneModel";
 
 export type SceneModule = "party" | "monsters" | "inventory" | "recruitment" | "upgrades";
 export type RunModule = SceneModule | "actions" | "models";
+export type ActionView = "turn" | "timeline" | "search";
 export interface WatchFocus {
     module: RunModule;
+    actionView?: ActionView;
     selection?: Selection;
 }
 export const MODULE_NAMES: Record<RunModule, string> = {

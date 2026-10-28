@@ -15,9 +15,7 @@ import {
     Moon,
     Monitor,
     PushPin,
-    Play,
     ArrowLeft,
-    Flask,
     Plugs,
     WarningCircle,
     ArrowsClockwise,
@@ -32,13 +30,15 @@ import {
     fmt,
     isActive,
     PHASE,
-    safeTemplate,
     short,
     STATUS,
 } from "./model";
 import type { Draft } from "./model";
 import { defaultDraft, NewBatch } from "./NewBatch";
 import { RunDetail } from "./RunDetail";
+import { InspectorResizeHandle } from "./InspectorResizeHandle";
+import { ResizableTable } from "./ResizableTable";
+import { milliseconds } from "./modelMetrics";
 import { PageBoundary } from "./PageBoundary";
 import { buildRunCatalog, canonicalRunIds } from "./runCatalog";
 import { livePosition } from "./watchModel";
@@ -46,11 +46,22 @@ import type { WatchPosition } from "./watchModel";
 import type { WatchFocus } from "./sceneNavigation";
 import { ApiProfilesPanel, readApiProfiles } from "./ApiProfiles";
 import { Empty, StatusBadge, Trend } from "./ui";
-import type { ApiProfile, Archive, Job, Settings, Snapshot } from "./types";
+import type { ApiProfile, Archive, HistoryDeletion, Job, Settings, Snapshot } from "./types";
 
 type Section =
-    "runs" | "batches" | "archives" | "curves" | "apis" | "templates" | "settings";
+    "runs" | "archives" | "curves" | "apis" | "settings";
 type View = "list" | "watch" | "focus";
+const RUN_COLUMNS = [
+    { id: "select", label: "选择", minWidth: 64 },
+    { id: "name", label: "运行 / 模型", minWidth: 120 },
+    { id: "status", label: "状态与阶段", minWidth: 140 },
+    { id: "turn", label: "回合", minWidth: 64 },
+    { id: "duration", label: "累计耗时", minWidth: 80 },
+    { id: "score", label: "Rank Score", minWidth: 100 },
+    { id: "tokens", label: "输出 Token", minWidth: 90 },
+    { id: "activity", label: "最近活动", minWidth: 130 },
+    { id: "pin", label: "关注", minWidth: 56 },
+];
 const WatchRun = lazy(() => import("./WatchRun").then(module => ({ default: module.WatchRun })));
 const RunHistory = lazy(() => import("./RunHistory").then(module => ({ default: module.RunHistory })));
 const CurveBoard = lazy(() => import("./CurveBoard").then(module => ({ default: module.CurveBoard })));
@@ -95,11 +106,9 @@ export default function App() {
         const requested = new URLSearchParams(location.search).get("section");
         return [
             "runs",
-            "batches",
             "archives",
             "curves",
             "apis",
-            "templates",
             "settings",
         ].includes(requested || "")
             ? (requested as Section)
@@ -123,15 +132,10 @@ export default function App() {
     );
     const [search, setSearch] = useStored("gmb.search.v1", "");
     const [filter, setFilter] = useStored("gmb.filter.v1", "all");
-    const [batchId, setBatchId] = useStored("gmb.batch.v1", "all");
     const [storedPins, setPins] = useStored<string[]>("gmb.pins.v1", []);
     const [storedWatchIds, setWatchIds] = useStored<string[]>("gmb.watch.v1", []);
     const pins = canonicalRunIds(storedPins, catalog);
     const watchIds = canonicalRunIds(storedWatchIds, catalog);
-    const [templates, setTemplates] = useStored<Draft[]>(
-        "gmb.templates.v1",
-        [],
-    );
     const [width, setWidth] = useStored("gmb.inspector-width.v1", 410);
     const [appearance, setAppearance] = useStored<"dark" | "light" | "system">(
         "gmb.theme.v1",
@@ -180,15 +184,6 @@ export default function App() {
         running = active.filter((job) => job.status !== "queued"),
         queued = active.filter((job) => job.status === "queued");
     const attention = active.filter(job => job.checkpoint_error);
-    const batches = useMemo(
-        () =>
-            Array.from(
-                new Map(
-                    jobs.map((job) => [job.batch_id, job.batch_name]),
-                ).entries(),
-            ).reverse(),
-        [jobs],
-    );
     const selectedJobs = jobs.filter((job) => checked.includes(runKey(job)));
     const visible = useMemo(
         () =>
@@ -198,10 +193,9 @@ export default function App() {
                 .reverse()
                 .filter((job) => {
                     const text =
-                        `${job.name} ${job.config.model} ${job.batch_name} ${job.config.preset}`.toLowerCase();
+                        `${job.name} ${job.config.model} ${job.config.preset}`.toLowerCase();
                     return (
                         text.includes(search.toLowerCase()) &&
-                        (batchId === "all" || job.batch_id === batchId) &&
                         (filter === "all" ||
                             (filter === "active" && isActive(job)) ||
                             (filter === "attention" && !!job.checkpoint_error) ||
@@ -213,7 +207,7 @@ export default function App() {
                         Number(pins.includes(runKey(b))) -
                         Number(pins.includes(runKey(a))),
                 ),
-        [jobs, search, batchId, filter, pins],
+        [jobs, search, filter, pins],
     );
     const watching = watchIds
         .map((id) => catalog.byId.get(id))
@@ -294,13 +288,36 @@ export default function App() {
         setFocusOrigin("list");
         setView(job ? "focus" : "list");
         if (job) setSelectedId(runKey(job));
-        else setBatchId("all");
+    }
+    function deletedHistory(result: HistoryDeletion) {
+        const removed = new Set(result.deleted_job_ids.flatMap(id => [id, catalog.keys.get(id) || id]));
+        if (result.run_id) removed.add(`archive:${result.run_id}`);
+        setPins(ids => ids.filter(id => !removed.has(id)));
+        setWatchIds(ids => ids.filter(id => !removed.has(id)));
+        setChecked(ids => ids.filter(id => !removed.has(id)));
+        setCurveIds(ids => ids.filter(id => !removed.has(id)));
+        setNotices(items => items.filter(item => !removed.has(item.key)));
+        setWatchPositions(previous => Object.fromEntries(Object.entries(previous).filter(([id]) => !removed.has(id))));
+        if (selectedId && removed.has(selectedId)) {
+            setSelectedId(null);
+            setView("list");
+        }
+        queryClient.setQueryData<Snapshot>(["workbench"], current => current && ({
+            ...current, jobs: current.jobs.filter(job => !removed.has(job.id)),
+        }));
+        queryClient.setQueryData<{ runs: Archive[] }>(["archives"], current => current && ({
+            runs: current.runs.filter(archive => archive.run_id !== result.run_id),
+        }));
+        queryClient.removeQueries({ queryKey: ["run-curves"], predicate: query => {
+            const params = new URL(query.queryKey[1] as string, location.origin).searchParams;
+            return result.run_id !== null && params.get("run_id") === result.run_id || removed.has(params.get("job_id") || "");
+        } });
     }
     function clone(job: Job) {
         const config = job.config;
         create({
             ...defaultDraft(config.preset),
-            name: `${job.batch_name}（复制）`,
+            name: `${job.name}（复制）`,
             rows: [
                 {
                     profile_id: config.profile_id || null,
@@ -383,7 +400,7 @@ export default function App() {
                     replay.agent?.config?.reasoning_effort ||
                     replay.agent?.config?.effort ||
                     "",
-                timeout: replay.agent?.config?.timeout ?? 180,
+                timeout: replay.agent?.config?.timeout ?? 600,
                 temperature:
                     replay.agent?.config?.temperature == null
                         ? ""
@@ -427,10 +444,8 @@ export default function App() {
     }
     const pageTitle = {
         runs: "运行中心",
-        batches: "实验批次",
         archives: "历史存档",
         curves: "曲线对比",
-        templates: "模型模板",
         apis: "API 配置",
         settings: "调度设置",
     }[section];
@@ -478,11 +493,9 @@ export default function App() {
                         {(
                             [
                                 ["runs", SquaresFour, "运行中心"],
-                                ["batches", Stack, "实验批次"],
                                 ["archives", ArchiveBox, "历史存档"],
                                 ["curves", ChartLineUp, "曲线对比"],
                                 ["apis", Plugs, "API 配置"],
-                                ["templates", Flask, "模型模板"],
                             ] as const
                         ).map(([key, Icon, label]) => (
                             <button
@@ -492,7 +505,7 @@ export default function App() {
                                         ? "nav-item active"
                                         : "nav-item"
                                 }
-                                onClick={() => { setSection(key); if (key === "archives") { setView("list"); setBatchId("all"); } }}
+                                onClick={() => { setSection(key); if (key === "archives") setView("list"); }}
                             >
                                 <Icon size={18} />
                                 {label}
@@ -503,16 +516,6 @@ export default function App() {
                         ))}
                     </nav>
                     <div className="sidebar-bottom">
-                        <a href="/legacy/?mode=manual">
-                            <Play size={17} />
-                            人工操作
-                            <ArrowSquareOut size={14} />
-                        </a>
-                        <a href="/replay/">
-                            <ArchiveBox size={17} />
-                            回放与复盘
-                            <ArrowSquareOut size={14} />
-                        </a>
                         <a href="/leaderboard/">
                             <Stack size={17} />
                             排行榜
@@ -551,9 +554,6 @@ export default function App() {
                                 </button>
                             ))}
                         </div>
-                        <span className="sidebar-note">
-                            任务由本机服务独立执行
-                        </span>
                     </div>
                 </aside>
                 <main className={`workspace-main ${section === "curves" ? "is-curve-mode" : ""} ${(section === "runs" || section === "archives") ? view === "focus" ? "is-focus-mode" : view === "watch" ? "is-watch-mode" : "" : ""}`}>
@@ -633,23 +633,28 @@ export default function App() {
                         </div>
                     )}
                     <div className="workspace-heading">
-                        <div>
+                        <div className="workspace-title-group">
                             <h1>{pageTitle}</h1>
-                            <p>
-                                {section === "runs"
-                                    ? "这里只显示排队和执行中的 run，结束后移至历史存档。"
-                                    : section === "batches"
-                                      ? "把配置组合与重复运行组织成可追溯的实验。"
-                                      : section === "archives"
-                                        ? "读取已有运行，不修改存档或重新评分。"
-                                        : section === "curves"
-                                          ? "统一比较经济、经验与正式战力，按真实回合对齐。"
-                                        : section === "apis"
-                                          ? "复用 API 连接，安全保存凭证，直接获取模型目录。"
-                                          : section === "templates"
-                                            ? "复用模型与实验参数，凭证留在服务端。"
-                                            : "限制并发，管理本机执行资源。"}
-                            </p>
+                            {section === "runs" && view === "list" && query.data && (
+                                <div className="summary-strip" role="group" aria-label="运行统计">
+                                    <button className={filter === "active" ? "active" : ""} aria-pressed={filter === "active"}
+                                        onClick={() => setFilter(filter === "active" ? "all" : "active")}>
+                                        <span>执行中</span>{" "}<span className="summary-value">{running.length}</span>
+                                    </button>
+                                    <button className={filter === "queued" ? "active" : ""} aria-pressed={filter === "queued"}
+                                        onClick={() => setFilter("queued")}>
+                                        <span>等待队列</span>{" "}<span className="summary-value">{queued.length}</span>
+                                    </button>
+                                    <button className={filter === "attention" ? "active" : ""} aria-pressed={filter === "attention"}
+                                        onClick={() => setFilter("attention")}>
+                                        <span>存档异常</span>{" "}<span className={`summary-value ${attention.length ? "error-text" : ""}`}>{attention.length}</span>
+                                    </button>
+                                    <div className="scheduler-meter">
+                                        <span>并发</span><strong className="mono">{running.length} / {query.data.settings.max_parallel}</strong>
+                                        <button onClick={() => setSection("settings")} aria-label="调整并发设置"><Sliders size={15} /></button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                         {(section === "runs" || section === "archives") && (
                             <div className="view-switch" aria-label="工作视图">
@@ -696,67 +701,6 @@ export default function App() {
                             <>
                                 {(section === "runs" || (section === "archives" && view !== "list")) && (
                                     <>
-                                        {section === "runs" && <div className="summary-strip">
-                                            <button
-                                                className={
-                                                    filter === "active"
-                                                        ? "active"
-                                                        : ""
-                                                }
-                                                onClick={() =>
-                                                    setFilter(
-                                                        filter === "active"
-                                                            ? "all"
-                                                            : "active",
-                                                    )
-                                                }
-                                            >
-                                                <span className="summary-value">
-                                                    {running.length}
-                                                </span>
-                                                <span>执行中</span>
-                                            </button>
-                                            <button
-                                                onClick={() =>
-                                                    setFilter("queued")
-                                                }
-                                            >
-                                                <span className="summary-value">
-                                                    {queued.length}
-                                                </span>
-                                                <span>等待队列</span>
-                                            </button>
-                                            <button
-                                                onClick={() =>
-                                                    setFilter("attention")
-                                                }
-                                            >
-                                                <span
-                                                    className={`summary-value ${attention.length ? "error-text" : ""}`}
-                                                >
-                                                    {attention.length}
-                                                </span>
-                                                <span>存档异常</span>
-                                            </button>
-                                            <div className="scheduler-meter">
-                                                <span>并发容量</span>
-                                                <strong className="mono">
-                                                    {running.length} /{" "}
-                                                    {
-                                                        query.data.settings
-                                                            .max_parallel
-                                                    }
-                                                </strong>
-                                                <button
-                                                    onClick={() =>
-                                                        setSection("settings")
-                                                    }
-                                                    aria-label="调整并发设置"
-                                                >
-                                                    <Sliders size={15} />
-                                                </button>
-                                            </div>
-                                        </div>}
                                         {view === "focus" && selected ? (
                                             <div className="focus-workspace">
                                                 <button
@@ -882,7 +826,7 @@ export default function App() {
                                                         />
                                                         <input
                                                             aria-label="搜索运行"
-                                                            placeholder="搜索模型、批次或 preset"
+                                                            placeholder="搜索模型或 preset"
                                                             value={search}
                                                             onChange={(e) =>
                                                                 setSearch(
@@ -893,29 +837,6 @@ export default function App() {
                                                         />
                                                         <kbd>Ctrl K</kbd>
                                                     </label>
-                                                    <select
-                                                        aria-label="筛选批次"
-                                                        value={batchId}
-                                                        onChange={(e) =>
-                                                            setBatchId(
-                                                                e.target.value,
-                                                            )
-                                                        }
-                                                    >
-                                                        <option value="all">
-                                                            所有批次
-                                                        </option>
-                                                        {batches.map(
-                                                            ([id, name]) => (
-                                                                <option
-                                                                    key={id}
-                                                                    value={id}
-                                                                >
-                                                                    {name}
-                                                                </option>
-                                                            ),
-                                                        )}
-                                                    </select>
                                                     <select
                                                         aria-label="筛选运行状态"
                                                         value={filter}
@@ -986,20 +907,6 @@ export default function App() {
                                                                 : ""}
                                                         </Button>
                                                         <Button highContrast size="1" variant="soft" onClick={() => openCurves(selectedJobs.map(runKey))}>对比选中曲线{selectedJobs.length > 4 ? "（前 4 个）" : ""}</Button>
-                                                        {selectedJobs.length ===
-                                                            2 &&
-                                                            selectedJobs.every(
-                                                                (j) =>
-                                                                    j.archive_id,
-                                                            ) && (
-                                                                <a
-                                                                    className="small-link"
-                                                                    href={`/replay/compare.html?left=${encodeURIComponent(selectedJobs[0].archive_id!)}&right=${encodeURIComponent(selectedJobs[1].archive_id!)}`}
-                                                                >
-                                                                    对照两局
-                                                                    <ArrowSquareOut />
-                                                                </a>
-                                                            )}
                                                         <Button
                                                             highContrast
                                                             size="1"
@@ -1041,7 +948,7 @@ export default function App() {
                                                         aria-label="运行列表"
                                                     >
                                                         {visible.length ? (
-                                                            <table className="run-table">
+                                                            <ResizableTable className="run-table" storageKey="runs" columns={RUN_COLUMNS}>
                                                                 <thead>
                                                                     <tr>
                                                                         <th className="checkbox-col">
@@ -1107,6 +1014,7 @@ export default function App() {
                                                                         <th>
                                                                             回合
                                                                         </th>
+                                                                        <th title="模型调用累计耗时，不含排队、工具执行、评分和中断等待">累计耗时</th>
                                                                         <th>
                                                                             Rank
                                                                             Score
@@ -1207,11 +1115,6 @@ export default function App() {
                                                                                                 .reasoning_effort ||
                                                                                                 "默认推理"}
                                                                                         </span>
-                                                                                        <span>
-                                                                                            {
-                                                                                                job.batch_name
-                                                                                            }
-                                                                                        </span>
                                                                                     </div>
                                                                                 </td>
                                                                                 <td>
@@ -1264,6 +1167,9 @@ export default function App() {
                                                                                             </span>
                                                                                         </>
                                                                                     )}
+                                                                                </td>
+                                                                                <td className="run-duration mono" title="已记录的模型调用累计耗时，不含排队、工具执行、评分和中断等待">
+                                                                                    {milliseconds(job.model_duration_ms ?? null)}
                                                                                 </td>
                                                                                 <td>
                                                                                     <div className="score-value mono">
@@ -1344,7 +1250,7 @@ export default function App() {
                                                                         ),
                                                                     )}
                                                                 </tbody>
-                                                            </table>
+                                                            </ResizableTable>
                                                         ) : (
                                                             <Empty
                                                                 title={
@@ -1358,9 +1264,6 @@ export default function App() {
                                                                                 ? (setSearch(
                                                                                       "",
                                                                                   ),
-                                                                                  setBatchId(
-                                                                                      "all",
-                                                                                  ),
                                                                                   setFilter(
                                                                                       "all",
                                                                                   ))
@@ -1371,7 +1274,7 @@ export default function App() {
                                                                     </Button>
                                                                 }
                                                             >
-                                                                {active.length ? "试试其他关键词、批次或状态。" : jobs.length ? "已结束的 run 保留在历史存档，续跑后会回到这里。" : "添加模型和实验参数。任务在服务端排队执行，离开页面也会继续。"}
+                                                                {active.length ? "试试其他关键词或状态。" : jobs.length ? "前往历史存档查看已结束的 run。" : "添加模型和运行参数。"}
                                                             </Empty>
                                                         )}
                                                         <div className="table-footer">
@@ -1379,41 +1282,11 @@ export default function App() {
                                                                 {visible.length}{" "}
                                                                 个 run
                                                             </span>
-                                                            <span>
-                                                                状态每秒同步，列表不会随进度自动重排
-                                                            </span>
                                                         </div>
                                                     </section>
                                                     {selected && (
-                                                        <aside className="inspector">
-                                                            <div className="resize-control">
-                                                                <label>
-                                                                    面板宽度
-                                                                    <input
-                                                                        type="range"
-                                                                        min={
-                                                                            340
-                                                                        }
-                                                                        max={
-                                                                            600
-                                                                        }
-                                                                        value={
-                                                                            width
-                                                                        }
-                                                                        onChange={(
-                                                                            e,
-                                                                        ) =>
-                                                                            setWidth(
-                                                                                Number(
-                                                                                    e
-                                                                                        .target
-                                                                                        .value,
-                                                                                ),
-                                                                            )
-                                                                        }
-                                                                    />
-                                                                </label>
-                                                            </div>
+                                                        <aside className="inspector" id="run-inspector">
+                                                            <InspectorResizeHandle width={width} onChange={setWidth} />
                                                             <RunDetail
                                                                 key={
                                                                     selected.id
@@ -1426,8 +1299,8 @@ export default function App() {
                                                                         null,
                                                                     )
                                                                 }
-                                                                onFocus={() => {
-                                                                    setFocusTarget(undefined);
+                                                                onFocus={(target) => {
+                                                                    setFocusTarget(target);
                                                                     setFocusOrigin("list");
                                                                     setView("focus");
                                                                 }}
@@ -1439,130 +1312,13 @@ export default function App() {
                                         )}
                                     </>
                                 )}
-                                {section === "batches" && (
-                                    <div className="batches-list">
-                                        {batches.length ? (
-                                            batches.map(([id, name]) => {
-                                                const group = jobs.filter(
-                                                        (j) =>
-                                                            j.batch_id === id,
-                                                    ),
-                                                    completed = group.filter(
-                                                        (j) =>
-                                                            j.status ===
-                                                            "completed",
-                                                    ).length;
-                                                return (
-                                                    <article
-                                                        className="batch-row"
-                                                        key={id}
-                                                    >
-                                                        <div className="batch-icon">
-                                                            <Stack size={22} />
-                                                        </div>
-                                                        <div className="batch-info">
-                                                            <h2>{name}</h2>
-                                                            <p>
-                                                                {group.length}{" "}
-                                                                个 run /{" "}
-                                                                {
-                                                                    new Set(
-                                                                        group.map(
-                                                                            (
-                                                                                j,
-                                                                            ) =>
-                                                                                j
-                                                                                    .config
-                                                                                    .model,
-                                                                        ),
-                                                                    ).size
-                                                                }{" "}
-                                                                个模型 /{" "}
-                                                                {
-                                                                    new Set(
-                                                                        group.map(
-                                                                            (
-                                                                                j,
-                                                                            ) =>
-                                                                                j
-                                                                                    .config
-                                                                                    .preset,
-                                                                        ),
-                                                                    ).size
-                                                                }{" "}
-                                                                个 preset
-                                                            </p>
-                                                            <div
-                                                                className="batch-segments"
-                                                                aria-label={`已完成 ${completed} 个，总共 ${group.length} 个`}
-                                                            >
-                                                                {group.map(
-                                                                    (j) => (
-                                                                        <span
-                                                                            key={
-                                                                                j.id
-                                                                            }
-                                                                            className={`segment-${j.status}`}
-                                                                            title={`${j.name}：${STATUS[j.status]}`}
-                                                                        />
-                                                                    ),
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                        <div className="batch-progress mono">
-                                                            {completed}
-                                                            <span>
-                                                                {" "}
-                                                                / {
-                                                                    group.length
-                                                                }{" "}
-                                                                完成
-                                                            </span>
-                                                        </div>
-                                                        <button className="text-button" onClick={() => openCurves(group.map(runKey))}>对比曲线{group.length > 4 ? "（前 4 个）" : ""}</button>
-                                                        <Button
-                                                            highContrast
-                                                            variant="soft"
-                                                            onClick={() => {
-                                                                setBatchId(id);
-                                                                setFilter(
-                                                                    "all",
-                                                                );
-                                                                setSearch("");
-                                                                setSection(group.some(isActive) ? "runs" : "archives");
-                                                                setView("list");
-                                                            }}
-                                                        >
-                                                            查看批次
-                                                            <CaretRight />
-                                                        </Button>
-                                                    </article>
-                                                );
-                                            })
-                                        ) : (
-                                            <Empty
-                                                title="还没有实验批次"
-                                                action={
-                                                    <Button
-                                                        highContrast
-                                                        onClick={() => create()}
-                                                    >
-                                                        新建实验
-                                                    </Button>
-                                                }
-                                            >
-                                                把不同模型、推理强度和种子放进一个批次。
-                                            </Empty>
-                                        )}
-                                    </div>
-                                )}
                                 {section === "curves" && <PageBoundary name="曲线对比"><Suspense fallback={<p className="muted">正在加载曲线工作区…</p>}>
                                     <CurveBoard catalog={catalog} selectedIds={curveIds} onSelection={setCurveIds}
                                         onBack={curveOrigin ? () => { setSection(curveOrigin.section); setView(curveOrigin.view); setCurveOrigin(null); } : undefined} />
                                 </Suspense></PageBoundary>}
                                 {section === "archives" && view === "list" && (
                                     <PageBoundary name="历史存档"><Suspense fallback={<p className="muted">正在加载历史…</p>}>
-                                        <RunHistory jobs={jobs} onCompare={openCurves} batchId={batchId} onBatchChange={setBatchId} onResume={archive => void resume(archive)} onRerun={archive => void resume(archive, true)} onClone={clone} onOpen={job => openHistory(job)}
+                                        <RunHistory jobs={jobs} onCompare={openCurves} onDeleted={deletedHistory} onResume={archive => void resume(archive)} onRerun={archive => void resume(archive, true)} onClone={clone} onOpen={job => openHistory(job)}
                                             onWatch={selected => { setWatchIds(selected.map(runKey)); setView("watch"); }} />
                                     </Suspense></PageBoundary>
                                 )}
@@ -1598,80 +1354,6 @@ export default function App() {
                                         }
                                     />
                                 )}
-                                {section === "templates" && (
-                                    <div className="templates-list">
-                                        {templates.length ? (
-                                            templates.map((template, i) => (
-                                                <article
-                                                    key={i}
-                                                    className="template-row"
-                                                >
-                                                    <div>
-                                                        <h2>{template.name}</h2>
-                                                        <p>
-                                                            {template.rows
-                                                                .map(
-                                                                    (r) =>
-                                                                        r.model ||
-                                                                        "服务端环境模型",
-                                                                )
-                                                                .join(" / ")}
-                                                            ，{template.preset}
-                                                        </p>
-                                                        <small>
-                                                            不含 API Key
-                                                        </small>
-                                                    </div>
-                                                    <Button
-                                                        highContrast
-                                                        onClick={() =>
-                                                            create(
-                                                                safeTemplate(
-                                                                    template,
-                                                                ),
-                                                            )
-                                                        }
-                                                    >
-                                                        使用模板
-                                                        <Plus />
-                                                    </Button>
-                                                    <button
-                                                        className="text-button"
-                                                        onClick={() =>
-                                                            setTemplates(
-                                                                (items) =>
-                                                                    items.filter(
-                                                                        (
-                                                                            _,
-                                                                            n,
-                                                                        ) =>
-                                                                            n !==
-                                                                            i,
-                                                                    ),
-                                                            )
-                                                        }
-                                                    >
-                                                        删除
-                                                    </button>
-                                                </article>
-                                            ))
-                                        ) : (
-                                            <Empty
-                                                title="保存常用的实验配置"
-                                                action={
-                                                    <Button
-                                                        highContrast
-                                                        onClick={() => create()}
-                                                    >
-                                                        配置第一个模板
-                                                    </Button>
-                                                }
-                                            >
-                                                在新建实验中选择“保存为模板”，不保存凭证。
-                                            </Empty>
-                                        )}
-                                    </div>
-                                )}
                                 {section === "settings" && (
                                     <SettingsPanel
                                         settings={query.data.settings}
@@ -1685,15 +1367,6 @@ export default function App() {
                             </>
                         )
                     )}
-                    <footer className="workspace-footer">
-                        <span>Guild Manager Bench</span>
-                        <span>评测规则与运行管理分离</span>
-                        <a className="font-credit" href="/workbench/fonts/NOTICE.txt" target="_blank" rel="noreferrer" title="MiSans 与 JetBrains Mono 的来源及授权">字体：MiSans</a>
-                        <a href="/legacy/">
-                            旧版调试页
-                            <ArrowSquareOut size={12} />
-                        </a>
-                    </footer>
                 </main>
                 <Dialog.Root open={newOpen} onOpenChange={setNewOpen}>
                     {newOpen && query.data && (
@@ -1716,19 +1389,10 @@ export default function App() {
                                 }))
                             }
                             initial={draft}
-                            onSave={(template) =>
-                                setTemplates((items) => [
-                                    ...items.filter(
-                                        (t) => t.name !== template.name,
-                                    ),
-                                    template,
-                                ])
-                            }
                             onCreated={(created) => {
                                 setNewOpen(false);
                                 setSection("runs");
                                 setView("list");
-                                setBatchId("all");
                                 setFilter("all");
                                 setSearch("");
                                 setSelectedId(created[0].id);
@@ -1828,10 +1492,6 @@ function SettingsPanel({
     return (
         <form className="settings-form" onSubmit={save}>
             <h2>执行资源</h2>
-            <p className="muted">
-                每个 run
-                使用独立工作进程，评分在该进程内顺序执行，不再为每局派生整机规模的进程池。
-            </p>
             <div className="form-grid">
                 <label>
                     全局并发上限
@@ -1876,8 +1536,8 @@ function SettingsPanel({
                     {message}
                 </p>
             )}
-            <section className="settings-notes">
-                <h3>运行与恢复</h3>
+            <details className="settings-notes">
+                <summary>运行与恢复</summary>
                 <p>
                     关页、刷新或浏览器断线不会停止任务。关闭工作台服务会停止任务，重启后不会自动重复提交模型请求。
                 </p>
@@ -1888,7 +1548,12 @@ function SettingsPanel({
                 <p>
                     工作台用于可信的本机环境，不提供用户认证。不要将服务直接暴露到公网。
                 </p>
-            </section>
+            </details>
+            <details className="settings-notes">
+                <summary>字体授权</summary>
+                <p>本软件使用小米 MiSans 字体及 JetBrains Mono 字体。</p>
+                <a href="/workbench/fonts/NOTICE.txt" target="_blank" rel="noreferrer">版权与许可证</a>
+            </details>
         </form>
     );
 }

@@ -62,13 +62,15 @@ export const TOOLS: Record<string, string> = {
     dismiss_adventurer: "解雇冒险者",
     allocate_experience: "分配经验",
     craft_equipment: "制作装备",
+    exchange_materials: "兑换材料",
     equip_item: "穿戴装备",
     unequip_item: "卸下装备",
     purchase_upgrade: "购买升级",
     end_turn: "结束回合",
     write_memo: "记录备忘",
     preview_battle: "预览战斗",
-    preview_team_power: "试算队伍战力",
+    preview_team_power: "方案试算",
+    execute_plan: "执行方案",
 };
 export const isActive = (job: Job) =>
     ["queued", "starting", "running", "stopping"].includes(job.status);
@@ -157,7 +159,7 @@ export function expandDraft(draft: Draft): RunRequest[] {
         seeds.length *
         draft.repeats;
     if (count < 1 || count > 64)
-        throw new Error("一个批次需要 1 到 64 个 run，请调整参数组合");
+        throw new Error("一次可创建 1 到 64 个 run，请调整参数组合");
     for (const row of draft.rows) {
         if (row.base_url.trim()) {
             let url: URL;
@@ -225,25 +227,6 @@ export function expandDraft(draft: Draft): RunRequest[] {
     if (draft.rerun_run_id && (!Number.isInteger(draft.rerun_from_turn) || draft.rerun_from_turn! < 1 || draft.rerun_from_turn! > draft.rerun_max_turn!))
         throw new Error("重跑起始回合不在可恢复范围内");
     return result;
-}
-
-export function safeTemplate(draft: Draft): Draft {
-    expandDraft(draft);
-    return {
-        ...draft,
-        resume_run_id: undefined,
-        rerun_run_id: undefined,
-        rerun_from_turn: undefined,
-        rerun_max_turn: undefined,
-        rows: draft.rows.map((row) => ({
-            profile_id: row.profile_id || null,
-            provider: row.provider,
-            model: row.model,
-            base_url: row.base_url,
-            thinking: row.thinking ?? null,
-            api_key: "",
-        })),
-    };
 }
 
 export interface ModelEntry {

@@ -86,6 +86,14 @@ export interface Observation {
     turn: number;
     max_turns: number;
     finished?: boolean;
+    unique_challenge_classes?: boolean;
+    used_challenge_class_ids?: string[];
+    material_exchange?: {
+        from_turn: number;
+        point_limit: number;
+        used_points: number;
+        remaining_points: number;
+    };
     monsters?: GameEntity[];
     equipment_inventory?: GameEntity[];
     crafting_recipes?: CraftingRecipe[];
@@ -120,6 +128,7 @@ export interface Job {
         reported: number;
         responses: number;
     };
+    model_duration_ms?: number | null;
     retries: number;
     tool_failures: number;
     error: string | null;
@@ -135,6 +144,11 @@ export interface Job {
         ok: boolean | null;
         summary: string;
     }[];
+}
+export interface HistoryDeletion {
+    deleted: true;
+    run_id: string | null;
+    deleted_job_ids: string[];
 }
 export interface Snapshot {
     jobs: Job[];
@@ -165,6 +179,8 @@ export interface Archive {
     preset: string;
     model: string;
     rank_score: number | null;
+    model_duration_ms?: number | null;
+    usage?: Job["usage"];
     failure_reason?: string;
     protocol_status?: string | null;
 }
