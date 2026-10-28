@@ -33,7 +33,7 @@ _TOOL_NAMES = {
     "purchase_upgrade": "升级公会", "allocate_experience": "分配经验",
     "recruit_adventurer": "招募冒险者", "dismiss_adventurer": "解散冒险者",
     "equip_item": "穿戴装备", "unequip_item": "卸下装备",
-    "preview_battle": "模拟对战", "preview_team_power": "预览队伍评分",
+    "preview_battle": "模拟对战", "preview_team_power": "方案试算", "execute_plan": "执行方案",
     "preview_monster_refresh": "预览怪物刷新", "refresh_monsters": "刷新怪物",
     "write_memo": "保存备忘录", "end_turn": "安排讨伐并结束回合",
 }
@@ -424,7 +424,14 @@ class RunReporter:
             p = result["preview"]
             return f"模拟对战 · {p['adventurer_name']} → {p['monster_name']} · {'胜利' if p['won'] else '未获胜'}（非实际讨伐）"
         if name == "preview_team_power":
-            return f"预览队伍评分 · Rank Score {result['rank_score']:.1f}"
+            if "rank_score_delta" in result:
+                return (f"方案试算 · Rank Score {result['current_rank_score']:.1f} → "
+                        f"{result['projected_rank_score']:.1f}（未执行）")
+            if "rank_score" in result:
+                return f"方案试算 · Rank Score {result['rank_score']:.1f}（未执行）"
+            return f"方案试算 · {result['operation_count']}步（未执行，不估算战力）"
+        if name == "execute_plan":
+            return "方案已提交，未重复执行" if result["already_executed"] else f"已执行{result['operation_count']}步方案"
         return label
 
     def _changes(self, result: dict[str, Any]) -> None:
@@ -442,7 +449,10 @@ class RunReporter:
                 f"  Lv.{adventurer['level']} · 生命 {adventurer['resources']['current_hp']}/{stats['hp']}"
                 f" · 攻击 {stats['attack']} / 防御 {stats['defense']}", "dim",
             ))
-        for change in result.get("event", {}).get("changes", []):
+        changes = list(result.get("event", {}).get("changes", []))
+        if result.get("plan_id") and not result.get("already_executed"):
+            changes.extend(change for event in result.get("events", []) for change in event.get("changes", []))
+        for change in changes:
             if change["kind"] == "turn":
                 continue
             before, current = change.get("before"), change.get("after")

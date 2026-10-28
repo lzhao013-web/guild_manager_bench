@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from threading import RLock
 from typing import Any, Callable, Mapping, Sequence
@@ -12,6 +12,8 @@ from uuid import uuid4
 from guild_manager_bench.bench.llm.battle_log import BATTLE_LOG_SCHEMA, battle_log_id, query_battle_log
 from guild_manager_bench.bench.llm.forecast import FORECAST_SCHEMA, query_forecast
 from guild_manager_bench.bench.llm.monster_refresh import PREVIEW_REFRESH_SCHEMA, REFRESH_SCHEMA
+from guild_manager_bench.bench.llm.material_exchange import material_exchange_schema
+from guild_manager_bench.game.actions import PreparationAction
 from guild_manager_bench.game.engine import GameError, preview_battle as preview_battle_result
 from guild_manager_bench.game.loader import load_game_definition
 from guild_manager_bench.game.models import CombatResources
@@ -21,7 +23,8 @@ from guild_manager_bench.runtime.action_codec import (
     decode_end_turn_action,
     decode_preparation_action,
 )
-from guild_manager_bench.runtime.session import GameSession
+from guild_manager_bench.runtime.observation import build_observation
+from guild_manager_bench.runtime.session import GameSession, _observation_changes
 
 
 class ToolCallError(ValueError):
@@ -67,6 +70,13 @@ def tool_schemas(*, expose_battle_preview: bool = False, talent_tree_enabled: bo
     return schemas
 
 
+@dataclass(slots=True)
+class _PlanReceipt:
+    base_state: GameState
+    actions: tuple[PreparationAction, ...]
+    result: dict[str, Any] | None = None
+
+
 class GuildManagerTools:
     """面向 LLM agent 的强类型工具层。
 
@@ -79,6 +89,7 @@ class GuildManagerTools:
         self.definition = definition
         self._sessions: dict[str, GameSession] = {}
         self._battle_previews: dict[str, tuple[int, list[dict[str, Any]]]] = {}
+        self._preparation_plans: dict[str, tuple[int, dict[str, _PlanReceipt]]] = {}
         self._lock = RLock()
 
     @classmethod
@@ -93,7 +104,7 @@ class GuildManagerTools:
     def list_tool_schemas(self) -> list[dict[str, Any]]:
         """返回当前工具层支持的工具 schema。"""
 
-        return tool_schemas(
+        schemas = tool_schemas(
             expose_battle_preview=self.definition.llm_tools.expose_battle_preview,
             talent_tree_enabled=self.definition.content.has_talent_tree,
             expose_tactics=self.definition.llm_tools.expose_tactics,
@@ -103,6 +114,13 @@ class GuildManagerTools:
             expose_ultimates=any(t.slot == "ultimate" for t in self.definition.content.equipment_templates),
             max_battle_preview_per_turn=self.definition.llm_tools.max_battle_preview_per_turn,
         )
+        if self.definition.rules.material_exchange is not None:
+            schemas.append(material_exchange_schema(
+                self.definition.rules.material_exchange,
+                max_turns=self.definition.rules.max_turns,
+                final_preparation_only=self.definition.rules.final_preparation_only,
+            ))
+        return [*schemas, team_power_preview_schema(schemas), deepcopy(_EXECUTE_PLAN_SCHEMA)]
 
     def call_tool(
         self,
@@ -259,6 +277,12 @@ class GuildManagerTools:
                 result.update({"turn": obs["turn"], "monsters": obs["monsters"],
                                "monster_refresh": obs["monster_refresh"]})
             return result
+
+    def exchange_materials(self, session_id: str, material_id: str, quantity: int) -> dict[str, Any]:
+        """付费兑换同种材料，批量数量不改变单次工具调用计费。"""
+        return self._submit_preparation(session_id, {
+            "type": "exchange_materials", "material_id": material_id, "quantity": quantity,
+        })
 
     def craft_equipment(self, session_id: str, recipe_id: str) -> dict[str, Any]:
         """按配方合成一件装备。"""
@@ -523,35 +547,89 @@ class GuildManagerTools:
             )
 
     def preview_team_power(self, session_id: str, operations: list[Mapping[str, Any]]) -> dict[str, Any]:
-        """只返回准备方案相对当前真实状态的战力变化，不写入会话。"""
+        """全局只读预检准备方案，只有终局阶段计算正式战力。"""
         from guild_manager_bench.bench.llm.preparation_plan import simulate_preparation_plan
         from guild_manager_bench.bench.metrics import compute_rank_score
 
         with self._lock:
             session = self._get_session(session_id)
             assert session.state is not None
-            start = self.definition.llm_tools.endgame_start_turn
-            if start is None or session.state.turn < start:
-                return {"ok": False, "simulation_only": True, "error": "仅在终局阶段可预览战力"}
+            if session.state.turn > session.state.max_turns:
+                return {"ok": False, "simulation_only": True, "error": "游戏已结束"}
             try:
-                projected = simulate_preparation_plan(
+                plan = simulate_preparation_plan(
                     self.definition, session.state, operations, self.list_tool_schemas(),
                 )
             except ValueError as exc:
                 return {"ok": False, "simulation_only": True, "error": str(exc)}
-            current_score = round(compute_rank_score(self.definition, session.state), 2)
-            projected_score = (
-                current_score if projected is session.state
-                else round(compute_rank_score(self.definition, projected), 2)
-            )
-            return {
+            result: dict[str, Any] = {
                 "ok": True,
                 "simulation_only": True,
-                "current_rank_score": current_score,
-                "projected_rank_score": projected_score,
-                "rank_score_delta": round(projected_score - current_score, 2),
-                "operation_count": len(operations),
+                "operation_count": len(plan.actions),
+                "required_calls": len(plan.actions),
+                "changes": _plan_changes(self.definition, session.state, plan.projected_state),
             }
+            start = self.definition.llm_tools.endgame_start_turn
+            if start is not None and session.state.turn >= start:
+                current_score = round(compute_rank_score(self.definition, session.state), 2)
+                projected_score = (
+                    current_score if plan.projected_state is session.state
+                    else round(compute_rank_score(self.definition, plan.projected_state), 2)
+                )
+                result.update(
+                    current_rank_score=current_score,
+                    projected_rank_score=projected_score,
+                    rank_score_delta=round(projected_score - current_score, 2),
+                )
+            # 空方案可查询当前状态，但不签发免费执行凭据。
+            if plan.actions:
+                plan_id = uuid4().hex
+                self._plans_for(session)[plan_id] = _PlanReceipt(session.state, plan.actions)
+                result["plan_id"] = plan_id
+            return result
+
+    def execute_plan(self, session_id: str, plan_id: str, remaining_calls: int) -> dict[str, Any]:
+        """免费提交已验证方案，预算余额由 harness 注入，不能由模型指定。"""
+        with self._lock:
+            session = self._get_session(session_id)
+            if not _non_empty_string(plan_id):
+                return {"ok": False, "error": "plan_id 必须是非空字符串"}
+            receipt = self._plans_for(session).get(plan_id)
+            if receipt is None:
+                return {"ok": False, "error": "方案凭据不存在或已跨回合失效，请重新试算"}
+            if receipt.result is not None:
+                return {**deepcopy(receipt.result), "already_executed": True}
+            if session.state is not receipt.base_state:
+                return {"ok": False, "error": "游戏状态已改变，方案凭据已失效，请重新试算"}
+            required = len(receipt.actions)
+            if remaining_calls < required:
+                return {
+                    "ok": False, "required_calls": required, "remaining_calls": remaining_calls,
+                    "error": f"剩余调用次数不足：执行需要至少{required}次余额，当前剩余{remaining_calls}次。"
+                             "未执行且不扣费，请缩短方案后重新试算或结束回合，不要原样重试。",
+                }
+            events = session.apply_preparations(receipt.actions)
+            receipt.result = {
+                "ok": True, "plan_id": plan_id, "operation_count": required,
+                "already_executed": False,
+                "events": [_compact_event(event) for event in events],
+            }
+            return deepcopy(receipt.result)
+
+    def restore_preparations(self, session_id: str, actions: Sequence[Mapping[str, Any]]) -> None:
+        """恢复已记录的整批动作，不注册为模型工具，也不重新试算或评分。"""
+        with self._lock:
+            self._get_session(session_id).apply_preparations(tuple(
+                decode_preparation_action(action) for action in actions
+            ))
+
+    def _plans_for(self, session: GameSession) -> dict[str, _PlanReceipt]:
+        assert session.state is not None
+        saved = self._preparation_plans.get(session.session_id)
+        if saved is None or saved[0] != session.state.turn:
+            saved = (session.state.turn, {})
+            self._preparation_plans[session.session_id] = saved
+        return saved[1]
 
     def _submit_preparation(
         self,
@@ -599,9 +677,33 @@ class GuildManagerTools:
         if self.definition.rules.monster_refresh.enabled:
             names["preview_monster_refresh"] = "preview_monster_refresh"
             names["refresh_monsters"] = "refresh_monsters"
-        if self.definition.llm_tools.endgame_start_turn is not None:
-            names["preview_team_power"] = "preview_team_power"
+        if self.definition.rules.material_exchange is not None:
+            names["exchange_materials"] = "exchange_materials"
+        names["preview_team_power"] = "preview_team_power"
+        names["execute_plan"] = "execute_plan"
         return names
+
+
+def _plan_changes(definition: GameDefinition, before: GameState, after: GameState) -> list[dict[str, Any]]:
+    changes = _observation_changes(build_observation(definition, before), build_observation(definition, after))
+    # 试算产生的内部编号不是实际对象，不能作为后续真实操作的引用。
+    replacements = {
+        item.adventurer_id: f"试算角色{index}"
+        for index, item in enumerate(after.adventurers, 1)
+        if item.adventurer_id not in {hero.adventurer_id for hero in before.adventurers}
+    }
+    replacements.update({
+        item.instance_id: f"试算装备{index}"
+        for index, item in enumerate(after.equipment_inventory, 1)
+        if item.instance_id not in {gear.instance_id for gear in before.equipment_inventory}
+    })
+    for change in changes:
+        for key, value in change.items():
+            if isinstance(value, str):
+                for canonical_id, label in replacements.items():
+                    value = value.replace(canonical_id, label)
+                change[key] = value
+    return changes
 
 
 def _session_snapshot(session: GameSession) -> dict[str, Any]:
@@ -824,7 +926,7 @@ _BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
     },
     {
         "name": "get_recruitment",
-        "description": "查看本回合招募候选的职业、价格、初始属性、成长与技能（队伍人数及上限见回合概览）。",
+        "description": "查看本回合招募候选的职业、价格、入队时的Lv1面板、成长与职业技能。面板含公会直接属性加成。",
         "parameters": {
             "type": "object",
             "required": ["session_id"],
@@ -946,7 +1048,7 @@ _BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
     },
     {
         "name": "end_turn",
-        "description": "提交本回合1v1讨伐配对并结束回合。hunts 可为空（如最终整备回合或全员休整）。",
+        "description": "提交本回合1v1讨伐配对并结束本轮交互。hunts=[] 表示全员休整。",
         "parameters": {
             "type": "object",
             "required": ["session_id"],
@@ -1019,8 +1121,8 @@ _BATTLE_PREVIEW_SCHEMA: dict[str, Any] = _battle_preview_schema(3)
 _TACTICS_SCHEMA: dict[str, Any] = {
     "name": "configure_tactics",
     "description": (
-        "覆盖设置角色的主动技能释放顺序与停用列表（填当前拥有的主动技能字符串 ID，被动技能不受影响）。"
-        "未列入的普通主动按默认顺序排在后面。自动回复只能停用，不能排序。两项均传 [] 恢复默认。"
+        "设置角色的主动技能释放顺序与停用列表（填当前拥有的主动技能字符串 ID，覆盖旧设置，两项均传 [] 恢复默认）。"
+        "列表中的技能按顺序优先释放，未列入的普通主动排在后面按默认顺序检查。自动回复仅可停用，不可排序。被动技能不受影响。"
     ),
     "parameters": {
         "type": "object",
@@ -1049,9 +1151,11 @@ def team_power_preview_schema(schemas: Sequence[Mapping[str, Any]]) -> dict[str,
     return {
         "name": "preview_team_power",
         "description": (
-            "终局阶段只读试算准备方案（最多20步）对全队终局评分（rank_score）的影响，不改变真实状态。"
-            "返回调用前真实分、方案执行后分数及差值；传 operations=[] 仅查询当前真实分。"
-            "试算只占1次工具预算，若采纳方案仍需调用真实工具执行。"
+            "全回合只读试算准备方案（最多20步），返回资源与属性变化，不改变真实状态。"
+            "终局前不计算或返回战力，终局阶段另返回正式rank_score及相对调用前的差值。"
+            "每次试算（包括失败）扣1次预算。非空合法方案返回plan_id，可用execute_plan免费提交一次，"
+            "但提交时剩余预算必须不少于方案步数。改变游戏状态或跨回合后凭据失效。"
+            "传operations=[]仅查询，不签发执行凭据。"
         ),
         "parameters": {
             "type": "object", "required": ["operations"],
@@ -1059,6 +1163,22 @@ def team_power_preview_schema(schemas: Sequence[Mapping[str, Any]]) -> dict[str,
             "additionalProperties": False,
         },
     }
+
+
+_EXECUTE_PLAN_SCHEMA: dict[str, Any] = {
+    "name": "execute_plan",
+    "description": (
+        "提交preview_team_power返回的plan_id，不扣调用预算，失败也不扣。"
+        "提交时剩余预算必须不少于方案步数，预算不足时整单拒绝，不要原样重试。"
+        "只读查询不使凭据失效，但会减少预算。游戏状态改变或跨回合后必须重新试算。"
+        "同一凭据只执行一次，重复请求返回已有结果。"
+    ),
+    "parameters": {
+        "type": "object", "required": ["plan_id"],
+        "properties": {"plan_id": {"type": "string", "minLength": 1}},
+        "additionalProperties": False,
+    },
+}
 
 
 def _without_session_id(schema: Mapping[str, Any]) -> dict[str, Any]:

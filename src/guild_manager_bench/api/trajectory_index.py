@@ -30,7 +30,7 @@ RESULT_FIELDS = (
     "source", "kind", "detail", "start_turn", "end_turn", "total_matches", "offset", "limit", "next_offset",
     "cursor", "next_cursor", "total_events", "matched_events", "record_count", "battle", "statistics",
     "gold_cost", "can_afford", "refresh_number", "rank_score", "current_rank_score", "projected_rank_score",
-    "rank_score_delta", "operation_count",
+    "rank_score_delta", "operation_count", "already_executed", "plan_id", "required_calls", "remaining_calls", "can_execute",
 )
 RESULT_COLLECTIONS = tuple(collection for collection, _ in COLLECTIONS.values()) + ("events", "items", "battles", "per_adventurer")
 
@@ -99,6 +99,11 @@ class TrajectoryIndex:
         counts = {key: len(result[key]) for key in RESULT_COLLECTIONS if isinstance(result.get(key), list)}
         if counts:
             compact["_collection_counts"] = counts
+        if name == "execute_plan" and isinstance(result.get("events"), list):
+            compact["events"] = [
+                {key: step[key] for key in ("type", "action", "summary", "changes") if key in step}
+                for step in result["events"]
+            ]
         if isinstance(result.get("preview"), dict):
             compact["preview"] = {key: value for key, value in result["preview"].items() if key != "events"}
         output = action_output(result, self.observation, result.get("_observation_after") or {},

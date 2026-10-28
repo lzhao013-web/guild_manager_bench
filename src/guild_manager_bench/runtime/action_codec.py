@@ -10,6 +10,7 @@ from guild_manager_bench.game.actions import (
     DismissAction,
     EndTurnAction,
     EquipAction,
+    ExchangeMaterialsAction,
     HuntAction,
     PreparationAction,
     PurchaseUpgradeAction,
@@ -34,6 +35,11 @@ def decode_preparation_action(payload: Mapping[str, Any]) -> PreparationAction:
             adventurer_id=_str(payload, "adventurer_id"),
             skill_priority=payload.get("skill_priority"),
             disabled_skills=payload.get("disabled_skills"),
+        )
+    if action_type == "exchange_materials":
+        return ExchangeMaterialsAction(
+            material_id=_str(payload, "material_id"),
+            quantity=_int(payload, "quantity"),
         )
     if action_type == "craft":
         return CraftAction(recipe_id=_str(payload, "recipe_id"))
@@ -82,6 +88,8 @@ def encode_preparation_action(action: PreparationAction) -> dict[str, Any]:
             "skill_priority": list(action.skill_priority),
             "disabled_skills": list(action.disabled_skills),
         }
+    if isinstance(action, ExchangeMaterialsAction):
+        return {"type": "exchange_materials", "material_id": action.material_id, "quantity": action.quantity}
     if isinstance(action, CraftAction):
         return {"type": "craft", "recipe_id": action.recipe_id}
     if isinstance(action, PurchaseUpgradeAction):

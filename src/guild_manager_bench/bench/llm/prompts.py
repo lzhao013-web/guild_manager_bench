@@ -10,9 +10,29 @@ from guild_manager_bench.bench.llm.refs import (
 from guild_manager_bench.game.state import MATERIAL_NAMES
 
 DEFAULT_OBJECTIVE = (
-    "在有限回合内最大化获取资源、培养队伍，使全队在最后一回合结束时的终局评测中获得最高的终局战力评分（rank_score）。"
-    "终局评测会让全队以满HP/MP迎战多波不同特性的高难度敌人，并自动选择最佳1v1配对计算总分。"
+    "在有限回合内获取资源、培养队伍，最大化最后一回合结束时的全队终局战力评分（rank_score）。"
 )
+
+
+def _evaluation_rules(rules: Mapping[str, Any]) -> str:
+    difficulty_count = len(range(
+        rules["rank_min_diff"], rules["rank_max_diff"] + 1, rules["rank_step"],
+    ))
+    total_waves = difficulty_count * rules["rank_waves"]
+    difficulty = "难度按档逐步提高的" if difficulty_count > 1 else "难度固定的"
+    resources = (
+        "双方以满HP/MP独立开战"
+        if rules["resource_mode"] == "full"
+        else "敌人以满HP/MP、角色以终局当前HP/MP独立开战"
+    )
+    return (
+        f"终局评测：在游戏结束时，你的团队将面对{difficulty}{total_waves}波敌人。"
+        f"每波刷新{rules['wave_size']}名敌人，{resources}，系统自动选择最适合的角色进行1v1配对，"
+        "每名角色和敌人每波至多参战一次。"
+        "每场战斗的分数判定以胜负为主，败场只能拿到较低分数，未配对的敌人不记分。"
+        "单场战斗的分数汇总为该波次的分数。"
+        "所有波次的分数按难度加权汇总为rank_score。"
+    )
 
 
 def build_system_prompt(
@@ -26,6 +46,7 @@ def build_system_prompt(
     forecast_enabled: bool = False,
     challenge_rules: Mapping[str, Any] | None = None,
     monster_refresh_rules: Mapping[str, Any] | None = None,
+    scoring_rules: Mapping[str, Any] | None = None,
 ) -> str:
     """构建系统提示词（静态游戏规则，跨回合不变，适合 LLM prompt caching）。"""
 
@@ -40,38 +61,51 @@ def build_system_prompt(
     mp_recovery = int(rules.get("mp", 0))
     hp_percent = _percent(rules.get("hp_percent"))
     mp_percent = _percent(rules.get("mp_percent"))
+    skill_check = (
+        "先结算自动回复，再检查普通主动技能"
+        if talent_tree_enabled else "再检查主动技能"
+    )
 
     lines = [
             "你正在进行 Guild Manager Bench。",
             f"目标：{objective}",
+            *([_evaluation_rules(scoring_rules)] if scoring_rules is not None else []),
             "",
-            "回合流程：每回合可调用查询工具获取详情，或调用准备工具调整队伍；确认本回合所有准备操作完成后，调用 end_turn 提交讨伐列表并结束回合。",
+            "回合流程：每回合可查询详情或调整队伍，准备完成后调用 end_turn 提交讨伐并结束本轮交互。",
             "战斗形式：战斗是确定性的自动1V1，没有队员间协作。经营讨伐使用角色当前HP/MP（当前HP为0的角色无法出战），每位角色每回合最多讨伐一个怪物，每个怪物每回合也最多被讨伐一次。",
             "行动与速度：双方行动条从0开始，按速度（SPD）累积，达到100即可行动，行动后扣除100。因此速度（SPD）影响出手频率，不只是先后手。双方同时达到行动条件时，依次比较当前行动条、速度（SPD），仍相同则冒险者先动。",
-            "行动结算：确定行动者后，先结算其身上的持续伤害、治疗和回魔。若仍存活，再检查主动技能。技能触发条件基于此时的HP/MP判定，判定通过后才扣除本次技能的MP消耗。",
+            f"行动结算：先结算行动者已有状态的持续伤害、治疗和回魔。若仍存活，{skill_check}。技能条件按此时的HP/MP判定，通过后扣除本次技能的MP消耗。",
             "技能选择：每次行动按列表顺序检查主动技能，仅释放首个满足触发条件、MP充足且次数未耗尽的技能；无可用技能则进行普攻。普通主动技能会替代本次普攻，即使技能只有治疗或增益效果。“即时”主动技能释放后会立即追加一次普攻，不会继续释放其他主动技能，也不免除其MP消耗。被动技能不参与排序，满足条件时动态生效。",
             "属性与伤害：角色面板属性已包含等级、装备和公会升级的直接加成，不包含战斗中的被动与状态加成。升级、穿脱装备或购买公会升级改变最大HP/MP时，保持已损失的HP/MP差值不变（即上限增加多少，当前值同步增加多少，不会直接回满）。战斗中的攻击、防御、速度按“（面板属性＋固定加成之和）×各倍率之积”计算并向下取整。普攻伤害为 max(1, 攻击－防御)，按普攻伤害倍率结算的技能在扣防后乘算（向下取整且最低1点），无视防御伤害另按技能描述计算。",
             "计数与持续时间：技能条件中的“行动序号”是单场战斗双方累计行动次数；状态持续时间则按状态持有者自己的行动次数计算，两者不同。双方累计达到1000次行动仍未分胜负，判为平局。",
-            "战后处理：经营讨伐只有胜利才获得奖励，战斗后的剩余HP/MP保留。战败不会永久失去角色。回合末全体角色按恢复规则恢复，包括未出战和战败者。战斗状态及“每场一次”的技能计数不跨场保留。",
-            "回合末恢复公式（不超过各自最大HP/MP）："
+            "战后处理：经营讨伐胜利后发放奖励，剩余HP/MP保留，战败角色仍留在队伍。全部讨伐结束后，全体角色统一结算回合末恢复，包括未出战和战败者。战斗状态和技能次数逐场重置。",
+            "回合末恢复公式（战后回血/回魔在此结算，上限为最大HP/MP）："
             f"HP回复 = {hp_recovery} + 最大HP×{hp_percent} + 战后回血属性；"
             f"MP回复 = {mp_recovery} + 最大MP×{mp_percent} + 战后回魔属性。",
             "刷新机制：每回合结束时，当前未讨伐的怪物和未招募的候选冒险者均不保留，下回合会刷新全新列表。",
-            f"调用预算：每回合最多允许 {max_tool_calls} 次非 end_turn 工具调用{bp_limit_text}；所有查询、战斗预览、准备动作以及失败的调用均会消耗预算，请合理规划工具调用。",
+            f"调用预算：每回合最多允许 {max_tool_calls} 次收费工具调用{bp_limit_text}。"
+            "查询、战斗预览、准备动作和方案试算包括失败调用均扣1次。end_turn与execute_plan不扣预算。",
+            "方案试算：全回合可用preview_team_power校验最多20步准备动作，返回资源与属性变化。"
+            "终局前不计算或返回战力，终局阶段另提供正式rank_score与分差。"
+            "试算扣1次，非空合法方案返回plan_id。execute_plan免费提交该凭据，"
+            "但提交时剩余预算必须不少于方案步数，这只是门槛，成功后不扣这些次数。"
+            "查询不使凭据失效但会减少预算，改变游戏状态或跨回合后必须重新试算。"
+            "预算不足时整单拒绝且不扣费，应缩短方案后重新试算或结束回合，不要原样重试。"
+            "同一凭据只执行一次，重复提交返回已有结果。",
             "对象编号：角色、怪物、配方、升级、候选和装备使用列表左侧的数字 id（同回合已有编号固定，新对象编号见工具返回）。技能配置使用技能字符串 ID，战斗日志使用结果中的 battle_id。",
             "工具返回：每次调用均返回执行状态（成功/失败）、剩余预算及结果摘要。准备工具仅返回变更摘要，完整列表详情需通过对应的查询工具查看。",
     ]
     if talent_tree_enabled:
-        lines = [line.replace("若仍存活，再检查主动技能。", "若仍存活，先结算自动回复，再检查普通主动技能。") for line in lines]
         lines.extend([
             "自动回复：自身行动开始、持续状态结算后检查，每场一次，不占普通主动选择、不额外普攻。可停用，不能排序。",
-            "全局天赋：可通过 get_upgrades 查询并由 purchase_upgrade 解锁天赋节点。购买天赋消耗金币、材料和经验池经验（材料与制作装备共用，经验池与角色升级共用）。节点需满足全部前置且与互斥节点不可兼得，购买后不可退款或洗点。经营类天赋仅对购买后的制作或讨伐生效，当前查询显示的配方费用与怪物奖励均已计入已生效的加成。",
+            "全局天赋：公会属性与技能加成适用于全体成员，包括新招募者。可通过 get_upgrades 查询并由 purchase_upgrade 解锁天赋节点。购买天赋消耗金币、材料和经验池经验（材料与制作装备共用，经验池与角色升级共用）。节点需满足全部前置且与互斥节点不可兼得，购买后不可退款或洗点。经营类天赋仅对购买后的制作或讨伐生效，当前查询显示的配方费用与怪物奖励均已计入已生效的加成。",
         ])
     if tactics_enabled:
         lines.append(
-            "技能配置：可通过 configure_tactics 调整角色主动技能的释放优先级或停用指定主动技能。"
-            "配置跨回合生效，并同时作用于日常讨伐、战斗预览与终局评测；被动技能及技能本身的触发条件、"
-            "MP消耗和次数限制不受影响。"
+            "技能配置：可通过 configure_tactics 调整角色主动技能的释放优先级或停用指定主动技能"
+            "（未列出的普通主动技能排在后面，按默认顺序检查）。配置跨回合生效，并同时作用于日常讨伐、"
+            "战斗预览与终局评测。被动技能及技能本身的触发条件、MP消耗和次数限制不受影响。"
+            "穿戴新装备或印记不会自动将其技能置顶。"
         )
     if battle_log_enabled:
         lines.append(
@@ -81,23 +115,30 @@ def build_system_prompt(
     if forecast_enabled:
         lines.append(
             "未来刷新：未来各回合刷新的怪物和招募候选由随机种子与回合数唯一确定，不受玩家操作影响。"
-            "可通过 get_forecast 提前查询未来经营回合的刷新列表（怪物展示基础奖励，未计经营天赋加成；"
-            "该查询不包含终局评测敌人或评分种子）。"
+            "可通过 get_forecast 提前查询未来经营回合的刷新列表（怪物展示基础奖励，未计经营天赋加成，"
+            "不包含终局评测敌人或评分种子）。"
         )
     if challenge_rules is not None:
         start = challenge_rules["start_turn"]
         last_hunt = challenge_rules["last_hunt_turn"]
         lines.append(
             f"固定挑战：T{start}起额外出现三个带【挑战】标识的单位，最多可挑战至T{last_hunt}。"
-            "普通怪物和候选仍照常刷新，但未击败的挑战跨回合保留，属性不变。"
-            "挑战失败后敌方下次恢复满HP/MP，己方保留实际消耗。挑战占正常讨伐名额，"
-            "胜利后永久移除，只奖励一份对应核心，不奖励金币或经验。可提前用 get_forecast 的 tier=challenge 查询属性与基础奖励，"
-            "未来存在以此前未击败为条件。"
-            "特殊核心可通过 get_crafting 查看全部职业印记配方，再用 craft_equipment 制作、equip_item 装入 ultimate 槽，"
-            "从而获得终极技能。每份核心只能制作一个印记，每人最多一个。"
-            "制作后不能拆回核心，但印记可卸下、转移给符合职业限制的队友，解雇也不会销毁印记。"
-            f"T{last_hunt + 1}是最终整备回合，不发生讨伐，可使用上一回合奖励制作、培养、穿装和配置技能，最后调用 end_turn(hunts=[]) 完成评测。"
+            "普通怪物和候选照常刷新，未击败的挑战跨回合保留且属性不变。"
+            "挑战占正常讨伐名额，失败后敌方下次恢复满HP/MP，己方保留实际消耗。"
+            "胜利后目标永久移除，只奖励一份对应核心，不奖励金币或经验。"
+            "可提前用 get_forecast 的 tier=challenge 查询属性与基础奖励（仅在此前未击败时存在）。"
         )
+        if challenge_rules.get("unique_challenge_classes"):
+            lines.append(
+                "每种职业本局最多赢得一个固定挑战。"
+            )
+        lines.extend([
+            "终极印记：特殊核心可通过 get_crafting 查看全部职业印记配方，用 craft_equipment 制作、"
+            "equip_item 装入 ultimate 槽以获得终极技能。每份核心只能制作一个印记，每人最多一个。"
+            "制作后不能拆回核心，但印记可卸下、转移给符合职业限制的队友，解雇也不会销毁印记。",
+            f"最终整备：T{last_hunt + 1}是最终整备回合，不发生讨伐，可使用上一回合奖励制作、培养、"
+            "穿装和配置技能，最后调用 end_turn(hunts=[]) 完成评测。",
+        ])
         lines = [line.replace(
             "当前未讨伐的怪物和未招募的候选冒险者均不保留",
             "当前未讨伐的普通怪物和未招募的候选冒险者均不保留",
@@ -154,9 +195,10 @@ def _memo_summary(memo_entries: Sequence[str]) -> str:
         for entry in memo_entries
         if isinstance(entry, str) and entry.strip()
     ]
+    heading = "备忘录（上回合由模型自行记录）："
     if not values:
-        return "备忘录：无。（提示：本回合的思考不会带到下回合，如有跨回合计划请用 write_memo 记录。备忘录只持续1回合。）"
-    lines = ["备忘录："]
+        return f"{heading}无。跨回合计划请在 end_turn 前用 write_memo 记录，供下一回合使用。"
+    lines = [heading]
     lines.extend(f"- {entry}" for entry in values)
     return "\n".join(lines)
 
@@ -174,13 +216,9 @@ def _endgame_notice(
     if turns_remaining is None:
         turns_remaining = max_turns - turn
     return (
-        f"现在是终局阶段：当前回合 {turn}/{max_turns}，剩余 {turns_remaining} 回合。"
-        "终局评测会评估全队对多类高难度敌人的战斗表现（每场以满HP/MP开始，并自动选择最佳一一配对）。"
-        "单场得分以胜负为主，同时计入敌方损失HP的比例和己方剩余HP的比例——"
-        "同样获胜也可能得到不同分数，战败或平局也可能获得部分分数；终局战力评分（rank_score）汇总不同难度下的表现。"
-        "请兼顾剩余回合的经营与终局阵容强化。你可使用 preview_team_power 试算一组准备动作对 rank_score 的影响"
-        "（分差相对调用前的真实状态计算，不是本回合开始时的状态；传入 operations=[] 只查询当前 rank_score；"
-        "试算不会实际执行方案，采纳后仍需逐个调用真实工具）。"
+        f"现在是终局阶段：当前回合 {turn}/{max_turns}，剩余 {turns_remaining} 回合。\n"
+        "方案试算：可用 preview_team_power 比较准备方案相对当前真实状态的 rank_score 分差。"
+        "operations=[] 查询当前分数。采纳后，可用 execute_plan 提交试算返回的 plan_id。"
     )
 
 
@@ -188,10 +226,25 @@ def _state_summary(observation: Mapping[str, Any]) -> str:
     adventurers = observation.get("adventurers", ())
     monsters = observation.get("monsters", ())
     refs = build_numeric_refs(observation)
+    purchased_upgrade_names = [
+        upgrade["name"]
+        for upgrade in _sequence(observation.get("global_upgrades"))
+        if upgrade["unlocked"]
+    ]
     lines = [
         f"当前回合：{observation['turn']}/{observation['max_turns']}",
         f"资源：金币 {observation['gold']}，经验池 {observation['experience_pool']}，材料 {_mapping_text(observation['materials'])}",
     ]
+    exchange = observation.get("material_exchange")
+    if exchange is not None:
+        remaining, limit = exchange["remaining_points"], exchange["point_limit"]
+        if observation["turn"] < exchange["from_turn"]:
+            lines.append(f"材料兑换：未开放（T{exchange['from_turn']}起）")
+        elif remaining == 0:
+            lines.append(f"材料兑换：额度已用尽（0/{limit}点）")
+        else:
+            lines.append(f"材料兑换：剩余额度{remaining}/{limit}点")
+    lines.append(f"已购买升级：{'、'.join(purchased_upgrade_names) or '无'}")
     # Experience rules if available
     exp_rules = observation.get("experience_rules")
     if isinstance(exp_rules, Mapping):
@@ -202,8 +255,12 @@ def _state_summary(observation: Mapping[str, Any]) -> str:
             lines.append(f"升级需求：{base}+{growth_per}/级；最高等级 {max_level}")
     if observation.get("final_preparation_only") and observation["turn"] == observation["max_turns"]:
         lines.append("当前为最终整备：没有讨伐，完成准备后提交 end_turn(hunts=[])。")
-    if "defeated_challenge_ids" in observation:
-        lines.append(f"固定挑战已击败 {len(observation['defeated_challenge_ids'])}/3，详细属性与奖励可按需查询。")
+    if any(monster.get("tier") == "challenge" for monster in monsters):
+        if "defeated_challenge_ids" in observation:
+            lines.append(f"固定挑战已击败 {len(observation['defeated_challenge_ids'])}/3，详细属性与奖励可按需查询。")
+        if observation.get("unique_challenge_classes"):
+            used = ", ".join(observation["used_challenge_class_ids"]) or "无"
+            lines.append(f"固定挑战已用职业：{used}。")
     refresh = observation.get("monster_refresh")
     if isinstance(refresh, Mapping):
         if refresh["available"]:

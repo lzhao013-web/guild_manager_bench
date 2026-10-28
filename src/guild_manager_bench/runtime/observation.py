@@ -33,7 +33,7 @@ from guild_manager_bench.game.state import (
     RewardBundle,
     SpawnedMonster,
 )
-from guild_manager_bench.game.upgrades import UpgradeInventory, missing_upgrade_requirements
+from guild_manager_bench.game.upgrades import UpgradeInventory, apply_upgrade_stats, missing_upgrade_requirements
 
 
 def build_observation(definition: GameDefinition, state: GameState) -> dict[str, Any]:
@@ -58,9 +58,19 @@ def build_observation(definition: GameDefinition, state: GameState) -> dict[str,
             "defeated_challenge_ids": sorted(state.defeated_challenge_ids),
             "final_preparation_only": definition.rules.final_preparation_only,
             "challenge_start_turn": min(c.min_turn for c in definition.content.challenge_archetypes),
+            **({
+                "unique_challenge_classes": True,
+                "used_challenge_class_ids": sorted(state.used_challenge_class_ids),
+            } if definition.rules.unique_challenge_classes else {}),
         } if definition.content.challenge_archetypes else {}),
         **({"monster_refresh": monster_refresh_info(definition, state)}
            if definition.rules.monster_refresh.enabled else {}),
+        **({"material_exchange": {
+            "from_turn": definition.rules.material_exchange.from_turn,
+            "point_limit": definition.rules.material_exchange.point_limit,
+            "used_points": state.exchange_used_points,
+            "remaining_points": definition.rules.material_exchange.point_limit - state.exchange_used_points,
+        }} if definition.rules.material_exchange is not None else {}),
         "gold": state.gold,
         "materials": dict(state.materials),
         "experience_pool": state.experience_pool,
@@ -90,7 +100,7 @@ def build_observation(definition: GameDefinition, state: GameState) -> dict[str,
             for upgrade in definition.content.global_upgrades
         ],
         "recruit_candidates": [
-            _recruit_candidate_to_dict(state, candidate, size_limit)
+            _recruit_candidate_to_dict(definition, state, candidate, size_limit)
             for candidate in state.recruit_candidates
         ],
     }
@@ -169,6 +179,7 @@ def _monster_to_dict(definition: GameDefinition, state: GameState, monster: Spaw
 
 
 def _recruit_candidate_to_dict(
+    definition: GameDefinition,
     state: GameState,
     candidate: RecruitCandidate,
     size_limit: int,
@@ -187,6 +198,11 @@ def _recruit_candidate_to_dict(
         "name": candidate.name,
         "recruit_gold": candidate.recruit_gold,
         "base_stats": _stats_to_dict(candidate.base_stats),
+        "effective_stats": _stats_to_dict(apply_upgrade_stats(
+            candidate.base_stats,
+            (upgrade for upgrade in definition.content.global_upgrades
+             if upgrade.upgrade_id in state.unlocked_upgrade_ids),
+        )),
         "stat_growth_per_level": _stat_modifier_to_dict(candidate.stat_growth_per_level),
         "skills": [_skill_to_dict(skill) for skill in candidate.skills],
         "level_skill_unlocks": [

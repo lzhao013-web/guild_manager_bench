@@ -48,9 +48,14 @@ def _skill_text(skill: Mapping[str, Any]) -> str:
     name = str(skill.get("name") or skill.get("skill_id") or "技能")
     kind = skill.get("kind")
     condition = _condition_text(skill.get("condition")) or "总是"
+    once_per_battle = bool(skill.get("once_per_battle"))
     effects = [
-        _effect_text(effect)
-        for effect in _sequence(skill.get("effects"))
+        _effect_text(
+            effect,
+            omit_self_prefix=kind == "passive" and index > 0,
+            parent_once_per_battle=once_per_battle,
+        )
+        for index, effect in enumerate(_sequence(skill.get("effects")))
         if isinstance(effect, Mapping)
     ]
     effect_text = "，".join(effect for effect in effects if effect) or "无"
@@ -68,7 +73,7 @@ def _skill_text(skill: Mapping[str, Any]) -> str:
     mp_cost = skill.get("mp_cost")
     if isinstance(mp_cost, int | float) and mp_cost:
         limits.append(f"需要{_number(mp_cost)}MP")
-    if skill.get("once_per_battle"):
+    if once_per_battle:
         limits.append("每场战斗最多触发一次")
     if limits:
         sentences.append("限制：" + "，".join(limits) + "。")
@@ -121,12 +126,19 @@ def _condition_text(value: Any) -> str:
     return raw if condition_value is None else f"{raw}:{condition_value}"
 
 
-def _effect_text(effect: Mapping[str, Any], *, status_context: bool = False) -> str:
+def _effect_text(
+    effect: Mapping[str, Any],
+    *,
+    status_context: bool = False,
+    omit_self_prefix: bool = False,
+    parent_once_per_battle: bool = False,
+) -> str:
     effect_type = effect.get("type")
     value = effect.get("value")
     stat = effect.get("stat")
     target = effect.get("target")
     target_text = _effect_target_text(target, status_context=status_context)
+    stat_prefix = "" if omit_self_prefix and target in (None, "self") else target_text
     stat_text = _stat_text(stat)
     if status_context:
         if effect_type == "true_damage":
@@ -138,9 +150,9 @@ def _effect_text(effect: Mapping[str, Any], *, status_context: bool = False) -> 
         if effect_type == "mp_restore":
             return f"{target_text}每次行动开始恢复{_number(value)}点MP"
         if effect_type == "stat_bonus":
-            return f"{target_text}{stat_text}+{_number(value)}"
+            return f"{stat_prefix}{stat_text}+{_number(value)}"
         if effect_type == "stat_multiplier":
-            return f"{target_text}{stat_text}×{_number(value)}"
+            return f"{stat_prefix}{stat_text}×{_number(value)}"
     if effect_type == "damage_multiplier":
         return f"造成一段“扣防后普攻伤害×{_number(value)}”的伤害，向下取整且最低1点"
     if effect_type == "heal":
@@ -163,28 +175,38 @@ def _effect_text(effect: Mapping[str, Any], *, status_context: bool = False) -> 
     if effect_type == "apply_status":
         status = effect.get("status")
         if isinstance(status, Mapping):
-            return f"对{target_text}施加状态：{_status_text(status)}"
+            return f"对{target_text}施加状态：{_status_text(status, omit_stack=parent_once_per_battle)}"
         return f"对{target_text}施加状态"
     if effect_type == "stat_bonus":
-        return f"{target_text}{stat_text}+{_number(value)}"
+        return f"{stat_prefix}{stat_text}+{_number(value)}"
     if effect_type == "stat_multiplier":
-        return f"{target_text}{stat_text}×{_number(value)}"
+        return f"{stat_prefix}{stat_text}×{_number(value)}"
     if stat is not None:
         return f"{effect_type}:{stat_text}:{_number(value)}"
     return f"{effect_type}:{_number(value)}"
 
 
-def _status_text(status: Mapping[str, Any]) -> str:
+def _status_text(status: Mapping[str, Any], *, omit_stack: bool = False) -> str:
     name = str(status.get("name") or status.get("status_id") or "状态")
     duration = status.get("duration")
     polarity = _status_polarity_text(status.get("polarity"))
-    stack = _status_stack_text(status.get("stack_mode"))
-    effects = [
-        _effect_text(effect, status_context=True)
-        for effect in _sequence(status.get("effects"))
-        if isinstance(effect, Mapping)
-    ]
-    effect_text = "；".join(effect for effect in effects if effect)
+    stack = "" if omit_stack else _status_stack_text(status.get("stack_mode"))
+    effects = []
+    seen_stat_subject = False
+    for effect in _sequence(status.get("effects")):
+        if not isinstance(effect, Mapping):
+            continue
+        is_stat = effect.get("type") in {"stat_bonus", "stat_multiplier"}
+        text = _effect_text(
+            effect,
+            status_context=True,
+            omit_self_prefix=is_stat and seen_stat_subject,
+        )
+        if is_stat:
+            seen_stat_subject = True
+        if text:
+            effects.append(text)
+    effect_text = "，".join(effects)
     parts = []
     if polarity:
         parts.append(f"{polarity}状态")

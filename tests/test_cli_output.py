@@ -81,6 +81,18 @@ def reporter_for(stream, *, mode="watch", width=100, terminal=False, **kwargs):
     return reporter
 
 
+@pytest.mark.parametrize("name,result,expected", [
+    ("preview_team_power", {"operation_count": 2}, "不估算战力"),
+    ("preview_team_power", {"current_rank_score": 10, "projected_rank_score": 12, "rank_score_delta": 2}, "10.0 → 12.0"),
+    ("preview_team_power", {"rank_score": 9}, "Rank Score 9.0"),
+    ("execute_plan", {"operation_count": 2, "already_executed": False}, "已执行2步方案"),
+    ("execute_plan", {"operation_count": 2, "already_executed": True}, "未重复执行"),
+])
+def test_plan_summaries_support_global_preview_execution_and_frozen_full(name, result, expected):
+    reporter = reporter_for(io.StringIO())
+    assert expected in reporter._query_summary(name, result)
+
+
 def test_watch_output_describes_game_changes_and_actual_battles(recorded_run):
     events, run, candidate, agent = recorded_run
     stream = io.StringIO()

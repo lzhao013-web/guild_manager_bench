@@ -1,6 +1,7 @@
 rules:
   max_turns: 35
   final_preparation_only: true
+  unique_challenge_classes: true
   seed: 42
   monster_spawn:
     count_curve:
@@ -13,6 +14,22 @@ rules:
     reward_growth_curve:
       base: 0.0
       per_turn: 0.15
+  material_exchange:
+    from_turn: 12
+    point_limit: 6
+    offers:
+      - material_id: mithril_shard
+        gold: 35
+        points: 2
+        materials: {iron_ore: 4, bone: 2}
+      - material_id: spider_silk
+        gold: 40
+        points: 2
+        materials: {herb: 4, sharp_claw: 2}
+      - material_id: beast_hide
+        gold: 20
+        points: 1
+        materials: {bone: 2, sharp_claw: 2}
   monster_refresh:
     base_prices:
       - {from_turn: 1, gold: 10}

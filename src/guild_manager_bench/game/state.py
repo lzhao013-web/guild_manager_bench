@@ -6,6 +6,7 @@ from typing import Mapping
 
 from guild_manager_bench.game.crafting import CraftingRecipe
 from guild_manager_bench.game.equipment import EquipmentInstance, EquipmentLoadout, EquipmentTemplate
+from guild_manager_bench.game.material_exchange import MaterialExchangeRules
 from guild_manager_bench.game.models import CombatResources, CombatStatModifier, CombatStats
 from guild_manager_bench.game.progression import ExperienceRules
 from guild_manager_bench.game.skills import Skill
@@ -562,6 +563,8 @@ class GameRules:
     recruitment: RecruitmentRules = field(default_factory=RecruitmentRules)
     final_preparation_only: bool = False
     monster_refresh: MonsterRefreshRules = field(default_factory=MonsterRefreshRules)
+    unique_challenge_classes: bool = False
+    material_exchange: MaterialExchangeRules | None = None
 
     def __post_init__(self) -> None:
         _require_at_least("max_turns", self.max_turns, 1)
@@ -575,8 +578,15 @@ class GameRules:
             raise TypeError("recruitment must be RecruitmentRules")
         if not isinstance(self.final_preparation_only, bool):
             raise TypeError("final_preparation_only must be a bool")
+        if not isinstance(self.unique_challenge_classes, bool):
+            raise TypeError("unique_challenge_classes must be a bool")
         if not isinstance(self.monster_refresh, MonsterRefreshRules):
             raise TypeError("monster_refresh must be MonsterRefreshRules")
+        if self.material_exchange is not None:
+            if not isinstance(self.material_exchange, MaterialExchangeRules):
+                raise TypeError("material_exchange must be MaterialExchangeRules")
+            if self.material_exchange.from_turn > self.max_turns:
+                raise ValueError("兑换开放回合不能晚于最终回合")
 
 
 @dataclass(frozen=True, slots=True)
@@ -718,6 +728,8 @@ class GameState:
     next_adventurer_number: int = 1
     defeated_challenge_ids: frozenset[str] = frozenset()
     monster_refresh_count: int = 0
+    used_challenge_class_ids: frozenset[str] = frozenset()
+    exchange_used_points: int = 0
 
     def __post_init__(self) -> None:
         _require_at_least("turn", self.turn, 1)
@@ -727,6 +739,8 @@ class GameState:
         _require_at_least("gold", self.gold, 0)
         if not isinstance(self.monster_refresh_count, int) or isinstance(self.monster_refresh_count, bool) or self.monster_refresh_count < 0:
             raise ValueError("monster_refresh_count 必须是非负整数")
+        if not isinstance(self.exchange_used_points, int) or isinstance(self.exchange_used_points, bool) or self.exchange_used_points < 0:
+            raise ValueError("exchange_used_points 必须是非负整数")
         _require_at_least("experience_pool", self.experience_pool, 0)
         _require_at_least("next_equipment_instance_number", self.next_equipment_instance_number, 1)
         _require_at_least("next_adventurer_number", self.next_adventurer_number, 1)
@@ -739,6 +753,9 @@ class GameState:
         object.__setattr__(self, "defeated_challenge_ids", frozenset(self.defeated_challenge_ids))
         for challenge_id in self.defeated_challenge_ids:
             _require_non_empty("defeated_challenge_id", challenge_id)
+        object.__setattr__(self, "used_challenge_class_ids", frozenset(self.used_challenge_class_ids))
+        for class_id in self.used_challenge_class_ids:
+            _require_non_empty("used_challenge_class_id", class_id)
 
         _validate_unique_ids("adventurer", (item.adventurer_id for item in self.adventurers))
         _validate_unique_ids("equipment instance", (item.instance_id for item in self.equipment_inventory))

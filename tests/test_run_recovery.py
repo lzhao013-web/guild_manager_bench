@@ -76,6 +76,9 @@ def test_rerun_creates_branch_keeps_prefix_memo_and_does_not_touch_original(tmp_
     assert child["session_id"] != plan.replay["session_id"]
     assert child["resume_history"][-1]["from_turn"] == 2
     assert child["resume_history"][-1]["source_run_id"] == source.name
+    resumed = [json.loads(line)["event"] for line in (Path(result.archive_dir) / "trace.jsonl").read_text(encoding="utf-8").splitlines()
+               if json.loads(line).get("record_type") == "event" and json.loads(line)["event"]["type"] == "run_resumed"]
+    assert resumed[-1]["last_adventurer_rank_scores"] == {"turn": 1, "scores": child["turns"][0]["adventurer_rank_scores"]}
     assert all(path.read_bytes() == raw for path, raw in original.items())
     history = TrajectoryStore().read(Path(result.archive_dir) / "trace.jsonl", archived=True)
     rows = history["entries"]

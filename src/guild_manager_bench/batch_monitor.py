@@ -22,7 +22,7 @@ from guild_manager_bench.game.state import MATERIAL_NAMES
 _LABELS = {"starting": "启动中", "running": "运行中", "completed": "已完成", "failed": "失败",
            "interrupted": "已中断", "exited": "异常退出", "unknown": "状态待确认"}
 _NEW_TOOLS = {"get_forecast": "未来查询", "get_battle_log": "战斗记录",
-              "configure_tactics": "技能配置", "preview_team_power": "方案试算"}
+              "configure_tactics": "技能配置", "preview_team_power": "方案试算", "execute_plan": "执行方案"}
 _TOOL_LABELS = {
     **_NEW_TOOLS, "get_recruitment": "查候选", "get_inventory": "查装备",
     "get_crafting": "查配方", "get_upgrades": "查天赋", "get_events": "查事件",
@@ -165,6 +165,10 @@ def _tool_summary(name: str, result: dict[str, Any], content: str) -> str:
     if name == "preview_team_power" and "rank_score_delta" in result:
         return (f"试算 {result['current_rank_score']:.1f} → {result['projected_rank_score']:.1f} "
                 f"({result['rank_score_delta']:+.1f})，未执行")
+    if name == "preview_team_power" and "operation_count" in result:
+        return f"试算{result['operation_count']}步，未执行，不估算战力"
+    if name == "execute_plan":
+        return "已提交，未重复执行" if result["already_executed"] else f"已执行{result['operation_count']}步，不扣调用预算"
     if name == "get_forecast":
         return f"{result['kind']} T{result['start_turn']}—{result['end_turn']}，命中 {result['total_matches']}，返回 {len(result['items'])}"
     if name == "get_battle_log":

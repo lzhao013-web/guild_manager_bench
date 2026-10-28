@@ -17,6 +17,19 @@ class CraftAction:
 
 
 @dataclass(frozen=True, slots=True)
+class ExchangeMaterialsAction:
+    """按固定费用兑换指定数量的一种材料。"""
+
+    material_id: str
+    quantity: int
+
+    def __post_init__(self) -> None:
+        _require_non_empty("material_id", self.material_id)
+        if not isinstance(self.quantity, int) or isinstance(self.quantity, bool) or self.quantity < 1:
+            raise ValueError("quantity 必须为正整数")
+
+
+@dataclass(frozen=True, slots=True)
 class PurchaseUpgradeAction:
     """购买一个全局加成。"""
 
@@ -144,6 +157,7 @@ PreparationAction: TypeAlias = (
     | EquipAction
     | ConfigureTacticsAction
     | RefreshMonstersAction
+    | ExchangeMaterialsAction
 )
 PREPARATION_ACTION_TYPES = (
     CraftAction,
@@ -155,6 +169,7 @@ PREPARATION_ACTION_TYPES = (
     EquipAction,
     ConfigureTacticsAction,
     RefreshMonstersAction,
+    ExchangeMaterialsAction,
 )
 
 

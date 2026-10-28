@@ -15,7 +15,7 @@ from guild_manager_bench.bench.llm.tools import GuildManagerTools, ToolCallError
 
 @dataclass(slots=True)
 class ToolBudget:
-    """单个 LLM 回合的非 end_turn 工具调用预算。"""
+    """单个 LLM 回合的收费工具调用预算。"""
 
     max_tool_calls: int
     used: int = 0
@@ -32,7 +32,7 @@ class ToolBudget:
 
     @property
     def remaining(self) -> int:
-        """返回剩余的非 end_turn 工具调用次数。"""
+        """返回剩余的收费工具调用次数。"""
 
         return max(0, self.max_tool_calls - self.used)
 
@@ -43,7 +43,7 @@ class ToolBudget:
         return self.remaining == 0
 
     def consume(self) -> None:
-        """消耗一次非 end_turn 工具调用预算。"""
+        """消耗一次收费工具调用预算。"""
 
         self.used += 1
 
@@ -152,9 +152,6 @@ class TurnToolHarness:
         """返回当前回合可注册给 LLM 的工具 schema。"""
 
         schemas = self.tools.list_tool_schemas()
-        if self.endgame_start_turn is not None and self._turn >= self.endgame_start_turn:
-            from guild_manager_bench.bench.llm.tools import team_power_preview_schema
-            schemas.append(team_power_preview_schema(schemas))
         schemas.append(deepcopy(_WRITE_MEMO_SCHEMA))
         return schemas
 
@@ -168,7 +165,7 @@ class TurnToolHarness:
         if self.ended:
             return self._error("回合已结束")
 
-        if name != "end_turn" and self.budget.exhausted:
+        if name not in {"end_turn", "execute_plan"} and self.budget.exhausted:
             return self._error("工具调用次数已用尽；仅允许使用 end_turn")
 
         if name == "preview_battle" and self._battle_preview_count >= self.max_battle_preview_per_turn:
@@ -177,17 +174,7 @@ class TurnToolHarness:
                 "请仅在关键对战时使用 preview_battle"
             )
 
-        if name == "preview_team_power":
-            if self.endgame_start_turn is None:
-                return self._error("preview_team_power 未启用")
-            if self._turn < self.endgame_start_turn:
-                remaining = self.endgame_start_turn - self._turn
-                return self._error(
-                    f"preview_team_power 仅在终局阶段（回合 {self.endgame_start_turn}+）可用，"
-                    f"当前回合 {self._turn}，还需 {remaining} 回合"
-                )
-
-        if name != "end_turn":
+        if name not in {"end_turn", "execute_plan"}:
             self.budget.consume()
 
         if name == "write_memo":
@@ -201,6 +188,13 @@ class TurnToolHarness:
             except (ToolCallError, ValueError) as exc:
                 result = {"ok": False, "error": str(exc)}
 
+        if name == "preview_team_power" and result.get("ok") is True:
+            result = {
+                **result,
+                "remaining_calls": self.budget.remaining,
+                "can_execute": bool(result.get("plan_id")) and self.budget.remaining >= result["required_calls"],
+            }
+
         if name == "preview_battle":
             self._battle_preview_count += 1
 
@@ -210,12 +204,16 @@ class TurnToolHarness:
         # 成功后增量更新 refs（为新增的实体分配序号，已有项序号不变）
         if result.get("ok") is True and not self.ended:
             try:
-                observation = self.tools.get_observation(self.session_id)["observation"]
-                update_numeric_refs(self._turn_refs, observation)
+                self.refresh_refs()
             except Exception:
                 pass
 
         return self._with_budget(result)
+
+    def refresh_refs(self) -> None:
+        """只从整批提交后的真实状态分配新编号，恢复时保持相同顺序。"""
+        observation = self.tools.get_observation(self.session_id)["observation"]
+        update_numeric_refs(self._turn_refs, observation)
 
     def _arguments_with_session(
         self,
@@ -225,6 +223,8 @@ class TurnToolHarness:
         values = {} if arguments is None else dict(arguments)
         values = resolve_tool_arguments_with_refs(self._turn_refs, name, values)
         values["session_id"] = self.session_id
+        if name == "execute_plan":
+            values["remaining_calls"] = self.budget.remaining
         return values
 
     def _write_memo(self, arguments: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -265,8 +265,8 @@ class TurnToolHarness:
 _WRITE_MEMO_SCHEMA: dict[str, Any] = {
     "name": "write_memo",
     "description": (
-        "写入跨回合备忘录。对话历史不跨回合保留，备忘录仅在下回合初展示一次后清空；"
-        "同回合多次调用会追加，建议回合末汇总写入。"
+        "各回合独立对话，跨回合计划通过备忘录保存。同回合多次写入会追加，建议在回合末、调用 end_turn 前汇总写入。"
+        "备忘录在下一回合初展示一次后清空。"
     ),
     "parameters": {
         "type": "object",

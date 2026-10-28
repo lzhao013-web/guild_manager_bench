@@ -143,9 +143,14 @@ def test_advanced_inherits_full_except_talents_and_documented_balance_overrides(
     full = load_game_definition("data/presets/full")
     advanced = load_game_definition("data/presets/advanced")
     assert advanced.rules.final_preparation_only
+    assert advanced.rules.unique_challenge_classes
+    assert not full.rules.unique_challenge_classes
     assert advanced.rules.monster_refresh.enabled
     assert not full.rules.monster_refresh.enabled
-    assert replace(advanced.rules, final_preparation_only=False, monster_refresh=full.rules.monster_refresh) == full.rules
+    assert advanced.rules.material_exchange is not None
+    assert full.rules.material_exchange is None
+    assert replace(advanced.rules, final_preparation_only=False, unique_challenge_classes=False,
+                   monster_refresh=full.rules.monster_refresh, material_exchange=None) == full.rules
     assert advanced.scoring == full.scoring
     assert advanced.starting_gold == full.starting_gold
     assert advanced.starting_materials == full.starting_materials

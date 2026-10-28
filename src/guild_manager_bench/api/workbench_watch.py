@@ -24,7 +24,11 @@ class WatchJournal:
     def history(self) -> dict[str, Any]:
         with self._lock:
             self._index()
-            return {"cursor": self.cursor, "entries": [dict(row) for row in self.trajectory.rows]}
+            return {
+                "cursor": self.cursor, "entries": [dict(row) for row in self.trajectory.rows],
+                "attempts": [{k: v for k, v in attempt.items() if k not in {"start", "end"}}
+                             for attempt in self.attempts],
+            }
 
     def _event(self, record: dict[str, Any]) -> dict[str, Any] | None:
         if self.archived:
@@ -76,7 +80,7 @@ class WatchJournal:
                         self.attempts[-1]["status"] = "completed"
                     self.attempts.append({
                         "id": self.cursor, "turn": turn, "attempt": ordinal,
-                        "status": "running", "score": None, "actions": 0,
+                        "status": "running", "score": None, "rank_contributions": None, "actions": 0,
                         "at": at, "updated_at": at,
                         "start": start, "end": self.cursor,
                     })
@@ -88,12 +92,15 @@ class WatchJournal:
                         if self.trajectory.attempt_states.get(old["id"]) == "rolled_back":
                             old["status"] = "rolled_back"
                     current["score"] = e.get("last_rank_score")
+                    current["rank_contributions"] = e.get("last_adventurer_rank_scores")
                 elif kind == "tool_result":
                     current["actions"] += 1
                 elif kind == "turn_completed":
                     current["status"] = "scoring"
                 elif kind == "turn_scored":
-                    current.update(status="completed", score=e["rank_score"])
+                    current.update(status="completed", score=e["rank_score"], rank_contributions=(
+                        {"turn": e["turn"], "scores": e["adventurer_rank_scores"]}
+                        if e.get("adventurer_rank_scores") is not None else None))
                 elif kind in {"turn_failed", "worker_failed", "run_failed"} and current["status"] != "completed":
                     current["status"] = "failed"
                 elif kind == "turn_retry":

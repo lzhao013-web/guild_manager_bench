@@ -83,6 +83,7 @@ class TurnTrace:
     failure_reason: str | None = None
     observation_before: dict[str, Any] | None = None
     rank_score: float | None = None
+    adventurer_rank_scores: dict[str, float] | None = None
 
     def complete(self) -> None:
         self.status = "completed"
@@ -114,6 +115,8 @@ class TurnTrace:
         }
         if self.rank_score is not None:
             data["rank_score"] = self.rank_score
+        if self.adventurer_rank_scores is not None:
+            data["adventurer_rank_scores"] = dict(self.adventurer_rank_scores)
         return data
 
 

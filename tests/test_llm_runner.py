@@ -95,6 +95,14 @@ def test_run_llm_game_completes_when_agent_ends_each_turn() -> None:
     assert run.final_observation["finished"] is True
     assert len(run.turns) == run.final_observation["max_turns"]
     assert all(turn.status == "completed" for turn in run.turns)
+    system = run.turns[0].messages[0]["content"]
+    rules = GuildManagerTools.from_data_dir(_data_dir()).definition.scoring
+    total_waves = len(range(rules.rank_min_diff, rules.rank_max_diff + 1, rules.rank_step)) * rules.rank_waves
+    assert f"难度按档逐步提高的{total_waves}波敌人" in system
+    assert f"每波刷新{run.final_observation['scoring']['wave_size']}名敌人" in system
+    assert "每名角色和敌人每波至多参战一次" in system
+    assert "未配对的敌人不记分" in system
+    assert "按难度加权汇总为rank_score" in system
 
 
 def test_illegal_action_error_is_returned_to_model_before_recovery() -> None:
@@ -380,7 +388,8 @@ def test_turn_prompt_includes_compact_skill_summaries() -> None:
     prompt = build_turn_prompt(observation)
 
     assert "上一回合：无，这是本局第一个回合。" in prompt
-    assert "备忘录：无。" in prompt
+    assert "备忘录（上回合由模型自行记录）：无。" in prompt
+    assert "已购买升级：无" in prompt.splitlines()
     assert "本回合概览：" in prompt
     assert "可制作配方" in prompt
     assert "可购买升级" in prompt
@@ -403,6 +412,32 @@ def test_turn_prompt_includes_compact_skill_summaries() -> None:
     assert "回合流程：" not in prompt
     assert "战斗机制：" not in prompt
     assert "回复机制：" not in prompt
+
+
+def test_turn_prompt_shows_purchased_upgrade_names_without_memo() -> None:
+    tools = GuildManagerTools.from_data_dir(_data_dir())
+    session_id = tools.start_session("purchased-upgrades-prompt")["session_id"]
+    harness = TurnToolHarness(tools, session_id, max_tool_calls=3)
+    assert harness.call_tool("purchase_upgrade", {"upgrade_id": 3})["ok"]
+    assert harness.call_tool("purchase_upgrade", {"upgrade_id": 1})["ok"]
+    assert harness.call_tool("end_turn", {"hunts": []})["ok"]
+
+    observation = tools.get_observation(session_id)["observation"]
+    prompt = build_turn_prompt(observation)
+
+    assert "已购买升级：训练场、野战医疗" in prompt.splitlines()
+    assert "备忘录（上回合由模型自行记录）：无。" in prompt
+
+
+def test_turn_prompt_labels_memo_origin_and_preserves_entries() -> None:
+    tools = GuildManagerTools.from_data_dir(_data_dir())
+    observation = tools.start_session("memo-origin-prompt")["observation"]
+    entries = ("下回合查看招募。", "保留当前装备。")
+
+    prompt = build_turn_prompt(observation, memo_entries=entries)
+
+    assert "备忘录（上回合由模型自行记录）：\n- 下回合查看招募。\n- 保留当前装备。" in prompt
+    assert prompt.index("备忘录（上回合由模型自行记录）：") < prompt.index("当前回合：")
 
 
 def test_system_prompt_includes_static_rules() -> None:
@@ -428,7 +463,9 @@ def test_system_prompt_includes_static_rules() -> None:
     assert "HP回复 = " in prompt
     assert "MP回复 = " in prompt
     assert "刷新机制：" in prompt
-    assert "每回合最多允许 7 次非 end_turn 工具调用" in prompt
+    assert "每回合最多允许 7 次收费工具调用" in prompt
+    assert "end_turn与execute_plan不扣预算" in prompt
+    assert "提交时剩余预算必须不少于方案步数" in prompt
     assert "preview_battle 最多 5 次/回合" in prompt
     assert "使用列表左侧的数字 id" in prompt
     assert "技能配置使用技能字符串 ID" in prompt
@@ -620,6 +657,8 @@ def test_memo_tool_content_appears_in_next_turn_prompt() -> None:
         for prompt in agent.prompts
         if "当前回合：1/" in prompt
     )
+    assert f"备忘录（上回合由模型自行记录）：\n- {memo_text}" in run.turns[1].prompt
+    assert all(memo_text not in turn.prompt for turn in run.turns[2:])
     assert run.turns[0].tool_calls[0].name == "write_memo"
     assert run.turns[0].messages[3]["content"].startswith("成功 write_memo")
 

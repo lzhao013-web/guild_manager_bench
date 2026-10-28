@@ -33,6 +33,49 @@ def operation(name, args, before, after, summary):
                 ]}}}]
 
 
+def test_history_exposes_lightweight_attempt_boundaries_including_empty_turns_and_zero_rank(tmp_path):
+    path = tmp_path / "trace.jsonl"
+    write(path, [
+        {"type": "turn_started", "turn": 1, "observation": observation()},
+        {"type": "turn_completed"},
+        {"type": "turn_scored", "turn": 1, "rank_score": 0},
+        {"type": "turn_started", "turn": 2, "observation": {**observation(), "turn": 2}},
+        {"type": "turn_failed"}, {"type": "turn_retry"},
+        {"type": "turn_started", "turn": 2, "observation": {**observation(), "turn": 2}},
+    ])
+    original = path.read_bytes()
+    result = TrajectoryStore().read(path, archived=True)
+    assert result["entries"] == []
+    assert [(a["turn"], a["attempt"], a["status"], a["score"]) for a in result["attempts"]] == [
+        (1, 1, "completed", 0), (2, 1, "rolled_back", None), (2, 2, "running", None),
+    ]
+    assert all("start" not in a and "end" not in a and "observation" not in a for a in result["attempts"])
+    assert path.read_bytes() == original
+
+
+def test_history_keeps_committed_plan_steps_and_repeated_submission_marker_not_query_events(tmp_path):
+    path = tmp_path / "events.jsonl"
+    before, after = observation(), observation()
+    after["global_upgrades"][0].update(unlocked=True, description="全队攻击增加", stats={"attack": 2})
+    step = {"type": "preparation_applied", "action": {"type": "purchase_upgrade", "upgrade_id": "training"},
+            "summary": "解锁训练场", "changes": [{"kind": "resource", "label": "金币", "before": 100, "after": 80}]}
+    write(path, [
+        {"type": "turn_started", "turn": 1, "observation": before},
+        {"type": "tool_result", "name": "execute_plan", "result": {"ok": True, "already_executed": False,
+            "plan_id": "p1", "operation_count": 1, "events": [step], "_observation_after": after}},
+        {"type": "tool_result", "name": "execute_plan", "result": {"ok": True, "already_executed": True,
+            "plan_id": "p1", "operation_count": 1, "events": [step]}},
+        {"type": "tool_result", "name": "get_battle_log", "result": {"ok": True, "events": [{"private": "完整战斗日志不复制"}]}},
+    ], archived=False)
+    rows = TrajectoryStore().read(path, archived=False)["entries"]
+    assert rows[0]["event"]["result"]["events"] == [step]
+    assert rows[0]["event"]["result"]["_action_output"]["global_upgrades"][0]["description"] == "全队攻击增加"
+    assert rows[1]["event"]["result"]["already_executed"] is True
+    assert rows[2]["event"]["result"]["_collection_counts"]["events"] == 1
+    assert "events" not in rows[2]["event"]["result"]
+    assert "_observation_after" not in json.dumps(rows)
+
+
 def test_all_registered_tools_and_unknown_tools_are_indexed_once(tmp_path):
     from guild_manager_bench.bench.llm.harness import TurnToolHarness
     from guild_manager_bench.bench.llm.tools import GuildManagerTools

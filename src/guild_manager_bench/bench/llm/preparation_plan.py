@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import dataclass
 import re
+
+from guild_manager_bench.game.actions import PreparationAction
 from typing import Any, Mapping, Sequence
 
 from guild_manager_bench.game.engine import apply_preparation_action
@@ -22,6 +25,7 @@ PREPARATION_TOOLS = {
     "unequip_item": "unequip",
     "configure_tactics": "configure_tactics",
     "refresh_monsters": "refresh_monsters",
+    "exchange_materials": "exchange_materials",
 }
 _RESULT_FIELDS = {
     "recruit_adventurer": "adventurer_id",
@@ -60,8 +64,14 @@ def plan_operations_schema(schemas: Sequence[Mapping[str, Any]]) -> dict[str, An
     return {
         "type": "array", "maxItems": MAX_PLAN_OPERATIONS,
         "items": {"anyOf": variants},
-        "description": "按顺序校验并试算的准备动作列表（仅限准备工具，不可含查询、预览、write_memo 或 end_turn）；传 [] 仅评估当前状态。",
+        "description": "按顺序校验并试算的准备动作列表（仅限准备工具，不可含查询、预览、write_memo 或 end_turn）。传 [] 仅评估当前状态。",
     }
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedPlan:
+    projected_state: GameState
+    actions: tuple[PreparationAction, ...]
 
 
 def simulate_preparation_plan(
@@ -69,13 +79,14 @@ def simulate_preparation_plan(
     state: GameState,
     operations: Any,
     schemas: Sequence[Mapping[str, Any]],
-) -> GameState:
-    """失败时抛出带步骤位置的错误，调用方不会获得部分执行结果。"""
+) -> PreparedPlan:
+    """校验并解析局部引用，失败时不返回部分方案。"""
     if not isinstance(operations, list) or len(operations) > MAX_PLAN_OPERATIONS:
         raise ValueError(f"operations 必须是最多 {MAX_PLAN_OPERATIONS} 步的列表")
     allowed = {schema["name"]: schema["parameters"] for schema in schemas
                if schema["name"] in PREPARATION_TOOLS}
     aliases: dict[str, tuple[str, str]] = {}
+    actions: list[PreparationAction] = []
     for index, operation in enumerate(operations, start=1):
         try:
             if not isinstance(operation, Mapping):
@@ -114,6 +125,7 @@ def simulate_preparation_plan(
                     arguments[field] = canonical_id
             action = decode_preparation_action({"type": PREPARATION_TOOLS[tool], **arguments})
             state = apply_preparation_action(definition, state, action)
+            actions.append(action)
             if "as" in operation:
                 field = _RESULT_FIELDS[tool]
                 canonical_id = (
@@ -126,4 +138,4 @@ def simulate_preparation_plan(
             for alias, (_, canonical_id) in aliases.items():
                 message = message.replace(canonical_id, f"${alias}")
             raise ValueError(f"方案第 {index} 步：{message}") from exc
-    return state
+    return PreparedPlan(state, tuple(actions))

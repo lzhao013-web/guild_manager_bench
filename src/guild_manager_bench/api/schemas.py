@@ -16,6 +16,8 @@ class ActionRequest(BaseModel):
     equipment_instance_id: str | None = None
     slot: str | None = None
     amount: int | None = None
+    material_id: str | None = None
+    quantity: int | None = Field(default=None, strict=True, ge=1)
     hunts: list[dict[str, str]] = Field(default_factory=list)
     locked_monster_ids: list[str] | None = None
 

@@ -53,12 +53,13 @@ class RecordingAgent:
         return LlmAgentResponse(tool_calls=(LlmToolCall(name, args),))
 
 
-def test_endgame_notice_describes_evaluation_without_diversity_advice():
+def test_endgame_notice_focuses_on_preview_without_diversity_advice():
     text = build_endgame_system_prompt(31, 35)
-    assert "多类高难度敌人" in text
-    assert "满HP/MP" in text
-    assert "最佳一一配对" in text
-    assert "本回合开始" in text
+    assert "preview_team_power" in text
+    assert "相对当前真实状态" in text
+    assert "execute_plan" in text
+    assert "plan_id" in text
+    assert "终局评测：" not in text
     assert "多面性" not in text
 
 
@@ -87,7 +88,7 @@ def test_normal_operation_has_no_feedback_or_extra_scoring(monkeypatch, turn, st
     assert trace.status == "completed"
     assert trace.prompt == expected_prompt
     messages, schemas = agent.requests[0]
-    assert all("preview_team_power" != schema["name"] for schema in schemas)
+    assert {"preview_team_power", "execute_plan"} <= {schema["name"] for schema in schemas}
     assert "当前终局评分" not in trace.prompt
     assert "最佳一一配对" not in trace.prompt
     assert all("rank_score" not in message["content"] for message in messages)
@@ -178,14 +179,34 @@ def test_empty_team_still_shows_zero_automatic_baseline():
     assert trace.tool_calls[0].result["tool_budget"]["used"] == 0
 
 
-def test_team_power_preview_is_still_rejected_before_endgame():
-    tools, sid = make_session(30)
-    harness = TurnToolHarness(tools, sid, max_tool_calls=1, endgame_start_turn=31)
-    result = harness.call_tool("preview_team_power", {"operations": []})
-    assert result["ok"] is False
-    assert "仅在终局阶段" in result["error"]
-    assert "rank_score" not in result
-    assert "turn_start_rank_score" not in result
+@pytest.mark.parametrize("start", [31, None])
+def test_plan_preview_is_global_without_scoring_before_endgame(monkeypatch, start):
+    tools, sid = make_session(30, endgame_start_turn=start)
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("pre-endgame plan preview and execution must not compute rank")
+
+    monkeypatch.setattr(metrics, "compute_rank_score", forbidden)
+    harness = TurnToolHarness(tools, sid, max_tool_calls=3, endgame_start_turn=start)
+    result = harness.call_tool("preview_team_power", {"operations": [{
+        "tool": "dismiss_adventurer", "arguments": {"adventurer_id": 1},
+    }]})
+    assert result["ok"] is True
+    assert result["can_execute"] is True
+    assert result["tool_budget"]["used"] == 1
+    assert not any("rank_score" in key for key in result)
+    text = _format_tool_result_for_model("preview_team_power", result)
+    assert "不计算战力" in text
+    assert result["plan_id"] in text
+    applied = harness.call_tool("execute_plan", {"plan_id": result["plan_id"]})
+    assert applied["ok"] is True
+    assert applied["tool_budget"]["used"] == 1
+    assert not any("rank_score" in key for key in applied)
+
+    empty = harness.call_tool("preview_team_power", {"operations": []})
+    assert empty["ok"] is True
+    assert "plan_id" not in empty
+    assert empty["can_execute"] is False
 
 
 def test_failed_team_preview_does_not_report_a_fabricated_delta(monkeypatch):

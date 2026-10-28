@@ -260,6 +260,8 @@ def _turn_replay(turn: TurnTrace) -> dict[str, Any]:
         data["observation_before"] = turn.observation_before
     if turn.rank_score is not None:
         data["rank_score"] = turn.rank_score
+    if turn.adventurer_rank_scores is not None:
+        data["adventurer_rank_scores"] = dict(turn.adventurer_rank_scores)
     return data
 
 
@@ -454,6 +456,12 @@ def _compact_tool_result(result: Mapping[str, Any]) -> dict[str, Any] | None:
     turn_result = result.get("turn_result")
     if isinstance(turn_result, Mapping):
         compact["turn_result"] = dict(turn_result)
+    # 批量方案必须保留已执行的真实动作，恢复时不重跑试算或依赖临时凭据。
+    if isinstance(result.get("plan_id"), str) and isinstance(result.get("events"), list):
+        compact.update(
+            plan_id=result["plan_id"], events=result["events"],
+            already_executed=result["already_executed"], operation_count=result["operation_count"],
+        )
     refs = result.get("_llm_refs")
     if isinstance(refs, Mapping):
         compact["_llm_refs"] = {

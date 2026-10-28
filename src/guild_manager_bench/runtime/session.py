@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from threading import Lock
@@ -14,6 +15,7 @@ from guild_manager_bench.game.actions import (
     DismissAction,
     EndTurnAction,
     EquipAction,
+    ExchangeMaterialsAction,
     PreparationAction,
     PurchaseUpgradeAction,
     RecruitAction,
@@ -24,7 +26,7 @@ from guild_manager_bench.game.engine import (
     TurnResult, apply_preparation_action, end_turn, new_game, preview_battle,
     preview_monster_refresh, monster_refresh_cost,
 )
-from guild_manager_bench.game.state import GameDefinition, GameState
+from guild_manager_bench.game.state import MATERIAL_NAMES, GameDefinition, GameState
 from guild_manager_bench.runtime.action_codec import (
     encode_end_turn_action,
     encode_preparation_action,
@@ -47,6 +49,10 @@ class GameSession:
     def __post_init__(self) -> None:
         if self.state is None:
             self.state = new_game(self.definition)
+        exchange = self.definition.rules.material_exchange
+        point_limit = exchange.point_limit if exchange is not None else 0
+        if self.state.exchange_used_points > point_limit:
+            raise ValueError("存档兑换额度超出当前规则上限")
         if not self.events:
             self._append_event("session_started", {"summary": "会话开始"})
 
@@ -62,20 +68,30 @@ class GameSession:
     def apply_preparation(self, action: PreparationAction) -> SessionEvent:
         """执行一个回合内操作并记录事件。"""
 
+        return self.apply_preparations((action,))[0]
+
+    def apply_preparations(self, actions: Sequence[PreparationAction]) -> tuple[SessionEvent, ...]:
+        """整批校验成功后提交状态和逐步事件，失败时均不写入。"""
+
         with self._lock:
             assert self.state is not None
-            turn = self.state.turn
-            before_observation = build_observation(self.definition, self.state)
-            self.state = apply_preparation_action(self.definition, self.state, action)
-            after_observation = build_observation(self.definition, self.state)
-            return self._append_event(
-                "preparation_applied",
-                {
+            state = self.state
+            turn = state.turn
+            payloads = []
+            before = build_observation(self.definition, state)
+            for action in actions:
+                state = apply_preparation_action(self.definition, state, action)
+                after = build_observation(self.definition, state)
+                payloads.append({
                     "action": encode_preparation_action(action),
-                    "summary": _preparation_summary(self.definition, before_observation, action),
-                    "changes": _observation_changes(before_observation, after_observation),
-                },
-                turn=turn,
+                    "summary": _preparation_summary(self.definition, before, action),
+                    "changes": _observation_changes(before, after),
+                })
+                before = after
+            self.state = state
+            return tuple(
+                self._append_event("preparation_applied", payload, turn=turn)
+                for payload in payloads
             )
 
     def end_turn(self, action: EndTurnAction) -> tuple[TurnResult, SessionEvent]:
@@ -222,6 +238,8 @@ class GameSession:
 
         state_dict = data.get("_state")
         if isinstance(state_dict, dict):
+            if definition.rules.material_exchange is not None and "exchange_used_points" not in state_dict:
+                raise ValueError("存档缺少兑换额度记录，无法安全恢复")
             state = _deserialize_state(state_dict)
         else:
             # Fallback: reconstruct from final_observation
@@ -317,6 +335,8 @@ def _preparation_summary(
     observation: dict[str, Any],
     action: PreparationAction,
 ) -> str:
+    if isinstance(action, ExchangeMaterialsAction):
+        return f"兑换 {MATERIAL_NAMES[action.material_id]} ×{action.quantity}"
     if isinstance(action, RefreshMonstersAction):
         return f"付费刷新怪物，锁定{len(action.locked_monster_ids)}个普通目标，固定挑战自动保留"
     if isinstance(action, ConfigureTacticsAction):
@@ -395,9 +415,15 @@ def _observation_changes(
             after["materials"].get(material_id, 0),
         )
 
+    if "material_exchange" in after:
+        _append_value_change(changes, "resource", "兑换剩余额度",
+                            before["material_exchange"]["remaining_points"], after["material_exchange"]["remaining_points"])
     if "monster_refresh" in after:
         _append_value_change(changes, "resource", "本回合刷新次数",
                             before["monster_refresh"]["refreshes_used"], after["monster_refresh"]["refreshes_used"])
+    if "used_challenge_class_ids" in after:
+        _append_value_change(changes, "challenge", "已消耗挑战资格的职业",
+                            before["used_challenge_class_ids"], after["used_challenge_class_ids"])
     _append_adventurer_changes(changes, before, after)
     _append_equipment_changes(changes, before, after)
     _append_upgrade_changes(changes, before, after)
@@ -1028,7 +1054,17 @@ def _restore_from_observation(definition: GameDefinition, obs: dict[str, Any]) -
         if uid in valid_upgrade_ids
     )
 
+    exchange_used_points = 0
+    if definition.rules.material_exchange is not None:
+        exchange = obs.get("material_exchange")
+        if not isinstance(exchange, dict) or "used_points" not in exchange:
+            raise ValueError("存档缺少兑换额度记录，无法安全恢复")
+        exchange_used_points = exchange["used_points"]
+    elif "material_exchange" in obs:
+        raise ValueError("当前规则未启用存档中的材料兑换")
+
     return GameState(
+        exchange_used_points=exchange_used_points,
         turn=obs.get("turn", 1),
         max_turns=obs.get("max_turns", 10),
         seed=obs.get("seed", 0),
@@ -1043,6 +1079,7 @@ def _restore_from_observation(definition: GameDefinition, obs: dict[str, Any]) -
         next_equipment_instance_number=max_instance + 1,
         next_adventurer_number=max_adv + 1,
         defeated_challenge_ids=frozenset(obs.get("defeated_challenge_ids", ())),
+        used_challenge_class_ids=frozenset(obs.get("used_challenge_class_ids", ())),
         monster_refresh_count=obs.get("monster_refresh", {}).get("refreshes_used", 0),
     )
 

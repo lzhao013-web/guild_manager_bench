@@ -7,6 +7,7 @@ import yaml
 
 from guild_manager_bench.game.crafting import CraftingRecipe, MaterialCost
 from guild_manager_bench.game.equipment import EquipmentTemplate
+from guild_manager_bench.game.material_exchange import MaterialExchangeOffer, MaterialExchangeRules
 from guild_manager_bench.game.models import CombatResources, CombatStatModifier, CombatStats
 from guild_manager_bench.game.progression import ExperienceRules
 from guild_manager_bench.game.skills import (
@@ -303,6 +304,7 @@ def _parse_game_rules(
     return GameRules(
         max_turns=_int(_required(data, "max_turns"), "rules.max_turns"),
         final_preparation_only=_bool(data.get("final_preparation_only", False), "rules.final_preparation_only"),
+        unique_challenge_classes=_bool(data.get("unique_challenge_classes", False), "rules.unique_challenge_classes"),
         seed=_int(data.get("seed", 0), "rules.seed"),
         monster_spawn=MonsterSpawnRules(
             count_curve=_parse_float_curve(_mapping(_required(spawn, "count_curve"), "rules.monster_spawn.count_curve")),
@@ -319,12 +321,36 @@ def _parse_game_rules(
         monster_refresh=_parse_monster_refresh_rules(
             _mapping(data.get("monster_refresh", {}), "rules.monster_refresh")
         ),
+        material_exchange=(
+            _parse_material_exchange_rules(_mapping(data["material_exchange"], "rules.material_exchange"))
+            if "material_exchange" in data else None
+        ),
         turn_recovery=_parse_turn_recovery(
             _mapping(data.get("turn_recovery", {}), "rules.turn_recovery")
         ),
         recruitment=_parse_recruitment_rules(
             _mapping(data.get("recruitment", {}), "rules.recruitment")
         ),
+    )
+
+
+def _parse_material_exchange_rules(data: Mapping[str, Any]) -> MaterialExchangeRules:
+    path = "rules.material_exchange"
+    offers = []
+    for index, raw in enumerate(_list(_required(data, "offers"), f"{path}.offers")):
+        offer_path = f"{path}.offers[{index}]"
+        offer = _mapping(raw, offer_path)
+        materials = _int_mapping(_required(offer, "materials"), f"{offer_path}.materials")
+        offers.append(MaterialExchangeOffer(
+            material_id=_str(_required(offer, "material_id"), f"{offer_path}.material_id"),
+            gold_cost=_int(_required(offer, "gold"), f"{offer_path}.gold"),
+            point_cost=_int(_required(offer, "points"), f"{offer_path}.points"),
+            material_costs=tuple(MaterialCost(material_id=k, quantity=v) for k, v in materials.items()),
+        ))
+    return MaterialExchangeRules(
+        from_turn=_int(_required(data, "from_turn"), f"{path}.from_turn"),
+        point_limit=_int(_required(data, "point_limit"), f"{path}.point_limit"),
+        offers=tuple(offers),
     )
 
 

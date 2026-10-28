@@ -64,7 +64,7 @@ rules:
 
 刷新预览与实刷各占一次普通工具调用。可以不预览而直接实刷，或看过候选后选择不付费。实际付费前不能跳过当前候选查看再下一次。
 
-真实刷新也是准备动作，可用于 `preview_team_power` 的操作方案试算。方案使用 `refresh_monsters`，参数同真实工具，不允许嵌套 `preview_monster_refresh`。方案只返回终局评分，不返回可操作的虚拟怪池。刷新费用可能影响方案后续购买，刷新本身不会让经营讨伐奖励提前进入库存。
+真实刷新也是准备动作，可用于 `preview_team_power` 的操作方案试算。方案使用 `refresh_monsters`，参数同真实工具，不允许嵌套 `preview_monster_refresh`。方案返回预计资源与属性变化，终局阶段额外返回正式评分，不返回可操作的虚拟怪池。合法方案可通过 `execute_plan` 提交，遵循[方案工具](tactical-tools.md)的余额门槛和凭据失效规则。刷新费用可能影响方案后续购买，刷新本身不会让经营讨伐奖励提前进入库存。
 
 ## 未来预测、存档与回放
 
@@ -88,5 +88,3 @@ HTTP锁定列表使用会话观察中的字符串 `monster_id`，LLM工具使用
 ```text
 uv run python -m pytest tests/test_monster_refresh.py -q --basetemp runs/.pytest-refresh-target
 ```
-
-价格校准方法和未验证边界见 `runs/monster-refresh-pricing-20261019/report.md`。目前没有新增完整模型运行结果。

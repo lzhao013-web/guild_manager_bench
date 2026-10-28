@@ -12,6 +12,7 @@ from guild_manager_bench.game.actions import (
     DismissAction,
     EndTurnAction,
     EquipAction,
+    ExchangeMaterialsAction,
     HuntAction,
     PreparationAction,
     PurchaseUpgradeAction,
@@ -111,6 +112,36 @@ def new_game(definition: GameDefinition) -> GameState:
     )
 
 
+def _apply_material_exchange(
+    definition: GameDefinition, state: GameState, action: ExchangeMaterialsAction,
+) -> GameState:
+    rules = definition.rules.material_exchange
+    if rules is None:
+        raise GameError("材料兑换未启用")
+    if state.turn < rules.from_turn:
+        raise GameError(f"材料兑换尚未开放，T{rules.from_turn}起可用")
+    offer = next((item for item in rules.offers if item.material_id == action.material_id), None)
+    if offer is None:
+        raise GameError(f"不支持兑换该材料: {action.material_id}")
+    points = offer.point_cost * action.quantity
+    gold = offer.gold_cost * action.quantity
+    if state.exchange_used_points + points > rules.point_limit:
+        raise GameError(f"兑换额度不足：需要{points}点，剩余{rules.point_limit - state.exchange_used_points}点")
+    if state.gold < gold:
+        raise GameError(f"金币不足：兑换需要{gold}金币，当前{state.gold}")
+    for cost in offer.material_costs:
+        if state.materials.get(cost.material_id, 0) < cost.quantity * action.quantity:
+            raise GameError(f"兑换材料不足: {cost.material_id}")
+    materials = dict(state.materials)
+    for cost in offer.material_costs:
+        materials[cost.material_id] -= cost.quantity * action.quantity
+    materials[action.material_id] = materials.get(action.material_id, 0) + action.quantity
+    return replace(
+        state, gold=state.gold - gold, materials=materials,
+        exchange_used_points=state.exchange_used_points + points,
+    )
+
+
 def is_finished(state: GameState) -> bool:
     """判断游戏是否已经超过最后回合。"""
 
@@ -179,6 +210,9 @@ def apply_preparation_action(
             raise GameError(f"金币不足：刷新需要{cost}金币，当前{state.gold}")
         return replace(state, gold=state.gold - cost, current_monsters=monsters,
                        monster_refresh_count=state.monster_refresh_count + 1)
+
+    if isinstance(action, ExchangeMaterialsAction):
+        return _apply_material_exchange(definition, state, action)
 
     if isinstance(action, CraftAction):
         state, _ = _apply_craft_action(definition, state, action.recipe_id)
@@ -739,6 +773,11 @@ def _apply_hunt_action(
     if not adventurer.resources.is_alive:
         raise GameError(f"冒险者已阵亡: {adventurer.adventurer_id}")
     monster = _monster_by_id(state, hunt_action.monster_id)
+    if monster.tier == "challenge" and definition.rules.unique_challenge_classes:
+        if not adventurer.template_id:
+            raise GameError("固定挑战需要冒险者具有职业 template_id")
+        if adventurer.template_id in state.used_challenge_class_ids:
+            raise GameError(f"该职业已成功通关固定挑战，不能再次挑战: {adventurer.template_id}")
 
     combat_result = run_auto_battle(
         Combatant(
@@ -764,6 +803,8 @@ def _apply_hunt_action(
             state = replace(
                 state,
                 defeated_challenge_ids=state.defeated_challenge_ids | {monster.archetype_id},
+                used_challenge_class_ids=(state.used_challenge_class_ids | {adventurer.template_id}
+                    if definition.rules.unique_challenge_classes else state.used_challenge_class_ids),
                 current_monsters=tuple(m for m in state.current_monsters if m.monster_id != monster.monster_id),
             )
 

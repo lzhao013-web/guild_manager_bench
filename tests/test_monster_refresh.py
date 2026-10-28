@@ -245,7 +245,8 @@ def test_preparation_plan_can_pay_refresh_but_never_changes_real_board(game):
     plan=[{'tool':'refresh_monsters','arguments':{'locked_monster_ids':[before.current_monsters[0].monster_id]}}]
     simulated=simulate_preparation_plan(tools.definition,before,plan,tools.list_tool_schemas())
     actual=apply_preparation_action(tools.definition,before,RefreshMonstersAction((before.current_monsters[0].monster_id,)))
-    assert simulated==actual and tools.get_state(sid) is before
+    assert simulated.projected_state==actual and tools.get_state(sid) is before
+    assert simulated.actions == (RefreshMonstersAction((before.current_monsters[0].monster_id,)),)
     assert encode_preparation_action(RefreshMonstersAction())['type']=='refresh_monsters'
 
 
