@@ -40,7 +40,7 @@ class GoogleGenerateContentConfig:
     model: str
     api_key: str | None = None
     base_url: str = DEFAULT_BASE_URL
-    timeout: float = 180.0
+    timeout: float = 600.0
     temperature: float | None = None
     top_p: float | None = None
     max_tokens: int | None = None
@@ -77,7 +77,7 @@ class GoogleGenerateContentConfig:
         resolved_model = _first_config_value(model, dotenv_values, "GOOGLE_MODEL")
         if not resolved_model:
             raise GoogleGenerateContentError("model is required or GOOGLE_MODEL must be set")
-        resolved_timeout = _first_config_value(timeout, dotenv_values, "GOOGLE_TIMEOUT", default="180")
+        resolved_timeout = _first_config_value(timeout, dotenv_values, "GOOGLE_TIMEOUT", default="600")
         resolved_max_tokens = _first_config_value(max_tokens, dotenv_values, "GOOGLE_MAX_TOKENS")
         resolved_session = resolve_session_id(session_id, dotenv_values, "GOOGLE_SESSION_ID")
         return cls(

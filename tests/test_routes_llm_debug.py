@@ -15,10 +15,10 @@ from guild_manager_bench.api.routes_llm_debug import (
 )
 
 
-def test_llm_debug_timeouts_default_to_180_seconds() -> None:
-    assert DEFAULT_LLM_DEBUG_TIMEOUT == 180.0
+def test_llm_debug_request_timeout_defaults_to_600_seconds() -> None:
+    assert DEFAULT_LLM_DEBUG_TIMEOUT == 600.0
     assert LLM_DEBUG_EVENT_SEND_TIMEOUT == 180.0
-    assert _float_value({}, "timeout", DEFAULT_LLM_DEBUG_TIMEOUT) == 180.0
+    assert _float_value({}, "timeout", DEFAULT_LLM_DEBUG_TIMEOUT) == 600.0
 
 
 def test_llm_debug_builds_anthropic_agent_with_thinking_controls() -> None:

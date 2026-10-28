@@ -69,7 +69,7 @@ def test_google_config_accepts_api_key_env_names(monkeypatch, key_name):
     config = GoogleGenerateContentConfig.from_env(model="gemini-test", env_file=None)
     assert config.api_key == "test-key"
     assert config.base_url == "https://generativelanguage.googleapis.com/v1beta"
-    assert config.timeout == 180
+    assert config.timeout == 600
     assert config.max_tokens is None
 
 

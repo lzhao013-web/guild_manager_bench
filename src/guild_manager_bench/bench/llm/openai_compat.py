@@ -155,7 +155,7 @@ class OpenAIChatCompletionsConfig:
     model: str
     api_key: str | None = None
     base_url: str = "https://api.openai.com/v1"
-    timeout: float = 180.0
+    timeout: float = 600.0
     temperature: float | None = None
     top_p: float | None = None
     max_tokens: int | None = None
@@ -205,7 +205,7 @@ class OpenAIChatCompletionsConfig:
         if resolved_timeout is not None:
             resolved_timeout = float(resolved_timeout)
         else:
-            resolved_timeout = 180.0
+            resolved_timeout = 600.0
         resolved_session = resolve_session_id(
             session_id,
             dotenv_values,

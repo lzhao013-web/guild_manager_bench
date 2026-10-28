@@ -24,7 +24,7 @@ class RunSpec(BaseModel):
     thinking: bool | None = None
     temperature: float | None = Field(default=None, ge=0, le=2)
     max_tokens: int | None = Field(default=None, ge=1, le=1000000)
-    timeout: float = Field(default=180, ge=1, le=3600)
+    timeout: float = Field(default=600, ge=1, le=3600)
     objective: str = Field(default=DEFAULT_OBJECTIVE, min_length=1, max_length=16000)
     max_tool_calls_per_turn: int = Field(default=20, ge=0, le=1000)
     game_seed: int | None = None

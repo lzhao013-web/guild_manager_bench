@@ -61,7 +61,7 @@ class AnthropicMessagesConfig:
     api_key: str | None = None
     base_url: str = "https://api.anthropic.com"
     api_version: str = "2023-06-01"
-    timeout: float = 180.0
+    timeout: float = 600.0
     max_tokens: int = DEFAULT_MAX_TOKENS
     temperature: float | None = None
     top_p: float | None = None
@@ -116,7 +116,7 @@ class AnthropicMessagesConfig:
         if resolved_timeout is not None:
             resolved_timeout = float(resolved_timeout)
         else:
-            resolved_timeout = 180.0
+            resolved_timeout = 600.0
         resolved_max_tokens = _first_config_value(
             max_tokens,
             dotenv_values,

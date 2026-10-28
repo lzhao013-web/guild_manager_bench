@@ -22,7 +22,7 @@ from guild_manager_bench.bench.llm.prompts import DEFAULT_OBJECTIVE
 
 
 LLM_ARCHIVE_DIR = Path("runs/llm")
-DEFAULT_LLM_DEBUG_TIMEOUT = 180.0
+DEFAULT_LLM_DEBUG_TIMEOUT = 600.0
 LLM_DEBUG_EVENT_SEND_TIMEOUT = 180.0
 
 

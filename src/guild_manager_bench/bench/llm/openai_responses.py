@@ -37,7 +37,7 @@ class OpenAIResponsesConfig:
     model: str
     api_key: str | None = None
     base_url: str = "https://api.openai.com/v1"
-    timeout: float = 180.0
+    timeout: float = 600.0
     temperature: float | None = None
     top_p: float | None = None
     max_output_tokens: int | None = None
@@ -124,7 +124,7 @@ class OpenAIResponsesConfig:
             timeout=(
                 float(resolved_timeout)
                 if resolved_timeout is not None
-                else 180.0
+                else 600.0
             ),
             temperature=temperature,
             top_p=top_p,
