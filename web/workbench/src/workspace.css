@@ -154,27 +154,37 @@
 }
 .run-overview {
     height: 100%;
-    min-height: 478px;
+    min-height: 0;
     padding: 10px;
     box-sizing: border-box;
 }
 .overview-grid {
-    height: 100%;
     display: grid;
+    height: 100%;
+    min-height: 554px;
+    align-content: stretch;
+    align-items: stretch;
     grid-template-columns: repeat(12, minmax(0, 1fr));
-    grid-template-rows: minmax(186px, 1.3fr) minmax(146px, 1fr) minmax(110px, 0.75fr);
+    grid-template-rows: minmax(220px, 1.35fr) minmax(150px, 1fr) minmax(168px, 1fr);
     grid-template-areas:
         "party party party party party party party actions actions actions actions actions"
         "monsters monsters monsters monsters monsters monsters monsters models models models models models"
         "inventory inventory inventory inventory recruitment recruitment recruitment recruitment upgrades upgrades upgrades upgrades";
     gap: 8px;
 }
+.overview-grid.is-finished {
+    min-height: 428px;
+    grid-template-rows: minmax(220px, 1.2fr) minmax(200px, 1fr);
+    grid-template-areas:
+        "party party party party party party party actions actions actions actions actions"
+        "inventory inventory inventory inventory upgrades upgrades upgrades upgrades models models models models";
+}
 .overview-module {
     position: relative;
     min-width: 0;
     min-height: 0;
     background: var(--gray-2);
-    border: 1px solid var(--gray-6);
+    border: 1px solid var(--gray-4);
     border-radius: 6px;
     display: flex;
     flex-direction: column;
@@ -189,7 +199,7 @@
     pointer-events: none;
     animation: wb-locate-highlight 600ms var(--wb-motion-ease);
 }
-.overview-party { grid-area: party; }
+.overview-party { grid-area: party; container-type: inline-size; container-name: overview-party; }
 .overview-actions { grid-area: actions; }
 .overview-monsters { grid-area: monsters; }
 .overview-models { grid-area: models; }
@@ -203,7 +213,6 @@
     padding: 7px 10px;
     background: none;
     border: 0;
-    border-bottom: 1px solid var(--border);
     text-align: left;
     color: var(--gray-12);
     min-width: 0;
@@ -238,7 +247,12 @@
     color: var(--gray-11);
     flex-shrink: 0;
 }
+.overview-module.is-empty .overview-module-heading { flex-wrap: wrap; }
+.overview-module.is-empty .overview-module-heading > small { white-space: normal; }
 .overview-module-content {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
     padding: 8px 10px;
     min-height: 0;
     flex: 1;
@@ -247,6 +261,20 @@
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 8px 12px;
+}
+.overview-party-grid[data-members="1"] { grid-template-columns: minmax(0, 1fr); }
+.overview-party-grid[data-members="2"],
+.overview-party-grid[data-members="4"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@container overview-party (min-width: 820px) {
+    .overview-party-grid[data-members="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+.overview-items {
+    display: grid;
+    flex: 1;
+    min-height: 0;
+    contain: size;
+    overflow: hidden;
+    align-content: start;
 }
 .overview-party-grid > button {
     min-width: 0;
@@ -409,6 +437,7 @@
     gap: 4px;
 }
 .overview-current-action {
+    flex-shrink: 0;
     display: flex;
     flex-direction: column;
     width: 100%;
@@ -445,7 +474,7 @@
 }
 .overview-action-rows button {
     display: grid;
-    grid-template-columns: 54px auto minmax(0, 1fr);
+    grid-template-columns: max-content minmax(0, 1.2fr) minmax(0, 1fr);
     align-items: baseline;
     gap: 8px;
     background: none;
@@ -457,8 +486,11 @@
 .overview-action-rows strong {
     font-size: var(--wb-text-sm);
     font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
-.overview-action-rows time,
+.overview-action-rows time { color: var(--gray-11); font-size: var(--wb-text-xs); white-space: nowrap; }
 .overview-action-rows button > span {
     color: var(--gray-11);
     font-size: var(--wb-text-xs);
@@ -479,10 +511,11 @@
     font-size: var(--wb-text-sm);
     line-height: 1.65;
     overflow: hidden;
-    display: -webkit-box;
-    -webkit-line-clamp: 4;
-    -webkit-box-orient: vertical;
+    flex: 1;
+    min-height: 0;
+    margin: 4px 0 0;
     white-space: pre-wrap;
+    overflow-wrap: anywhere;
     overflow-wrap: anywhere;
 }
 .overview-empty {
@@ -671,12 +704,16 @@
 }
 @container (max-width: 780px) {
     .run-overview { height: auto; min-height: 100%; }
-    .overview-grid {
+    .overview-grid, .overview-grid.is-finished {
         height: auto;
+        min-height: 0;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         grid-template-rows: none;
         grid-template-areas: "party party" "actions actions" "monsters monsters" "inventory recruitment" "upgrades models";
     }
+    .overview-grid.is-finished { grid-template-areas: "party party" "actions actions" "inventory upgrades" "models models"; }
+    .overview-items { flex: none; height: var(--overview-natural-height); }
+    .overview-model-excerpt { flex: none; max-height: 13.2em; }
     .overview-module { min-height: 118px; }
     .overview-party { min-height: 185px; }
 }
@@ -687,7 +724,9 @@
     .workspace-module-panel,
     .scene-module-content { flex: 0 0 auto; }
     .run-overview { height: auto; }
-    .overview-grid { height: auto; }
+    .overview-grid, .overview-grid.is-finished { height: auto; min-height: 0; grid-template-rows: none; }
+    .overview-items { flex: none; height: var(--overview-natural-height); }
+    .overview-model-excerpt { flex: none; max-height: 13.2em; }
     .scene-inspector-scroll,
     .scene-module-content > .scene-canvas { overflow: visible; }
     .scene-canvas,
@@ -711,10 +750,11 @@
     .spectator-full .spectator-controls { display: block; }
     .spectator-full .spectator-footer { padding: 8px 12px; }
     .run-overview { padding: 8px; }
-    .overview-grid {
+    .overview-grid, .overview-grid.is-finished {
         grid-template-columns: minmax(0, 1fr);
         grid-template-areas: "party" "actions" "monsters" "inventory" "recruitment" "upgrades" "models";
     }
+    .overview-grid.is-finished { grid-template-areas: "party" "actions" "inventory" "upgrades" "models"; }
     .overview-module { grid-column: 1; min-height: 115px; }
     .overview-party { min-height: 240px; }
     .overview-party-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
@@ -723,8 +763,8 @@
     .overview-party-grid strong { font-size: var(--wb-text-xs); }
     .overview-member-level { display: none; }
     .overview-enemies { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .overview-action-rows button { grid-template-columns: 54px minmax(0, 1fr); }
-    .overview-action-rows button > span { grid-column: 2; }
+    .overview-action-rows button { grid-template-columns: max-content minmax(0, 1fr); }
+    .overview-action-rows button > span { display: none; }
     .overview-module-heading > small { font-size: var(--wb-text-xs); }
     .workspace-module-toolbar { gap: 6px; padding-inline: 8px; }
     .workspace-module-toolbar > label > span,

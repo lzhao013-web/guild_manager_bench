@@ -135,6 +135,66 @@ it("默认同时展示七个模块摘要，展开只占当前工作区，不产�
     expect(trigger).toHaveFocus();
 });
 
+it("空摘要保留展开入口，旧快照未记录不冒充空清单，回看后内容恢复", () => {
+    const view = render(<Harness value={{ ...observation, equipment_inventory: [] }} />);
+    const inventory = () => screen.getByRole("region", { name: "装备库概览" });
+    expect(inventory()).toHaveTextContent("此时仓库里没有装备");
+    const trigger = within(inventory()).getByRole("button", { name: "展开装备库" });
+    trigger.focus();
+    fireEvent.click(trigger);
+    expect(screen.getByRole("region", { name: "装备库模块" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "返回总览" }));
+    expect(trigger).toHaveFocus();
+    view.rerender(<Harness value={{ ...observation, equipment_inventory: undefined }} />);
+    expect(inventory()).toHaveTextContent("该快照未记录库存");
+    expect(inventory()).not.toHaveTextContent("此时仓库里没有装备");
+    view.rerender(<Harness />);
+    expect(within(inventory()).getByRole("button", { name: "查看装备 总览验收靴" })).toBeVisible();
+});
+
+it("终局收起怪物和候选，回看结算前按历史快照恢复，返回焦点仍可用", () => {
+    const finished = { ...observation, turn: 36, finished: true, monsters: [], recruit_candidates: [] };
+    const view = render(<Harness value={finished} />);
+    expect(screen.queryByRole("region", { name: "本回合怪物概览" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "招募候选概览" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "查看成员 总览验收卫士" })).toBeVisible();
+    expect(screen.getByRole("region", { name: "装备库概览" })).toBeVisible();
+    expect(document.querySelector(".overview-grid")).toHaveClass("is-finished");
+    view.rerender(<Harness />);
+    expect(screen.getByRole("button", { name: "查看怪物 总览验收怪物" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "查看招募候选 总览验收游侠" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "展开本回合怪物" }));
+    view.rerender(<Harness value={finished} />);
+    fireEvent.click(screen.getByRole("button", { name: "返回总览" }));
+    expect(screen.getByRole("button", { name: "展开编队" })).toHaveFocus();
+});
+
+it("空间充足时显示四位成员、十个怪物、三位候选和五项可解锁升级", () => {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(() => new DOMRect(0, 0, 750, 180));
+    render(<Harness value={{ ...observation,
+        adventurers: Array.from({ length: 4 }, (_, i) => ({ ...member, adventurer_id: `member-${i}`, name: `成员 ${i}` })),
+        monsters: Array.from({ length: 10 }, (_, i) => ({ ...observation.monsters![0], monster_id: `monster-${i}`, name: `怪物 ${i}` })),
+        recruit_candidates: Array.from({ length: 3 }, (_, i) => ({ ...observation.recruit_candidates![0], candidate_id: `candidate-${i}`, name: `候选 ${i}` })),
+        global_upgrades: Array.from({ length: 5 }, (_, i) => ({ ...observation.global_upgrades![0], upgrade_id: `upgrade-${i}`, name: `升级 ${i}`, unlocked: false, can_purchase: true })),
+    }} />);
+    expect(document.querySelector(".overview-party-grid")).toHaveAttribute("data-members", "4");
+    expect(screen.getAllByRole("button", { name: /^查看成员 成员/ })).toHaveLength(4);
+    expect(screen.getAllByRole("button", { name: /^查看怪物 怪物/ })).toHaveLength(10);
+    expect(screen.getAllByRole("button", { name: /^查看招募候选 候选/ })).toHaveLength(3);
+    expect(screen.getAllByRole("button", { name: /^查看升级 升级/ })).toHaveLength(5);
+});
+
+it("最近行动的回合结算只显示一次战斗统计，明确零场仍显示为零", () => {
+    const events: WatchRecord[] = [{ at: records[0].at, after: 0, cursor: 1,
+        event: { type: "tool_result", name: "end_turn", turn: 35, result: { ok: true,
+            event: { summary: "结束第 35 回合：0 场战斗，0 胜 0 负" }, turn_result: { battles: [] } } } }];
+    render(<Harness frames={watchFrames(events)} />);
+    const actions = screen.getByRole("region", { name: "最近行动概览" });
+    expect(within(actions).getByText("结束回合", { exact: true })).toBeVisible();
+    expect(within(actions).getAllByText("0 场，0 胜 0 负", { exact: true })).toHaveLength(1);
+    expect(within(actions).queryByText(/结束第 35 回合/)).not.toBeInTheDocument();
+});
+
 it("返回总览再打开模块，保留装备筛选，不要求用户重新查找", () => {
     render(<Harness />);
     fireEvent.click(screen.getByRole("button", { name: "展开装备库" }));
@@ -191,7 +251,10 @@ it("总览优先展示改变局面的行动和失败，而不是被连续查询�
     expect(actions).toHaveTextContent("12 次查询");
 });
 
-it("次要模块只保留精选摘要，闲置装备和满足条件的候选优先，其余可展开", () => {
+it("按卡片空间展示更多条目，闲置装备和可招募候选优先，其余可展开", () => {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+        return this.classList.contains("overview-items") ? new DOMRect(0, 0, 450, 180) : new DOMRect();
+    });
     const value: Observation = {
         ...observation,
         equipment_inventory: [
@@ -206,9 +269,9 @@ it("次要模块只保留精选摘要，闲置装备和满足条件的候选优�
     render(<Harness value={value} />);
     const inventory = screen.getByRole("region", { name: "装备库概览" });
     expect(within(inventory).getByRole("button", { name: "查看装备 总览验收靴" })).toBeVisible();
-    expect(within(inventory).getAllByRole("button", { name: /^查看装备 / })).toHaveLength(2);
+    expect(within(inventory).getAllByRole("button", { name: /^查看装备 / })).toHaveLength(10);
     const recruits = screen.getByRole("region", { name: "招募候选概览" });
-    expect(within(recruits).getAllByRole("button", { name: /^查看招募候选 / })).toHaveLength(2);
+    expect(within(recruits).getAllByRole("button", { name: /^查看招募候选 / })).toHaveLength(4);
     expect(within(recruits).queryByRole("button", { name: "查看招募候选 构造不可招募者" })).not.toBeInTheDocument();
     fireEvent.click(within(recruits).getByRole("button", { name: "展开招募候选" }));
     expect(screen.getByRole("button", { name: "查看招募候选 构造不可招募者" })).toBeVisible();

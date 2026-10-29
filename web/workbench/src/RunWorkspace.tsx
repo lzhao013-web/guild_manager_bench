@@ -60,7 +60,7 @@ export function RunWorkspace({
                     ? returnFocus.current
                     : panel.querySelector<HTMLElement>(
                           `[data-module-target="${previousModule.current}"]`,
-                      )!;
+                      ) || panel.querySelector<HTMLElement>('[data-module-target="party"]')!;
                 target.focus({ preventScroll: true });
             }
         } else {
