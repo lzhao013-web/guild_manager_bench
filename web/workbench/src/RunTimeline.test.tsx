@@ -194,7 +194,7 @@ it("侧栏直达总览，选择回合不定位局面，查看原始操作后可�
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     function Harness() {
         const [position, setPosition] = useState<WatchPosition>({ attempt: null, cursor: null });
-        return <QueryClientProvider client={client}><Theme><WatchRun job={testJob("timeline-direct", { status: "completed", cursor: 400 })}
+        return <QueryClientProvider client={client}><Theme><WatchRun runId="timeline-direct" job={testJob("timeline-direct", { status: "completed", cursor: 400 })}
             position={position} onPosition={setPosition} initialFocus={{ module: "actions", actionView: "timeline" }} onStop={vi.fn()} onClone={vi.fn()} /></Theme></QueryClientProvider>;
     }
     render(<Harness />);

@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Theme } from "@radix-ui/themes";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
 import { WatchRun, livePosition } from "./WatchRun";
 import { stateChanges, watchFrames } from "./watchModel";
 import type { WatchPage, WatchPosition, WatchRecord } from "./watchModel";
@@ -126,11 +127,10 @@ const job = (id = "one"): Job => ({
     cursor: 5,
     checkpoint_at: null,
     checkpoint_error: null,
-    observation: recruited,
     budget: null,
     recent_actions: [],
 });
-function setup(count = 1, initialPage = first, historyPage = first) {
+function setup(count = 1, initialPage = first, historyPage = first, status: Job["status"] = "running") {
     let live = initialPage;
     const requests: string[] = [];
     const onStop = vi.fn();
@@ -174,7 +174,8 @@ function setup(count = 1, initialPage = first, historyPage = first) {
                         return (
                             <WatchRun
                                 key={`${id}-${focus}`}
-                                job={job(id)}
+                                job={{ ...job(id), status }}
+                                runId={id}
                                 compact={!focus}
                                 initialFocus={focus ? focusTarget : undefined}
                                 onFocus={!focus ? target => { onFocus(target); setFocusTarget(target); setFocus(true); } : undefined}
@@ -189,9 +190,10 @@ function setup(count = 1, initialPage = first, historyPage = first) {
             </QueryClientProvider>
         );
     }
-    render(<Harness />);
+    const view = render(<Harness />);
     return {
         client,
+        setStatus: (value: Job["status"]) => { status = value; view.rerender(<Harness />); },
         requests,
         onStop,
         onFocus,
@@ -201,6 +203,39 @@ function setup(count = 1, initialPage = first, historyPage = first) {
         },
     };
 }
+
+it.each([
+    ["completed", "最终局面"], ["failed", "最后记录局面"], ["interrupted", "最后记录局面"],
+] as const)("%s 的单局与多路都区分终态和历史，仍可回到%s", async (status, label) => {
+    setup(1, first, first, status);
+    await screen.findByText(label, { exact: true });
+    for (const focus of [false, true]) {
+        if (focus) await userEvent.click(screen.getByRole("button", { name: "专注查看" }));
+        expect(screen.getByText(label, { exact: true })).toBeVisible();
+        expect(screen.queryByRole("button", { name: "暂停跟随" })).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "停止运行" })).not.toBeInTheDocument();
+        if (focus) {
+            expect(document.querySelector(".spectator-runtime")).not.toHaveTextContent(/工具预算|等待模型响应/);
+            expect(screen.queryByText("运行已结束，可按步骤回看")).not.toBeInTheDocument();
+        }
+        await userEvent.click(screen.getByRole("button", { name: "上一步" }));
+        expect(screen.getByText("历史局面", { exact: true })).toBeVisible();
+        await userEvent.click(screen.getByRole("button", { name: `返回${label}` }));
+        expect(screen.getByText(label, { exact: true })).toBeVisible();
+        expect(screen.queryByText("实时局面", { exact: true })).not.toBeInTheDocument();
+    }
+});
+
+it("暂停的运行结束时保留历史位置，只把返回入口改为终态回看", async () => {
+    const { setStatus } = setup();
+    await screen.findByText("实时局面", { exact: true });
+    await userEvent.click(screen.getByRole("button", { name: "暂停跟随" }));
+    setStatus("completed");
+    expect(screen.getByText("历史局面", { exact: true })).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "返回最终局面" }));
+    expect(screen.getByText("最终局面", { exact: true })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "暂停跟随" })).not.toBeInTheDocument();
+});
 
 it("编队贡献来自所选位置之前的结算，回看旧回合不使用未来或已回滚的贡献", async () => {
     const attempt = first.attempts[0];
@@ -524,7 +559,7 @@ it("从较早工具直接定位所属模型推理，不跳到最新调用，返�
     expect(reasoning.closest("details")).toHaveAttribute("open");
     const body = within(screen.getByRole("region", { name: "所选位置的模型调用" })).getByText("先招募一位剑士。", { exact: true });
     expect(reasoning.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
-    expect(screen.getByText(/本次响应包含 2 个工具调用，共享以下 API 推理记录/)).toBeVisible();
+    expect(screen.getByText(/这 2 个工具调用共用下面这段模型思考/)).toBeVisible();
     expect(screen.queryByText("不相关的新调用推理", { exact: true })).not.toBeInTheDocument();
     expect(screen.getByText("历史局面", { exact: true })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "返回该工具" }));
@@ -537,8 +572,8 @@ it("从较早工具直接定位所属模型推理，不跳到最新调用，返�
 
 it("对应调用未保存 API 推理时明确说明，不拿正文或后一次推理替代", async () => {
     await openReasoningFromRecentTool(undefined);
-    expect(screen.getByText(/该调用未记录可读的 API 推理文本或摘要/)).toBeVisible();
-    expect(screen.getByText(/该调用未记录可读的 API 推理文本或摘要/).closest("details")).toHaveAttribute("open");
+    expect(screen.getByText(/这次调用没有保存思考过程/)).toBeVisible();
+    expect(screen.getByText(/这次调用没有保存思考过程/).closest("details")).toHaveAttribute("open");
     expect(within(screen.getByRole("region", { name: "所选位置的模型调用" })).getByText("先招募一位剑士。", { exact: true })).toBeVisible();
     expect(screen.queryByText("不相关的新调用推理", { exact: true })).not.toBeInTheDocument();
 });

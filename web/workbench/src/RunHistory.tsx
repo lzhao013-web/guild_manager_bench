@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertDialog, Button, DropdownMenu } from "@radix-ui/themes";
 import { ArrowDown, ArrowUp, ArrowsDownUp, CaretDown, MagnifyingGlass } from "@phosphor-icons/react";
@@ -7,6 +7,7 @@ import { fmt, isActive } from "./model";
 import { HISTORY_COLUMNS, historyCreatedAt, historyMetrics, historyPreset, historyRuns, historyStatus, sortHistoryRuns } from "./runCatalog";
 import { milliseconds } from "./modelMetrics";
 import { ResizableTable } from "./ResizableTable";
+import { RunId } from "./RunId";
 import type { HistoryRun, HistorySort, HistorySortField } from "./runCatalog";
 import { Empty } from "./ui";
 import type { Archive, HistoryDeletion, Job } from "./types";
@@ -17,9 +18,9 @@ const HISTORY_RESIZE_COLUMNS = [
     { id: "preset", label: HISTORY_COLUMNS.preset.label, minWidth: 64 },
     { id: "status", label: HISTORY_COLUMNS.status.label, minWidth: 64 },
     { id: "turn", label: HISTORY_COLUMNS.turns.label, minWidth: 64 },
-    { id: "score", label: HISTORY_COLUMNS.score.label, minWidth: 80 },
-    { id: "duration", label: HISTORY_COLUMNS.duration.label, minWidth: 80 },
-    { id: "tokens", label: HISTORY_COLUMNS.tokens.label, minWidth: 96 },
+    { id: "score", label: HISTORY_COLUMNS.score.label, minWidth: 120 },
+    { id: "duration", label: HISTORY_COLUMNS.duration.label, minWidth: 128 },
+    { id: "tokens", label: HISTORY_COLUMNS.tokens.label, minWidth: 144 },
     { id: "created", label: HISTORY_COLUMNS.created_at.label, minWidth: 100 },
     { id: "actions", label: "操作", minWidth: 166 },
 ];
@@ -31,8 +32,9 @@ function failureSummary(error: string): string {
     return "运行失败，查看原始错误";
 }
 
-export function RunHistory({ jobs, onDeleted, onResume, onRerun, onOpen, onClone, onWatch, onCompare }: {
+export function RunHistory({ jobs, runKeys, onDeleted, onResume, onRerun, onOpen, onClone, onWatch, onCompare }: {
     jobs: Job[];
+    runKeys: Map<string, string>;
     onDeleted: (result: HistoryDeletion) => void;
     onResume: (archive: Archive) => void;
     onRerun?: (archive: Archive) => void;
@@ -57,16 +59,16 @@ export function RunHistory({ jobs, onDeleted, onResume, onRerun, onOpen, onClone
     const [preset, setPreset] = useState("all");
     const [sort, setSort] = useState<HistorySort>({ field: "created_at", direction: "desc" });
     const [checked, setChecked] = useState<string[]>([]);
-    const allRows = historyRuns(jobs, query.data?.runs || []);
+    const allRows = useMemo(() => historyRuns(jobs, query.data?.runs || []), [jobs, query.data?.runs]);
     // 续跑会把 run 移出历史；保留正在使用的筛选项，不能让控件静默变回“全部”。
-    const presets = [...new Set([...allRows.map(historyPreset), ...(preset === "all" ? [] : [preset])])]
-        .sort((a, b) => a.localeCompare(b));
-    const rows = sortHistoryRuns(allRows.filter(row => {
+    const presets = useMemo(() => [...new Set([...allRows.map(historyPreset), ...(preset === "all" ? [] : [preset])])]
+        .sort((a, b) => a.localeCompare(b)), [allRows, preset]);
+    const rows = useMemo(() => sortHistoryRuns(allRows.filter(row => {
         const status = row.job?.status || row.archive!.status;
-        const text = `${row.job?.name || ""} ${row.job?.config.model || row.archive?.model || ""} ${row.id} ${historyPreset(row)}`;
+        const text = `${row.job?.name || ""} ${row.job?.config.model || row.archive?.model || ""} ${row.id} ${row.job ? runKeys.get(row.job.id) : ""} ${historyPreset(row)}`;
         return text.toLowerCase().includes(search.toLowerCase()) && (filter === "all" || status === filter)
             && (preset === "all" || historyPreset(row) === preset);
-    }), sort);
+    }), sort), [allRows, search, filter, preset, sort, runKeys]);
     const selectedRows = rows.filter(row => checked.includes(row.id));
     const selected = selectedRows.flatMap(row => row.job ? [row.job] : []);
     const curveId = (row: typeof rows[number]) => row.job?.id || `archive:${row.archive!.run_id}`;
@@ -165,7 +167,7 @@ export function RunHistory({ jobs, onDeleted, onResume, onRerun, onOpen, onClone
                 <button className="text-button" onClick={() => setChecked([])}>清除选择</button>
             </div>}
             {query.isPending && <p className="muted">正在读取存档…</p>}
-            {query.isError && <p className="callout error" role="alert">读取存档产物失败：{query.error.message}。工作台已知的历史仍可查看。</p>}
+            {query.isError && <p className="callout error" role="alert">存档读取失败：{query.error.message}</p>}
             {rows.length ? (
                 <div className="archive-table-wrap">
                     <ResizableTable className="run-table archive-table" storageKey="history" columns={HISTORY_RESIZE_COLUMNS}>
@@ -173,7 +175,7 @@ export function RunHistory({ jobs, onDeleted, onResume, onRerun, onOpen, onClone
                             <th className="checkbox-col"><input type="checkbox" aria-label="选择当前筛选的全部历史 run"
                                 checked={rows.length > 0 && rows.every(row => checked.includes(row.id))}
                                 onChange={event => setChecked(event.target.checked ? rows.map(row => row.id) : [])} /></th>
-                            {sortHeader("name")}{sortHeader("preset")}{sortHeader("status")}{sortHeader("turns")}{sortHeader("score")}{sortHeader("duration")}{sortHeader("tokens")}{sortHeader("created_at")}<th>操作</th>
+                            {sortHeader("name")}{sortHeader("preset")}{sortHeader("status")}{sortHeader("turns")}{sortHeader("score")}{sortHeader("duration")}{sortHeader("tokens")}{sortHeader("created_at")}<th scope="col" className="history-actions-column">操作</th>
                         </tr></thead>
                         <tbody>{rows.map(row => {
                             const { job, archive } = row;
@@ -187,9 +189,10 @@ export function RunHistory({ jobs, onDeleted, onResume, onRerun, onOpen, onClone
                                     checked={checked.includes(row.id)}
                                     onChange={event => setChecked(ids => event.target.checked ? [...ids, row.id] : ids.filter(id => id !== row.id))} /></td>
                                 <td className="archive-name"><strong title={job?.name || archive!.model}>{job?.name || archive!.model || "未记录模型"}</strong>
-                                    <small className="archive-id" title={job?.archive_id || archive?.run_id || undefined}>{job?.archive_id || archive?.run_id || "未生成存档"}</small>
+                                    <div className="archive-identity"><RunId id={job ? runKeys.get(job.id)! : `archive:${archive!.run_id}`} />
+                                        <small className="archive-id" title={job?.archive_id || archive?.run_id || undefined}>{job?.archive_id || archive?.run_id || "未生成存档"}</small></div>
                                     {job?.config.rerun_run_id && <small className="archive-id" title={job.config.rerun_run_id}>从 T{job.config.rerun_from_turn} 分支 · 来源 {job.config.rerun_run_id}</small>}
-                                    {(job?.data.protocol_status === "mixed" || archive?.protocol_status === "mixed") && <small className="history-error">跨版本执行，不作同版本标准比较</small>}
+                                    {(job?.data.protocol_status === "mixed" || archive?.protocol_status === "mixed") && <small className="history-error" title="续跑时使用了不同版本的规则">跨版本</small>}
                                     {failure && <details className="history-failure">
                                         <summary>{failureSummary(failure)}</summary>
                                         <pre>{failure}</pre>
@@ -209,7 +212,7 @@ export function RunHistory({ jobs, onDeleted, onResume, onRerun, onOpen, onClone
                                     {created.toLocaleDateString("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit" })}
                                     <small>{created.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false })}</small>
                                 </time> : "未记录"}</td>
-                                <td><div className="archive-actions">
+                                <td className="history-actions-column"><div className="archive-actions">
                                     {job && <Button highContrast size="1" variant="soft" onClick={() => onOpen(job)}>查看详情</Button>}
                                     {!job && archive && <Button highContrast size="1" variant="soft" onClick={() => onCompare([curveId(row)])}>查看曲线</Button>}
                                     <DropdownMenu.Root>
@@ -230,7 +233,7 @@ export function RunHistory({ jobs, onDeleted, onResume, onRerun, onOpen, onClone
                         })}</tbody>
                     </ResizableTable>
                 </div>
-            ) : !query.isPending && <Empty title="没有匹配的历史 run">结束的 run 会出现在这里；正在排队和执行的 run 请到运行中心查看。</Empty>}
+            ) : !query.isPending && <Empty title="没有匹配的历史运行"></Empty>}
             <AlertDialog.Root open={deleteTargets.length > 0} onOpenChange={open => {
                 if (!open && !deleting) { setDeleteTargets([]); setDeleteErrors([]); }
             }}>
@@ -246,8 +249,8 @@ export function RunHistory({ jobs, onDeleted, onResume, onRerun, onOpen, onClone
                             <small className="mono">{row.archive?.run_id || row.job?.archive_id || row.job!.id}</small></li>)}
                     </ul>}
                     {deleteTargets.some(row => !row.job && row.archive?.status === "running") &&
-                        <p className="callout">请先确认外部 CLI 进程已经停止。</p>}
-                    {deleteTargets.some(inUse) && <p className="callout">部分存档正在被运行或续跑占用，不能删除。</p>}
+                        <p className="callout">删除前，请确认命令行中启动的任务已经停止。</p>}
+                    {deleteTargets.some(inUse) && <p className="callout">部分存档仍在使用中，请先停止对应任务。</p>}
                     {deleting && <p className="muted" role="status">已处理 {deleteProgress} / {deleteTargets.length} 项</p>}
                     {deleteErrors.length > 0 && <div className="callout error history-delete-errors" role="alert">
                         {bulkDelete && <p>已删除 {deletedCount} 项，{deleteErrors.length} 项请求失败。</p>}

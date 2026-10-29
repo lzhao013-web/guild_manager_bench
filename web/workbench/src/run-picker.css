@@ -1,0 +1,10 @@
+.run-picker-trigger { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid var(--gray-7); border-radius: 5px; color: var(--gray-12); background: var(--color-surface); font-size: var(--wb-text-sm); white-space: nowrap; }
+.run-picker { width: min(440px, calc(100vw - 24px)); }
+.run-picker-search { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-bottom: 1px solid var(--border); color: var(--muted); }
+.run-picker-search input { min-width: 0; width: 100%; border: 0; background: none; color: var(--gray-12); padding: 8px 2px; font-size: var(--wb-text-sm); }
+.run-picker-options { max-height: min(340px, 55dvh); overflow: auto; padding-block: 6px; }
+.run-picker-options > button { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; width: 100%; text-align: left; padding: 10px; border: 0; border-radius: 4px; background: none; font-size: var(--wb-text-sm); }
+.run-picker-options > button:hover, .run-picker-options > button[aria-selected="true"] { background: var(--accent-3); }
+.run-picker-options strong { min-width: 0; overflow-wrap: anywhere; font-weight: 500; }
+.run-picker-options small { grid-column: 1 / -1; font-size: var(--wb-text-xs); color: var(--muted); }
+.run-picker-count { margin: 0; padding: 8px; border-top: 1px solid var(--border); color: var(--muted); font-size: var(--wb-text-xs); }

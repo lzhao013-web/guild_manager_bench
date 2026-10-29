@@ -264,7 +264,7 @@ it("点击方案子操作读取整个原子提交后的局面与父调用参数�
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     function Harness() {
         const [position, setPosition] = useState<WatchPosition>({ attempt: null, cursor: null });
-        return <QueryClientProvider client={client}><Theme><WatchRun job={testJob("plan", { status: "completed", cursor: 30 })} position={position} onPosition={setPosition} initialFocus={{ module: "actions", actionView: "search" }} onStop={vi.fn()} onClone={vi.fn()} /></Theme></QueryClientProvider>;
+        return <QueryClientProvider client={client}><Theme><WatchRun runId="plan" job={testJob("plan", { status: "completed", cursor: 30 })} position={position} onPosition={setPosition} initialFocus={{ module: "actions", actionView: "search" }} onStop={vi.fn()} onClone={vi.fn()} /></Theme></QueryClientProvider>;
     }
     render(<Harness />);
     fireEvent.click(await screen.findByRole("button", { name: /查看轨迹.*制作青铜剑.*方案第1\/4步/ }));
@@ -297,7 +297,7 @@ it("整局结果定位到归档帧，原始事件及跨回合切换不误读当�
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     function Harness() {
         const [position, setPosition] = useState<WatchPosition>({ attempt: null, cursor: null });
-        return <QueryClientProvider client={client}><Theme><WatchRun job={testJob("one", { status: "completed", cursor: 30 })} position={position} onPosition={setPosition} initialFocus={{ module: "actions" }} onStop={vi.fn()} onClone={vi.fn()} /></Theme></QueryClientProvider>;
+        return <QueryClientProvider client={client}><Theme><WatchRun runId="one" job={testJob("one", { status: "completed", cursor: 30 })} position={position} onPosition={setPosition} initialFocus={{ module: "actions" }} onStop={vi.fn()} onClone={vi.fn()} /></Theme></QueryClientProvider>;
     }
     render(<Harness />);
     fireEvent.click(await screen.findByRole("button", { name: "整局检索" }));

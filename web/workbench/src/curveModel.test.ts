@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { conditionWarning, curveChoices, curveMilestoneGroups, curveSegments, latestCommonTurn, selectedCurves } from "./curveModel";
+import { curveChoices, curveMilestoneGroups, curveSegments, latestCommonTurn, selectedCurves } from "./curveModel";
 import type { CurveData, CurvePoint } from "./curveModel";
 import { buildRunCatalog } from "./runCatalog";
 import { testArchive, testJob } from "./test-jobs";
@@ -55,16 +55,4 @@ it("同模型但不同存档保留独立曲线，最多比较四路", () => {
     const choices = curveChoices(catalog, []);
     expect(choices).toHaveLength(5);
     expect(selectedCurves(choices.map(choice => choice.key), choices, catalog)).toHaveLength(4);
-});
-
-it("同条件不制造警告，不同规则、种子和上限都明确提醒", () => {
-    expect(conditionWarning([data, { ...data, run_id: "two" }])).toBeNull();
-    expect(conditionWarning([data, { ...data, conditions: { ...data.conditions, protocol_hash: "other" } }])).toContain("规则");
-    expect(conditionWarning([data, { ...data, conditions: { ...data.conditions, game_seed: 2 } }])).toContain("种子");
-    expect(conditionWarning([data, { ...data, max_turns: 8 }])).toContain("回合上限");
-});
-
-it("旧存档缺协议资料或随机种子未固定时不声称同条件", () => {
-    expect(conditionWarning([data, { ...data, conditions: {} }])).not.toBeNull();
-    expect(conditionWarning([{ ...data, conditions: {} }, { ...data, conditions: {} }])).toContain("未核实");
 });

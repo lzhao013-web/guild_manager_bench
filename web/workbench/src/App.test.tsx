@@ -3,10 +3,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import App from "./App";
+import { CurveBoard } from "./CurveBoard";
 import type { Job, Snapshot } from "./types";
 import { testArchive, testJob } from "./test-jobs";
 
-vi.mock("./CurveBoard", () => ({ CurveBoard: ({ selectedIds, onBack }: { selectedIds: string[]; onBack?: () => void }) => <section aria-label="曲线工作区"><p>{selectedIds.join("/")}</p>{onBack && <button onClick={onBack}>返回原工作区</button>}</section> }));
+vi.mock("./CurveBoard", () => ({ CurveBoard: vi.fn(({ selectedIds, onBack }: { selectedIds: string[]; onBack?: () => void }) => <section aria-label="曲线工作区"><p>{selectedIds.join("/")}</p>{onBack && <button onClick={onBack}>返回原工作区</button>}</section>) }));
 vi.mock("./WatchRun", () => ({ WatchRun: ({ job }: { job: Job }) => <section aria-label="专注 run"><h2>{job.name}</h2><p>{job.id} / {job.status}</p></section> }));
 vi.mock("./RunDetail", () => ({ RunDetail: ({ job, onFocus }: { job: Job; onFocus: () => void }) => <section aria-label="run 详情"><span>{job.name}</span><button onClick={onFocus}>专注查看</button></section> }));
 
@@ -31,9 +32,26 @@ function setup(jobs: Job[], url = "/") {
     });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, refetchInterval: false, staleTime: Infinity } } });
     client.setQueryData(["workbench"], data);
-    render(<QueryClientProvider client={client}><App /></QueryClientProvider>);
-    return { client, update: (next: Job[]) => act(() => { data = { ...data, jobs: next }; client.setQueryData(["workbench"], data); }) };
+    const view = render(<QueryClientProvider client={client}><App /></QueryClientProvider>);
+    return { ...view, client, publish: (next: Job[]) => { data = { ...data, jobs: next }; },
+        update: (next: Job[]) => act(() => { data = { ...data, jobs: next }; client.setQueryData(["workbench"], data); }) };
 }
+
+it("查看曲线时不因根组件秒级计时反复渲染工作区", async () => {
+    vi.useFakeTimers();
+    const { unmount, client } = setup([], "/?section=curves");
+    try {
+        await act(() => vi.advanceTimersByTimeAsync(10));
+        expect(screen.getByRole("region", { name: "曲线工作区" })).toBeVisible();
+        const renders = vi.mocked(CurveBoard).mock.calls.length;
+        await act(() => vi.advanceTimersByTimeAsync(3000));
+        expect(vi.mocked(CurveBoard).mock.calls).toHaveLength(renders);
+    } finally {
+        unmount();
+        client.clear();
+        vi.useRealTimers();
+    }
+});
 
 it("运行列表显示累计模型耗时，续跑不重复相加，零值和缺失有区别", () => {
     setup([
@@ -66,6 +84,19 @@ it("详情面板用边缘分隔条调整宽度，沿用宽度记忆，不再显�
     expect(screen.getByRole("separator", { name: "调整详情面板宽度" })).toHaveAttribute("aria-valuenow", "536");
 });
 
+it("停止前仍说明保存和强制退出的后果，取消不发送停止请求", () => {
+    setup([testJob("stop-copy")]);
+    fireEvent.click(screen.getByLabelText("选择当前筛选的全部运行"));
+    fireEvent.click(screen.getByRole("button", { name: "停止选中" }));
+    const dialog = screen.getByRole("alertdialog", { name: "停止 1 个运行任务？" });
+    expect(dialog).toHaveTextContent("尝试保存进度后退出");
+    expect(dialog).toHaveTextContent("超过 8 秒");
+    expect(dialog).toHaveTextContent("未完成的回合可能需要重新执行");
+    fireEvent.click(within(dialog).getByRole("button", { name: "继续运行" }));
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    expect(vi.mocked(fetch).mock.calls.some(([path]) => String(path).endsWith("/stop"))).toBe(false);
+});
+
 it("运行统计并入标题，仍可筛选队列与存档异常、进入并发设置", () => {
     setup([
         testJob("running", { name: "执行样例", archive_id: "running" }),
@@ -88,6 +119,60 @@ it("运行统计并入标题，仍可筛选队列与存档异常、进入并发�
     fireEvent.click(within(summary).getByRole("button", { name: "调整并发设置" }));
     expect(screen.getByRole("heading", { name: "调度设置" })).toBeVisible();
     expect(screen.queryByRole("group", { name: "运行统计" })).not.toBeInTheDocument();
+});
+
+it("执行中统计和筛选都排除排队，三个统计按钮均可再次点击恢复全部", () => {
+    const statuses = ["queued", "starting", "running", "stopping"] as const;
+    setup(statuses.map(status => testJob(status, { name: `筛选样例 ${status}`, archive_id: status, status,
+        checkpoint_error: status === "running" ? "存档写入失败" : null })));
+    const summary = screen.getByRole("group", { name: "运行统计" });
+    const executing = within(summary).getByRole("button", { name: "执行中 3" });
+    fireEvent.click(executing);
+    expect(screen.queryByRole("button", { name: "筛选样例 queued" })).not.toBeInTheDocument();
+    for (const status of ["starting", "running", "stopping"]) expect(screen.getByRole("button", { name: `筛选样例 ${status}` })).toBeVisible();
+    fireEvent.click(executing);
+    expect(screen.getByLabelText("筛选运行状态")).toHaveValue("all");
+    for (const label of ["等待队列 1", "存档异常 1"]) {
+        const button = within(summary).getByRole("button", { name: label });
+        fireEvent.click(button);
+        expect(screen.getAllByRole("row")).toHaveLength(2);
+        fireEvent.click(button);
+        expect(button).toHaveAttribute("aria-pressed", "false");
+        expect(screen.getByLabelText("筛选运行状态")).toHaveValue("all");
+        expect(screen.getAllByRole("row")).toHaveLength(5);
+    }
+});
+
+it("空闲低频发现外部新任务，有任务时及时刷新，终态恢复低频且支持手动刷新", async () => {
+    vi.useFakeTimers();
+    const { publish, unmount, client } = setup([]);
+    const requests = () => vi.mocked(fetch).mock.calls.filter(([path]) => path === "/api/workbench").length;
+    try {
+        await act(() => vi.advanceTimersByTimeAsync(4900));
+        expect(requests()).toBe(0);
+        const job = testJob("external", { name: "外部提交样例", status: "queued", archive_id: null });
+        publish([job]);
+        await act(() => vi.advanceTimersByTimeAsync(200));
+        await act(() => vi.advanceTimersByTimeAsync(1));
+        expect(requests()).toBe(1);
+        expect(screen.getByRole("button", { name: job.name })).toBeVisible();
+        await act(() => vi.advanceTimersByTimeAsync(1100));
+        expect(requests()).toBe(2);
+        publish([{ ...job, status: "completed" }]);
+        await act(() => vi.advanceTimersByTimeAsync(1100));
+        await act(() => vi.advanceTimersByTimeAsync(1));
+        expect(screen.queryByRole("button", { name: job.name })).not.toBeInTheDocument();
+        const finished = requests();
+        await act(() => vi.advanceTimersByTimeAsync(4000));
+        expect(requests()).toBe(finished);
+        fireEvent.click(screen.getByRole("button", { name: "立即刷新" }));
+        await act(() => vi.advanceTimersByTimeAsync(1));
+        expect(requests()).toBe(finished + 1);
+    } finally {
+        unmount();
+        client.clear();
+        vi.useRealTimers();
+    }
 });
 
 it("多选运行进入统一曲线工作区，续跑使用同一个身份，并能返回运行列表", async () => {
@@ -156,7 +241,7 @@ it("删除存档后清理续跑身份、关注、观战、曲线和列表缓存"
     await userEvent.click(screen.getByRole("menuitem", { name: "删除存档" }));
     await userEvent.click(screen.getByRole("button", { name: "确认删除" }));
     await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
-    expect(await screen.findByText("没有匹配的历史 run")).toBeVisible();
+    expect(await screen.findByText("没有匹配的历史运行")).toBeVisible();
     expect(JSON.parse(localStorage.getItem("gmb.pins.v1")!)).toEqual([]);
     expect(JSON.parse(localStorage.getItem("gmb.watch.v1")!)).toEqual([]);
     expect(JSON.parse(localStorage.getItem("gmb.curves.v1")!)).toEqual(["other"]);
@@ -196,6 +281,99 @@ it("运行中心只显示活动 run，历史归并续跑，不把恢复的旧累
     expect(screen.queryByText("正在执行的另一局")).not.toBeInTheDocument();
 });
 
+it("空闲页重新打开仍显示最近五个结果，按结束时间排序，零分和未知不混淆", async () => {
+    const jobs = Array.from({ length: 7 }, (_, index) => testJob(`recent-${index}`, {
+        name: `近期运行 ${index}`, archive_id: `archive-${index}`, status: "completed",
+        created_at: index === 6 ? "2026-01-01T00:00:00Z" : "2026-10-01T00:00:00Z",
+        ended_at: `2026-10-29T12:0${index}:00Z`, last_score: index === 6 ? 0 : null,
+    }));
+    const first = setup(jobs);
+    expect(screen.queryByLabelText("运行结果通知")).not.toBeInTheDocument();
+    const items = within(screen.getByRole("region", { name: "最近结束的运行" })).getAllByRole("listitem");
+    expect(items).toHaveLength(5);
+    expect(items[0]).toHaveTextContent("近期运行 6");
+    expect(within(items[0]).getByText("0", { exact: true })).toBeVisible();
+    expect(within(items[1]).getByText("未知", { exact: true })).toBeVisible();
+    expect(items[4]).toHaveTextContent("近期运行 2");
+    expect(screen.queryByRole("textbox", { name: "搜索运行" })).not.toBeInTheDocument();
+    expect(screen.queryByText("0 个 run")).not.toBeInTheDocument();
+    expect(screen.queryByText("0 个运行")).not.toBeInTheDocument();
+    first.unmount();
+    first.client.clear();
+    setup(jobs);
+    const recent = screen.getByRole("region", { name: "最近结束的运行" });
+    expect(within(recent).getAllByRole("listitem")).toHaveLength(5);
+    await userEvent.click(within(recent).getByRole("button", { name: "查看结果 近期运行 6 recent-6" }));
+    expect(await screen.findByRole("region", { name: "专注 run" })).toHaveTextContent("recent-6 / completed");
+});
+
+it.each(["queued", "starting", "running", "stopping"] as const)("存在 %s 任务时不显示最近结果，搜索或状态筛选无匹配也不显示", status => {
+    const finished = testJob("finished", { name: "之前的结果", archive_id: "finished", status: "completed" });
+    const active = testJob("active", { name: "当前任务", archive_id: "active", status });
+    setup([finished, active]);
+    expect(screen.getByRole("button", { name: active.name })).toBeVisible();
+    expect(screen.queryByRole("region", { name: "最近结束的运行" })).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "搜索运行" }), { target: { value: "不存在的任务" } });
+    expect(screen.getByRole("heading", { name: "没有匹配的运行" })).toBeVisible();
+    expect(screen.queryByRole("region", { name: "最近结束的运行" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "清除筛选" }));
+    fireEvent.change(screen.getByLabelText("筛选运行状态"), { target: { value: status === "queued" ? "running" : "queued" } });
+    expect(screen.getByRole("heading", { name: "没有匹配的运行" })).toBeVisible();
+    expect(screen.queryByRole("region", { name: "最近结束的运行" })).not.toBeInTheDocument();
+});
+
+it("运行结束后进入最近结果，续跑后收起整个最近区域，不因关闭通知删除结果", async () => {
+    const previous = testJob("previous", { name: "之前的结果", archive_id: "previous", status: "completed" });
+    const job = testJob("transition", { archive_id: "transition-archive" });
+    const { update } = setup([previous, job]);
+    expect(screen.queryByRole("region", { name: "最近结束的运行" })).not.toBeInTheDocument();
+    const finished = { ...job, status: "failed" as const, ended_at: "2026-10-29T12:00:00Z" };
+    update([previous, finished]);
+    expect(within(await screen.findByRole("region", { name: "最近结束的运行" })).getByText("失败")).toBeVisible();
+    const notices = screen.getByLabelText("运行结果通知");
+    await userEvent.click(notices.querySelector("summary")!);
+    await userEvent.click(within(notices).getByRole("button", { name: /关闭.*结果通知/ }));
+    await waitFor(() => expect(screen.queryByLabelText("运行结果通知")).not.toBeInTheDocument());
+    expect(screen.getByRole("region", { name: "最近结束的运行" })).toBeVisible();
+    update([previous, finished, testJob("resumed", { archive_id: job.archive_id, created_at: "2026-10-30T12:00:00Z" })]);
+    await waitFor(() => expect(screen.queryByRole("region", { name: "最近结束的运行" })).not.toBeInTheDocument());
+    expect(screen.getByRole("button", { name: job.name })).toBeVisible();
+});
+
+it("首次使用与筛选无结果提供不同操作，不使用加载图标或零计数占位", async () => {
+    const { update } = setup([]);
+    expect(screen.getByRole("heading", { name: "创建你的第一组实验" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "配置第一组实验" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "清除筛选" })).not.toBeInTheDocument();
+    expect(document.querySelector(".empty-mark")).toBeNull();
+    update([testJob("new-active")]);
+    await userEvent.type(await screen.findByRole("textbox", { name: "搜索运行" }), "不匹配");
+    expect(screen.getByRole("heading", { name: "没有匹配的运行" })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "当前没有进行中的任务" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "清除筛选" }));
+    expect(screen.getByRole("button", { name: testJob("new-active").name })).toBeVisible();
+});
+
+it("同名运行以稳定短 ID 区分，搜索原 ID 在续跑后仍能定位且历史页保持相同标识", async () => {
+    const original = testJob("original-12345678");
+    const other = testJob("other-87654321", { archive_id: "another" });
+    const { update } = setup([original, other]);
+    const search = screen.getByRole("textbox", { name: "搜索运行" });
+    await userEvent.type(search, "12345678");
+    expect(screen.getAllByRole("row")).toHaveLength(2);
+    expect(screen.getByText("#12345678")).toBeVisible();
+    const resumed = testJob("resumed-abcdefgh", { created_at: "2026-10-20T11:00:00Z" });
+    update([{ ...original, status: "interrupted" }, resumed, other]);
+    expect(screen.getByText("#12345678")).toBeVisible();
+    expect(screen.queryByText("#abcdefgh")).not.toBeInTheDocument();
+    update([{ ...original, status: "interrupted" }, { ...resumed, status: "completed" }, other]);
+    await userEvent.click(screen.getByRole("button", { name: "历史存档" }));
+    await userEvent.type(await screen.findByRole("textbox", { name: "搜索存档" }), "12345678");
+    expect(screen.getAllByRole("row")).toHaveLength(2);
+    expect(screen.getByText("#12345678")).toBeVisible();
+});
+
 it("活动 run 结束后离开列表、发出通知，但不关闭正在看的详情", async () => {
     const running = testJob("current");
     const { update } = setup([running]);
@@ -206,7 +384,7 @@ it("活动 run 结束后离开列表、发出通知，但不关闭正在看的�
     await waitFor(() => expect(screen.getByRole("region", { name: "专注 run" })).toHaveTextContent("current / completed"));
     expect(await screen.findByLabelText("运行结果通知")).toHaveTextContent("已完成，已移至历史存档");
     fireEvent.click(screen.getByRole("button", { name: "返回运行列表" }));
-    expect(screen.getByText("当前没有排队或执行中的 run")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "当前没有进行中的任务" })).toBeVisible();
     expect(screen.queryByRole("region", { name: "run 详情" })).not.toBeInTheDocument();
 });
 

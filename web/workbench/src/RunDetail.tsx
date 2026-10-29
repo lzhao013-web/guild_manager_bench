@@ -20,7 +20,6 @@ import { matchesTool, summarizeToolCalls, toolCategoryLabel } from "./toolCalls"
 import type { ToolCallStatus } from "./toolCalls";
 import "./actions.css";
 import {
-    duration,
     fmt,
     isActive,
     modelEntries,
@@ -28,14 +27,17 @@ import {
     time,
 } from "./model";
 import { Empty, JsonDetails, Metric, StatusBadge, Trend } from "./ui";
+import { ElapsedTime } from "./ElapsedTime";
 import { ChangeValue, useNewItemKeys } from "./motion";
 import { ModelCallStats } from "./ModelCallStats";
 import { RunNotices } from "./RunNotices";
+import { RunId } from "./RunId";
 import type { Job } from "./types";
 import type { WatchFocus } from "./sceneNavigation";
 
 export function RunDetail({
     job,
+    runId,
     compact = false,
     onStop,
     onClone,
@@ -46,6 +48,7 @@ export function RunDetail({
     pinned,
 }: {
     job: Job;
+    runId: string;
     compact?: boolean;
     onStop: (job: Job) => void;
     onClone: (job: Job) => void;
@@ -62,6 +65,7 @@ export function RunDetail({
     const models = useMemo(() => modelEntries(records), [records]);
     const watch = useLiveWatch(job);
     const frames = useMemo(() => watchFrames(watch.data?.records || []), [watch.data]);
+    const observation = frames.at(-1)?.observation ?? null;
     const entries = useMemo(() => actionEntries(frames), [frames]);
     const [toolType, setToolType] = useState("all");
     const [toolStatus, setToolStatus] = useState<"all" | ToolCallStatus>("all");
@@ -116,9 +120,7 @@ export function RunDetail({
         >
             <header className="detail-header">
                 <div className="detail-title">
-                    <span className="subtle-label" title={job.archive_id || job.id}>
-                        RUN / {(job.archive_id || job.id).slice(0, 22)}
-                    </span>
+                    <RunId id={runId} />
                     <h2>{job.name}</h2>
                     <RunNotices key={job.id} config={job.config} data={job.data} />
                 </div>
@@ -156,7 +158,7 @@ export function RunDetail({
                 <span>{PHASE[job.phase] || job.phase}</span>
                 {isActive(job) && (
                     <span className="mono muted">
-                        {duration(job.phase_started_at)}
+                        <ElapsedTime start={job.phase_started_at} live />
                     </span>
                 )}
             </div>
@@ -217,7 +219,6 @@ export function RunDetail({
                                 label="最新 Rank Score"
                                 value={fmt(job.last_score)}
                                 changeValue={job.last_score ?? "unknown"}
-                                note="使用已记录评分，不在浏览器重算"
                             />
                             <Metric
                                 label="模型 / 工具调用"
@@ -226,7 +227,7 @@ export function RunDetail({
                             />
                             <Metric
                                 label="运行耗时"
-                                value={duration(job.started_at, job.ended_at)}
+                                value={<ElapsedTime start={job.started_at} end={job.ended_at} live={isActive(job)} />}
                             />
                         </div>
                         <section className="detail-section">
@@ -249,30 +250,30 @@ export function RunDetail({
                             <div className="section-heading">
                                 <h3>当前队伍</h3>
                                 <span className="mono muted">
-                                    {job.observation?.adventurers.length ?? 0} /{" "}
-                                    {job.observation?.party_size_limit ??
+                                    {observation?.adventurers.length ?? 0} /{" "}
+                                    {observation?.party_size_limit ??
                                         "未知"}
                                 </span>
                             </div>
-                            {job.observation ? (
+                            {observation ? (
                                 <>
                                     <div className="resource-line">
                                         <span>
                                             金币{" "}
-                                            <b><ChangeValue value={job.observation.gold}>{fmt(job.observation.gold)}</ChangeValue></b>
+                                            <b><ChangeValue value={observation.gold}>{fmt(observation.gold)}</ChangeValue></b>
                                         </span>
                                         <span>
                                             经验池{" "}
                                             <b>
-                                                <ChangeValue value={job.observation.experience_pool}>
-                                                    {fmt(job.observation.experience_pool)}
+                                                <ChangeValue value={observation.experience_pool}>
+                                                    {fmt(observation.experience_pool)}
                                                 </ChangeValue>
                                             </b>
                                         </span>
                                     </div>
                                     <div className="party-list">
-                                        {job.observation.adventurers.length ? (
-                                            job.observation.adventurers.map(
+                                        {observation.adventurers.length ? (
+                                            observation.adventurers.map(
                                                 (member) => (
                                                     <div
                                                         className="party-member"
@@ -442,7 +443,7 @@ export function RunDetail({
                                             ) : (
                                                 <p className="muted">
                                                     {entry.response
-                                                        ? "本次没有模型正文，可能仅返回工具调用。"
+                                                        ? "这次响应没有正文。"
                                                         : "尚未收到正文。"}
                                                 </p>
                                             )}
@@ -471,10 +472,7 @@ export function RunDetail({
                                 </div>
                             ) : (
                                 !loading && (
-                                    <Empty title="尚无模型调用">
-                                        只展示 API
-                                        实际返回的内容，不推断模型思考过程。
-                                    </Empty>
+                                    <Empty title="尚无模型调用" />
                                 )
                             ))}
                         {tab === "diagnostics" && (
@@ -539,8 +537,7 @@ export function RunDetail({
                                     value={job.data}
                                 />
                                 <p className="field-help">
-                                    完整模型和行动历史保留在运行归档中。这里的在线日志视图最多保留最近
-                                    600 个事件。
+                                    诊断日志仅显示最近 600 条记录。
                                 </p>
                             </>
                         )}

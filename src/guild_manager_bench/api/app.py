@@ -15,6 +15,7 @@ from guild_manager_bench.api.routes_llm_archive import llm_archive_router
 from guild_manager_bench.api.routes_llm_debug import llm_debug_router
 from guild_manager_bench.api.routes_sessions import sessions_router
 from guild_manager_bench.api.store import SessionStore
+from guild_manager_bench.api.static_files import WorkbenchFiles
 from guild_manager_bench.api.websocket import SessionHub, websocket_router
 from guild_manager_bench.game.loader import load_game_definition
 from guild_manager_bench.game.presets import list_data_presets, resolve_data_source
@@ -69,7 +70,7 @@ def create_app(data_dir: str | Path = "data", *, preset: str | None = None) -> F
     static_dir = _static_dir()
     workbench_dir = Path(__file__).resolve().parents[3] / "web" / "workbench" / "dist"
     if workbench_dir.exists():
-        app.mount("/workbench", StaticFiles(directory=workbench_dir, html=True), name="workbench")
+        app.mount("/workbench", WorkbenchFiles(directory=workbench_dir, html=True), name="workbench")
 
     @app.get("/", include_in_schema=False)
     async def home(request: Request):
@@ -78,7 +79,7 @@ def create_app(data_dir: str | Path = "data", *, preset: str | None = None) -> F
             return FileResponse(static_dir / "index.html")
         index = workbench_dir / "index.html"
         if index.exists():
-            return FileResponse(index)
+            return FileResponse(index, headers={"Cache-Control": "no-cache"})
         return HTMLResponse("<h1>工作台尚未构建</h1><p>在项目根目录执行 <code>npm install &amp;&amp; npm run build</code>，然后重启服务。</p><a href='/legacy/'>打开旧版调试页</a>", status_code=503)
 
     if static_dir.exists():

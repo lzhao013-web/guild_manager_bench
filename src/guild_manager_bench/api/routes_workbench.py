@@ -7,7 +7,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
-from guild_manager_bench.api.workbench import ACTIVE, Workbench
+from guild_manager_bench.api.workbench import ACTIVE, Workbench, job_summary
 from guild_manager_bench.api.history_deletion import ArchiveBusyError
 from guild_manager_bench.api.workbench_curves import CurveStore, empty_curves
 from guild_manager_bench.api.workbench_trajectories import TrajectoryStore
@@ -228,7 +228,8 @@ def workbench_router(manager: Workbench) -> APIRouter:
     @router.post("/batches", dependencies=[Depends(same_origin)], status_code=201)
     async def create_batch(body: CreateBatch):
         try:
-            return manager.create_batch(body)
+            batch = manager.create_batch(body)
+            return {**batch, "jobs": [job_summary(job) for job in batch["jobs"]]}
         except RecoveryConfirmationRequired as exc:
             raise HTTPException(409, exc.detail) from exc
         except (ValueError, RuntimeError) as exc:
@@ -242,7 +243,7 @@ def workbench_router(manager: Workbench) -> APIRouter:
     @router.post("/jobs/{job_id}/stop", dependencies=[Depends(same_origin)])
     async def stop_job(job_id: str):
         try:
-            return manager.stop(job_id)
+            return job_summary(manager.stop(job_id))
         except KeyError as exc:
             raise HTTPException(404, "找不到运行任务") from exc
 

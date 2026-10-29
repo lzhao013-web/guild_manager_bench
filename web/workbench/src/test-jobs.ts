@@ -11,7 +11,7 @@ export function testJob(id: string, patch: Partial<Job> = {}): Job {
         last_score: 595.2728, scores: [{ turn: 10, value: 595.2728 }], calls: 55, tools: 99,
         usage: { input_tokens: 1000, output_tokens: 200, reported: 1, responses: 1 },
         retries: 0, tool_failures: 0, error: null, notice: null, cursor: 0,
-        checkpoint_at: null, checkpoint_error: null, observation: null, budget: null, recent_actions: [],
+        checkpoint_at: null, checkpoint_error: null, budget: null, recent_actions: [],
         ...patch,
     };
 }

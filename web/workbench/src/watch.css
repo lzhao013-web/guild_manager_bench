@@ -74,6 +74,7 @@
     color: var(--amber-11);
     border-color: var(--amber-6);
 }
+.spectator-viewpoint.is-final { color: var(--gray-11); background: var(--gray-2); border-color: var(--border); }
 .spectator-viewpoint .viewpoint-action {
     margin-left: auto;
 }

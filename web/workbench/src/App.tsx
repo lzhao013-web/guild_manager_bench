@@ -25,7 +25,6 @@ import {
 } from "@phosphor-icons/react";
 import { api } from "./api";
 import {
-    duration,
     fmt,
     isActive,
     PHASE,
@@ -45,8 +44,12 @@ import type { WatchPosition } from "./watchModel";
 import type { WatchFocus } from "./sceneNavigation";
 import { ApiProfilesPanel, readApiProfiles } from "./ApiProfiles";
 import { Empty, StatusBadge, Trend } from "./ui";
+import { ElapsedTime } from "./ElapsedTime";
 import { ChangeValue } from "./motion";
 import { RunResultNotice } from "./RunResultNotice";
+import { RecentRuns } from "./RecentRuns";
+import { RunId } from "./RunId";
+import { RunPicker } from "./RunPicker";
 import type { ApiProfile, Archive, HistoryDeletion, Job, Settings, Snapshot } from "./types";
 
 type Section =
@@ -54,12 +57,12 @@ type Section =
 type View = "list" | "watch" | "focus";
 const RUN_COLUMNS = [
     { id: "select", label: "选择", minWidth: 64 },
-    { id: "name", label: "运行 / 模型", minWidth: 120 },
+    { id: "name", label: "运行 / 模型", minWidth: 160 },
     { id: "status", label: "状态与阶段", minWidth: 140 },
     { id: "turn", label: "回合", minWidth: 64 },
     { id: "duration", label: "累计耗时", minWidth: 80 },
     { id: "score", label: "Rank Score", minWidth: 100 },
-    { id: "tokens", label: "输出 Token", minWidth: 90 },
+    { id: "tokens", label: "输出 Token", minWidth: 104 },
     { id: "activity", label: "最近活动", minWidth: 130 },
     { id: "pin", label: "关注", minWidth: 56 },
 ];
@@ -84,15 +87,10 @@ function useStored<T>(key: string, initial: T) {
 
 export default function App() {
     const queryClient = useQueryClient();
-    const [now, setNow] = useState(Date.now());
-    useEffect(() => {
-        const timer = setInterval(() => setNow(Date.now()), 1000);
-        return () => clearInterval(timer);
-    }, []);
     const query = useQuery({
         queryKey: ["workbench"],
         queryFn: () => api<Snapshot>("/api/workbench"),
-        refetchInterval: 1000,
+        refetchInterval: result => result.state.data?.jobs.some(isActive) ? 1000 : 5000,
     });
     const profilesQuery = useQuery({
         queryKey: ["api-profiles"],
@@ -184,6 +182,8 @@ export default function App() {
     const active = jobs.filter(isActive),
         running = active.filter((job) => job.status !== "queued"),
         queued = active.filter((job) => job.status === "queued");
+    const recentJobs = useMemo(() => jobs.filter(job => !isActive(job)).sort((a, b) =>
+        (b.ended_at || b.updated_at).localeCompare(a.ended_at || a.updated_at) || b.id.localeCompare(a.id)).slice(0, 5), [jobs]);
     const attention = active.filter(job => job.checkpoint_error);
     const selectedJobs = jobs.filter((job) => checked.includes(runKey(job)));
     const visible = useMemo(
@@ -194,11 +194,11 @@ export default function App() {
                 .reverse()
                 .filter((job) => {
                     const text =
-                        `${job.name} ${job.config.model} ${job.config.preset}`.toLowerCase();
+                        `${job.name} ${job.config.model} ${job.config.preset} ${runKey(job)} ${job.id} ${job.archive_id || ""}`.toLowerCase();
                     return (
                         text.includes(search.toLowerCase()) &&
                         (filter === "all" ||
-                            (filter === "active" && isActive(job)) ||
+                            (filter === "active" && job.status !== "queued") ||
                             (filter === "attention" && !!job.checkpoint_error) ||
                             filter === job.status)
                     );
@@ -452,6 +452,7 @@ export default function App() {
     }[section];
     const detailProps = (job: Job) => ({
         job,
+        runId: runKey(job),
         onStop: (j: Job) => requestStop([j]),
         onClone: clone,
         onCurves: () => openCurves([runKey(job)]),
@@ -634,18 +635,18 @@ export default function App() {
                     <div className="workspace-heading">
                         <div className="workspace-title-group">
                             <h1>{pageTitle}</h1>
-                            {section === "runs" && view === "list" && query.data && (
+                            {section === "runs" && view === "list" && query.data && active.length > 0 && (
                                 <div className="summary-strip" role="group" aria-label="运行统计">
                                     <button className={filter === "active" ? "active" : ""} aria-pressed={filter === "active"}
                                         onClick={() => setFilter(filter === "active" ? "all" : "active")}>
                                         <span>执行中</span>{" "}<ChangeValue value={running.length} className="summary-value">{running.length}</ChangeValue>
                                     </button>
                                     <button className={filter === "queued" ? "active" : ""} aria-pressed={filter === "queued"}
-                                        onClick={() => setFilter("queued")}>
+                                        onClick={() => setFilter(filter === "queued" ? "all" : "queued")}>
                                         <span>等待队列</span>{" "}<ChangeValue value={queued.length} className="summary-value">{queued.length}</ChangeValue>
                                     </button>
                                     <button className={filter === "attention" ? "active" : ""} aria-pressed={filter === "attention"}
-                                        onClick={() => setFilter("attention")}>
+                                        onClick={() => setFilter(filter === "attention" ? "all" : "attention")}>
                                         <span>存档异常</span>{" "}<ChangeValue value={attention.length} className={`summary-value ${attention.length ? "error-text" : ""}`}>{attention.length}</ChangeValue>
                                     </button>
                                     <div className="scheduler-meter">
@@ -727,56 +728,13 @@ export default function App() {
                                                         每路独立回看，点击人物、怪物或摘要查看完整模块。
                                                     </span>
                                                     <button className="text-button" disabled={!watching.length} onClick={() => openCurves(watching.map(runKey))}><ChartLineUp size={15} />对比当前观战曲线</button>
-                                                    <select
-                                                        aria-label="添加观战 run"
-                                                        value=""
-                                                        onChange={(e) => {
-                                                            if (e.target.value)
-                                                                setWatchIds(
-                                                                    [
-                                                                        ...watchIds.filter(
-                                                                            (
-                                                                                id,
-                                                                            ) =>
-                                                                                jobs.some(
-                                                                                    (
-                                                                                        j,
-                                                                                    ) =>
-                                                                                        runKey(j) ===
-                                                                                        id,
-                                                                                ),
-                                                                        ),
-                                                                        e.target
-                                                                            .value,
-                                                                    ].slice(
-                                                                        0,
-                                                                        4,
-                                                                    ),
-                                                                );
-                                                        }}
-                                                        disabled={
-                                                            watching.length >= 4
-                                                        }
-                                                    >
-                                                        <option value="">
-                                                            添加一个 run…
-                                                        </option>
-                                                        {(section === "runs" ? active : jobs.filter(job => !isActive(job)))
-                                                            .filter(
-                                                                (j) =>
-                                                                    !watchIds.includes(
-                                                                        runKey(j),
-                                                                    ),
-                                                            )
-                                                            .map((j) => (
-                                                                <option
-                                                                    key={j.id}
-                                                                    value={runKey(j)}
-                                                                >
-                                                                    {j.name}
-                                                                </option>
-                                                            ))}
-                                                    </select>
+                                                    <RunPicker label="添加观战 run" disabled={watching.length >= 4}
+                                                        options={(section === "runs" ? active : jobs.filter(job => !isActive(job)))
+                                                            .filter(job => !watchIds.includes(runKey(job)))
+                                                            .map(job => ({ key: runKey(job), name: job.name, preset: job.config.preset,
+                                                                model: job.config.model || "", status: job.status,
+                                                                aliases: [job.id, job.archive_id || ""] }))}
+                                                        onSelect={id => setWatchIds([...watchIds, id].slice(0, 4))} />
                                                 </div>
                                                 {watching.length ? (
                                                     <div
@@ -818,14 +776,14 @@ export default function App() {
                                             </div>
                                         ) : (
                                             <>
-                                                <div className="runs-toolbar">
+                                                {active.length > 0 && <div className="runs-toolbar">
                                                     <label className="run-search">
                                                         <MagnifyingGlass
                                                             size={17}
                                                         />
                                                         <input
                                                             aria-label="搜索运行"
-                                                            placeholder="搜索模型或 preset"
+                                                            placeholder="搜索名称、模型、preset 或 ID"
                                                             value={search}
                                                             onChange={(e) =>
                                                                 setSearch(
@@ -849,7 +807,7 @@ export default function App() {
                                                             所有状态
                                                         </option>
                                                         <option value="active">
-                                                            进行中
+                                                            执行中
                                                         </option>
                                                         <option value="attention">
                                                             需要关注
@@ -879,8 +837,8 @@ export default function App() {
                                                             size={18}
                                                         />
                                                     </button>
-                                                </div>
-                                                {checked.length > 0 && (
+                                                </div>}
+                                                {checked.length > 0 && active.length > 0 && (
                                                     <div className="selection-toolbar">
                                                         <strong>
                                                             已选择{" "}
@@ -1102,6 +1060,7 @@ export default function App() {
                                                                                             job.name
                                                                                         }
                                                                                     </button>
+                                                                                    <RunId id={runKey(job)} />
                                                                                     <div className="run-subtitle">
                                                                                         {
                                                                                             job
@@ -1134,11 +1093,7 @@ export default function App() {
                                                                                             job.status !==
                                                                                                 "queued" && (
                                                                                                 <span>
-                                                                                                    {duration(
-                                                                                                        job.phase_started_at,
-                                                                                                        null,
-                                                                                                        now,
-                                                                                                    )}
+                                                                                                    <ElapsedTime start={job.phase_started_at} live />
                                                                                                 </span>
                                                                                             )}
                                                                                     </div>
@@ -1240,37 +1195,19 @@ export default function App() {
                                                                 </tbody>
                                                             </ResizableTable>
                                                         ) : (
-                                                            <Empty
-                                                                title={
-                                                                    active.length ? "没有匹配的 run" : jobs.length ? "当前没有排队或执行中的 run" : "从第一组实验开始"
-                                                                }
-                                                                action={
-                                                                    <Button
-                                                                        highContrast
-                                                                        onClick={() =>
-                                                                            !active.length && jobs.length ? openHistory() : active.length
-                                                                                ? (setSearch(
-                                                                                      "",
-                                                                                  ),
-                                                                                  setFilter(
-                                                                                      "all",
-                                                                                  ))
-                                                                                : create()
-                                                                        }
-                                                                    >
-                                                                        {active.length ? "清除筛选" : jobs.length ? "查看历史存档" : "新建实验"}
-                                                                    </Button>
-                                                                }
-                                                            >
-                                                                {active.length ? "试试其他关键词或状态。" : jobs.length ? "前往历史存档查看已结束的 run。" : "添加模型和运行参数。"}
-                                                            </Empty>
+                                                            <div className="run-list-empty">
+                                                                {!active.length && <button className="refresh-button" aria-label="立即刷新" title="立即刷新运行状态" onClick={() => void query.refetch()}><ArrowsClockwise size={18} /></button>}
+                                                                <h2>{active.length ? "没有匹配的运行" : jobs.length ? "当前没有进行中的任务" : "创建你的第一组实验"}</h2>
+                                                                <p>{active.length ? "修改关键词或清除筛选，即可重新查看正在执行的任务。"
+                                                                    : jobs.length ? "最近的运行结果保留在下方。继续实验可使用右上角的新建入口。"
+                                                                    : "选择模型和运行参数后加入队列，运行状态与结果将在这里显示。"}</p>
+                                                                {active.length > 0 ? <Button highContrast size="2" variant="soft" onClick={() => { setSearch(""); setFilter("all"); }}>清除筛选</Button>
+                                                                    : !jobs.length && <Button highContrast size="2" onClick={() => create()}>配置第一组实验</Button>}
+                                                            </div>
                                                         )}
-                                                        <div className="table-footer">
-                                                            <span>
-                                                                {visible.length}{" "}
-                                                                个 run
-                                                            </span>
-                                                        </div>
+                                                        {visible.length > 0 && <div className="table-footer"><span>{visible.length} 个运行</span></div>}
+                                                        {active.length === 0 && recentJobs.length > 0 && <RecentRuns jobs={recentJobs} runKeys={catalog.keys}
+                                                            onOpen={job => openHistory(job)} onHistory={() => openHistory()} />}
                                                     </section>
                                                     {selected && (
                                                         <aside className="inspector" id="run-inspector">
@@ -1306,7 +1243,7 @@ export default function App() {
                                 </Suspense></PageBoundary>}
                                 {section === "archives" && view === "list" && (
                                     <PageBoundary name="历史存档"><Suspense fallback={<p className="muted">正在加载历史…</p>}>
-                                        <RunHistory jobs={jobs} onCompare={openCurves} onDeleted={deletedHistory} onResume={archive => void resume(archive)} onRerun={archive => void resume(archive, true)} onClone={clone} onOpen={job => openHistory(job)}
+                                        <RunHistory jobs={jobs} runKeys={catalog.keys} onCompare={openCurves} onDeleted={deletedHistory} onResume={archive => void resume(archive)} onRerun={archive => void resume(archive, true)} onClone={clone} onOpen={job => openHistory(job)}
                                             onWatch={selected => { setWatchIds(selected.map(runKey)); setView("watch"); }} />
                                     </Suspense></PageBoundary>
                                 )}
@@ -1402,7 +1339,7 @@ export default function App() {
                             停止 {stopTargets.length} 个运行任务？
                         </AlertDialog.Title>
                         <AlertDialog.Description>
-                            排队任务会立即取消。运行中的任务会请求保存并退出，阻塞超过等待时间后强制结束。未完成回合可能在续跑时回滚。
+                            排队任务会取消。正在运行的任务会尝试保存进度后退出，超过 8 秒仍未退出则强制结束。续跑时，未完成的回合可能需要重新执行。
                         </AlertDialog.Description>
                         {stopError && (
                             <p className="callout error" role="alert">
@@ -1469,7 +1406,7 @@ function SettingsPanel({
                 method: "PUT",
                 body: JSON.stringify(draft),
             });
-            setMessage("设置已保存。降低上限不会中断已启动的任务。");
+            setMessage("设置已保存，正在运行的任务不受影响。");
             onSaved();
         } catch (cause) {
             setMessage((cause as Error).message);
@@ -1513,7 +1450,7 @@ function SettingsPanel({
                             }))
                         }
                     />
-                    <small>相同服务地址共享上限，不等同于请求速率限制。</small>
+                    <small>使用同一服务地址的任务共享这个上限。</small>
                 </label>
             </div>
             <Button highContrast type="submit" loading={busy}>
@@ -1527,14 +1464,10 @@ function SettingsPanel({
             <details className="settings-notes">
                 <summary>运行与恢复</summary>
                 <p>
-                    关页、刷新或浏览器断线不会停止任务。关闭工作台服务会停止任务，重启后不会自动重复提交模型请求。
+                    关闭页面不会停止任务。关闭工作台服务后，需要手动续跑。
                 </p>
                 <p>
-                    停止先请求协作退出，8
-                    秒后仍未退出则强制结束。续跑以最近成功写入的原子检查点为准。
-                </p>
-                <p>
-                    工作台用于可信的本机环境，不提供用户认证。不要将服务直接暴露到公网。
+                    工作台没有登录保护，请勿直接开放到公网。
                 </p>
             </details>
             <details className="settings-notes">

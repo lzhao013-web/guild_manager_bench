@@ -15,7 +15,6 @@
 .curve-legend strong { display: block; font-size: var(--wb-text-sm); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .curve-legend small { display: block; color: var(--gray-11); font-size: var(--wb-text-xs); margin-top: 3px; }
 .curve-legend button { display: grid; place-items: center; color: var(--gray-11); background: none; border: 0; padding: 5px; }
-.curve-warning { font-size: var(--wb-text-xs); line-height: 1.7; padding: 8px 12px; border: 1px solid var(--amber-6); background: var(--amber-3); color: var(--amber-11); border-radius: 5px; }
 .curve-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: var(--wb-text-xs); margin: 8px 0; color: var(--gray-11); }
 .curve-controls label, .curve-values header label { display: inline-flex; gap: 8px; align-items: center; white-space: nowrap; flex-shrink: 0; }
 .curve-board .curve-controls input[type="number"], .curve-board .curve-values input[type="number"] { width: 80px; flex: 0 0 80px; min-height: 29px; padding: 4px 7px; font-size: var(--wb-text-xs); }
@@ -93,7 +92,6 @@
 .curve-warning-summary li { padding: 3px 0; overflow-wrap: anywhere; }
 .curve-common-turn { padding: 5px 9px; border: 1px solid var(--accent-7); border-radius: 4px; background: var(--accent-3); color: var(--accent-11); font-size: var(--wb-text-xs); white-space: nowrap; }
 .curve-coverage { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: var(--wb-text-xs); }
-.curve-note { font-size: var(--wb-text-xs); color: var(--gray-11); line-height: 1.8; margin: 10px 0 0; }
 @media (min-width: 901px) and (max-height: 800px) {
     .curve-plot { height: 140px; }
     .curve-chart header { padding-top: 8px; }

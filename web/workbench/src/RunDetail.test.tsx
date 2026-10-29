@@ -20,7 +20,7 @@ function setup(records: WatchRecord[], rawRecords: WatchRecord[] = [], job: Job 
         return new Response(JSON.stringify(path.endsWith("/watch") ? page : { events: rawRecords, cursor: 10, has_more: false }));
     });
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
-    render(<QueryClientProvider client={client}><Theme><RunDetail job={job}
+    render(<QueryClientProvider client={client}><Theme><RunDetail job={job} runId={job.id}
         onStop={vi.fn()} onClone={vi.fn()} {...actions} /></Theme></QueryClientProvider>);
     return requests;
 }
@@ -78,6 +78,22 @@ it("运行列表侧栏也保留具体对象与影响，不再被原始 600 事�
     expect(requests.every(path => path.includes("/watch") || path.includes("/events?"))).toBe(true);
 });
 
+it("摘要不携带局面时，侧栏从回合快照显示最新队伍和资源", async () => {
+    const after: Observation = { ...initial, gold: 40, experience_pool: 25, adventurers: [{
+        adventurer_id: "member", template_id: "warrior", name: "局面接口中的剑士", level: 2,
+        resources: { current_hp: 60, current_mp: 15 }, effective_stats: { hp: 100, mp: 20 },
+    }] };
+    setup([rec(1, { type: "turn_started", observation: initial }),
+        rec(2, { type: "tool_result", name: "recruit_adventurer", result: { ok: true, _observation_after: after } })]);
+    const party = screen.getByRole("heading", { name: "当前队伍" }).closest("section")!;
+    expect(await within(party).findByText("局面接口中的剑士")).toBeVisible();
+    expect(party).toHaveTextContent("1 / 3");
+    expect(party).toHaveTextContent("金币 40");
+    expect(party).toHaveTextContent("经验池 25");
+    expect(party).toHaveTextContent("HP 60 / 100");
+    expect(party).toHaveTextContent("MP 15 / 20");
+});
+
 it("侧栏只查询时不把成功查询描述为经营成果", async () => {
     setup([rec(1, { type: "turn_started", observation: initial }),
         rec(2, { type: "tool_result", name: "get_party", result: { ok: true, adventurers: [] } })]);
@@ -119,7 +135,7 @@ it("悬停查看完整来源，可移入浮层阅读，切换版本标记只显�
     const mixed = screen.getByRole("button", { name: "跨版本执行，查看说明" });
     fireEvent.pointerEnter(mixed, { pointerType: "mouse" });
     const warning = await screen.findByRole("dialog", { name: "跨版本详情" });
-    expect(warning).toHaveTextContent("跨版本执行：历史与当前规则不完全一致，不作为同版本标准评测比较。");
+    expect(warning).toHaveTextContent("这次运行续跑时使用了不同版本的游戏规则。");
     expect(warning).not.toHaveTextContent("20261020-171620");
     expect(rerun).toHaveAttribute("aria-expanded", "false");
     fireEvent.pointerLeave(mixed);

@@ -315,8 +315,8 @@ h3 {
 .brand div > span {
   display: block;
   color: var(--muted);
-  font-size: 8px;
-  letter-spacing: 0.1em;
+  font-size: 10px;
+  letter-spacing: 0.04em;
   margin-top: 3px;
 }
 .sidebar-label {
@@ -721,6 +721,13 @@ kbd {
   white-space: nowrap;
   text-align: left;
 }
+.run-id { display: inline-block; color: var(--gray-11); font-size: var(--wb-text-xs); white-space: nowrap; font-weight: 400; }
+.run-name + .run-id { display: block; margin-top: 4px; }
+.monitor-identity > .run-id { float: right; margin-left: 8px; }
+.run-table:not(.archive-table) :is(th, td):is(:nth-child(4), :nth-child(5), :nth-child(6), :nth-child(7)),
+.archive-table :is(th, td):is(:nth-child(5), :nth-child(6), :nth-child(7), :nth-child(8)) { text-align: right; font-variant-numeric: tabular-nums; }
+.archive-table th:is(:nth-child(5), :nth-child(6), :nth-child(7), :nth-child(8)) button { justify-content: flex-end; }
+.run-table .trend { margin-left: auto; }
 .run-subtitle {
   display: flex;
   align-items: center;
@@ -1423,6 +1430,18 @@ pre {
 .history-delete-errors { max-height: min(240px, 35vh); overflow: auto; overflow-wrap: anywhere; }
 .archive-table-wrap {
   overflow: auto;
+  isolation: isolate;
+}
+.archive-table .history-actions-column {
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  background: var(--gray-1);
+  box-shadow: inset 1px 0 var(--border);
+}
+.archive-table thead .history-actions-column,
+.archive-table tbody tr:hover .history-actions-column {
+  background: var(--gray-2);
 }
 .archive-table th:first-child,
 .archive-table td:first-child {
@@ -1485,6 +1504,9 @@ pre {
   color: var(--muted);
   font-size: var(--wb-text-xs);
 }
+.archive-identity { display: flex; align-items: baseline; gap: 8px; min-width: 0; margin-top: 5px; }
+.archive-identity > .archive-id { min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.archive-duration, .archive-tokens { overflow: hidden; text-overflow: ellipsis; }
 .archive-actions {
   display: flex;
   align-items: center;
@@ -1696,7 +1718,7 @@ pre {
     font-size: var(--wb-text-xs);
   }
   .brand div > span {
-    font-size: 7px;
+    font-size: 10px;
   }
   .workspace-header,
   .workspace-heading {

@@ -27,6 +27,20 @@ from guild_manager_bench.bench.llm.recovery import RecoveryConfirmationRequired,
 
 ACTIVE = {"queued", "starting", "running", "stopping"}
 
+# 公开摘要只携带运行元数据。局面通过选中任务的 watch 接口按需读取，
+# 不把内部状态或未来新增的大字段自动带入全局轮询。
+JOB_SUMMARY_FIELDS = frozenset({
+    "id", "name", "batch_id", "batch_name", "status", "phase", "phase_started_at",
+    "created_at", "updated_at", "started_at", "ended_at", "config", "effective_config",
+    "data", "archive_id", "turn", "max_turns", "last_score", "scores", "calls", "tools",
+    "usage", "model_duration_ms", "retries", "tool_failures", "error", "notice", "cursor",
+    "checkpoint_at", "checkpoint_error", "budget", "recent_actions",
+})
+
+
+def job_summary(job: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in job.items() if key in JOB_SUMMARY_FIELDS}
+
 
 def timestamp() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -140,7 +154,7 @@ class Workbench:
             self._ownership = None
 
     def snapshot(self) -> dict[str, Any]:
-        return {"jobs": list(self.jobs.values()), "settings": self.settings.model_dump(),
+        return {"jobs": [job_summary(job) for job in self.jobs.values()], "settings": self.settings.model_dump(),
                 "presets": list(self.presets), "scheduler_error": self.failure}
 
     def configure(self, settings: SchedulerSettings) -> dict[str, int]:

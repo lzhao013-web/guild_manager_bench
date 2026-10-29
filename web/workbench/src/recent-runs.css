@@ -1,0 +1,31 @@
+.run-list-empty { padding: 24px 30px; border-bottom: 1px solid var(--border); }
+.run-list-empty h2 { margin: 0; font-size: var(--wb-text-md); font-weight: 600; }
+.run-list-empty p { margin: 6px 0 0; color: var(--gray-11); font-size: var(--wb-text-sm); }
+.run-list-empty > button { margin-top: 14px; }
+.run-list-empty > .refresh-button { float: right; margin: 0 0 0 12px; }
+.recent-runs { padding: 22px 30px; container-type: inline-size; }
+.recent-runs > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 8px; }
+.recent-runs h2 { margin: 0; font-size: var(--wb-text-sm); font-weight: 600; color: var(--gray-11); }
+.recent-runs .text-button { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; color: var(--accent-11); }
+.recent-runs ul { list-style: none; padding: 0; margin: 0; }
+.recent-run { display: grid; grid-template-columns: minmax(180px, 1fr) 80px 130px 110px 85px; align-items: center; gap: 16px; padding: 18px 0; border-bottom: 1px solid var(--border); }
+.recent-run:last-child { border-bottom: 0; }
+.recent-run-title { min-width: 0; }
+.recent-run-title > .run-name { max-width: 100%; font-size: var(--wb-text-base); }
+.recent-run-title > div { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; margin-top: 5px; color: var(--gray-11); font-size: var(--wb-text-xs); }
+.recent-run-warning { color: var(--amber-11); }
+.recent-run-score { text-align: right; }
+.recent-run-score > span { display: block; font-size: var(--wb-text-xs); color: var(--gray-11); }
+.recent-run-score > strong { font-size: var(--wb-text-base); font-weight: 500; }
+.recent-run > time { text-align: right; font-size: var(--wb-text-xs); color: var(--gray-11); font-variant-numeric: tabular-nums; }
+.recent-run-open { justify-self: end; }
+@container (max-width: 760px) {
+    .recent-run { grid-template-columns: minmax(0, 1fr) auto; gap: 12px 16px; }
+    .recent-run > .status { justify-self: end; }
+    .recent-run-score { text-align: left; display: flex; align-items: baseline; gap: 8px; }
+    .recent-run-open { grid-column: 2; }
+}
+@media (max-width: 767px) {
+    .run-list-empty { padding: 20px 16px; }
+    .recent-runs { padding: 20px 16px; }
+}

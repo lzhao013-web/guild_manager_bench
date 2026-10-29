@@ -4,6 +4,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { RunHistory } from "./RunHistory";
+import { buildRunCatalog } from "./runCatalog";
 import { testArchive, testJob } from "./test-jobs";
 import type { Archive, Job } from "./types";
 
@@ -13,12 +14,45 @@ function setup(jobs: Job[], archives: Archive[]) {
     client.setQueryData(["archives"], { runs: archives });
     function Harness({ items }: { items: Job[] }) {
         return <QueryClientProvider client={client}><Theme>
-            <RunHistory jobs={items} {...callbacks} />
+            <RunHistory jobs={items} runKeys={buildRunCatalog(items).keys} {...callbacks} />
         </Theme></QueryClientProvider>;
     }
     const view = render(<Harness items={jobs} />);
     return { ...callbacks, client, updateJobs: (items: Job[]) => view.rerender(<Harness items={items} />) };
 }
+
+it("历史页只保留版本事实标记，不显示比较限制横幅", async () => {
+    setup([], [testArchive("mixed-a", { model: "跨版 A", protocol_status: "mixed" }),
+        testArchive("mixed-b", { model: "跨版 B", protocol_status: "mixed" }), testArchive("normal", { model: "普通记录" })]);
+    expect(screen.getAllByText("跨版本", { exact: true })).toHaveLength(2);
+    expect(screen.queryByText(/比较限制|同版本标准评测比较/)).not.toBeInTheDocument();
+    await userEvent.type(screen.getByRole("textbox", { name: "搜索存档" }), "普通记录");
+    expect(screen.queryByText(/跨版本运行 · 比较限制/)).not.toBeInTheDocument();
+    expect(screen.queryByText("跨版本", { exact: true })).not.toBeInTheDocument();
+});
+
+it("操作列表头和各行使用固定列，排序后按钮仍打开各自的记录", async () => {
+    const job = testJob("managed-actions", { name: "A 受控记录", status: "completed", archive_id: null });
+    const archive = testArchive("cli-actions", { model: "B 命令行存档", status: "completed" });
+    const callbacks = setup([job], [archive]);
+    expect(screen.getByRole("columnheader", { name: "操作" })).toHaveClass("history-actions-column");
+    for (const direction of ["ascending", "descending"]) {
+        await userEvent.click(screen.getByRole("button", { name: "Run / 模型" }));
+        expect(screen.getByRole("columnheader", { name: "Run / 模型" })).toHaveAttribute("aria-sort", direction);
+        const managedRow = screen.getByRole("row", { name: /A 受控记录/ });
+        const cliRow = screen.getByRole("row", { name: /B 命令行存档/ });
+        const detail = within(managedRow).getByRole("button", { name: "查看详情" });
+        const curve = within(cliRow).getByRole("button", { name: "查看曲线" });
+        for (const button of [detail, curve]) expect(button.closest("td")).toHaveClass("history-actions-column");
+        await userEvent.click(detail);
+        expect(callbacks.onOpen).toHaveBeenLastCalledWith(job);
+        await userEvent.click(curve);
+        expect(callbacks.onCompare).toHaveBeenLastCalledWith(["archive:cli-actions"]);
+        await userEvent.click(within(managedRow).getByRole("button", { name: "A 受控记录 的更多操作" }));
+        expect(screen.getByRole("menuitem", { name: "查看曲线" })).toBeVisible();
+        await userEvent.keyboard("{Escape}");
+    }
+});
 
 it("已完成存档可从指定回合重跑，但不提供原地续跑", async () => {
     const archive = testArchive("completed-parent", { model: "已完成来源", status: "completed" });
@@ -265,7 +299,7 @@ it("确认期间新增的排队引用会阻止删除，不发送请求", async (
     updateJobs([testJob("queued-child", { status: "queued", archive_id: null,
         config: { ...testJob("config").config, rerun_run_id: "source" } })]);
     expect(screen.getByRole("button", { name: "确认删除" })).toBeDisabled();
-    expect(screen.getByText("部分存档正在被运行或续跑占用，不能删除。")).toBeVisible();
+    expect(screen.getByText("部分存档仍在使用中，请先停止对应任务。")).toBeVisible();
     expect(fetch.mock.calls.filter(([, init]) => init?.method === "DELETE")).toHaveLength(0);
 });
 
@@ -286,7 +320,7 @@ it("preset 下拉来自受控与 CLI 历史，支持自定义和未记录项，�
     fireEvent.change(screen.getByRole("combobox", { name: "筛选历史状态" }), { target: { value: "failed" } });
     expect(rowNames()).toEqual(["Alpha advanced"]);
     fireEvent.change(screen.getByRole("textbox", { name: "搜索存档" }), { target: { value: "Beta" } });
-    expect(screen.getByText("没有匹配的历史 run")).toBeVisible();
+    expect(screen.getByText("没有匹配的历史运行")).toBeVisible();
     fireEvent.change(screen.getByRole("textbox", { name: "搜索存档" }), { target: { value: "Alpha" } });
     expect(rowNames()).toEqual(["Alpha advanced"]);
     expect(screen.queryByRole("combobox", { name: "筛选历史批次" })).not.toBeInTheDocument();
@@ -355,5 +389,5 @@ it("续跑把最后一个匹配 run 移出历史后，preset 控件仍保留用�
     act(() => client.setQueryData(["archives"], { runs: [] }));
     expect(screen.getByRole("combobox", { name: "筛选历史 preset" })).toHaveValue("full");
     expect(screen.getByRole("status")).toHaveTextContent("显示 0 / 0 个历史 run");
-    expect(screen.getByText("没有匹配的历史 run")).toBeVisible();
+    expect(screen.getByText("没有匹配的历史运行")).toBeVisible();
 });

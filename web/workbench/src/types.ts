@@ -100,6 +100,7 @@ export interface Observation {
     recruit_candidates?: GameEntity[];
     global_upgrades?: GameEntity[];
 }
+/** 公开运行摘要。局面由选中任务的 watch 接口提供，不随全局轮询传输。 */
 export interface Job {
     id: string;
     name: string;
@@ -136,7 +137,6 @@ export interface Job {
     cursor: number;
     checkpoint_at: string | null;
     checkpoint_error: string | null;
-    observation: Observation | null;
     budget: { used: number; max_tool_calls: number } | null;
     recent_actions: {
         name: string;

@@ -11,19 +11,21 @@ import { ModelCallStats } from "./ModelCallStats";
 import { MaterialExchangeStatus } from "./MaterialExchangeStatus";
 import { monsterClassification } from "./monsterModel";
 import { StatusBadge } from "./ui";
+import { RunId } from "./RunId";
 import { ChangeValue } from "./motion";
 import { MonitorPreviews } from "./MonitorPreviews";
-import { ATTEMPT_STATUS, attemptLabel, livePosition } from "./watchModel";
+import { ATTEMPT_STATUS, attemptLabel, livePosition, watchPresentation } from "./watchModel";
 import type { WatchFrame, WatchPage, WatchPosition, WatchRecord } from "./watchModel";
 import type { Job } from "./types";
 import type { WatchFocus } from "./sceneNavigation";
 
 /** 多路只呈现有界摘要，完整模块在单局工作区中查看。 */
-export function WatchMonitor({ job, page, live, frame, frames, records, position, hasNew,
+export function WatchMonitor({ job, runId, page, live, frame, frames, records, position, hasNew,
     loading, failure, onRetry, onPosition, onFrame, onPause, onStop, onFocus, onPin,
     onClose, pinned,
 }: {
     job: Job;
+    runId: string;
     page: WatchPage | undefined;
     live: WatchPage | undefined;
     frame: WatchFrame | undefined;
@@ -44,6 +46,7 @@ export function WatchMonitor({ job, page, live, frame, frames, records, position
     pinned?: boolean;
 }) {
     const following = position.attempt === null;
+    const presentation = watchPresentation(job, following);
     const selected = page?.attempts.find(attempt => attempt.id === page.selected);
     const observation = frame?.observation;
     const members = observation && [...observation.adventurers].sort((a, b) =>
@@ -51,9 +54,9 @@ export function WatchMonitor({ job, page, live, frame, frames, records, position
     const monsters = observation?.monsters;
     const model = useMemo(() => modelEntries(records).at(-1), [records]);
     const index = frame ? frames.indexOf(frame) : -1;
-    const warning = failure ? `同步失败：${failure.message}，保留已读取局面` :
+    const warning = failure ? `更新失败，暂时显示上次的局面：${failure.message}` :
         job.checkpoint_error ? `存档失败：${job.checkpoint_error}` :
-        job.error || (selected?.status === "rolled_back" ? "本次尝试已回滚，不代表当前局面" : "");
+        job.error || (selected?.status === "rolled_back" ? "这次尝试已撤销，正在回看当时的局面" : "");
     function inspect(target?: WatchFocus) { onFocus?.(target); }
     const text = model?.text || model?.reasoning || "";
     const body = text ? `${text.length > 600 ? "…" : ""}${text.slice(-600)}` :
@@ -63,6 +66,7 @@ export function WatchMonitor({ job, page, live, frame, frames, records, position
             <header className="monitor-header">
                 <div className="monitor-identity">
                     <h2 title={`${job.name}\n${job.config.provider} / ${job.config.model}\n${job.config.preset} / ${job.batch_name}`}>{job.name}</h2>
+                    <RunId id={runId} />
                     <div className="monitor-stage">
                         <StatusBadge status={job.status} turn={job.turn} maxTurns={job.max_turns} />
                         {warning ? <span className={`monitor-warning ${failure || job.checkpoint_error || job.status === "failed" ? "is-error" : ""}`} title={warning} role={failure || job.checkpoint_error || job.status === "failed" ? "alert" : "status"}>{warning}</span> :
@@ -79,8 +83,8 @@ export function WatchMonitor({ job, page, live, frame, frames, records, position
                 </div>
             </header>
             <div className="monitor-metrics" aria-label="当前观看位置的资源">
-                <div className={`spectator-viewpoint ${following ? "is-live" : "is-history"}`} title={selected ? attemptLabel(selected) : "等待初始化"}>
-                    {following ? <Broadcast size={12} /> : <Pause size={12} />}<strong>{following ? "实时局面" : "历史局面"}</strong>
+                <div className={`spectator-viewpoint ${presentation.realtime ? "is-live" : following ? "is-final" : "is-history"}`} title={selected ? attemptLabel(selected) : "等待初始化"}>
+                    {presentation.realtime ? <Broadcast size={12} /> : <Pause size={12} />}<strong>{presentation.label}</strong>
                 </div>
                 <span className="monitor-score" title={`已记录评分 ${fmt(frame?.score)}`}><ChartLineUp size={12} /><ChangeValue value={frame?.score ?? "unknown"}>{fmt(frame?.score)}</ChangeValue></span>
                 <span title={`金币 ${fmt(observation?.gold)}`}><Coins size={12} /><b><ChangeValue value={observation?.gold ?? "unknown"}>{observation ? short(observation.gold) : "未知"}</ChangeValue></b></span>
@@ -89,7 +93,7 @@ export function WatchMonitor({ job, page, live, frame, frames, records, position
                 {observation?.material_exchange && <MaterialExchangeStatus turn={observation.turn} exchange={observation.material_exchange} />}
             </div>
             {loading ? <div className="monitor-empty" aria-label="正在读取观战历史">正在读取局面…</div> : !page?.records.length ? (
-                <div className="monitor-empty">{job.status === "queued" ? "等待任务开始" : "尚无观战事件"}<small>任务初始化后显示真实局面</small></div>
+                <div className="monitor-empty">{job.status === "queued" ? "等待任务开始" : "尚无观战记录"}</div>
             ) : <div className="monitor-body">
                 <section className="monitor-party" aria-label="编队摘要">
                     {members?.length ? members.map(member => <button key={member.adventurer_id}
@@ -136,10 +140,10 @@ export function WatchMonitor({ job, page, live, frame, frames, records, position
                         value={Math.max(0, index)} disabled={!frames.length} onChange={event => onFrame(frames[Number(event.target.value)])} />
                     <button aria-label="下一步" title="下一步" disabled={index < 0 || index >= frames.length - 1} onClick={() => onFrame(frames[index + 1])}><CaretRight size={12} /></button>
                 </div>
-                <button className={`monitor-follow ${following ? "is-following" : ""}`} aria-label={following ? "暂停跟随" : `返回实时${hasNew ? "（有新事件）" : ""}`}
+                {(isActive(job) || !following) ? <button className={`monitor-follow ${presentation.realtime ? "is-following" : ""}`} aria-label={following ? "暂停跟随" : `${presentation.returnLabel}${isActive(job) && hasNew ? "（有新事件）" : ""}`}
                     disabled={following && !page?.selected} onClick={following ? onPause : () => onPosition(livePosition)}>
-                    {following ? <Pause size={12} /> : <Broadcast size={12} />}{following ? "暂停跟随" : "返回实时"}{hasNew && <i title="有新事件" />}
-                </button>
+                    {following ? <Pause size={12} /> : <Broadcast size={12} />}{following ? "暂停跟随" : presentation.returnLabel}{isActive(job) && hasNew && <i title="有新事件" />}
+                </button> : <span className="muted">运行已结束</span>}
             </footer>
         </section>
     );

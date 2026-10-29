@@ -1,5 +1,5 @@
-import { TOOLS } from "./model";
-import type { EventRecord, Observation } from "./types";
+import { isActive, TOOLS } from "./model";
+import type { EventRecord, Job, Observation } from "./types";
 import { withMonsterStages } from "./monsterModel";
 import type { MonsterStages } from "./monsterModel";
 
@@ -34,6 +34,15 @@ export interface WatchPosition {
     frozen?: WatchPage;
 }
 export const livePosition: WatchPosition = { attempt: null, cursor: null };
+export function watchPresentation(job: Job, following: boolean) {
+    const active = isActive(job);
+    const finalLabel = job.status === "completed" ? "最终局面" : "最后记录局面";
+    return {
+        realtime: active && following,
+        label: following ? active ? "实时局面" : finalLabel : "历史局面",
+        returnLabel: active ? "返回实时" : `返回${finalLabel}`,
+    };
+}
 export interface WatchFrame {
     cursor: number;
     record: WatchRecord;

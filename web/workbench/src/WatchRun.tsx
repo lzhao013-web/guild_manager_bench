@@ -1,3 +1,4 @@
+import { runNotice } from "./runNotice";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@radix-ui/themes";
@@ -18,7 +19,8 @@ import {
     ChartLineUp,
 } from "@phosphor-icons/react";
 import { api, useLiveWatch } from "./api";
-import { duration, fmt, isActive, modelEntries, PHASE, time } from "./model";
+import { fmt, isActive, modelEntries, PHASE, time } from "./model";
+import { ElapsedTime } from "./ElapsedTime";
 import { Empty, JsonDetails, StatusBadge, Trend } from "./ui";
 import { ChangeValue } from "./motion";
 import { WatchMonitor } from "./WatchMonitor";
@@ -28,6 +30,7 @@ import type { ActionEntry } from "./actionModel";
 import { TrajectoryProvider } from "./TrajectoryContext";
 import type { TrajectoryPage } from "./trajectoryModel";
 import { RunWorkspace } from "./RunWorkspace";
+import { RunId } from "./RunId";
 import type { RunModule, WatchFocus } from "./sceneNavigation";
 import { SceneMaterials } from "./SceneMaterials";
 import { MaterialExchangeStatus } from "./MaterialExchangeStatus";
@@ -37,6 +40,7 @@ import {
     isWatchEvent,
     livePosition,
     watchFrames,
+    watchPresentation,
 } from "./watchModel";
 import type { WatchFrame, WatchPage, WatchPosition, WatchRecord } from "./watchModel";
 import type { EventPage, EventRecord, Job } from "./types";
@@ -51,6 +55,7 @@ interface ModelReasoningTarget { call: number; title: string }
 
 export function WatchRun({
     job,
+    runId,
     position,
     onPosition,
     compact = false,
@@ -64,6 +69,7 @@ export function WatchRun({
     initialFocus,
 }: {
     job: Job;
+    runId: string;
     position: WatchPosition;
     onPosition: (position: WatchPosition) => void;
     compact?: boolean;
@@ -77,6 +83,7 @@ export function WatchRun({
     pinned?: boolean;
 }) {
     const following = position.attempt === null;
+    const presentation = watchPresentation(job, following);
     const [utility, setUtility] = useState(false);
     const [historyRequested, setHistoryRequested] = useState(initialFocus?.actionView === "timeline" || initialFocus?.actionView === "search");
     const [reasoningTarget, setReasoningTarget] = useState<(ModelReasoningTarget & { page: WatchPage }) | null>(null);
@@ -127,6 +134,7 @@ export function WatchRun({
         [frames, cutoff],
     );
     const observation = frame?.observation || null;
+    const historyNotice = page?.origin ? runNotice((page as TrajectoryPage).warning) : null;
     const actionsVisible = activeModule === "actions";
 
     const navigation = useRef<AbortController | null>(null);
@@ -202,12 +210,14 @@ export function WatchRun({
     const runtime = (
         <div className="spectator-runtime">
             <StatusBadge status={job.status} turn={job.turn} maxTurns={job.max_turns} />
-            <span>{PHASE[job.phase] || job.phase}</span>
-            {isActive(job) && <span className="mono">{duration(job.phase_started_at)}</span>}
-            <span className="runtime-budget">工具预算 {job.budget ? `${job.budget.used} / ${job.budget.max_tool_calls}` : "未记录"}</span>
+            {isActive(job) && <>
+                <span>{PHASE[job.phase] || job.phase}</span>
+                <span className="mono"><ElapsedTime start={job.phase_started_at} live /></span>
+                <span className="runtime-budget">工具预算 {job.budget ? `${job.budget.used} / ${job.budget.max_tool_calls}` : "未记录"}</span>
+            </>}
         </div>
     );
-    if (compact) return <WatchMonitor job={job} page={page} live={live.data} frame={frame} frames={frames} records={modelRecords}
+    if (compact) return <WatchMonitor job={job} runId={runId} page={page} live={live.data} frame={frame} frames={frames} records={modelRecords}
         position={position} hasNew={hasNew} loading={loading} failure={failure}
         onRetry={() => void (following ? live : history).refetch()} onPosition={onPosition} onFrame={chooseFrame} onPause={pause}
         onStop={onStop} onFocus={onFocus} onPin={onPin} onClose={onClose} pinned={pinned} />;
@@ -219,7 +229,7 @@ export function WatchRun({
         >
             <header className="spectator-header">
                 <div className="spectator-title">
-                    <span className="subtle-label">{job.batch_name}</span>
+                    <RunId id={runId} />
                     <h2 title={job.name}>{job.name}</h2>
                     <span className="muted" title={`${job.config.provider} / ${job.config.model || "环境配置模型"}`}>
                         {job.config.provider} / {job.config.model || "环境配置模型"}
@@ -272,15 +282,13 @@ export function WatchRun({
                     <i />
                 </div>
             ) : !page?.records.length ? (
-                <Empty title={job.status === "queued" ? "等待任务开始" : "尚无观战事件"}>
-                    任务初始化后会显示真实局面和行动，不会为观战额外请求模型。
-                </Empty>
+                <Empty title={job.status === "queued" ? "等待任务开始" : "尚无观战记录"} />
             ) : (
                 <>
                     <div className="spectator-statusbar">
-                    <div className={`spectator-viewpoint ${following ? "is-live" : "is-history"}`}>
-                        {following ? <Broadcast size={15} /> : <Clock size={15} />}
-                        <strong>{following ? "实时局面" : "历史局面"}</strong>
+                    <div className={`spectator-viewpoint ${presentation.realtime ? "is-live" : following ? "is-final" : "is-history"}`}>
+                        {presentation.realtime ? <Broadcast size={15} /> : <Clock size={15} />}
+                        <strong>{presentation.label}</strong>
                         <span>
                             {selected ? attemptLabel(selected) : "准备中"}
                             {selected?.status === "rolled_back" ? " / 已回滚" : ""}
@@ -330,13 +338,13 @@ export function WatchRun({
                     </div>
                     </div>
                     {locationError && <p role="alert" className="spectator-notice">历史定位失败：{locationError}</p>}
-                    {page.origin && <p className="spectator-notice">正在查看{page.origin === "archive" ? "整局归档" : "当前运行阶段"}的真实历史，仅切换观看位置，不改变任务状态。{(page as TrajectoryPage).warning}</p>}
+                    {historyNotice && <p className="spectator-notice">{historyNotice}</p>}
                     {selected?.status === "rolled_back" && (
                         <p className="spectator-notice">
-                            本次尝试已回滚。这里保留当时的真实记录，不代表当前任务局面。
+                            这次尝试已撤销，正在回看当时的局面。
                         </p>
                     )}
-                    {observation && selected?.turn != null && observation.turn > selected.turn && (
+                    {observation && selected?.turn != null && observation.turn > selected.turn && !(following && job.status === "completed" && observation.finished) && (
                         <p className="spectator-notice">
                             {observation.finished
                                 ? "最终局面"
@@ -400,7 +408,7 @@ export function WatchRun({
                         <CaretRight />
                     </button>
                 </div>
-                {following ? (
+                {following && isActive(job) ? (
                     <button
                         className="watch-follow active"
                         onClick={pause}
@@ -409,12 +417,12 @@ export function WatchRun({
                         <Pause size={15} />
                         暂停跟随
                     </button>
-                ) : (
+                ) : !following ? (
                     <button className="watch-follow" onClick={returnLive}>
-                        <Broadcast size={15} />
-                        返回实时{hasNew ? "（有新事件）" : ""}
+                        {isActive(job) ? <Broadcast size={15} /> : <Clock size={15} />}
+                        {presentation.returnLabel}{isActive(job) && hasNew ? "（有新事件）" : ""}
                     </button>
-                )}
+                ) : null}
             </div>
             <footer className="detail-footer spectator-footer">
                 <Button
@@ -459,8 +467,7 @@ export function WatchRun({
             {utility && (
                 <section className="spectator-utility">
                     <div className="spectator-column-title">
-                        <h3>实时运行信息</h3>
-                        <span>不随历史局面回退</span>
+                        <h3>{isActive(job) ? "实时运行信息" : "最终运行信息"}</h3>
                     </div>
                     <p>
                         最近活动 {time(job.updated_at)} / 最近存档 {time(job.checkpoint_at)}
@@ -539,9 +546,9 @@ function ModelPanel({
         <details className="reasoning model-linked-reasoning" key={model.key} ref={reasoning}>
             <summary>API 提供的推理文本或摘要</summary>
             {model.reasoning ? <>
-                {reasoningTarget && returnedTools && returnedTools.length > 1 && <p className="model-reasoning-note">本次响应包含 {returnedTools.length} 个工具调用，共享以下 API 推理记录，日志没有逐工具的独立思考区间。</p>}
+                {reasoningTarget && returnedTools && returnedTools.length > 1 && <p className="model-reasoning-note">这 {returnedTools.length} 个工具调用共用下面这段模型思考。</p>}
                 <pre>{model.reasoning}</pre>
-            </> : <p className="model-reasoning-note">该调用未记录可读的 API 推理文本或摘要，无法从正文或工具参数还原思考。仍可查看本次正文和已记录的输入、响应。</p>}
+            </> : <p className="model-reasoning-note">这次调用没有保存思考过程。</p>}
         </details>
     );
     return (
@@ -555,7 +562,7 @@ function ModelPanel({
                 <button onClick={onReturnAction}><CaretLeft size={13} />返回该工具</button>
             </div>}
             {!model ? (
-                <p className="scene-empty">{reasoningTarget ? "该日志缺少关联模型调用记录，不能用其它调用代替。" : "该位置尚未发出模型请求"}</p>
+                <p className="scene-empty">{reasoningTarget ? "找不到对应的模型调用记录。" : "该位置尚未发出模型请求"}</p>
             ) : (
                 <div
                     className="spectator-model-content"
@@ -576,7 +583,7 @@ function ModelPanel({
                             </option>
                         ))}
                     </select>
-                    <div className="model-call-config" title="当前 run 的配置，不代表未记录的历史调用配置">
+                    <div className="model-call-config">
                         <span>当前 run 配置</span>
                         <strong>{job.config.model || "服务端默认模型"}</strong>
                         <span>接口 {job.config.provider}</span>
@@ -588,7 +595,7 @@ function ModelPanel({
                         <pre className="watch-model-text">{model.text}</pre>
                     ) : (
                         <p className="scene-empty">
-                            {model.response ? "本次未返回正文，可能仅调用工具。" : "尚未收到正文。"}
+                            {model.response ? "本次回复没有正文。" : "尚未收到正文。"}
                         </p>
                     )}
                     {!reasoningTarget && reasoningPanel}

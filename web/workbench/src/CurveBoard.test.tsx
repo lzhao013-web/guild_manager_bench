@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Theme } from "@radix-ui/themes";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
 import { CurveBoard } from "./CurveBoard";
 import { buildRunCatalog } from "./runCatalog";
 import { testArchive, testJob } from "./test-jobs";
@@ -61,7 +62,9 @@ it("三类曲线统一展示并联动定位，收入与余额可切换，缺回�
     fireEvent.keyDown(screen.getByRole("img", { name: /经济，横轴/ }), { key: "ArrowLeft" });
     expect(screen.getByLabelText("定位对比回合")).toHaveValue(1);
     expect(within(rows[1]).getAllByRole("cell")[2]).toHaveTextContent("0");
-    fireEvent.change(screen.getByLabelText("添加曲线 run"), { target: { value: "archive:cli" } });
+    await userEvent.click(screen.getByRole("button", { name: "添加曲线 run" }));
+    await userEvent.type(screen.getByRole("combobox", { name: /搜索运行名称/ }), "cli");
+    await userEvent.click(screen.getByRole("option", { name: /构造 CLI/ }));
     expect(await within(values).findByText("构造 CLI")).toBeVisible();
     expect(requests.some(path => path.includes("run_id=cli"))).toBe(true);
     expect(requests.every(path => path.startsWith("GET ") && !path.includes("/replay") && !path.includes("/rescore"))).toBe(true);
@@ -117,16 +120,17 @@ it("运行结束和检查点变化后立即追上最后一个回合，不因停�
     expect(screen.getByRole("region", { name: "同回合数值与差值" })).toHaveTextContent("400");
 });
 
-it("相同风险合并但保留每路详情，共同回合按钮只定位实际已记录数值且遵守范围", async () => {
-    const warning = "跨版本执行：历史与当前规则不完全一致，不作同版本标准比较";
+it("去掉比较声明但保留曲线过时提示，共同回合按钮仍定位已记录数值且遵守范围", async () => {
+    const warning = "跨版本执行：历史与当前规则不完全一致，不作同版本标准比较。当前回放暂不可读或格式不符，保留上次成功读取的曲线";
     setup(false, false, [], {
         a: { ...data([point(1), point(2), point(4)]), warning },
         b: { ...data([point(1, 2), point(3, 2), { ...point(4, 2), gold_income: null }]), warning },
     });
     const values = await screen.findByRole("region", { name: "同回合数值与差值" });
     await waitFor(() => expect(values).toHaveTextContent("800"));
-    const risk = screen.getByLabelText("曲线风险提示");
-    expect(risk.querySelector("summary")).toHaveTextContent(`2 个 run：${warning}`);
+    const risk = screen.getByLabelText("曲线数据提示");
+    expect(risk.querySelector("summary")).toHaveTextContent("2 个 run：曲线更新失败，暂时显示上次的数据");
+    expect(screen.queryByText(/同版本标准比较/)).not.toBeInTheDocument();
     expect(risk).not.toHaveAttribute("open");
     fireEvent.click(risk.querySelector("summary")!);
     expect(within(risk).getByText(/构造模型 A/)).toBeVisible();
@@ -147,9 +151,23 @@ it("相同风险合并但保留每路详情，共同回合按钮只定位实际�
     expect(screen.getByText("当前范围内没有共同已记录的三项指标回合")).toBeVisible();
 });
 
+it.each(["条件资料缺失", "规则、种子与上限不同"])("%s时正常展示曲线和差值，不显示比较条件提示", async scenario => {
+    const first = { ...data([point(1), point(3)]), milestones: [], warning: "跨版本执行：历史与当前规则不完全一致，不作同版本标准比较" };
+    const second = { ...data([point(1, 2), point(3, 2)]), milestones: [],
+        conditions: scenario === "条件资料缺失" ? {} : { ...first.conditions, protocol_hash: "other", game_seed: 99 },
+        max_turns: 35 };
+    setup(false, false, [], { a: first, b: second });
+    const values = await screen.findByRole("region", { name: "同回合数值与差值" });
+    await waitFor(() => expect(values).toHaveTextContent("600"));
+    expect(values).toHaveTextContent("差值 +299.8766");
+    expect(screen.getByRole("region", { name: "战力曲线" })).toBeVisible();
+    expect(screen.queryByText(/部分规则信息|仅供并列查看|同条件/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("曲线数据提示")).not.toBeInTheDocument();
+});
+
 it("没有结算数据时显示原因，不画三张空图或假曲线", async () => {
     setup(true);
-    expect(await screen.findByText("尚无可读取的结算曲线", { exact: true })).toBeVisible();
+    expect(await screen.findByText("暂无曲线数据", { exact: true })).toBeVisible();
     expect(screen.queryByRole("region", { name: "经济曲线" })).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "同回合数值与差值" })).not.toBeInTheDocument();
 });

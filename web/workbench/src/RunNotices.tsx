@@ -60,7 +60,7 @@ export function RunNotices({ config, data }: Pick<Job, "config" | "data">) {
             <header><strong>{detail.label}</strong><Popover.Close><button type="button" aria-label="关闭运行信息"><X size={14} /></button></Popover.Close></header>
             <p>{detail.kind === "rerun"
                 ? `从 T${config.rerun_from_turn} 开局分支重跑，来源：${config.rerun_run_id}。原记录保持不变。`
-                : "跨版本执行：历史与当前规则不完全一致，不作为同版本标准评测比较。"}</p>
+                : "这次运行续跑时使用了不同版本的游戏规则。"}</p>
         </Popover.Content>}
     </Popover.Root>;
 }
