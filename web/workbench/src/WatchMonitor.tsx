@@ -11,6 +11,7 @@ import { ModelCallStats } from "./ModelCallStats";
 import { MaterialExchangeStatus } from "./MaterialExchangeStatus";
 import { monsterClassification } from "./monsterModel";
 import { StatusBadge } from "./ui";
+import { ChangeValue } from "./motion";
 import { MonitorPreviews } from "./MonitorPreviews";
 import { ATTEMPT_STATUS, attemptLabel, livePosition } from "./watchModel";
 import type { WatchFrame, WatchPage, WatchPosition, WatchRecord } from "./watchModel";
@@ -63,7 +64,7 @@ export function WatchMonitor({ job, page, live, frame, frames, records, position
                 <div className="monitor-identity">
                     <h2 title={`${job.name}\n${job.config.provider} / ${job.config.model}\n${job.config.preset} / ${job.batch_name}`}>{job.name}</h2>
                     <div className="monitor-stage">
-                        <StatusBadge status={job.status} />
+                        <StatusBadge status={job.status} turn={job.turn} maxTurns={job.max_turns} />
                         {warning ? <span className={`monitor-warning ${failure || job.checkpoint_error || job.status === "failed" ? "is-error" : ""}`} title={warning} role={failure || job.checkpoint_error || job.status === "failed" ? "alert" : "status"}>{warning}</span> :
                             <span className="monitor-phase" title={`${PHASE[job.phase] || job.phase}${isActive(job) ? ` · ${duration(job.phase_started_at)}` : ""}`}>{PHASE[job.phase] || job.phase}{isActive(job) && ` · ${duration(job.phase_started_at)}`}</span>}
                         <span className="monitor-budget" title="实时工具预算，不随历史位置回退">工具 {job.budget ? `${job.budget.used}/${job.budget.max_tool_calls}` : "未记录"}</span>
@@ -81,10 +82,10 @@ export function WatchMonitor({ job, page, live, frame, frames, records, position
                 <div className={`spectator-viewpoint ${following ? "is-live" : "is-history"}`} title={selected ? attemptLabel(selected) : "等待初始化"}>
                     {following ? <Broadcast size={12} /> : <Pause size={12} />}<strong>{following ? "实时局面" : "历史局面"}</strong>
                 </div>
-                <span className="monitor-score" title={`已记录评分 ${fmt(frame?.score)}`}><ChartLineUp size={12} />{fmt(frame?.score)}</span>
-                <span title={`金币 ${fmt(observation?.gold)}`}><Coins size={12} /><b>{observation ? short(observation.gold) : "未知"}</b></span>
-                <span title={`经验池 ${fmt(observation?.experience_pool)}`}><Sparkle size={12} /><b>{observation ? short(observation.experience_pool) : "未知"}</b></span>
-                <button title="查看完整编队" aria-label="展开编队" disabled={!onFocus} onClick={() => inspect({ module: "party" })}><UsersThree size={12} />{observation ? `${observation.adventurers.length}/${observation.party_size_limit}` : "未知"}{observation && observation.adventurers.length > 6 ? "（显示6位）" : ""}</button>
+                <span className="monitor-score" title={`已记录评分 ${fmt(frame?.score)}`}><ChartLineUp size={12} /><ChangeValue value={frame?.score ?? "unknown"}>{fmt(frame?.score)}</ChangeValue></span>
+                <span title={`金币 ${fmt(observation?.gold)}`}><Coins size={12} /><b><ChangeValue value={observation?.gold ?? "unknown"}>{observation ? short(observation.gold) : "未知"}</ChangeValue></b></span>
+                <span title={`经验池 ${fmt(observation?.experience_pool)}`}><Sparkle size={12} /><b><ChangeValue value={observation?.experience_pool ?? "unknown"}>{observation ? short(observation.experience_pool) : "未知"}</ChangeValue></b></span>
+                <button title="查看完整编队" aria-label="展开编队" disabled={!onFocus} onClick={() => inspect({ module: "party" })}><UsersThree size={12} /><ChangeValue value={observation ? `${observation.adventurers.length}/${observation.party_size_limit}` : "unknown"}>{observation ? `${observation.adventurers.length}/${observation.party_size_limit}` : "未知"}</ChangeValue>{observation && observation.adventurers.length > 6 ? "（显示6位）" : ""}</button>
                 {observation?.material_exchange && <MaterialExchangeStatus turn={observation.turn} exchange={observation.material_exchange} />}
             </div>
             {loading ? <div className="monitor-empty" aria-label="正在读取观战历史">正在读取局面…</div> : !page?.records.length ? (
@@ -113,7 +114,7 @@ export function WatchMonitor({ job, page, live, frame, frames, records, position
                     {monsters && monsters.length > 4 && <button className="monitor-more" aria-label={`查看全部 ${monsters.length} 个怪物`} disabled={!onFocus} onClick={() => inspect({ module: "monsters" })}>+{monsters.length - 4}</button>}
                     {monsters?.length === 0 && <span className="muted">此时没有怪物记录</span>}
                 </section>
-                <MonitorPreviews observation={observation || null} frame={frame} frames={frames} onFrame={onFrame} onFocus={onFocus} />
+                <MonitorPreviews observation={observation || null} frame={frame} frames={frames} onFrame={onFrame} onFocus={onFocus} live={following && isActive(job)} />
                 <button className={`monitor-model ${text ? "has-output" : "is-pending"}`} aria-label="查看完整模型输出" title={body} disabled={!onFocus} onClick={() => inspect({ module: "models" })}>
                     <span className="monitor-row-label">{!model?.text && model?.reasoning ? "推理" : "模型"}</span>
                     <span className="monitor-model-content">

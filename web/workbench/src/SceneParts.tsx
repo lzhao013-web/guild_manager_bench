@@ -14,6 +14,7 @@ import {
     MagicWand,
 } from "@phosphor-icons/react";
 import { fmt } from "./model";
+import { ChangeValue } from "./motion";
 import { conditionText, effectText, signed, STAT_NAMES, statEntries } from "./sceneModel";
 import type { SceneSkill } from "./sceneModel";
 import type { GameEntity } from "./types";
@@ -66,10 +67,12 @@ export function Vital({
                     {mana ? <Sparkle size={11} /> : <Heart size={11} />}
                     {label}
                 </span>
-                <b className="mono">
-                    {fmt(value)} <span>/ {fmt(max)}</span>
-                    {delta != null && delta !== 0 && <em>{signed(delta)}</em>}
-                </b>
+                <ChangeValue value={`${value}/${max}`}>
+                    <b className="mono">
+                        {fmt(value)} <span>/ {fmt(max)}</span>
+                        {delta != null && delta !== 0 && <em>{signed(delta)}</em>}
+                    </b>
+                </ChangeValue>
             </div>
             <div
                 className="vital-track"
@@ -84,7 +87,7 @@ export function Vital({
                       }
                     : { "aria-hidden": true as const })}
             >
-                <i style={{ "--fill": `${ratio}%` } as CSSProperties} />
+                <i style={{ "--fill": ratio / 100 } as CSSProperties} />
             </div>
         </div>
     );

@@ -181,6 +181,9 @@
     gap: 3px;
     color: var(--gray-11);
 }
+.scene-vital > div > .change-value {
+    color: var(--gray-12);
+}
 .scene-vital b {
     font-size: var(--wb-text-xs);
     font-weight: 500;
@@ -204,10 +207,17 @@
 }
 .vital-track i {
     display: block;
-    width: var(--fill);
+    width: 100%;
     height: 100%;
     border-radius: inherit;
     background: var(--green-9);
+    transform: scaleX(var(--fill));
+    transform-origin: left;
+}
+@media (prefers-reduced-motion: no-preference) {
+    .vital-track i {
+        transition: transform 220ms var(--wb-motion-ease);
+    }
 }
 .mana .vital-track i {
     background: var(--blue-9);

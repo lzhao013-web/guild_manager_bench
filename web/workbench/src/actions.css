@@ -41,7 +41,7 @@
 .action-group > summary > span { display: block; margin-top: 3px; font-size: 10px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .action-group > summary > b { font-size: 10px; font-weight: 500; color: var(--red-11); }
 .action-group.is-system { background: var(--gray-3); }
-.action-detail { min-width: 0; min-height: 0; padding: 16px 20px; overflow: auto; scrollbar-width: thin; font-size: 12px; }
+.action-detail { min-width: 0; min-height: 0; padding: 16px 20px; overflow: auto; scrollbar-width: thin; font-size: 12px; animation: wb-detail-enter var(--wb-motion-base) var(--wb-motion-ease); }
 .action-detail > header h3 { font-size: 17px; line-height: 1.6; margin: 6px 0 9px; overflow-wrap: anywhere; }
 .action-detail-meta { color: var(--gray-11); font-size: 10px; }
 .action-model-link { display: inline-flex; align-items: center; gap: 4px; padding: 4px 7px; border: 1px solid var(--accent-6); border-radius: 4px; background: var(--accent-3); color: var(--accent-11); font: inherit; font-size: 11px; cursor: pointer; }

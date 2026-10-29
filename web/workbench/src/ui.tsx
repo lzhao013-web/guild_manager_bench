@@ -9,8 +9,13 @@ import {
 } from "@phosphor-icons/react";
 import type { Job } from "./types";
 import { STATUS } from "./model";
+import { ChangeValue } from "./motion";
 
-export function StatusBadge({ status }: { status: Job["status"] }) {
+export function StatusBadge({ status, turn, maxTurns }: {
+    status: Job["status"];
+    turn?: number | null;
+    maxTurns?: number | null;
+}) {
     const Icon =
         status === "completed"
             ? CheckCircle
@@ -25,11 +30,26 @@ export function StatusBadge({ status }: { status: Job["status"] }) {
                     : CircleNotch;
     return (
         <span className={`status status-${status}`}>
-            <Icon size={14} weight="bold" />
-            {STATUS[status]}
+            <ChangeValue value={status} className="status-content" variant="enter">
+                {status === "running" && turn != null && turn > 0 && maxTurns != null && maxTurns > 0
+                    ? <TurnProgressRing turn={turn} total={maxTurns} />
+                    : <Icon size={14} weight="bold" />}
+                {STATUS[status]}
+            </ChangeValue>
         </span>
     );
 }
+
+function TurnProgressRing({ turn, total }: { turn: number; total: number }) {
+    const completed = Math.round(Math.min(1, Math.max(0, turn / total)) * 10000) / 100;
+    return <svg className="status-progress-ring" width="14" height="14" viewBox="0 0 16 16"
+        aria-hidden="true" focusable="false">
+        <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="2"
+            pathLength="100" strokeDasharray={`${completed} ${100 - completed}`}
+            transform="rotate(-90 8 8)" />
+    </svg>;
+}
+
 export function Empty({
     title,
     children,
@@ -54,15 +74,17 @@ export function Metric({
     label,
     value,
     note,
+    changeValue,
 }: {
     label: string;
     value: ReactNode;
     note?: string;
+    changeValue?: unknown;
 }) {
     return (
         <div className="metric">
             <span>{label}</span>
-            <strong>{value}</strong>
+            <strong>{changeValue === undefined ? value : <ChangeValue value={changeValue}>{value}</ChangeValue>}</strong>
             {note && <small>{note}</small>}
         </div>
     );

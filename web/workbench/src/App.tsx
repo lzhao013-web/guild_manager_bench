@@ -22,7 +22,6 @@ import {
     Command,
     CaretRight,
     ChartLineUp,
-    X,
 } from "@phosphor-icons/react";
 import { api } from "./api";
 import {
@@ -46,6 +45,8 @@ import type { WatchPosition } from "./watchModel";
 import type { WatchFocus } from "./sceneNavigation";
 import { ApiProfilesPanel, readApiProfiles } from "./ApiProfiles";
 import { Empty, StatusBadge, Trend } from "./ui";
+import { ChangeValue } from "./motion";
+import { RunResultNotice } from "./RunResultNotice";
 import type { ApiProfile, Archive, HistoryDeletion, Job, Settings, Snapshot } from "./types";
 
 type Section =
@@ -573,11 +574,9 @@ export default function App() {
                                     </span>
                                 </summary>
                                 <div className="run-result-menu">
-                                    {notices.map(notice => <div key={notice.key} className={`run-result-notice ${notice.status === "failed" ? "is-failed" : ""}`}>
-                                        <span><strong>{notice.name}</strong> {STATUS[notice.status]}，已移至历史存档。</span>
-                                        <button className="text-button" onClick={() => openHistory(catalog.byId.get(notice.key))}>查看结果</button>
-                                        <button className="notice-dismiss" aria-label={`关闭 ${notice.name} 的结果通知`} onClick={() => setNotices(items => items.filter(item => item.key !== notice.key))}><X size={16} /></button>
-                                    </div>)}
+                                    {notices.map(notice => <RunResultNotice key={notice.key} name={notice.name} status={notice.status}
+                                        onOpen={() => openHistory(catalog.byId.get(notice.key))}
+                                        onDismiss={() => setNotices(items => items.filter(item => item.key !== notice.key))} />)}
                                 </div>
                             </details>}
                             <button
@@ -639,18 +638,18 @@ export default function App() {
                                 <div className="summary-strip" role="group" aria-label="运行统计">
                                     <button className={filter === "active" ? "active" : ""} aria-pressed={filter === "active"}
                                         onClick={() => setFilter(filter === "active" ? "all" : "active")}>
-                                        <span>执行中</span>{" "}<span className="summary-value">{running.length}</span>
+                                        <span>执行中</span>{" "}<ChangeValue value={running.length} className="summary-value">{running.length}</ChangeValue>
                                     </button>
                                     <button className={filter === "queued" ? "active" : ""} aria-pressed={filter === "queued"}
                                         onClick={() => setFilter("queued")}>
-                                        <span>等待队列</span>{" "}<span className="summary-value">{queued.length}</span>
+                                        <span>等待队列</span>{" "}<ChangeValue value={queued.length} className="summary-value">{queued.length}</ChangeValue>
                                     </button>
                                     <button className={filter === "attention" ? "active" : ""} aria-pressed={filter === "attention"}
                                         onClick={() => setFilter("attention")}>
-                                        <span>存档异常</span>{" "}<span className={`summary-value ${attention.length ? "error-text" : ""}`}>{attention.length}</span>
+                                        <span>存档异常</span>{" "}<ChangeValue value={attention.length} className={`summary-value ${attention.length ? "error-text" : ""}`}>{attention.length}</ChangeValue>
                                     </button>
                                     <div className="scheduler-meter">
-                                        <span>并发</span><strong className="mono">{running.length} / {query.data.settings.max_parallel}</strong>
+                                        <span>并发</span><strong className="mono"><ChangeValue value={running.length}>{running.length}</ChangeValue> / {query.data.settings.max_parallel}</strong>
                                         <button onClick={() => setSection("settings")} aria-label="调整并发设置"><Sliders size={15} /></button>
                                     </div>
                                 </div>
@@ -1119,9 +1118,9 @@ export default function App() {
                                                                                 </td>
                                                                                 <td>
                                                                                     <StatusBadge
-                                                                                        status={
-                                                                                            job.status
-                                                                                        }
+                                                                                        status={job.status}
+                                                                                        turn={job.turn}
+                                                                                        maxTurns={job.max_turns}
                                                                                     />
                                                                                     <div className="phase-text">
                                                                                         {PHASE[
@@ -1150,32 +1149,21 @@ export default function App() {
                                                                                     )}
                                                                                 </td>
                                                                                 <td className="mono turn-cell">
-                                                                                    {job.turn ==
-                                                                                    null ? (
-                                                                                        "待启动"
-                                                                                    ) : (
-                                                                                        <>
-                                                                                            {
-                                                                                                job.turn
-                                                                                            }
-                                                                                            <span>
-                                                                                                {" "}
-                                                                                                /{" "}
-                                                                                                {
-                                                                                                    job.max_turns
-                                                                                                }
-                                                                                            </span>
-                                                                                        </>
-                                                                                    )}
+                                                                                    <ChangeValue value={job.turn ?? "pending"}>
+                                                                                        {job.turn == null ? "待启动" : <>
+                                                                                            {job.turn}
+                                                                                            <span className="turn-max"> / {job.max_turns}</span>
+                                                                                        </>}
+                                                                                    </ChangeValue>
                                                                                 </td>
                                                                                 <td className="run-duration mono" title="已记录的模型调用累计耗时，不含排队、工具执行、评分和中断等待">
                                                                                     {milliseconds(job.model_duration_ms ?? null)}
                                                                                 </td>
                                                                                 <td>
                                                                                     <div className="score-value mono">
-                                                                                        {fmt(
-                                                                                            job.last_score,
-                                                                                        )}
+                                                                                        <ChangeValue value={job.last_score ?? "unknown"}>
+                                                                                            {fmt(job.last_score)}
+                                                                                        </ChangeValue>
                                                                                     </div>
                                                                                     <Trend
                                                                                         points={

@@ -141,9 +141,19 @@ def main():
             # 整局索引也必须保留原调用输入，而不只在所选回合中有效。
             page.get_by_role("button", name="整局检索", exact=True).click()
             page.get_by_label("筛选轨迹操作", exact=True).select_option("allocate_experience")
-            page.get_by_role("button", name=f"查看轨迹 回合1 {summaries['allocate_experience']}", exact=True).click()
+            located = page.get_by_role("button", name=f"查看轨迹 回合1 {summaries['allocate_experience']}", exact=True)
+            located.click()
             expect(detail.get_by_role("region", name="输入参数", exact=True)).to_contain_text("分配经验数量")
             expect(detail.get_by_role("region", name="输入参数", exact=True)).to_contain_text("100")
+            assert detail.evaluate("element => getComputedStyle(element).animationName") == "wb-detail-enter"
+            assert located.evaluate("element => getComputedStyle(element, '::after').animationName") == "wb-locate-highlight"
+            mode = page.get_by_role("button", name="整局检索", exact=True)
+            assert mode.evaluate("element => getComputedStyle(element).transitionDuration") != "0s"
+            page.emulate_media(reduced_motion="reduce")
+            assert detail.evaluate("element => getComputedStyle(element).animationName") == "none"
+            assert located.evaluate("element => getComputedStyle(element, '::after').animationName") == "none"
+            assert mode.evaluate("element => getComputedStyle(element).transitionDuration") == "0s"
+            page.emulate_media(reduced_motion="no-preference")
             page.screenshot(path=str(directory / "whole-run-parameters-light.png"), full_page=True)
             page.get_by_role("button", name="所选回合", exact=True).click()
             timeline.locator(".action-entry").filter(has_text="配置主动技能").click()

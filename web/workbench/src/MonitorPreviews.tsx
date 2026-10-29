@@ -9,6 +9,7 @@ import type { ActionEntry } from "./actionModel";
 import type { WatchFocus } from "./sceneNavigation";
 import type { Observation } from "./types";
 import type { WatchFrame } from "./watchModel";
+import { useNewItemKeys } from "./motion";
 
 interface PreviewLayout { tiles: boolean; columns: number; rows: number; details: boolean; inlineProgress: boolean; roomy: boolean }
 function layoutFor(width: number, height: number, cards: number): PreviewLayout {
@@ -22,12 +23,13 @@ function layoutFor(width: number, height: number, cards: number): PreviewLayout 
     return { tiles, columns, details, roomy, inlineProgress: false, rows: Math.min(8, Math.max(1, Math.floor((tileHeight - (roomy ? 36 : 28)) / (roomy ? 48 : details ? 36 : 20)))) };
 }
 
-export function MonitorPreviews({ observation, frame, frames, onFrame, onFocus }: {
+export function MonitorPreviews({ observation, frame, frames, onFrame, onFocus, live = false }: {
     observation: Observation | null;
     frame: WatchFrame | undefined;
     frames: WatchFrame[];
     onFrame: (frame: WatchFrame) => void;
     onFocus?: (target?: WatchFocus) => void;
+    live?: boolean;
 }) {
     const { groups, opportunities } = useMemo(() => businessPreviews(observation), [observation]);
     const progress = useMemo(() => previewProgress(frames, frame), [frames, frame]);
@@ -45,11 +47,12 @@ export function MonitorPreviews({ observation, frame, frames, onFrame, onFocus }
         observer.observe(node);
         return () => observer.disconnect();
     }, [groups.length]);
-    const action = (item: ActionEntry, current = false) => <button key={item.frame.cursor} className={`${current ? "monitor-current" : ""} ${item.status === "failed" ? "failed" : ""}`}
+    const action = (item: ActionEntry, current = false) => <button key={item.frame.cursor} className={`${current ? "monitor-current" : ""} ${item.status === "failed" ? "failed" : ""} ${newEntries.has(item.frame.cursor) ? "motion-new" : ""}`}
         aria-label={`定位行动 ${item.title}`} title={`${item.title} ${actionSummary(item)}`} onClick={() => onFrame(item.frame)}>
         <span className="monitor-row-label">{item.rolledBack ? "已回滚" : item.status === "failed" ? "失败" : item.status === "pending" ? "执行中" : item.kind === "system" ? "提示" : item.kind === "query" ? "查询" : "行动"}</span><strong>{item.title}</strong><span className="monitor-action-summary">{actionSummary(item)}</span>
     </button>;
     const previewActions = progress.actions.length ? progress.actions : progress.query ? [progress.query] : [];
+    const newEntries = useNewItemKeys(previewActions.map(item => item.frame.cursor), live);
     const queryNote = layout.tiles && !layout.inlineProgress && layout.rows > 1 && (!progress.actions.length || progress.queryOnly);
     const actionLimit = layout.tiles && !layout.inlineProgress ? Math.max(1, layout.rows - (queryNote ? 1 : 0)) : 1;
     const actions = <section className="monitor-actions" aria-label="行动摘要">

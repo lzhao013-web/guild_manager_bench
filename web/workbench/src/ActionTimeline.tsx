@@ -10,6 +10,7 @@ import { ActionResults } from "./ActionResultPanel";
 import { inputPreview } from "./actionInputs";
 import type { ActionEntry } from "./actionModel";
 import { time } from "./model";
+import { useNewItemKeys } from "./motion";
 import { ToolCallFilters, ToolCallSummary } from "./ToolCallSummary";
 import { matchesTool, summarizeToolCalls, toolCategoryLabel } from "./toolCalls";
 import type { ToolCallStatus } from "./toolCalls";
@@ -45,6 +46,7 @@ export function ActionTimeline({ frames, frame, active, following, rolledBack, o
     const selected = detailFrame && (recent.entries.find(entry => entry.frame.cursor === detailFrame.cursor) || describeAction(detailFrame));
     const actions = entries.filter(entry => entry.kind === "action");
     const queries = entries.filter(entry => entry.kind === "query");
+    const newEntries = useNewItemKeys(entries.map(entry => entry.frame.cursor), following && active);
     const viewport = useRef<HTMLDivElement>(null);
     const scroll = useRef(0);
     const previousFrame = useRef<number | undefined>(undefined);
@@ -62,7 +64,7 @@ export function ActionTimeline({ frames, frame, active, following, rolledBack, o
     function row(entry: ActionEntry) {
         const isSelected = entry.frame.cursor === frame?.cursor || entry.start === frame?.cursor;
         return <button key={entry.frame.cursor} aria-label={`定位行动 ${entry.title}`} aria-pressed={isSelected}
-            className={`spectator-step action-entry ${isSelected ? "selected" : ""} ${entry.status === "failed" ? "failed" : ""}`}
+            className={`spectator-step action-entry ${isSelected ? "selected" : ""} ${entry.status === "failed" ? "failed" : ""} ${newEntries.has(entry.frame.cursor) ? "motion-new" : ""}`}
             onClick={() => onFrame(entry.frame)}>
             <span className="action-entry-time mono">{time(entry.frame.record.at)}</span>
             <span><strong>{entry.title}</strong>
@@ -78,7 +80,7 @@ export function ActionTimeline({ frames, frame, active, following, rolledBack, o
         <button aria-pressed={view === "timeline"} onClick={() => { setView("timeline"); onWholeRun?.(); }}>整局时间线</button>
         <button aria-pressed={view === "search"} onClick={() => { setView("search"); onWholeRun?.(); }}>整局检索</button>
     </nav>;
-    const detail = <section className="action-detail" aria-label="所选行动详情">
+    const detail = <section key={selected?.frame.cursor ?? "empty"} className="action-detail" aria-label="所选行动详情">
         {selected ? <>
             <header><span className="subtle-label">{selected.kind === "query" ? "查询记录，不代表修改局面" : selected.kind === "system" ? "运行事件" : "实际操作"}</span>
                 <h3>{selected.title}</h3><div className="action-detail-meta"><span className={`action-status is-${selected.status}`}>{ACTION_STATUS[selected.status]}</span><time className="mono">{time(selected.frame.record.at)}</time>

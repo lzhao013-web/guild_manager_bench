@@ -131,6 +131,7 @@ it("默认同时展示七个模块摘要，展开只占当前工作区，不产�
     expect(screen.queryByRole("region", { name: "装备库概览" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "返回总览" }));
     expect(screen.getByRole("region", { name: "装备库概览" })).toBeVisible();
+    expect(screen.getByRole("region", { name: "编队概览" })).toHaveClass("is-return-target");
     expect(trigger).toHaveFocus();
 });
 

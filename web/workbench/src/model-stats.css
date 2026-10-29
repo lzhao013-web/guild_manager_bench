@@ -28,7 +28,7 @@
 .model-reasoning-source > span { min-width: 0; overflow-wrap: anywhere; }
 .model-reasoning-source strong { font-weight: 550; }
 .model-reasoning-source button { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; padding: 4px 7px; border: 1px solid var(--accent-7); border-radius: 4px; background: var(--color-surface); color: var(--accent-11); font: inherit; font-size: var(--wb-text-xs); cursor: pointer; }
-.model-linked-reasoning[open] { border-inline-start: 2px solid var(--accent-7); padding-inline-start: 10px; }
+.model-linked-reasoning[open] { border-inline-start: 2px solid var(--accent-7); padding-inline-start: 10px; animation: wb-detail-enter var(--wb-motion-base) var(--wb-motion-ease); }
 .model-linked-reasoning > summary { cursor: pointer; }
 .spectator-models .model-linked-reasoning pre { max-height: none; overflow: visible; }
 .model-reasoning-note { white-space: normal; overflow-wrap: anywhere; color: var(--gray-11); font-size: var(--wb-text-sm); line-height: 1.7; margin: 8px 0; }

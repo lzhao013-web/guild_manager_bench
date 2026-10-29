@@ -20,6 +20,7 @@ import {
 import { api, useLiveWatch } from "./api";
 import { duration, fmt, isActive, modelEntries, PHASE, time } from "./model";
 import { Empty, JsonDetails, StatusBadge, Trend } from "./ui";
+import { ChangeValue } from "./motion";
 import { WatchMonitor } from "./WatchMonitor";
 import { ModelCallStats } from "./ModelCallStats";
 import { ActionTimeline } from "./ActionTimeline";
@@ -200,7 +201,7 @@ export function WatchRun({
     );
     const runtime = (
         <div className="spectator-runtime">
-            <StatusBadge status={job.status} />
+            <StatusBadge status={job.status} turn={job.turn} maxTurns={job.max_turns} />
             <span>{PHASE[job.phase] || job.phase}</span>
             {isActive(job) && <span className="mono">{duration(job.phase_started_at)}</span>}
             <span className="runtime-budget">工具预算 {job.budget ? `${job.budget.used} / ${job.budget.max_tool_calls}` : "未记录"}</span>
@@ -295,14 +296,14 @@ export function WatchRun({
                                 <Coins size={14} />
                                 金币
                             </span>
-                            <b>{fmt(observation?.gold)}</b>
+                            <b><ChangeValue value={observation?.gold ?? "unknown"}>{fmt(observation?.gold)}</ChangeValue></b>
                         </div>
                         <div>
                             <span>
                                 <Sparkle size={14} />
                                 经验池
                             </span>
-                            <b>{fmt(observation?.experience_pool)}</b>
+                            <b><ChangeValue value={observation?.experience_pool ?? "unknown"}>{fmt(observation?.experience_pool)}</ChangeValue></b>
                         </div>
                         <div>
                             <span>
@@ -310,9 +311,9 @@ export function WatchRun({
                                 队伍
                             </span>
                             <b>
-                                {observation
-                                    ? `${observation.adventurers.length} / ${observation.party_size_limit}`
-                                    : "未知"}
+                                <ChangeValue value={observation ? `${observation.adventurers.length}/${observation.party_size_limit}` : "unknown"}>
+                                    {observation ? `${observation.adventurers.length} / ${observation.party_size_limit}` : "未知"}
+                                </ChangeValue>
                             </b>
                         </div>
                         <div>
@@ -320,7 +321,7 @@ export function WatchRun({
                                 <ChartLineUp size={14} />
                                 已记录评分
                             </span>
-                            <b>{fmt(frame?.score)}</b>
+                            <b><ChangeValue value={frame?.score ?? "unknown"}>{fmt(frame?.score)}</ChangeValue></b>
                         </div>
                         {observation?.material_exchange && <div className="spectator-materials">
                             <MaterialExchangeStatus turn={observation.turn} exchange={observation.material_exchange} />

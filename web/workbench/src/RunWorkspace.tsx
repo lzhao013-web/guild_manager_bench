@@ -9,6 +9,7 @@ import type { Selection } from "./sceneModel";
 import type { Observation } from "./types";
 import type { RankContributions, WatchFrame, WatchRecord } from "./watchModel";
 import "./workspace.css";
+import { animateModuleEnter } from "./motion";
 
 export function RunWorkspace({
     observation,
@@ -40,12 +41,16 @@ export function RunWorkspace({
     const [visited, setVisited] = useState<RunModule[]>(() => activeModule ? [activeModule] : []);
     const [views, setViews] = useState<SceneViews>(() => activeModule && activeModule !== "actions" && activeModule !== "models"
         ? openSceneView({}, activeModule, observation, initialSelection) : {});
+    const root = useRef<HTMLDivElement>(null);
     const overview = useRef<HTMLDivElement>(null);
     const overviewScroll = useRef(0);
+    const spatialOrigin = useRef<DOMRect | null>(null);
     const heading = useRef<HTMLHeadingElement>(null);
     const returnFocus = useRef<HTMLElement | null>(null);
     const previousModule = useRef<RunModule | null>(null);
+    const returningModule = activeModule === null ? previousModule.current : null;
     useLayoutEffect(() => {
+        let animation: Animation | undefined;
         if (activeModule === null) {
             const panel = overview.current!;
             panel.scrollTop = overviewScroll.current;
@@ -63,12 +68,20 @@ export function RunWorkspace({
             setVisited((previous) => previous.includes(activeModule) ? previous : [...previous, activeModule]);
             if (!document.activeElement?.closest(".workspace-module-toolbar"))
                 heading.current!.focus({ preventScroll: true });
+            const panel = root.current?.querySelector<HTMLElement>(`.module-${activeModule}`);
+            if (panel) animation = animateModuleEnter(panel, spatialOrigin.current);
+            spatialOrigin.current = null;
         }
         previousModule.current = activeModule;
+        return () => animation?.cancel();
     }, [activeModule]);
     function open(module: RunModule, selection?: Selection, slot?: string) {
-        if (activeModule === null && overview.current!.contains(document.activeElement))
+        if (activeModule === null && overview.current!.contains(document.activeElement)) {
             returnFocus.current = document.activeElement as HTMLElement;
+            spatialOrigin.current = returnFocus.current.closest(".overview-module")?.getBoundingClientRect() || null;
+        } else {
+            spatialOrigin.current = null;
+        }
         if (module !== "actions" && module !== "models")
             setViews((previous) => openSceneView(previous, module, observation, selection, slot));
         onModule(module);
@@ -76,7 +89,7 @@ export function RunWorkspace({
     const mounted =
         activeModule && !visited.includes(activeModule) ? [...visited, activeModule] : visited;
     return (
-        <div className={`run-workspace ${activeModule ? "module-expanded" : "at-overview"}`}>
+        <div ref={root} className={`run-workspace ${activeModule ? "module-expanded" : "at-overview"}`}>
             {activeModule && (
                 <header className="workspace-module-toolbar">
                     <button className="workspace-return" onClick={() => onModule(null)}>
@@ -109,7 +122,7 @@ export function RunWorkspace({
                 </header>
             )}
             <div
-                className="workspace-overview-panel"
+                className={`workspace-overview-panel ${returningModule ? "is-returning" : ""}`}
                 hidden={activeModule !== null}
                 ref={overview}
                 onScroll={(event) => {
@@ -120,7 +133,7 @@ export function RunWorkspace({
                 <RunOverview
                     observation={observation}
                     frames={frames}
-                    records={records} live={live}
+                    records={records} live={live} returnModule={returningModule}
                     onOpen={open}
                     onFrame={onFrame}
                 />

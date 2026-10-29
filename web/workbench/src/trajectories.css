@@ -45,7 +45,9 @@
 .trajectory-note, .trajectory-warning { margin: 0; padding: 6px 10px; font-size: 10px; line-height: 1.6; color: var(--gray-11); flex-shrink: 0; }
 .trajectory-warning { color: var(--amber-11); background: var(--amber-3); }
 .trajectory-results { min-height: 0; overflow: auto; flex: 1; scrollbar-width: thin; }
-.trajectory-result { width: 100%; display: flex; align-items: flex-start; text-align: left; gap: 10px; padding: 11px 10px; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; color: var(--gray-12); background: transparent; cursor: pointer; font-family: inherit; }
+.trajectory-result { position: relative; width: 100%; display: flex; align-items: flex-start; text-align: left; gap: 10px; padding: 11px 10px; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; color: var(--gray-12); background: transparent; cursor: pointer; font-family: inherit; }
+.trajectory-result::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 1px var(--accent-8); opacity: 0; pointer-events: none; }
+.trajectory-result[aria-pressed="true"]::after { animation: wb-locate-highlight 720ms var(--wb-motion-ease); }
 .trajectory-result:hover { background: var(--accent-2); }
 .trajectory-result[aria-pressed="true"] { background: var(--accent-3); box-shadow: inset 3px 0 var(--accent-9); }
 .trajectory-result:focus-visible, .trajectory-mode button:focus-visible { outline: 2px solid var(--accent-9); outline-offset: -2px; }

@@ -8,6 +8,10 @@
   --wb-monitor-min-height: 390px;
   --wb-font-sans: "MiSans", -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
   --wb-font-mono: "JetBrains Mono", "MiSans", ui-monospace, "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  --wb-motion-fast: 120ms;
+  --wb-motion-base: 160ms;
+  --wb-motion-exit: 140ms;
+  --wb-motion-ease: cubic-bezier(.2, .8, .2, 1);
   font-family: var(--wb-font-sans);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -79,6 +83,106 @@ a:hover {
 }
 button {
   color: inherit;
+}
+@media (prefers-reduced-motion: no-preference) {
+  button,
+  a,
+  input,
+  select,
+  textarea,
+  summary {
+    transition-property: background-color, border-color, color, box-shadow, opacity;
+    transition-duration: var(--wb-motion-fast);
+    transition-timing-function: var(--wb-motion-ease);
+  }
+  .run-table tbody tr {
+    transition: background-color var(--wb-motion-fast) var(--wb-motion-ease);
+  }
+  .run-table tbody tr td:first-child {
+    transition: box-shadow var(--wb-motion-fast) var(--wb-motion-ease);
+  }
+  .rt-BaseDialogContent[data-state="open"] {
+    animation-duration: var(--wb-motion-base);
+  }
+  .rt-BaseDialogContent[data-state="closed"],
+  .rt-BaseDialogOverlay[data-state="closed"],
+  .rt-BaseDialogOverlay[data-state="closed"]::before {
+    animation-duration: var(--wb-motion-exit);
+  }
+  .inspector-resize-handle::after {
+    transition: opacity var(--wb-motion-fast) var(--wb-motion-ease);
+  }
+}
+@keyframes wb-detail-enter {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes wb-locate-highlight {
+  0% { opacity: 0; }
+  18% { opacity: .9; }
+  100% { opacity: 0; }
+}
+@keyframes wb-value-highlight {
+  0% { opacity: 0; }
+  20% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes wb-status-change {
+  from { opacity: .35; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes wb-status-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes wb-timeline-enter {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes wb-inspector-enter {
+  from { opacity: 0; transform: translateX(8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes wb-notice-enter {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes wb-notice-leave {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-4px); }
+}
+@keyframes wb-menu-enter {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.change-value {
+  position: relative;
+  display: inline-block;
+  isolation: isolate;
+}
+.change-value::before {
+  content: "";
+  position: absolute;
+  inset: -1px -3px;
+  z-index: -1;
+  border-radius: 3px;
+  background: var(--accent-3);
+  opacity: 0;
+  pointer-events: none;
+}
+.change-value.motion-highlight.is-changed::before {
+  animation: wb-value-highlight 480ms var(--wb-motion-ease);
+}
+.change-value.motion-enter::before { display: none; }
+.change-value.motion-enter.is-changed {
+  animation: wb-status-change var(--wb-motion-base) var(--wb-motion-ease);
+}
+.status-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.motion-new {
+  animation: wb-timeline-enter 180ms var(--wb-motion-ease);
 }
 button svg,
 a svg {
@@ -226,6 +330,7 @@ h3 {
   gap: 4px;
 }
 .nav-item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 11px;
@@ -238,6 +343,16 @@ h3 {
   text-align: left;
   font-weight: 500;
 }
+.nav-item::before {
+  content: "";
+  position: absolute;
+  inset: 9px auto 9px 3px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--accent-9);
+  opacity: 0;
+  transform: scaleY(.35);
+}
 .nav-item:hover {
   background: var(--gray-3);
   color: var(--gray-12);
@@ -245,6 +360,18 @@ h3 {
 .nav-item.active {
   background: var(--accent-3);
   color: var(--accent-11);
+}
+.nav-item.active::before {
+  opacity: 1;
+  transform: scaleY(1);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .nav-item::before {
+    transition: transform var(--wb-motion-base) var(--wb-motion-ease), opacity var(--wb-motion-base) var(--wb-motion-ease);
+  }
+  .status-running .status-content > svg {
+    animation: wb-status-spin 1.2s linear infinite;
+  }
 }
 .nav-item > span {
   margin-left: auto;
@@ -646,7 +773,7 @@ kbd {
 .turn-cell {
   white-space: nowrap;
 }
-.turn-cell > span {
+.turn-cell .turn-max {
   color: var(--muted);
 }
 .score-value {
@@ -703,6 +830,7 @@ kbd {
 }
 .inspector {
   position: relative;
+  animation: wb-inspector-enter var(--wb-motion-base) var(--wb-motion-ease);
   min-height: 0;
   border-left: 1px solid var(--border);
   background: var(--gray-2);
@@ -2043,6 +2171,7 @@ pre {
   }
 }
 .run-result-notices { position: relative; flex-shrink: 0; }
+.run-result-notices[open] .run-result-menu { animation: wb-menu-enter var(--wb-motion-base) var(--wb-motion-ease); }
 .run-result-notices > summary {
   list-style: none;
   cursor: pointer;
@@ -2073,6 +2202,7 @@ pre {
 .run-result-notice + .run-result-notice { margin-top: 6px; }
 .run-result-notice {
   display: flex;
+  animation: wb-notice-enter 180ms var(--wb-motion-ease);
   align-items: center;
   gap: 12px;
   padding: 8px 10px;
@@ -2082,6 +2212,7 @@ pre {
 }
 .run-result-notice > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .run-result-notice.is-failed { border-color: var(--red-9); background: var(--red-2); }
+.run-result-notice.is-leaving { animation: wb-notice-leave var(--wb-motion-exit) var(--wb-motion-ease) forwards; pointer-events: none; }
 .run-result-notice .text-button { flex-shrink: 0; }
 .notice-dismiss { display: grid; place-items: center; flex-shrink: 0; width: 28px; height: 28px; border: 0; background: transparent; color: var(--gray-11); cursor: pointer; }
 .history-error { display: block; max-width: 360px; white-space: normal; overflow-wrap: anywhere; color: var(--red-11); font-size: var(--wb-text-xs); margin-top: 4px; }

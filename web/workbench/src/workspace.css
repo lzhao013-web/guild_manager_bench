@@ -149,6 +149,9 @@
     overflow: auto;
     scrollbar-width: thin;
 }
+.workspace-overview-panel.is-returning {
+    animation: wb-detail-enter var(--wb-motion-base) var(--wb-motion-ease);
+}
 .run-overview {
     height: 100%;
     min-height: 478px;
@@ -167,6 +170,7 @@
     gap: 8px;
 }
 .overview-module {
+    position: relative;
     min-width: 0;
     min-height: 0;
     background: var(--gray-2);
@@ -174,6 +178,16 @@
     border-radius: 6px;
     display: flex;
     flex-direction: column;
+}
+.overview-module.is-return-target::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow: inset 0 0 0 1px var(--accent-8);
+    opacity: 0;
+    pointer-events: none;
+    animation: wb-locate-highlight 600ms var(--wb-motion-ease);
 }
 .overview-party { grid-area: party; }
 .overview-actions { grid-area: actions; }

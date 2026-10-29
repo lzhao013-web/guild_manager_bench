@@ -105,6 +105,35 @@ it("派遣参数按成员和怪物逐项展示，实际战果与输入分开", (
     expect(screen.getByRole("region", { name: "执行结果" })).toHaveTextContent("验收剑士 → 史莱姆：胜利");
 });
 
+it("实时追加只标记新行动，暂停期间的新记录不会在恢复时补播", () => {
+    const initialFrames = watchFrames([
+        rec(1, { type: "turn_started", observation }),
+        rec(2, { type: "tool_result", name: "allocate_experience", result: { ok: true } }),
+    ]);
+    const nextFrames = watchFrames([
+        rec(1, { type: "turn_started", observation }),
+        rec(2, { type: "tool_result", name: "allocate_experience", result: { ok: true } }),
+        rec(3, { type: "tool_result", name: "purchase_upgrade", result: { ok: true } }),
+    ]);
+    const pausedFrames = watchFrames([
+        rec(1, { type: "turn_started", observation }),
+        rec(2, { type: "tool_result", name: "allocate_experience", result: { ok: true } }),
+        rec(3, { type: "tool_result", name: "purchase_upgrade", result: { ok: true } }),
+        rec(4, { type: "tool_result", name: "write_memo", result: { ok: true } }),
+    ]);
+    const node = (frames: WatchFrame[], following = true) => <ActionTimeline frames={frames} frame={frames.at(-1)} active following={following}
+        rolledBack={false} onFrame={() => {}} renderDetails={() => null} />;
+    const view = render(node(initialFrames));
+    expect(document.querySelectorAll(".motion-new")).toHaveLength(0);
+    view.rerender(node(nextFrames));
+    expect(screen.getByRole("button", { name: "定位行动 分配经验" })).not.toHaveClass("motion-new");
+    expect(screen.getByRole("button", { name: "定位行动 购买升级" })).toHaveClass("motion-new");
+    view.rerender(node(pausedFrames, false));
+    expect(screen.getByRole("button", { name: "定位行动 记录备忘" })).not.toHaveClass("motion-new");
+    view.rerender(node(pausedFrames, true));
+    expect(screen.getByRole("button", { name: "定位行动 记录备忘" })).not.toHaveClass("motion-new");
+});
+
 it("空输入与缺失输入明确区分，正文按文本渲染且不截掉长备忘", () => {
     const text = '<img src=x onerror="alert(1)">\n' + "完整备忘".repeat(150);
     const { select } = setup([

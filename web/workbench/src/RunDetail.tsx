@@ -28,6 +28,7 @@ import {
     time,
 } from "./model";
 import { Empty, JsonDetails, Metric, StatusBadge, Trend } from "./ui";
+import { ChangeValue, useNewItemKeys } from "./motion";
 import { ModelCallStats } from "./ModelCallStats";
 import { RunNotices } from "./RunNotices";
 import type { Job } from "./types";
@@ -71,8 +72,9 @@ export function RunDetail({
     const groups = useMemo(() => actionGroups(filtered), [filtered]);
     const recent = useMemo(() => recentActions(frames), [frames]);
     const recentEntries = recent.actions.length ? recent.actions.slice(0, 5) : recent.queries.slice(-1);
+    const newEntries = useNewItemKeys(entries.map(entry => entry.frame.cursor), isActive(job));
     function renderAction(entry: ActionEntry) {
-        return <article className={`action ${entry.status === "failed" ? "failed" : ""}`} key={entry.frame.cursor}>
+        return <article className={`action ${entry.status === "failed" ? "failed" : ""} ${newEntries.has(entry.frame.cursor) ? "motion-new" : ""}`} key={entry.frame.cursor}>
             <header><strong>{entry.title}</strong>{entry.kind !== "system" && <span className="muted">{toolCategoryLabel(entry.event)}</span>}<span className={`action-status is-${entry.status}`}>{ACTION_STATUS[entry.status]}</span>
                 <span className="muted mono">{time(entry.frame.record.at)}</span></header>
             {entry.rolledBack && <p className="action-rollback">{entry.kind === "query" ? "所属尝试已回滚，查询仍反映当时状态" : "本次尝试已回滚，不再生效"}</p>}
@@ -150,7 +152,7 @@ export function RunDetail({
                 </div>
             </header>
             <div className="detail-status">
-                <StatusBadge status={job.status} />
+                <StatusBadge status={job.status} turn={job.turn} maxTurns={job.max_turns} />
                 <span>{PHASE[job.phase] || job.phase}</span>
                 {isActive(job) && (
                     <span className="mono muted">
@@ -209,15 +211,18 @@ export function RunDetail({
                                         ? "尚未开始"
                                         : `${job.turn} / ${job.max_turns}`
                                 }
+                                changeValue={job.turn ?? "pending"}
                             />
                             <Metric
                                 label="最新 Rank Score"
                                 value={fmt(job.last_score)}
+                                changeValue={job.last_score ?? "unknown"}
                                 note="使用已记录评分，不在浏览器重算"
                             />
                             <Metric
                                 label="模型 / 工具调用"
                                 value={`${fmt(job.calls)} / ${fmt(job.tools)}`}
+                                changeValue={`${job.calls}/${job.tools}`}
                             />
                             <Metric
                                 label="运行耗时"
@@ -254,15 +259,14 @@ export function RunDetail({
                                     <div className="resource-line">
                                         <span>
                                             金币{" "}
-                                            <b>{fmt(job.observation.gold)}</b>
+                                            <b><ChangeValue value={job.observation.gold}>{fmt(job.observation.gold)}</ChangeValue></b>
                                         </span>
                                         <span>
                                             经验池{" "}
                                             <b>
-                                                {fmt(
-                                                    job.observation
-                                                        .experience_pool,
-                                                )}
+                                                <ChangeValue value={job.observation.experience_pool}>
+                                                    {fmt(job.observation.experience_pool)}
+                                                </ChangeValue>
                                             </b>
                                         </span>
                                     </div>
@@ -343,7 +347,7 @@ export function RunDetail({
                             {watch.error && <p className="error-text">行动同步失败：{watch.error.message}</p>}
                             {recent.queryOnly && <p className="field-help">目前只进行了 {recent.queries.length} 次查询，尚无经营动作。</p>}
                             {recentEntries.length ? <ol className="recent-list">
-                                {recentEntries.map(entry => <li key={entry.frame.cursor}>
+                                {recentEntries.map(entry => <li key={entry.frame.cursor} className={newEntries.has(entry.frame.cursor) ? "motion-new" : ""}>
                                     <span className="turn-label">{entry.frame.record.event.turn != null ? `T${entry.frame.record.event.turn}` : "提示"}</span>
                                     <div><strong>{entry.title}</strong><p className={entry.status === "failed" ? "error-text" : "muted"}>{entry.rolledBack ? "已回滚 · " : ""}{actionSummary(entry)}</p></div>
                                 </li>)}
@@ -355,15 +359,18 @@ export function RunDetail({
                                 <Metric
                                     label="输入 Token（已报告）"
                                     value={fmt(job.usage.input_tokens)}
+                                    changeValue={job.usage.input_tokens ?? "unknown"}
                                 />
                                 <Metric
                                     label="输出 Token（已报告）"
                                     value={fmt(job.usage.output_tokens)}
+                                    changeValue={job.usage.output_tokens ?? "unknown"}
                                 />
-                                <Metric label="重试通知" value={job.retries} />
+                                <Metric label="重试通知" value={job.retries} changeValue={job.retries} />
                                 <Metric
                                     label="失败工具调用"
                                     value={job.tool_failures}
+                                    changeValue={job.tool_failures}
                                 />
                             </div>
                             <p className="field-help">
