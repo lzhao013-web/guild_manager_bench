@@ -10,7 +10,11 @@ const columns = [
 ];
 afterEach(() => vi.unstubAllGlobals());
 
-function geometry(visible = () => true) {
+function resizeEntry(target: Element): ResizeObserverEntry {
+    return { target, contentRect: new DOMRect(), borderBoxSize: [], contentBoxSize: [], devicePixelContentBoxSize: [] };
+}
+
+function geometry(visible = () => true, viewportWidth = 400) {
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
         if (!visible()) return new DOMRect();
         if (this.tagName === "COL") {
@@ -25,7 +29,7 @@ function geometry(visible = () => true) {
             const natural = this.getAttribute("aria-label")?.includes("次数") ? 100 : 200;
             return new DOMRect(0, 0, col.style.width ? parseFloat(col.style.width) : natural, 32);
         }
-        return new DOMRect(0, 0, 400, 200);
+        return new DOMRect(0, 0, viewportWidth, 200);
     });
 }
 function captures(handles: HTMLElement[]) {
@@ -59,7 +63,62 @@ function drag(handle: HTMLElement, from: number, to: number, pointerId = 1) {
     fireEvent.pointerUp(handle, { pointerId, clientX: to });
 }
 
-it("拖动仅改变当前列，松开保存，点击分隔线不触发排序或行点击", () => {
+it("无关数据刷新不重测列宽，内容引起的实际列宽变化仍更新无障碍数值", () => {
+    geometry();
+    const observers: { callback: ResizeObserverCallback; targets: Element[] }[] = [];
+    vi.stubGlobal("ResizeObserver", class {
+        entry: typeof observers[number];
+        constructor(callback: ResizeObserverCallback) {
+            this.entry = { callback, targets: [] };
+            observers.push(this.entry);
+        }
+        observe(target: Element) { this.entry.targets.push(target); }
+        disconnect() {}
+    });
+    const { table, handles } = setup();
+    const measure = vi.mocked(HTMLElement.prototype.getBoundingClientRect);
+    measure.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "更新数据" }));
+    expect(screen.getByRole("cell", { name: "2" })).toBeVisible();
+    expect(measure).not.toHaveBeenCalled();
+
+    // 容器宽度不变，但自动布局使名称列增长。浏览器通过表头尺寸通知这一变化。
+    const heading = screen.getByRole("columnheader", { name: "名称" });
+    const observer = observers.find(item => item.targets.includes(heading));
+    expect(observer).toBeDefined();
+    table.querySelector("col")!.style.width = "240px";
+    act(() => observer!.callback([resizeEntry(heading)], {} as ResizeObserver));
+    expect(handles[0]).toHaveAttribute("aria-valuenow", "240");
+    expect(handles[0]).toHaveAttribute("aria-valuetext", "240 像素");
+});
+
+it("拖动缩窄后按实际撑满宽度同步手柄，但只保存用户设置值", () => {
+    geometry(() => true, 300);
+    const callbacks: ResizeObserverCallback[] = [];
+    vi.stubGlobal("ResizeObserver", class {
+        constructor(callback: ResizeObserverCallback) { callbacks.push(callback); }
+        observe() {}
+        disconnect() {}
+    });
+    const { table, handles } = setup();
+    fireEvent.pointerDown(handles[0], { button: 0, pointerId: 7, clientX: 200 });
+    fireEvent.pointerMove(handles[0], { pointerId: 7, clientX: 160 });
+    const cols = [...table.querySelectorAll("col")];
+    // jsdom 不计算表格布局，模拟浏览器将 160 + 100 像素撑满到 300 像素后的测量结果。
+    vi.mocked(HTMLElement.prototype.getBoundingClientRect).mockImplementation(function (this: HTMLElement) {
+        return new DOMRect(0, 0, this === cols[0] ? 185 : this === cols[1] ? 115 : 300, 32);
+    });
+    act(() => callbacks[0]([resizeEntry(table.parentElement!), resizeEntry(table.tHead!.rows[0].cells[0])], {} as ResizeObserver));
+    expect(handles[0]).toHaveAttribute("aria-valuenow", "185");
+    expect(handles[1]).toHaveAttribute("aria-valuetext", "115 像素");
+    expect(cols[0].style.width).toBe("160px");
+    expect(localStorage.getItem("gmb.column-widths.v1.test")).toBeNull();
+    fireEvent.pointerUp(handles[0], { pointerId: 7 });
+    expect(handles[0]).toHaveAttribute("aria-valuenow", "185");
+    expect(JSON.parse(localStorage.getItem("gmb.column-widths.v1.test")!)).toEqual({ name: 160 });
+});
+
+it("拖动仅改变当前列设置，松开保存，点击分隔线不触发排序或行点击", () => {
     geometry();
     const { table, handles, sort, row } = setup();
     const save = vi.spyOn(Storage.prototype, "setItem");
@@ -173,8 +232,10 @@ it("折叠中的表格等实际可见后恢复列宽", () => {
     geometry(() => visible);
     const callbacks: (() => void)[] = [];
     vi.stubGlobal("ResizeObserver", class {
-        constructor(callback: () => void) { callbacks.push(callback); }
-        observe() {}
+        constructor(private callback: ResizeObserverCallback) {}
+        observe(target: Element) {
+            callbacks.push(() => this.callback([resizeEntry(target)], this as unknown as ResizeObserver));
+        }
         unobserve() {}
         disconnect() {}
     });

@@ -4,7 +4,7 @@
 }
 .resizable-table[data-column-sized] {
   table-layout: fixed;
-  min-width: 0;
+  min-width: 100%;
 }
 .resizable-table[data-column-sized] > thead > tr > th,
 .resizable-table[data-column-sized] > tbody > tr > th,

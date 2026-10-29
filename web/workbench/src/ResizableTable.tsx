@@ -1,7 +1,7 @@
 import { Children, cloneElement, isValidElement, useId, useLayoutEffect, useRef } from "react";
 import type { ReactNode } from "react";
 import { createColumnSizing } from "../../assets/table-resize.mjs";
-import type { ColumnSizing, ResizeColumn } from "../../assets/table-resize.mjs";
+import type { ResizeColumn } from "../../assets/table-resize.mjs";
 import "../../assets/table-resize.css";
 
 export type { ResizeColumn } from "../../assets/table-resize.mjs";
@@ -31,15 +31,12 @@ export function ResizableTable({ storageKey, columns, className = "", scroll = f
     children: ReactNode;
 }) {
     const table = useRef<HTMLTableElement>(null);
-    const sizing = useRef<ColumnSizing | null>(null);
     const id = useId();
     const schema = JSON.stringify(columns);
     useLayoutEffect(() => {
         const controller = createColumnSizing(table.current!, { key: storageKey, columns });
-        sizing.current = controller;
-        return () => { controller.destroy(); sizing.current = null; };
+        return () => controller.destroy();
     }, [storageKey, schema, scroll]);
-    useLayoutEffect(() => { sizing.current?.refresh(); });
     const content = <table ref={table} id={id} className={`resizable-table ${className}`}>
         <colgroup>{columns.map(column => <col key={column.id} />)}</colgroup>
         {headings(children, columns)}

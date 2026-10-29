@@ -141,18 +141,24 @@ export function createColumnSizing(table, { key, columns }) {
   const listeners = { pointerdown: down, pointermove: move, pointerup: up, pointercancel: cancel,
     lostpointercapture: cancel, click, dblclick: reset, keydown: keyboard };
   for (const [name, handler] of Object.entries(listeners)) table.addEventListener(name, handler, true);
-  const observer = new ResizeObserver(() => {
-    const width = viewport.getBoundingClientRect().width;
-    if (!drag && width > 0 && width !== viewportWidth) restore();
-  });
-  observer.observe(viewport);
-  restore();
-  return {
-    refresh() {
-      if (drag) return;
+  const observer = new ResizeObserver(entries => {
+    if (!drag && entries.some(entry => entry.target === viewport)) {
+      const width = viewport.getBoundingClientRect().width;
+      if (width > 0 && width !== viewportWidth) {
+        restore();
+        return;
+      }
+    }
+    // 自动布局或撑满容器会改变实际列宽，拖动期间也要同步手柄，但不重置拖动布局。
+    if (entries.some(entry => cells.includes(entry.target))) {
       const widths = measure();
       if (widths) aria(widths);
-    },
+    }
+  });
+  observer.observe(viewport);
+  cells.forEach(cell => observer.observe(cell));
+  restore();
+  return {
     destroy() {
       finish(true);
       observer.disconnect();

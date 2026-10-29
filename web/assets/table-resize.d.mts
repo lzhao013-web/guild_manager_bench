@@ -4,7 +4,6 @@ export interface ResizeColumn {
     minWidth: number;
 }
 export interface ColumnSizing {
-    refresh(): void;
     destroy(): void;
 }
 export function createColumnSizing(table: HTMLTableElement, options: {
