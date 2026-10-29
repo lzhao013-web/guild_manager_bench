@@ -64,7 +64,7 @@ it("旧式刷新预览和实刷均可统计筛选，只读预览不混同付费�
     expect(matchesOperation(preview, "all")).toBe(true);
     expect(matchesOperation(preview, "refresh_monsters")).toBe(true);
     expect(matchesOperation(refresh, "category:refresh")).toBe(true);
-    expect(historyAction(preview)).toMatchObject({ kind: "query", title: "预览怪物刷新", summary: "仅查看刷新候选，未刷新怪物或消耗金币" });
+    expect(historyAction(preview)).toMatchObject({ kind: "query", title: "预览怪物刷新", summary: "" });
 });
 it("方案步骤共享真实位置与生命周期，独立检索输入，不继承整批对象或改变原记录", () => {
     const parent: TrajectoryRow = { ...records()[0], names: { hero: "伊莲", sword: "青铜剑" }, subjects: [{ kind: "recipe", id: "sword", name: "青铜剑" }],

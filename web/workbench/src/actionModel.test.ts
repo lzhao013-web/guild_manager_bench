@@ -91,7 +91,7 @@ it("只有查询时明确没有经营动作，试算战斗不会被当成真实�
     const result = recentActions(watchFrames([initial, rec(2, { type: "tool_result", name: "preview_battle", result: { ok: true,
         preview: { adventurer_name: "验收剑士", monster_name: "验收史莱姆", won: true } } })]));
     expect(result.actions).toEqual([]);
-    expect(result.queries[0].summary).toBe("验收剑士 对 验收史莱姆：模拟胜利，不是实际讨伐");
+    expect(result.queries[0].summary).toBe("验收剑士 → 验收史莱姆：模拟胜利");
 });
 
 it("查询失败直接显示错误但仍不算经营动作，技术重试也不会被算成经营成果", () => {
@@ -155,11 +155,21 @@ it("全局方案试算不伪造战力，凭据执行与重复提交展示不同�
         rec(4, { type: "tool_result", name: "execute_plan", result: { ok: true, operation_count: 2, already_executed: true } }),
     ]));
     expect(entries[1]).toMatchObject({ kind: "query", title: "方案试算" });
-    expect(entries[1].summary).toContain("不估算战力");
-    expect(entries[1].summary).not.toContain("未知");
+    expect(entries[1].summary).toBe("共 2 步");
+    expect(entries[1].returned.preview).toBe(true);
     expect(entries[2]).toMatchObject({ kind: "action", title: "执行方案" });
-    expect(entries[2].summary).toContain("已执行 2 步方案，不扣调用预算");
-    expect(entries[3].summary).toContain("本次未重复执行");
+    expect(entries[2].summary).toBe("已执行 2 步");
+    expect(entries[3].summary).toBe("重复提交，未再次执行");
+});
+
+it.each([
+    ["get_forecast", { kind: "monsters", start_turn: 4, end_turn: 4, total_matches: 3 }, "怪物预告 T4，3 条"],
+    ["get_forecast", { kind: "recruits", start_turn: 4, end_turn: 6, total_matches: 5 }, "招募预告 T4-T6，5 条"],
+    ["get_battle_log", { battle: { adventurer_name: "验收剑士", monster_name: "史莱姆", won: true } }, "验收剑士 → 史莱姆：胜利"],
+    ["preview_team_power", { current_rank_score: 10, projected_rank_score: 12, rank_score_delta: 2 }, "战力 10 → 12（+2）"],
+])("%s 摘要只保留查询内容、对象和结果", (name, result, expected) => {
+    const entry = actionEntries(watchFrames([rec(1, { type: "tool_result", name, result: { ok: true, ...result } })]))[0];
+    expect(entry.summary).toBe(expected);
 });
 
 it("回滚保留当时的成功事实，但所有本次经营动作都标记不再生效", () => {

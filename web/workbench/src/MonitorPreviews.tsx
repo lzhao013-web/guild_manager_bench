@@ -4,7 +4,7 @@ import { businessPreviews, previewProgress } from "./businessModel";
 import { fmt } from "./model";
 import { Portrait } from "./SceneParts";
 import { EquipmentIcon } from "./EquipmentIcon";
-import { actionSummary } from "./actionModel";
+import { actionBrief } from "./actionModel";
 import type { ActionEntry } from "./actionModel";
 import type { WatchFocus } from "./sceneNavigation";
 import type { Observation } from "./types";
@@ -48,8 +48,8 @@ export function MonitorPreviews({ observation, frame, frames, onFrame, onFocus, 
         return () => observer.disconnect();
     }, [groups.length]);
     const action = (item: ActionEntry, current = false) => <button key={item.frame.cursor} className={`${current ? "monitor-current" : ""} ${item.status === "failed" ? "failed" : ""} ${newEntries.has(item.frame.cursor) ? "motion-new" : ""}`}
-        aria-label={`定位行动 ${item.title}`} title={`${item.title} ${actionSummary(item)}`} onClick={() => onFrame(item.frame)}>
-        <span className="monitor-row-label">{item.rolledBack ? "已回滚" : item.status === "failed" ? "失败" : item.status === "pending" ? "执行中" : item.kind === "system" ? "提示" : item.kind === "query" ? "查询" : "行动"}</span><strong>{item.title}</strong><span className="monitor-action-summary">{actionSummary(item)}</span>
+        aria-label={`定位行动 ${item.title}`} title={`${item.title} ${actionBrief(item)}`} onClick={() => onFrame(item.frame)}>
+        <span className="monitor-row-label">{item.rolledBack ? "已回滚" : item.status === "failed" ? "失败" : item.status === "pending" ? "执行中" : item.kind === "system" ? "提示" : item.kind === "query" ? "查询" : "行动"}</span><strong>{item.title}</strong><span className="monitor-action-summary">{actionBrief(item)}</span>
     </button>;
     const previewActions = progress.actions.length ? progress.actions : progress.query ? [progress.query] : [];
     const newEntries = useNewItemKeys(previewActions.map(item => item.frame.cursor), live);

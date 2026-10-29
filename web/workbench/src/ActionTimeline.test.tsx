@@ -18,7 +18,7 @@ function setup(records: WatchRecord[], selected?: number) {
     return { frames, onFrame, select: (cursor: number) => view.rerender(node(frames.find(frame => frame.cursor === cursor)!)) };
 }
 
-it("默认展示可读输入、原值和完整执行结果，点击仍定位真实结果帧", () => {
+it("默认展示资源与成员变化，输入按需展开，点击仍定位真实结果帧", () => {
     const { frames, onFrame } = setup([
         rec(2, { type: "tool_call", name: "allocate_experience", call_id: "xp", arguments: { adventurer_id: "hero", amount: 12 } }),
         rec(3, { type: "tool_result", name: "allocate_experience", call_id: "xp", result: { ok: true, event: { summary: "为验收剑士分配经验", changes: [
@@ -28,15 +28,16 @@ it("默认展示可读输入、原值和完整执行结果，点击仍定位真�
     ]);
     const detail = screen.getByRole("region", { name: "所选行动详情" });
     const input = within(detail).getByRole("region", { name: "输入参数" });
+    expect(input.closest("details")).not.toHaveAttribute("open");
+    fireEvent.click(input.closest("details")!.querySelector("summary")!);
     expect(within(input).getByText("验收剑士", { exact: true })).toBeVisible();
     expect(within(input).getByText("原值：hero", { exact: true })).toBeVisible();
     expect(within(input).getByText("12", { exact: true })).toBeVisible();
-    expect(within(detail).getByRole("region", { name: "执行结果" })).toHaveTextContent("经验池 50 → 38（-12）");
-    expect(within(detail).getByRole("region", { name: "执行结果" })).toHaveTextContent("等级 1 → 2（+1）");
-    expect(input.closest("details")).toBeNull();
+    expect(within(detail).getByRole("region", { name: "实际资源变化" })).toHaveTextContent("经验池-12");
+    expect(within(detail).getByRole("region", { name: "实际成员变化" })).toHaveTextContent("1 → 2");
     const row = screen.getByRole("button", { name: "定位行动 为验收剑士分配经验" });
-    expect(row).toHaveTextContent("输入 · 成员：验收剑士，分配经验数量：12");
-    expect(row).toHaveTextContent("等级 1 → 2");
+    expect(row).not.toHaveTextContent("输入 ·");
+    expect(within(row.closest("article")!).getByRole("region", { name: "实际成员变化" })).toHaveTextContent("1 → 2");
     fireEvent.click(row);
     expect(onFrame).toHaveBeenCalledWith(frames.at(-1));
     expect(frames.at(-1)!.record.event).not.toHaveProperty("arguments");
@@ -49,8 +50,10 @@ it("回看调用时显示当时输入和执行中，不提前展示之后的结�
     ]);
     select(2);
     const detail = screen.getByRole("region", { name: "所选行动详情" });
-    expect(within(detail).getByRole("region", { name: "输入参数" })).toHaveTextContent("10");
-    expect(within(detail).getByRole("region", { name: "执行结果" })).toHaveTextContent("尚未记录执行结果");
+    const input = within(detail).getByRole("region", { name: "输入参数" });
+    fireEvent.click(input.closest("details")!.querySelector("summary")!);
+    expect(input).toHaveTextContent("10");
+    expect(within(detail).getByRole("region", { name: "执行结果" })).toHaveTextContent("等待工具返回");
     expect(within(detail).queryByText("余额不足", { exact: true })).not.toBeInTheDocument();
 });
 
@@ -90,7 +93,7 @@ it("旧式刷新结果没有重复参数时，预览仍可筛选且不计为付�
     ]);
     fireEvent.change(screen.getByLabelText("筛选本回合工具"), { target: { value: "category:preview" } });
     const timeline = screen.getByRole("region", { name: "观战行动时间线" });
-    expect(within(timeline).getByRole("button", { name: "定位行动 预览怪物刷新" })).toHaveTextContent("只读预览");
+    expect(within(timeline).getByRole("button", { name: "定位行动 预览怪物刷新" })).toHaveTextContent("预览");
     fireEvent.change(screen.getByLabelText("筛选本回合工具"), { target: { value: "category:refresh" } });
     expect(within(timeline).queryByRole("button", { name: /定位行动/ })).not.toBeInTheDocument();
 });
@@ -99,10 +102,12 @@ it("派遣参数按成员和怪物逐项展示，实际战果与输入分开", (
     setup([rec(2, { type: "tool_result", name: "end_turn", arguments: { hunts: [{ adventurer_id: "hero", monster_id: "slime" }] },
         result: { ok: true, turn_result: { battles: [{ adventurer_name: "验收剑士", monster_name: "史莱姆", won: true }] } } })]);
     const input = screen.getByRole("region", { name: "输入参数" });
+    fireEvent.click(input.closest("details")!.querySelector("summary")!);
     expect(within(input).getByText("派遣 1")).toBeVisible();
     expect(within(input).getByText("验收剑士", { exact: true })).toBeVisible();
     expect(within(input).getByText("史莱姆", { exact: true })).toBeVisible();
-    expect(screen.getByRole("region", { name: "执行结果" })).toHaveTextContent("验收剑士 → 史莱姆：胜利");
+    expect(screen.getByRole("region", { name: "执行结果" })).toHaveTextContent("1 场，1 胜 0 负");
+    expect(within(screen.getByRole("region", { name: "所选行动详情" })).getByRole("region", { name: "战斗结果" })).toHaveTextContent("验收剑士 → 史莱姆");
 });
 
 it("实时追加只标记新行动，暂停期间的新记录不会在恢复时补播", () => {
@@ -141,10 +146,11 @@ it("空输入与缺失输入明确区分，正文按文本渲染且不截掉长�
         rec(3, { type: "tool_result", name: "write_memo", result: { ok: true } }),
         rec(4, { type: "tool_result", name: "write_memo", arguments: { content: text }, result: { ok: true, memo: { content: text } } }),
     ], 2);
-    expect(screen.getByRole("region", { name: "输入参数" })).toHaveTextContent("无输入参数（已记录为空对象）");
+    expect(screen.getByRole("region", { name: "输入参数" })).toHaveTextContent("无输入参数");
     select(3);
-    expect(screen.getByRole("region", { name: "输入参数" })).toHaveTextContent("原日志未记录输入参数");
+    expect(screen.getByRole("region", { name: "输入参数" })).toHaveTextContent("没有保存这次操作的参数");
     select(4);
     expect(screen.getByRole("region", { name: "输入参数" }).textContent).toContain(text);
+    expect(screen.getByRole("region", { name: "所选行动详情" }).querySelector(".return-memo pre")!.textContent).toBe(text);
     expect(document.querySelector("img")).not.toBeInTheDocument();
 });

@@ -37,7 +37,7 @@ export function TrajectoryOverview({ type, state, onCategory, onState, onAll }: 
             <div className="trajectory-state-totals" role="group" aria-label="按整局调用状态筛选">
                 {STATES.map(item => <button key={item.id} className={`is-${item.id}`} aria-pressed={state === item.id}
                     aria-label={`查看${item.label}记录`} disabled={!loaded} onClick={() => onState(item.id)}
-                    title={`查看已记录的${item.label}记录，并清除其它筛选。执行结果与回合状态可能重叠，不能将这些计数相加。`}>
+                    title={`查看${item.label}记录，并清除其它筛选`}>
                     {item.label} <b className="mono">{count(summary.states[item.id])}</b>
                 </button>)}
             </div>
@@ -48,8 +48,8 @@ export function TrajectoryOverview({ type, state, onCategory, onState, onAll }: 
                 const operations = category.attempts + (isPlan ? 0 : category.planSteps);
                 const confirmedCount = category.confirmed + (isPlan ? 0 : category.planConfirmed);
                 const title = isPlan
-                    ? `共 ${category.attempts} 次执行方案调用，包含 ${totalPlanSteps} 步子操作。已确认 ${category.confirmed} 次方案调用。子操作已计入各自类别，本卡片不重复累加。点击查看对应记录并清除其它筛选。`
-                    : `共 ${operations} 次${category.label}操作，其中直接调用 ${category.attempts} 次、方案子操作 ${category.planSteps} 步。已确认 ${confirmedCount} 次，其中直接调用 ${category.confirmed} 次、方案子操作 ${category.planConfirmed} 步。点击查看对应记录并清除其它筛选。`;
+                    ? `执行方案 ${category.attempts} 次，包含 ${totalPlanSteps} 步操作，已确认成功 ${category.confirmed} 次。`
+                    : `${category.label}共 ${operations} 次，其中单独执行 ${category.attempts} 次、方案内执行 ${category.planSteps} 次，已确认成功 ${confirmedCount} 次。`;
                 return <button key={category.id} className={loaded && operations === 0 ? "is-zero" : ""}
                     aria-label={`查看${category.label}记录`} aria-pressed={type === `category:${category.id}`} disabled={!loaded}
                     title={title} onClick={() => onCategory(category.id)}>
@@ -58,6 +58,5 @@ export function TrajectoryOverview({ type, state, onCategory, onState, onAll }: 
                 </button>;
             })}
         </div>
-        <p>类别计数含方案子操作，悬浮可查看来源 · 顶部总次数、状态计数和工具汇总仍按原始调用统计 · 不代表实际收益 · 状态可能重叠</p>
     </section>;
 }

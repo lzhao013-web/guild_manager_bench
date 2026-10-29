@@ -88,7 +88,7 @@ it("方案子操作按类别和具体工具检索，保留步骤及真实定位�
     expect(craft).not.toHaveTextContent("+1步");
     const execute = within(overview).getByRole("button", { name: "查看执行方案记录" });
     expect(execute).not.toHaveTextContent("共4步");
-    expect(execute.getAttribute("title")).toContain("包含 4 步子操作");
+    expect(execute.getAttribute("title")).toContain("包含 4 步操作");
     expect(within(execute).getByText("1", { exact: true })).toBeVisible();
     expect(execute).toHaveTextContent("已确认 1");
     expect(screen.getByText("按工具汇总 · 1 种 · 1 次调用")).toBeInTheDocument();
@@ -96,7 +96,7 @@ it("方案子操作按类别和具体工具检索，保留步骤及真实定位�
     fireEvent.click(craft);
     const child = screen.getByRole("button", { name: "查看轨迹 回合2 制作青铜剑 / 方案第1/4步" });
     expect(screen.getAllByRole("button", { name: /查看轨迹/ })).toHaveLength(1);
-    expect(child).toHaveTextContent("金币 100 → 90（-10）");
+    expect(child).toHaveTextContent("金币 -10");
     expect(child).toHaveTextContent("点击查看所属方案");
     expect(onLocate).not.toHaveBeenCalled();
     fireEvent.click(child);
@@ -120,11 +120,11 @@ it("类别计数合并方案子操作，悬浮保留调用与确认数来源", a
     expect(within(upgrade).getByText("14", { exact: true })).toBeVisible();
     expect(upgrade).toHaveTextContent("已确认 12");
     expect(upgrade).not.toHaveTextContent("+8步");
-    expect(upgrade.getAttribute("title")).toContain("直接调用 6 次、方案子操作 8 步");
-    expect(upgrade.getAttribute("title")).toContain("直接调用 4 次、方案子操作 8 步");
+    expect(upgrade.getAttribute("title")).toContain("单独执行 6 次、方案内执行 8 次");
+    expect(upgrade.getAttribute("title")).toContain("已确认成功 12 次");
     const execute = within(overview).getByRole("button", { name: "查看执行方案记录" });
     expect(execute).not.toHaveTextContent("共8步");
-    expect(execute.getAttribute("title")).toContain("包含 8 步子操作");
+    expect(execute.getAttribute("title")).toContain("包含 8 步操作");
     expect(within(execute).getByText("1", { exact: true })).toBeVisible();
     expect(execute).toHaveTextContent("已确认 1");
 });
@@ -244,7 +244,7 @@ it("覆盖不全和加载失败会明确提示，不宣称对象从未获得", a
     const details = screen.getByText("本局轨迹").closest("details")!;
     fireEvent.click(details.querySelector("summary")!);
     expect(screen.getByText("只覆盖当前运行阶段")).toBeVisible();
-    expect(screen.getByText("原日志未记录此对象的操作，不能确定获取回合。")).toBeVisible();
+    expect(screen.getByText("没有找到相关操作记录。")).toBeVisible();
 });
 it("点击方案子操作读取整个原子提交后的局面与父调用参数，不伪造中间帧", async () => {
     const initial: Observation = { turn: 5, max_turns: 8, gold: 300, experience_pool: 50, materials: {}, adventurers: [], party_size_limit: 3 };

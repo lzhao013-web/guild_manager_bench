@@ -499,7 +499,7 @@ it("购买对象不会被资源差值盖掉，时间线合并调用结果且逐�
         record(11, { type: "tool_result", name: "get_party", call_id: "q2", result: { ok: true, adventurers: changed.adventurers } }),
     ] });
     const summary = screen.getByRole("region", { name: "行动摘要" });
-    expect(await within(summary).findByRole("button", { name: "定位行动 购买全局加成 验收训练场" })).toHaveTextContent("金币 60 → 20");
+    expect(await within(summary).findByRole("button", { name: "定位行动 购买全局加成 验收训练场" })).toHaveTextContent("金币 -40");
     fireEvent.click(screen.getByRole("button", { name: "切换专注" }));
     fireEvent.click(await screen.findByRole("button", { name: "展开最近行动" }));
     const timeline = screen.getByRole("region", { name: "观战行动时间线" });
@@ -507,7 +507,7 @@ it("购买对象不会被资源差值盖掉，时间线合并调用结果且逐�
     fireEvent.click(within(timeline).getByRole("button", { name: "定位行动 购买全局加成 验收训练场" }));
     expect(screen.getByText("历史局面", { exact: true })).toBeVisible();
     expect(within(screen.getByLabelText("当前观看位置的资源")).getByText("20", { exact: true })).toBeVisible();
-    expect(screen.getByRole("region", { name: "所选行动详情" })).toHaveTextContent("金币 60 → 20");
+    expect(within(screen.getByRole("region", { name: "所选行动详情" })).getByRole("region", { name: "实际资源变化" })).toHaveTextContent("金币-40");
     const queries = within(timeline).getAllByRole("button", { name: "定位行动 查看队伍" });
     expect(queries).toHaveLength(2);
     for (const query of queries) {
@@ -623,7 +623,7 @@ it("正在执行的工具也可以定位已返回的模型推理，不提前显�
     await screen.findByText("此时尚未招募冒险者");
     fireEvent.click(screen.getByRole("button", { name: "切换专注" }));
     fireEvent.click(await screen.findByRole("button", { name: "展开最近行动" }));
-    expect(screen.getByRole("region", { name: "执行结果" })).toHaveTextContent("尚未记录执行结果");
+    expect(screen.getByRole("region", { name: "执行结果" })).toHaveTextContent("等待工具返回");
     fireEvent.click(screen.getByRole("button", { name: "查看对应模型推理" }));
     expect(screen.getByText("待执行工具的构造 API 推理", { exact: true })).toBeVisible();
 });

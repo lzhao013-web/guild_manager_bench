@@ -14,6 +14,10 @@ export interface InputField {
     value: InputValue;
 }
 export type ActionInput = { state: "missing" } | { state: "recorded"; value: InputValue };
+export const PLAN_TOOLS: Record<string, string> = {
+    craft: "craft_equipment", recruit: "recruit_adventurer", dismiss: "dismiss_adventurer", equip: "equip_item", unequip: "unequip_item",
+    purchase_upgrade: "purchase_upgrade", allocate_experience: "allocate_experience", configure_tactics: "configure_tactics", refresh_monsters: "refresh_monsters",
+};
 const LABELS: Record<string, string> = {
     session_id: "会话", adventurer_id: "成员", candidate_id: "招募候选", monster_id: "怪物",
     equipment_id: "装备", equipment_instance_id: "装备实例", instance_id: "实例", upgrade_id: "天赋 / 升级",

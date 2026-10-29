@@ -1,8 +1,11 @@
 import { actionNames, readableActionText } from "./actionInputs";
 import { MATERIALS, requirementLines, SLOTS, STAT_NAMES } from "./sceneModel";
+import { fmt } from "./model";
 import type { WatchFrame } from "./watchModel";
 
+export type ReturnKind = "members" | "equipment" | "upgrades" | "monsters" | "recruits" | "recipes" | "tactics" | "battles" | "events" | "forecast";
 export interface ReturnTable {
+    kind: ReturnKind;
     title: string;
     columns: string[];
     rows: string[][];
@@ -43,14 +46,14 @@ export const RETURN_LABELS: Record<string, string> = {
     next_gold_cost: "下次刷新费用", content: "备忘正文", count: "备忘数量", dropped_oldest: "已丢弃旧备忘数量",
 };
 export const returnLabel = (key: string) => Object.hasOwn(RETURN_LABELS, key) ? RETURN_LABELS[key] : key;
-const SIDES: Record<string, string> = { left: "冒险者", right: "怪物", preview: "预览记录，未实际执行", actual: "真实战斗记录", basic: "普攻", skill: "技能", status: "状态结算" };
+const SIDES: Record<string, string> = { left: "冒险者", right: "怪物", preview: "预览记录，未实际执行", actual: "真实战斗记录", basic: "普攻", basic_attack: "普攻", skill: "技能", status: "状态结算" };
 const number = (value: unknown) => value == null ? "未记录" : String(value);
 export function returnStats(value: Record<string, unknown> | undefined, omit: string[] = []): string {
     if (value == null) return "未记录";
     const fields = Object.entries(value).filter(([key]) => !omit.includes(key));
     if (!fields.length) return "无其他属性项";
     const nonzero = fields.filter(([, value]) => value !== 0);
-    return nonzero.length ? nonzero.map(([key, value]) => `${STAT_NAMES[key] || key} ${number(value)}`).join(" · ") : "各项均为 0";
+    return nonzero.length ? nonzero.map(([key, value]) => `${STAT_NAMES[key] || key} ${number(value)}`).join("\n") : "各项均为 0";
 }
 const price = (item: Record<string, any>) => [item.gold_cost != null ? `金币 ${item.gold_cost}` : item.recruit_gold != null ? `金币 ${item.recruit_gold}` : "",
     item.experience_cost != null ? `经验 ${item.experience_cost}` : "", item.material_costs ? Object.entries(item.material_costs).map(([key, val]) => `${MATERIALS[key] || key} ${val}`).join("、") : ""].filter(Boolean).join(" · ") || "未记录";
@@ -58,6 +61,32 @@ const flag = (value: unknown, yes: string, no: string) => value === true ? yes :
 export function battleResult(battle: Record<string, any>): string {
     return typeof battle.won === "boolean" ? battle.won ? "胜利" : "失败" :
         ({ left_win: "胜利", right_win: "失败", draw: "平局" } as Record<string, string>)[battle.combat?.outcome || battle.outcome] || "结果未记录";
+}
+
+export function summarizeBattles(records: Record<string, any>[]) {
+    const battles = records.map(battle => ({ name: `${battle.adventurer_name || "成员未记录"} → ${battle.monster_name || "怪物未记录"}`, result: battleResult(battle) }));
+    const wins = battles.filter(battle => battle.result === "胜利").length;
+    const losses = battles.filter(battle => battle.result === "失败").length;
+    const reward = (key: string) => records.every(battle => typeof battle.reward?.[key] === "number")
+        ? records.reduce((sum, battle) => sum + battle.reward[key], 0) : null;
+    const materials = new Map<string, number>();
+    const materialsKnown = records.every(battle => battle.reward?.materials != null);
+    if (materialsKnown) for (const battle of records) for (const [id, amount] of Object.entries(battle.reward.materials))
+        if (typeof amount === "number") materials.set(id, (materials.get(id) || 0) + amount);
+    return { battles, wins, losses, unknown: battles.length - wins - losses, gold: reward("gold"), experience: reward("experience"),
+        materials: materialsKnown ? [...materials].filter(([, value]) => value !== 0).map(([id, value]) => `${MATERIALS[id] || id} +${fmt(value)}`) : null };
+}
+
+export function returnNames(frame: WatchFrame): Map<string, string> {
+    const names = actionNames(frame), r = frame.record.event.result || {}, output = r._action_output || {};
+    for (const items of [r.adventurers, r.monsters, r.equipment_inventory, r.global_upgrades, r.recruit_candidates, r.crafting_recipes,
+        output.adventurers, output.equipment_inventory, output.global_upgrades, output.dismissed_adventurers])
+        for (const item of items || []) {
+            for (const key of ["adventurer_id", "monster_id", "instance_id", "upgrade_id", "candidate_id", "recipe_id"])
+                if (item[key] != null && item.name) names.set(String(item[key]), item.name);
+            for (const skill of [...(item.skills || []), ...(item.tactics?.available_active_skills || [])]) if (skill.name) names.set(skill.skill_id, skill.name);
+        }
+    return names;
 }
 
 export function describeReturn(frame: WatchFrame): ActionReturn {
@@ -68,67 +97,58 @@ export function describeReturn(frame: WatchFrame): ActionReturn {
         view.fields = Object.fromEntries(Object.entries(r).filter(([key]) => !["ok", "error", "event", "session_id"].includes(key) && !key.startsWith("_")));
         return view;
     }
-    const names = actionNames(frame);
+    const names = returnNames(frame);
     const output = r._action_output || {};
-    // 返回中的名称用于读返回本身，不将查询结果替换成当前局面。
-    for (const items of [r.adventurers, r.monsters, r.equipment_inventory, r.global_upgrades, r.recruit_candidates, r.crafting_recipes,
-        output.adventurers, output.equipment_inventory, output.global_upgrades, output.dismissed_adventurers])
-        for (const item of items || []) {
-            for (const key of ["adventurer_id", "monster_id", "instance_id", "upgrade_id", "candidate_id", "recipe_id"])
-                if (item[key] != null && item.name) names.set(String(item[key]), item.name);
-            for (const skill of [...(item.skills || []), ...(item.tactics?.available_active_skills || [])]) if (skill.name) names.set(skill.skill_id, skill.name);
-        }
     const readable = (text: unknown) => text == null ? "未记录" : readableActionText(String(text), names);
     const skillNames = (items: Record<string, any>[] | undefined) => items == null ? "" : items.map(skill => skill.name || skill.skill_id).join("、");
     const used = new Set(["ok", "event", "_llm_refs", "_observation_after", "_action_output", "session_id", "error"]);
-    function table(title: string, columns: string[], records: Record<string, any>[], row: (record: Record<string, any>) => string[], first = false) {
-        const result = { title, columns, records, rows: records.map(row) };
+    function table(kind: ReturnKind, title: string, columns: string[], records: Record<string, any>[], row: (record: Record<string, any>) => string[], first = false) {
+        const result = { kind, title, columns, records, rows: records.map(row) };
         if (first) view.tables.unshift(result);
         else view.tables.push(result);
     }
     function members(items: Record<string, any>[], title: string) {
-        if (event.name !== "configure_tactics") table(title, ["成员 / 编号", "等级", "生命 / 法力", "实际属性与技能"], items, item => [
+        if (event.name !== "configure_tactics") table("members", title, ["成员 / 编号", "等级", "生命 / 法力", "属性", "技能"], items, item => [
             `${item.name || "名称未记录"}\n${item.adventurer_id ?? ""}`, number(item.level),
             `生命 ${number(item.resources?.current_hp)} / ${number(item.effective_stats?.hp)}\n法力 ${number(item.resources?.current_mp)} / ${number(item.effective_stats?.mp)}`,
-            [returnStats(item.effective_stats, ["hp", "mp"]), skillNames(item.skills)].filter(Boolean).join("\n"),
+            returnStats(item.effective_stats, ["hp", "mp"]), skillNames(item.skills),
         ]);
-        for (const item of items) if (event.name === "configure_tactics" && item.tactics) table(`${item.name || "成员"}的实际战术`, ["项目", "结果"], Object.entries(item.tactics).filter(([key]) => key !== "available_active_skills").map(([key, value]) => ({ key, value })), pair => [
+        for (const item of items) if (event.name === "configure_tactics" && item.tactics) table("tactics", `${item.name || "成员"}的实际战术`, ["项目", "结果"], Object.entries(item.tactics).filter(([key]) => key !== "available_active_skills").map(([key, value]) => ({ key, value })), pair => [
             RETURN_LABELS[pair.key] || pair.key,
             Array.isArray(pair.value) ? pair.value.length ? pair.value.map(readable).join(pair.key === "skill_priority" ? " → " : "、") : pair.key === "skill_priority" ? "默认顺序" : "无" : readable(pair.value),
         ]);
     }
     function equipment(items: Record<string, any>[], title: string) {
-        table(title, ["装备 / 实例", "槽位", "装备属性与技能", "穿戴者"], items, item => [
+        table("equipment", title, ["装备 / 实例", "槽位", "属性", "穿戴者", "技能"], items, item => [
             `${item.name || "名称未记录"}\n${item.instance_id ?? ""}`, SLOTS[item.slot] || item.slot || "未记录",
-            [returnStats(item.stats), skillNames(item.skills)].filter(Boolean).join("\n"),
-            item.equipped_by === null ? "未穿戴" : readable(item.equipped_by),
+            returnStats(item.stats), item.equipped_by === null ? "未穿戴" : readable(item.equipped_by), skillNames(item.skills),
         ]);
     }
     function upgrades(items: Record<string, any>[], title: string, costs = true) {
-        table(title, costs ? ["天赋", "状态", "效果", "费用 / 缺口"] : ["天赋", "状态", "效果"], items, item => [item.name || item.upgrade_id,
+        table("upgrades", title, costs ? ["天赋", "状态", "效果", "费用 / 缺口"] : ["天赋", "状态", "效果"], items, item => [item.name || item.upgrade_id,
             item.unlocked === true ? "已解锁" : flag(item.can_purchase, "可解锁", "条件未满足"),
             [item.description, item.stats && returnStats(item.stats), typeof item.party_size_bonus === "number" && item.party_size_bonus !== 0 ? `编队容量加成 ${item.party_size_bonus}` : "", skillNames(item.skills)].filter(Boolean).join("\n") || "未记录",
             ...(costs ? [[price(item), ...requirementLines(item.missing, items)].join("\n")] : []),
         ]);
     }
     function monsters(items: Record<string, any>[], title: string) {
-        table(title, ["怪物 / 引用", "属性", "目标奖励", "技能"], items, item => [
+        table("monsters", title, ["怪物 / 引用", "属性", "目标奖励", "技能"], items, item => [
             `${item.name || "名称未记录"}\n${item.monster_id || item.refresh_ref || item.forecast_ref || ""}`, returnStats(item.stats),
             item.reward ? `金币 ${number(item.reward.gold)} · 经验 ${number(item.reward.experience)}${item.reward.materials ? "\n" + Object.entries(item.reward.materials).map(([key, value]) => `${MATERIALS[key] || key} ${value}`).join("、") : ""}` : "未记录", item.skills == null ? "未记录" : skillNames(item.skills) || "无",
         ]);
     }
     if (Array.isArray(r.adventurers)) { used.add("adventurers"); members(r.adventurers, "返回的队伍"); }
-    if (Array.isArray(r.monsters)) { used.add("monsters"); monsters(r.monsters, view.preview ? "刷新预览候选，不是实际刷新" : "返回的怪物"); }
+    if (Array.isArray(r.monsters)) { used.add("monsters"); monsters(r.monsters, view.preview ? "刷新候选" : "返回的怪物"); }
     if (Array.isArray(r.equipment_inventory)) { used.add("equipment_inventory"); equipment(r.equipment_inventory, "返回的装备库存"); }
     if (Array.isArray(r.global_upgrades)) { used.add("global_upgrades"); upgrades(r.global_upgrades, "返回的天赋与升级"); }
     if (Array.isArray(r.recruit_candidates)) {
-        used.add("recruit_candidates"); table("返回的招募候选", ["候选", "招募费用", "资格", "属性"], r.recruit_candidates, item => [
+        used.add("recruit_candidates"); table("recruits", "返回的招募候选", ["候选", "招募费用", "资格", "属性"], r.recruit_candidates, item => [
             item.name || item.candidate_id, price(item), flag(item.can_recruit, "可招募", requirementLines(item.missing).join(" · ") || "条件未满足"),
             [item.effective_stats ? "Lv1面板（含公会直接加成）" : "基础属性", returnStats(item.effective_stats || item.base_stats)].join("\n"),
         ]);
     }
     if (Array.isArray(r.crafting_recipes)) {
-        used.add("crafting_recipes"); table("返回的制作配方", ["配方 / 成品", "费用", "资格", "成品属性"], r.crafting_recipes, item => [
+        used.add("crafting_recipes"); table("recipes", "返回的制作配方", ["配方 / 成品", "费用", "资格", "成品属性"], r.crafting_recipes, item => [
             `${item.name || item.recipe_id}\n${item.output_name || ""}`, price(item), flag(item.can_craft, "可制作", requirementLines(item.missing).join(" · ") || "条件未满足"), returnStats(item.output_stats),
         ]);
     }
@@ -143,11 +163,11 @@ export function describeReturn(frame: WatchFrame): ActionReturn {
     if (output.equipment_inventory?.length) equipment(output.equipment_inventory, event.name === "craft_equipment" ? "实际制作出的装备" : "操作后的装备");
     if (returnedMembers.length) members(returnedMembers, event.name === "recruit_adventurer" ? "招募结果" : "操作后的成员");
     if (output.dismissed_adventurers?.length) members(output.dismissed_adventurers, "已解雇成员，以下为离队前记录");
-    const battles = r.turn_result?.battles || r.battles || (r.preview ? [r.preview] : r.battle ? [r.battle] : undefined);
+    const battles = r.turn_result?.battles || r.event?.battles || r.battles || (r.preview ? [r.preview] : r.battle ? [r.battle] : undefined);
     if (Array.isArray(battles)) {
         used.add("battles"); used.add("preview"); used.add("battle");
         const timing = battles.some(item => item.actions_taken != null || item.time_elapsed != null || item.combat?.actions_taken != null || item.combat?.time_elapsed != null);
-        table(view.preview ? "模拟战果，不是实际讨伐" : "已记录的战斗结果", ["成员 → 怪物", "结果", view.preview ? "模拟奖励" : "已记录奖励", ...(timing ? ["行动 / 耗时"] : [])], battles, item => [
+        table("battles", view.preview ? "模拟战果" : "战斗结果", ["成员 → 怪物", "结果", view.preview ? "模拟奖励" : "奖励", ...(timing ? ["行动 / 耗时"] : [])], battles, item => [
             `${item.adventurer_name || "成员未记录"} → ${item.monster_name || "怪物未记录"}`, battleResult(item),
             item.reward ? `金币 ${number(item.reward.gold)} · 经验 ${number(item.reward.experience)}${item.reward.materials ? "\n" + Object.entries(item.reward.materials).map(([key, value]) => `${MATERIALS[key] || key} ${value}`).join("、") : ""}` : "奖励未记录",
             ...(timing ? [`行动 ${number(item.actions_taken ?? item.combat?.actions_taken)}\n耗时 ${number(item.time_elapsed ?? item.combat?.time_elapsed)}`] : []),
@@ -161,26 +181,28 @@ export function describeReturn(frame: WatchFrame): ActionReturn {
     }
     if (Array.isArray(r.events)) {
         used.add("events");
-        table("已返回的事件", ["回合 / 行动", "事件 / 技能", "内容 / 伤害", "目标生命 / 治疗"], r.events, item => [
-            number(item.turn ?? item.action_index ?? item.sequence), item.skill_name || item.status_name || SIDES[item.action_type] || item.event_type || "未记录",
+        if (event.name === "get_events") table("events", "事件记录", ["回合", "内容"], r.events, item => [number(item.turn), item.summary || "未记录"]);
+        // 方案事件由方案面板按准备动作展示。
+        else if (event.name !== "execute_plan") table("events", "战斗过程", ["回合 / 行动", "事件 / 技能", "内容 / 伤害", "目标生命 / 治疗"], r.events, item => [
+            number(item.turn ?? item.action_index ?? item.sequence), item.skill_name || item.status_name || (item.skill_id ? readable(item.skill_id) : "") || SIDES[item.action_type] || item.event_type || "未记录",
             item.summary || `${item.actor_side ? SIDES[item.actor_side] || item.actor_side : ""} → ${item.target_side ? SIDES[item.target_side] || item.target_side : ""} · 伤害 ${number(item.damage)}`,
             `生命 ${number(item.target_hp)} · 治疗 ${number(item.healing)}`,
         ]);
     }
     if (Array.isArray(r.items) && event.name === "get_forecast") {
-        used.add("items"); table("已返回的未来条目，不是当前局面", ["回合 / 引用", "名称", "属性", "费用 / 基础奖励"], r.items, item => [
+        used.add("items"); table("forecast", "预告条目", ["回合 / 引用", "名称", "属性", "费用 / 基础奖励"], r.items, item => [
             `${number(item.turn)} / ${item.forecast_ref || ""}`, item.name || "未记录", returnStats(item.stats || item.base_stats),
             item.base_reward ? `基础金币 ${number(item.base_reward.gold)} · 基础经验 ${number(item.base_reward.experience)}` : price(item),
         ]);
     }
     view.fields = { ...view.fields, ...Object.fromEntries(Object.entries(r).filter(([key]) => !used.has(key) && !key.startsWith("_"))) };
     const resultNames = (items: Record<string, any>[]) => items.map(item => item.name || item.adventurer_id || item.instance_id || item.upgrade_id).join("、");
-    if (event.name === "execute_plan" && r.operation_count != null) view.summary = r.already_executed ? "方案已提交，本次未重复执行" : `已执行 ${r.operation_count} 步方案，不扣调用预算`;
+    if (event.name === "execute_plan" && r.operation_count != null) view.summary = r.already_executed ? "重复提交，未再次执行" : `已执行 ${r.operation_count} 步`;
     else if (event.name === "recruit_adventurer" && returnedMembers.length) view.summary = `招募到 ${resultNames(returnedMembers)}${returnedMembers[0].level != null ? `，等级 ${returnedMembers[0].level}` : ""}`;
-    else if (event.name === "craft_equipment" && output.equipment_inventory?.length) view.summary = `实际制成 ${resultNames(output.equipment_inventory)}，实例 ${output.equipment_inventory.map((item: any) => item.instance_id).join("、")}`;
-    else if (event.name === "purchase_upgrade" && output.global_upgrades?.length) view.summary = `本次已解锁 ${resultNames(output.global_upgrades)}`;
+    else if (event.name === "craft_equipment" && output.equipment_inventory?.length) view.summary = `制成 ${resultNames(output.equipment_inventory)}`;
+    else if (event.name === "purchase_upgrade" && output.global_upgrades?.length) view.summary = `解锁 ${resultNames(output.global_upgrades)}`;
     else if (event.name === "dismiss_adventurer" && output.dismissed_adventurers?.length) view.summary = `已解雇 ${resultNames(output.dismissed_adventurers)}`;
-    else if (event.name === "configure_tactics" && returnedMembers.some(item => item.tactics)) view.summary = returnedMembers.filter(item => item.tactics).map(item => `${item.name}：${Object.entries(item.tactics).filter(([key]) => key === "skill_priority" || key === "disabled_skills").map(([key, value]) => `${RETURN_LABELS[key]} ${Array.isArray(value) ? value.length ? value.map(readable).join(" → ") : key === "skill_priority" ? "默认顺序" : "无" : readable(value)}`).join("，")}`).join(" · ");
+    else if (event.name === "configure_tactics" && returnedMembers.some(item => item.tactics)) view.summary = `已配置 ${resultNames(returnedMembers.filter(item => item.tactics))}`;
     else if (returnedMembers.length) view.summary = `操作后的成员：${returnedMembers.map((item: any) => `${item.name}${item.level != null ? `（等级 ${item.level}）` : ""}`).join("、")}`;
     else if (output.equipment_inventory?.length) view.summary = `装备变更：${output.equipment_inventory.map((item: any) => `${item.name} → ${item.equipped_by === null ? "库存" : readable(item.equipped_by)}`).join("、")}`;
     else if (view.tables.length) view.summary = view.tables.map(item => `${item.title} ${item.rows.length} 条`).join(" · ");

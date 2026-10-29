@@ -2,9 +2,10 @@ import { TOOLS, fmt } from "./model";
 import { SLOTS, STAT_NAMES, signed } from "./sceneModel";
 import { actionNames as namesFor, actionTarget as targetName, describeInput, readableActionText as readable } from "./actionInputs";
 import type { ActionInput } from "./actionInputs";
-import { battleResult, describeReturn } from "./actionReturns";
+import { battleResult, describeReturn, summarizeBattles } from "./actionReturns";
 import type { ActionReturn } from "./actionReturns";
 import { stateChanges } from "./watchModel";
+import { describeChanges, changeDelta } from "./actionChanges";
 import type { EventRecord, GameEntity } from "./types";
 import type { WatchFrame } from "./watchModel";
 import { isReadOnlyTool, isRefreshPreview, toolCallStatus } from "./toolCalls";
@@ -116,13 +117,12 @@ function querySummary(frame: WatchFrame): string {
         return `返回 ${items.length} ${field[1]}${names ? `：${names}${items.length > 3 ? "等" : ""}` : ""}`;
     }
     if (field && r._collection_counts?.[field[0]] != null) return `返回 ${r._collection_counts[field[0]]} ${field[1]}`;
-    if (e.name === "get_forecast" && r.start_turn != null) return `未来${r.kind === "recruits" ? "招募" : "怪物"} T${r.start_turn}—T${r.end_turn}，命中 ${fmt(r.total_matches)} 条，不是当前局面`;
-    if (e.name === "preview_team_power" && r.current_rank_score != null) return `当前战力 ${fmt(r.current_rank_score)} → 方案战力 ${fmt(r.projected_rank_score)}（变化 ${fmt(r.rank_score_delta)}），方案未执行`;
-    if (e.name === "preview_battle" && r.preview) return `${r.preview.adventurer_name} 对 ${r.preview.monster_name}：模拟${battleResult(r.preview)}，不是实际讨伐`;
-    if (e.name === "preview_team_power" && r.rank_score != null) return `试算评分 ${fmt(r.rank_score)}，未执行真实讨伐`;
-    if (e.name === "preview_team_power" && r.operation_count != null) return `试算 ${r.operation_count} 步，方案未执行，不估算战力`;
-    if (e.name === "preview_monster_refresh" || isRefreshPreview(e)) return "仅查看刷新候选，未刷新怪物或消耗金币";
-    if (e.name === "get_battle_log" && r.battle) return `${r.battle.adventurer_name} 对 ${r.battle.monster_name}的已有战斗记录`;
+    if (e.name === "get_forecast" && r.start_turn != null) return `${r.kind === "recruits" ? "招募" : "怪物"}预告 T${r.start_turn}${r.start_turn === r.end_turn ? "" : `-T${r.end_turn}`}，${fmt(r.total_matches)} 条`;
+    if (e.name === "preview_team_power" && r.current_rank_score != null) return `战力 ${fmt(r.current_rank_score)} → ${fmt(r.projected_rank_score)}（${signed(r.rank_score_delta)}）`;
+    if (e.name === "preview_battle" && r.preview) return `${r.preview.adventurer_name} → ${r.preview.monster_name}：模拟${battleResult(r.preview)}`;
+    if (e.name === "preview_team_power" && r.rank_score != null) return `试算战力 ${fmt(r.rank_score)}`;
+    if (e.name === "preview_team_power" && r.operation_count != null) return `共 ${r.operation_count} 步`;
+    if (e.name === "get_battle_log" && r.battle) return `${r.battle.adventurer_name} → ${r.battle.monster_name}：${battleResult(r.battle)}`;
     return "";
 }
 export function describeAction(frame: WatchFrame, start = frame.cursor, call?: WatchFrame): ActionEntry {
@@ -140,18 +140,18 @@ export function describeAction(frame: WatchFrame, start = frame.cursor, call?: W
     let summary = failed ? readable(String(e.result?.error || e.error || e.failure_reason || frame.summary || String(e.content || "").split("\n", 1)[0]), names) : "";
     const effects = tool && kind === "action" ? observedEffects(frame, names) : [];
     const returned = describeReturn(described);
-    if (status === "pending") summary = "工具已发出，尚未记录执行结果";
+    if (status === "pending") summary = "等待工具返回";
     else if (tool && !failed) {
         if (kind === "query") summary = querySummary(described);
         else if (e.name === "write_memo" && e.result?.memo) {
             const memo = e.result.memo;
-            if (memo.content != null) summary = "已返回备忘正文，完整内容见业务返回。";
-            else if (memo.count != null) summary = `已记录备忘 ${memo.count} 条${memo.dropped_oldest ? `，已丢弃最早 ${memo.dropped_oldest} 条` : ""}`;
+            if (memo.content != null) summary = "备忘已保存";
+            else if (memo.count != null) summary = `备忘 ${memo.count} 条${memo.dropped_oldest ? `，已丢弃最早 ${memo.dropped_oldest} 条` : ""}`;
         }
         else if (e.name === "end_turn") {
             const battles = e.result?.turn_result?.battles;
             if (Array.isArray(battles)) {
-                if (!e.result.event?.summary) title = `结束回合：${battles.length} 场实际讨伐`;
+                if (!e.result.event?.summary) title = `结束回合：${battles.length} 场讨伐`;
                 summary = battles.length ? battles.map(b => `${b.adventurer_name} → ${b.monster_name}：${battleResult(b)}`).join(" · ") : "本回合没有安排讨伐";
             }
         }
@@ -186,10 +186,24 @@ export function actionEntries(frames: WatchFrame[]): ActionEntry[] {
 export function actionResult(entry: ActionEntry): string {
     if (entry.summary) return entry.summary;
     if (entry.kind === "system") return entry.title;
-    if (entry.status === "pending") return "工具已发出，尚未记录执行结果";
-    if (entry.status === "failed") return "执行失败，原日志未记录具体原因。";
-    if (entry.status === "recorded") return "已记录调用，但原日志未明确记录执行是否成功。";
-    return entry.effects.length ? entry.effects.join(" · ") : "已记录操作成功，没有可展示的额外业务返回。";
+    if (entry.status === "pending") return "等待工具返回";
+    if (entry.status === "failed") return "失败原因未记录";
+    if (entry.status === "recorded") return "执行结果未记录";
+    return entry.effects.length ? entry.effects.join(" · ") : "操作完成";
+}
+/** 列表与详情的短摘要，变化和集合由结构化结果面板承载。 */
+export function actionBrief(entry: ActionEntry): string {
+    if (entry.status === "failed" || entry.status === "pending" || entry.kind === "system") return actionResult(entry);
+    const battles = entry.returned.tables.find(table => table.kind === "battles");
+    if (battles) {
+        const result = summarizeBattles(battles.records);
+        return `${battles.rows.length} 场，${result.wins} 胜 ${result.losses} 负${result.unknown ? `，其它 ${result.unknown}` : ""}`;
+    }
+    if (entry.event.name === "preview_team_power" || entry.event.name === "execute_plan") return entry.summary;
+    const resources = describeChanges(entry).resources;
+    const main = resources.slice(0, 2).map(change => `${change.label} ${changeDelta(change, entry)}`).join("，");
+    const text = main || entry.summary || (entry.status === "recorded" ? "执行结果未记录" : "");
+    return text.length > 120 ? text.slice(0, 120) + "…" : text;
 }
 export function actionSummary(entry: ActionEntry): string {
     const facts = [entry.summary, ...entry.effects].filter(Boolean).join(" · ");

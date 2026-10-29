@@ -74,7 +74,7 @@ it("派遣结构、技能顺序和长备忘完整保存，列表预览不改写�
 it("完整摘要保留第三项之后的实际变化，缺失结果不冒充成功或留白", () => {
     const changes = Array.from({ length: 6 }, (_, index) => ({ kind: "resource", label: `资源${index}`, before: index, after: index + 1 }));
     expect(actionSummary(entry({}, { ok: true, event: { changes } }))).toContain("资源5 5 → 6");
-    expect(actionSummary(entry({}, {}))).toContain("未明确记录执行是否成功");
-    expect(actionSummary(entry({}, { ok: true }))).toContain("没有可展示的额外业务返回");
-    expect(actionSummary(entry({}, { ok: false }))).toContain("未记录具体原因");
+    expect(actionSummary(entry({}, {}))).toBe("执行结果未记录");
+    expect(actionSummary(entry({}, { ok: true }))).toBe("操作完成");
+    expect(actionSummary(entry({}, { ok: false }))).toBe("失败原因未记录");
 });

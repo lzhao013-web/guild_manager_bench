@@ -2,9 +2,8 @@ import { historyAction, planSteps } from "./trajectoryModel";
 import type { TrajectoryData, TrajectoryRow } from "./trajectoryModel";
 import type { ActionEntry } from "./actionModel";
 import { isReadOnlyTool } from "./toolCalls";
-import { battleResult } from "./actionReturns";
-import { MATERIALS, STAT_NAMES, signed } from "./sceneModel";
-import { fmt } from "./model";
+import { summarizeBattles } from "./actionReturns";
+import { STAT_NAMES, signed } from "./sceneModel";
 
 export interface TimelineItem {
     id: string;
@@ -157,19 +156,5 @@ export function settlement(item: TimelineItem) {
     const result = item.entry.event.result;
     const recorded = result?.turn_result?.battles ?? result?.event?.battles;
     if (!Array.isArray(recorded)) return null;
-    const battles = recorded.map((battle: Record<string, any>) => ({
-        name: `${battle.adventurer_name || "成员未记录"} → ${battle.monster_name || "怪物未记录"}`,
-        result: battleResult(battle),
-    }));
-    const wins = battles.filter(b => b.result === "胜利").length;
-    const losses = battles.filter(b => b.result === "失败").length;
-    const unknown = battles.length - wins - losses;
-    const reward = (field: string) => recorded.every(b => typeof b.reward?.[field] === "number")
-        ? recorded.reduce((sum, b) => sum + b.reward[field], 0) : null;
-    const materials = new Map<string, number>();
-    const materialsKnown = recorded.every(b => b.reward?.materials != null);
-    if (materialsKnown) for (const battle of recorded) for (const [id, amount] of Object.entries(battle.reward.materials))
-        if (typeof amount === "number") materials.set(id, (materials.get(id) || 0) + amount);
-    return { battles, wins, losses, unknown, gold: reward("gold"), experience: reward("experience"),
-        materials: materialsKnown ? [...materials].filter(([, value]) => value !== 0).map(([id, value]) => `${MATERIALS[id] || id} +${fmt(value)}`) : null };
+    return summarizeBattles(recorded);
 }

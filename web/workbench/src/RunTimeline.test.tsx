@@ -71,9 +71,10 @@ it("只有点选回合才展示详情，其它回合仍留在总览，原始定�
     const details = screen.getByRole("region", { name: "所选回合操作" });
     expect(within(details).getByText("Rank Score 0", { exact: true })).toBeVisible();
     expect(within(details).getByText("全体成员攻击提高2点")).toBeVisible();
-    expect(within(details).getByText("金币 100 → 80（-20）")).toBeVisible();
-    expect(within(details).getByText("战士 → 史莱姆")).toBeVisible();
-    expect(within(details).getByText("奖励材料 · 铁矿石 +1")).toBeVisible();
+    expect(within(within(details).getByRole("article", { name: "购买全局加成 训练场" })).getByRole("region", { name: "实际资源变化" })).toHaveTextContent("金币-20");
+    const battle = within(details).getByRole("article", { name: "战士 → 史莱姆" });
+    expect(battle).toBeVisible();
+    expect(within(battle).getByText("铁矿石").parentElement).toHaveTextContent("铁矿石1");
     expect(screen.getAllByRole("button", { name: /查看第 .* 回合概览/ })).toHaveLength(3);
     expect(onLocate).not.toHaveBeenCalled();
     fireEvent.click(within(details).getByRole("button", { name: "查看详情 购买全局加成 训练场" }));
@@ -132,7 +133,7 @@ it("回滚尝试不增加主表行或冒充有效升级，失败和无工具记�
     const details = screen.getByRole("region", { name: "所选回合操作" });
     expect(within(details).getByText("配方查询失败")).toBeVisible();
     fireEvent.change(within(details).getByLabelText("选择回合尝试"), { target: { value: "200" } });
-    expect(within(details).getByText("此尝试已回滚，不再生效。")).toBeVisible();
+    expect(within(details).getByText("这次尝试已撤销，操作结果不再生效。")).toBeVisible();
     expect(within(details).getByText("回滚尝试购买铁甲", { exact: true })).toBeVisible();
     expect(second).not.toHaveTextContent("铁甲");
 });
@@ -153,10 +154,10 @@ it("批量方案中的全局升级进入总览，重复提交不重复计数或�
     expect(first.querySelector(".run-process-battle")).toHaveAttribute("title", "已结束 / 战果缺失");
     fireEvent.click(first);
     const upgrade = screen.getByRole("article", { name: "方案解锁训练场" });
-    expect(within(upgrade).getByText("方案第 2 / 2 步 · 共用一次原子提交")).toBeVisible();
+    expect(within(upgrade).getByText("方案第 2 / 2 步")).toBeVisible();
     expect(within(upgrade).getByRole("button", { name: "查看详情 方案解锁训练场" })).toHaveTextContent("查看所属方案");
     expect(screen.getAllByText("方案制作铁剑", { exact: true })).toHaveLength(1);
-    expect(screen.getByText("战果与奖励未记录，不按零场或零收益处理。")).toBeVisible();
+    expect(screen.getByText("战果未记录")).toBeVisible();
 });
 
 it("加载失败不输出假零回合，旧服务覆盖提示收在按需说明中", async () => {
@@ -171,9 +172,9 @@ it("旧服务的有限覆盖始终可见，详细提示不占用总览高度，�
     expect(await screen.findByText(/仅当前执行阶段/)).toBeVisible();
     const notes = screen.getByText("记录提示").closest("details")!;
     expect(notes).not.toHaveAttribute("open");
-    expect(screen.getByText(/服务尚未提供回合边界/)).not.toBeVisible();
+    expect(screen.getByText(/部分回合记录不完整/)).not.toBeVisible();
     fireEvent.click(notes.querySelector("summary")!);
-    expect(screen.getByText(/服务尚未提供回合边界/)).toBeVisible();
+    expect(screen.getByText(/部分回合记录不完整/)).toBeVisible();
     expect(screen.queryByText(/Rank Score/)).not.toBeInTheDocument();
 });
 

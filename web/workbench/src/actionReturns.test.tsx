@@ -21,15 +21,15 @@ it("招募、制作与天赋直接展示实际结果对象，不再只返回成�
     const recruited = entry("recruit_adventurer", { ok: true, _action_output: { adventurers: [member] } }, { candidate_id: "candidate" });
     expect(actionResult(recruited)).toBe("招募到 结果剑士，等级 2");
     const crafted = entry("craft_equipment", { ok: true, _action_output: { equipment_inventory: [{ instance_id: "new", name: "新制铁剑", slot: "main_hand", stats: { attack: 7 }, equipped_by: null }] } }, { recipe_id: "recipe" });
-    expect(actionResult(crafted)).toContain("实际制成 新制铁剑，实例 new");
+    expect(actionResult(crafted)).toBe("制成 新制铁剑");
     render(<ActionResults entry={crafted} />);
     const result = screen.getByRole("region", { name: "实际制作出的装备" });
-    expect(result).toHaveTextContent("攻击 7");
+    expect(within(result).getByText("攻击").parentElement).toHaveTextContent("攻击7");
     expect(result).toHaveTextContent("主手");
     expect(result).toHaveTextContent("未穿戴");
     expect(result).not.toHaveTextContent("旧库存铁剑");
     const unlocked = entry("purchase_upgrade", { ok: true, _action_output: { global_upgrades: [{ name: "训练场", upgrade_id: "training", unlocked: true, stats: { attack: 3 } }] } });
-    expect(actionResult(unlocked)).toBe("本次已解锁 训练场");
+    expect(actionResult(unlocked)).toBe("解锁 训练场");
     expect(unlocked.returned.tables[0].title).toBe("本次已解锁天赋");
     expect(unlocked.returned.tables[0].rows[0]).toContain("攻击 3");
     expect(recruited.returned.tables.some(table => table.title.includes("实际战术"))).toBe(false);
@@ -51,15 +51,15 @@ it("招募查询展示入队面板，并保留旧返回的基础属性标签", (
 it("查询使用本次返回而非当前快照，空返回不从已有队伍补人", () => {
     const empty = entry("get_party", { adventurers: [], experience_pool: 0 });
     const { rerender } = render(<ActionResults entry={empty} />);
-    expect(screen.getByRole("region", { name: "返回的队伍" })).toHaveTextContent("本次实际返回空列表");
+    expect(screen.getByRole("region", { name: "返回的队伍" })).toHaveTextContent("无条目");
     expect(screen.getByRole("region", { name: "业务返回" })).not.toHaveTextContent("结果剑士");
     const actual = entry("get_party", { adventurers: [{ ...member, name: "查询返回成员", level: 5 }], experience_pool: 0 });
     rerender(<ActionResults entry={actual} />);
     expect(screen.getByRole("region", { name: "返回的队伍" })).toHaveTextContent("查询返回成员");
-    expect(screen.getByRole("region", { name: "返回的队伍" })).toHaveTextContent("攻击 18");
+    expect(within(screen.getByRole("region", { name: "返回的队伍" })).getByRole("cell", { name: "攻击 18" })).toBeVisible();
 });
 
-it("输入始终可见且派遣改为紧凑表格，摘要、战果和奖励直接可读", () => {
+it("默认突出逐场战果和奖励，派遣输入按需展开", () => {
     const second = { ...member, adventurer_id: "hero2", name: "第二位剑士" };
     const action = actionEntries(watchFrames([
         rec(1, { type: "turn_started", observation: { ...before, adventurers: [member, second] } }),
@@ -69,15 +69,16 @@ it("输入始终可见且派遣改为紧凑表格，摘要、战果和奖励直�
                 { adventurer_name: "第二位剑士", monster_name: "首领", won: false, reward: { gold: 0, experience: 0 } },
             ] } } }),
     ]))[1];
-    expect(action.returned.tables[0].title).toBe("已记录的战斗结果");
+    expect(action.returned.tables[0].title).toBe("战斗结果");
     render(<ActionResults entry={action} />);
     const input = screen.getByRole("region", { name: "输入参数" });
-    expect(input.closest("details")).toBeNull();
+    expect(input.closest("details")).not.toHaveAttribute("open");
+    fireEvent.click(input.closest("details")!.querySelector("summary")!);
     expect(within(input).getByRole("table")).toBeVisible();
     expect(within(input).getAllByRole("row")).toHaveLength(3);
-    const battles = screen.getByRole("region", { name: "已记录的战斗结果" });
+    const battles = screen.getByRole("region", { name: "战斗结果" });
     expect(battles).toHaveTextContent("胜利");
-    expect(battles).toHaveTextContent("金币 0 · 经验 12");
+    expect(within(battles).getByLabelText("战果概览")).toHaveTextContent("奖励金币+0奖励经验+12");
     expect(within(battles).queryByRole("columnheader", { name: "行动 / 耗时" })).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "执行结果" }).compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
@@ -87,9 +88,10 @@ it("大集合可在已返回数据内分页和筛选，不额外请求，也不�
     const records = Array.from({ length: 13 }, (_, i) => ({ ...member, adventurer_id: `member-${i}`, name: `候选成员${i}`, skills: [{ skill_id: `skill-${i}`, name: "重斩" }] }));
     render(<ActionResults entry={entry("get_party", { adventurers: records })} />);
     const table = screen.getByRole("region", { name: "返回的队伍" });
-    expect(within(table).getAllByRole("row")).toHaveLength(7);
+    expect(within(table).queryByRole("article")).not.toBeInTheDocument();
+    expect(within(table).getAllByRole("row")).toHaveLength(9);
     fireEvent.click(within(table).getByRole("button", { name: "下一页" }));
-    expect(table).toHaveTextContent("候选成员6");
+    expect(table).toHaveTextContent("候选成员8");
     fireEvent.change(within(table).getByRole("searchbox"), { target: { value: "skill-12" } });
     expect(within(table).getAllByRole("row")).toHaveLength(2);
     expect(table).toHaveTextContent("候选成员12");
@@ -102,11 +104,11 @@ it("实际战术与模拟结果不拿输入冒充，失败不展示产物，缺�
     const configured = entry("configure_tactics", { ok: true, _action_output: { adventurers: [member] } }, { adventurer_id: "hero", skill_priority: ["slash"] });
     expect(configured.returned.tables[0].title).toContain("实际战术");
     expect(configured.returned.tables[0].rows).toContainEqual(["技能顺序", "默认顺序"]);
-    expect(actionResult(configured)).toContain("技能顺序 默认顺序");
+    expect(actionResult(configured)).toBe("已配置 结果剑士");
     const simulated = entry("preview_battle", { ok: true, preview: { adventurer_name: "结果剑士", monster_name: "史莱姆" } });
     const { rerender } = render(<ActionResults entry={simulated} />);
     expect(screen.getByRole("region", { name: "业务返回" })).toHaveTextContent("结果未记录");
-    expect(screen.getByText(/这是查询或模拟返回/)).toBeVisible();
+    expect(screen.getByRole("heading", { name: "预览结果" })).toBeVisible();
     expect(screen.getByRole("region", { name: "业务返回" })).toHaveTextContent("奖励未记录");
     rerender(<ActionResults entry={entry("craft_equipment", { ok: false, error: "金币不足", missing: { gold: 10 } }, { recipe_id: "sword" })} />);
     expect(screen.getByRole("region", { name: "执行结果" })).toHaveTextContent("金币不足");

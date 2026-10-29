@@ -3,21 +3,22 @@ import type { ReactNode } from "react";
 import { TrajectoryOverview } from "./TrajectoryOverview";
 import { ToolCallSummary } from "./ToolCallSummary";
 import { ArrowSquareOut, ClockCounterClockwise, MagnifyingGlass, CaretDown } from "@phosphor-icons/react";
-import { ACTION_STATUS, actionSummary } from "./actionModel";
-import { inputPreview } from "./actionInputs";
+import { ACTION_STATUS, actionBrief } from "./actionModel";
 import { TOOL_CALL_STATUS, toolCategoryLabel, summarizeToolCalls } from "./toolCalls";
 import type { Selection } from "./sceneModel";
 import { useTrajectories } from "./TrajectoryContext";
+import { runNotice } from "./runNotice";
 import { confirmed, historyAction, LIFECYCLE, matchesOperation, matchesTrajectoryState, objectActionTitle, OPERATION_CATEGORIES, planSteps, subjectRows, trajectorySearch } from "./trajectoryModel";
 import type { OperationCategory, TrajectoryRow, TrajectoryState } from "./trajectoryModel";
 import "./trajectories.css";
 
 export function HistoryState() {
     const history = useTrajectories()!;
+    const notice = runNotice(history.data?.warning);
     return <>
         {history.pending && <p className="trajectory-note">正在读取整局轨迹…</p>}
         {history.error && <p role="alert">轨迹读取失败：{history.error.message} <button onClick={history.refresh}>重试</button></p>}
-        {history.data?.warning && <p className="trajectory-warning">{history.data.warning}</p>}
+        {notice && <p className="trajectory-warning">{notice}</p>}
         {history.locationError && <p role="alert">无法定位：{history.locationError}</p>}
     </>;
 }
@@ -32,8 +33,7 @@ export function TrajectoryResult({ row, subject }: { row: TrajectoryRow; subject
         <span className="trajectory-when"><b>第 {row.turn ?? "未知"} 回合</b><small>操作 {row.ordinal}</small></span>
         <span className="trajectory-content"><strong>{title}</strong>
             {title !== entry.title && <small>对应行动：{entry.title}</small>}
-            <small>{actionSummary(entry)}</small>
-            <small className="action-input-preview">输入 · {inputPreview(entry.input)}</small>
+            <small>{actionBrief(entry)}</small>
             <span className="trajectory-tags"><span>{toolCategoryLabel(row.event)}</span><span className={`action-status is-${entry.status}`}>{ACTION_STATUS[entry.status]}</span>
                 <span>{LIFECYCLE[row.lifecycle]}</span>
                 {row.planStep && <span>方案第 {row.planStep.index} / {row.planStep.total} 步 · 点击查看所属方案</span>}
@@ -90,11 +90,11 @@ export function RunTrajectories({ detail }: { detail?: ReactNode }) {
             <label className="trajectory-range">回合<input aria-label="轨迹起始回合" type="number" min="1" value={from} onChange={e => change(() => setFrom(e.target.value))} /><span>至</span><input aria-label="轨迹结束回合" type="number" min="1" value={to} onChange={e => change(() => setTo(e.target.value))} /></label>
         </div>
         <HistoryState />
-        <p className="trajectory-note">{history.data?.origin === "execution" ? "当前运行阶段" : "整局记录"} · {rows.length} 条匹配{searchable.length > (entries?.length || 0) && "（含方案子操作，不另计工具调用）"} · 包含续跑前历史，可能晚于当前观看位置</p>
+        <p className="trajectory-note">{history.data?.origin === "execution" ? "当前运行阶段" : "整局记录"} · {rows.length} 条匹配{searchable.length > (entries?.length || 0) && "（含方案内的操作）"}</p>
         <div className="trajectory-results" ref={viewport}>
             {history.data && <ToolCallSummary tools={tools} selected={type} onTool={name => quickFilter(name)} label="整局工具汇总" />}
             {rows.slice(current * 40, (current + 1) * 40).map(row => <TrajectoryResult key={row.id} row={row} />)}
-            {!history.pending && !history.error && !rows.length && <p className="trajectory-note">没有匹配的已记录行动。缺失日志不能证明从未购买或制作。</p>}
+            {!history.pending && !history.error && !rows.length && <p className="trajectory-note">没有匹配的行动记录。</p>}
         </div>
         {lastPage > 0 && <div className="trajectory-pagination"><button disabled={current === 0} onClick={() => setPage(current - 1)}>上一页</button><span>{current + 1} / {lastPage + 1}</span><button disabled={current === lastPage} onClick={() => setPage(current + 1)}>下一页</button></div>}
         </section>
@@ -131,9 +131,8 @@ function ObjectHistory({ subject }: { subject: Selection }) {
     return <details className="object-trajectories" key={`${subject.kind}:${subject.id}`}>
         <summary><ClockCounterClockwise size={14} /><strong>本局轨迹</strong><span>{history.error ? "轨迹读取失败" : history.pending ? "正在读取…" : summary}</span><b>{rows.length} 条</b><CaretDown size={13} /></summary>
         <HistoryState />
-        <p className="trajectory-note">整局历史，不代表当前观看快照。点击记录查看当时局面。</p>
         {rows.slice(0, limit).map(row => <TrajectoryResult key={row.id} row={row} subject={subject} />)}
         {rows.length > limit && <button className="text-button" onClick={() => setLimit(limit + 10)}>再显示 10 条</button>}
-        {!history.pending && !rows.length && <p className="trajectory-note">原日志未记录此对象的操作，不能确定获取回合。</p>}
+        {!history.pending && !rows.length && <p className="trajectory-note">没有找到相关操作记录。</p>}
     </details>;
 }

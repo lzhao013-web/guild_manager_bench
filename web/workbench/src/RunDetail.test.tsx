@@ -64,16 +64,17 @@ it("运行列表侧栏也保留具体对象与影响，不再被原始 600 事�
         rec(5, { type: "tool_result", name: "get_party", result: { ok: true, adventurers: [] } }),
     ]);
     expect(await screen.findByText("购买全局加成 验收训练场", { exact: true })).toBeVisible();
-    expect(screen.getByText("金币 100 → 40（-60）", { exact: true })).toBeVisible();
+    expect(screen.getByText("金币 -60", { exact: true })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "行动时间线" }));
     expect(screen.getAllByText("购买全局加成 验收训练场", { exact: true })).toHaveLength(1);
-    expect(screen.getAllByText("返回 0 位成员", { exact: true })).toHaveLength(2);
+    expect(screen.getAllByRole("region", { name: "返回的队伍" })).toHaveLength(2);
     expect(screen.getByRole("option", { name: "查看队伍（2）" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "实际局面变化" })).toBeVisible();
-    expect(screen.getAllByText("金币 100 → 40（-60）", { exact: true }).every(node => !node.closest("details"))).toBe(true);
+    expect(screen.getByRole("heading", { name: "资源变化" })).toBeVisible();
+    expect(screen.getByRole("region", { name: "实际资源变化" })).toHaveTextContent("金币-60");
+    expect(screen.getByText("完整实际变化（含属性前后值）").closest("details")).not.toHaveAttribute("open");
     fireEvent.change(screen.getByLabelText("筛选侧栏工具"), { target: { value: "get_party" } });
     expect(screen.queryByText("购买全局加成 验收训练场", { exact: true })).not.toBeInTheDocument();
-    expect(screen.getAllByText("返回 0 位成员", { exact: true })).toHaveLength(2);
+    expect(screen.getAllByRole("region", { name: "返回的队伍" })).toHaveLength(2);
     expect(requests.some(path => path.endsWith("/watch"))).toBe(true);
     expect(requests.every(path => path.includes("/watch") || path.includes("/events?"))).toBe(true);
 });

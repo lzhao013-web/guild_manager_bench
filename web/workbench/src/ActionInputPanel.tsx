@@ -27,8 +27,8 @@ function Value({ value }: { value: InputValue }) {
 export function ActionInputs({ input }: { input: ActionInput }) {
     return <section className="action-inputs" aria-label="输入参数">
         <h4>输入参数</h4>
-        {input.state === "missing" ? <p className="muted">原日志未记录输入参数，不能从结果反推。</p>
-            : input.value.kind === "object" && !input.value.children.length ? <p className="muted">无输入参数（已记录为空对象）</p>
+        {input.state === "missing" ? <p className="muted">没有保存这次操作的参数。</p>
+            : input.value.kind === "object" && !input.value.children.length ? <p className="muted">无输入参数</p>
             : <Value value={input.value} />}
     </section>;
 }

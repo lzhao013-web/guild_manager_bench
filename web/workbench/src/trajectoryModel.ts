@@ -1,4 +1,5 @@
 import { describeAction } from "./actionModel";
+import { PLAN_TOOLS } from "./actionInputs";
 import { matchesTool, OPERATION_CATEGORIES, operationCategory, summarizeToolCalls, toolCallStatus } from "./toolCalls";
 import type { ToolCallStatus } from "./toolCalls";
 import type { Selection } from "./sceneModel";
@@ -31,10 +32,6 @@ export interface TrajectoryData {
 }
 export type TrajectoryPage = WatchPage & { origin: TrajectoryData["origin"]; warning: string | null };
 export const LIFECYCLE = { confirmed: "回合已提交", uncommitted: "回合未提交", rolled_back: "已回滚，不再生效" };
-const PLAN_TOOLS: Record<string, string> = {
-    craft: "craft_equipment", recruit: "recruit_adventurer", dismiss: "dismiss_adventurer", equip: "equip_item", unequip: "unequip_item",
-    purchase_upgrade: "purchase_upgrade", allocate_experience: "allocate_experience", configure_tactics: "configure_tactics", refresh_monsters: "refresh_monsters",
-};
 /** 只展开成功执行的方案步骤。共享父记录定位，不将整批对象误关联到每个步骤。 */
 export function planSteps(row: TrajectoryRow): TrajectoryRow[] {
     const result = row.event.result;

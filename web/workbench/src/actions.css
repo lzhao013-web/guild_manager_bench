@@ -75,8 +75,98 @@
 .return-text { white-space: pre-wrap; overflow-wrap: anywhere; }
 .return-value-list { padding-left: 18px; margin: 0; }
 .return-pagination { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 6px; font-size: 11px; color: var(--gray-11); }
+.action-return-table.is-dense { margin: 8px 0; }
+.action-return-table.is-dense th { font-size: 10px; }
+.action-return-table.is-dense td { font-size: 11px; padding: 5px 6px; }
+.action-return-table.is-dense tbody > tr:not(.return-record-fields) td { white-space: nowrap; }
+.is-dense .return-cell-summary, .is-dense .return-object { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.6; }
+.is-dense .return-record-fields td { white-space: normal; }
 .return-pagination button { padding: 3px 7px; border: 1px solid var(--border); border-radius: 3px; color: var(--gray-12); background: transparent; cursor: pointer; font: inherit; }
-.action-preview-note { font-size: 11px; color: var(--amber-11); margin: 5px 0; }
+.action-plan-entry { border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+.action-plan-entry.selected { background: var(--gray-2); }
+.action-plan-entry.is-query { padding-bottom: 0; }
+.action-workspace .is-query .action-entry { padding-top: 7px; padding-bottom: 7px; }
+.action-workspace .is-query .action-entry > span:last-child { gap: 2px; }
+.action-workspace .is-query .action-entry small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.action-plan-heading { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.action-plan-panel, .action-output-panel { container-type: inline-size; min-width: 0; font-size: 12px; }
+.action-plan-panel.is-compact, .action-output-panel.is-compact { margin: 0 12px 0 77px; font-size: 11px; }
+.action-plan-panel h4, .action-output-panel h4 { margin: 0 0 7px; font-size: inherit; font-weight: 500; color: var(--gray-11); }
+.plan-resources, .plan-operation-summary { margin: 0 0 14px; }
+.plan-operation-summary > div { display: flex; flex-wrap: wrap; gap: 5px 14px; line-height: 1.65; }
+.plan-operation-summary b { font-weight: 500; }
+.plan-resources > div, .plan-stat-changes { display: flex; flex-wrap: wrap; gap: 5px 14px; }
+.plan-change { display: inline-flex; align-items: baseline; gap: 5px; }
+.plan-change > span { color: var(--gray-11); }
+.plan-change b { font-weight: 500; color: var(--gray-12); font-variant-numeric: tabular-nums; }
+.plan-resources .plan-change { padding: 2px 0; }
+.plan-members { margin-bottom: 10px; }
+.plan-members table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: inherit; }
+.plan-members th, .plan-members td { padding: 8px 6px; text-align: left; vertical-align: top; line-height: 1.65; overflow-wrap: anywhere; }
+.plan-members thead th { padding-top: 0; padding-bottom: 5px; color: var(--gray-11); font-size: 10px; font-weight: 400; border-bottom: 1px solid var(--border); }
+.plan-members th:first-child { width: 26%; padding-left: 0; }
+.plan-members th:nth-child(2) { width: 19%; }
+.plan-members tbody th { color: var(--gray-12); font-weight: 500; }
+.plan-members tbody tr + tr { border-top: 1px solid var(--border); }
+.plan-configuration { margin: 5px 0 0; overflow-wrap: anywhere; }
+.plan-configuration > span { color: var(--gray-11); margin-right: 7px; }
+.plan-other-changes, .plan-full-changes { margin: 8px 0; padding-left: 18px; line-height: 1.8; overflow-wrap: anywhere; }
+.plan-full-changes > li + li { margin-top: 5px; }
+.plan-full-changes ul { padding-left: 16px; }
+.plan-missing { color: var(--gray-11); margin: 8px 0; font-size: 11px; line-height: 1.6; }
+.plan-disclosure { margin: 8px 0 0; font-size: 11px; }
+.plan-disclosure > summary { width: fit-content; max-width: 100%; padding: 4px 0; color: var(--accent-11); cursor: pointer; line-height: 1.6; }
+.plan-disclosure > summary:hover { text-decoration: underline; }
+.plan-disclosure > summary:focus-visible { outline: 2px solid var(--accent-8); outline-offset: 3px; border-radius: 3px; }
+.plan-steps { margin: 6px 0; padding-left: 24px; }
+.plan-steps > li { padding: 5px 0 5px 3px; line-height: 1.65; }
+.plan-steps > li::marker { color: var(--gray-10); font-variant-numeric: tabular-nums; }
+.plan-steps strong { font-size: inherit; font-weight: 500; }
+.plan-steps p { margin: 3px 0 0; color: var(--gray-11); overflow-wrap: anywhere; }
+.plan-raw-details { border-top: 1px solid var(--border); padding-top: 8px; margin-top: 16px; }
+.action-entry-category { font-size: 10px; color: var(--gray-11); font-weight: 400; }
+.return-collection, .return-battles, .return-tactics, .return-statistics, .return-memo { margin: 12px 0; min-width: 0; }
+.return-collection > header { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; margin-bottom: 4px; }
+.return-collection > header h4 { margin-bottom: 0; }
+.return-collection > header > span { color: var(--gray-11); font-size: 10px; }
+.return-entity, .return-battle { padding: 9px 0; min-width: 0; }
+.return-entity + .return-entity, .return-battle + .return-battle { border-top: 1px solid var(--border); }
+.return-entity > header, .return-battle > header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.return-entity > header > strong, .return-battle > header > strong { font-size: inherit; font-weight: 500; overflow-wrap: anywhere; }
+.return-entity > header > span { display: flex; align-items: center; gap: 8px; color: var(--gray-11); font-size: 10px; flex-wrap: wrap; }
+.return-entity-owner { margin: 3px 0; color: var(--gray-11); }
+.return-stat-grid { display: flex; flex-wrap: wrap; gap: 3px 14px; padding: 0; margin: 6px 0; }
+.return-stat-grid > div { display: flex; align-items: baseline; gap: 6px; }
+.return-stat-grid dt, .return-stat-caption, .return-reward > span { color: var(--gray-11); }
+.return-stat-grid dd { margin: 0; color: var(--gray-12); font-weight: 500; font-variant-numeric: tabular-nums; }
+.return-stat-grid:empty { display: none; }
+.return-skills { display: flex; gap: 5px 10px; align-items: baseline; flex-wrap: wrap; margin: 6px 0; }
+.return-skills > span { color: var(--gray-11); }
+.return-skills ul { list-style: none; display: flex; flex-wrap: wrap; gap: 3px 12px; padding: 0; margin: 0; }
+.return-skills li { line-height: 1.7; overflow-wrap: anywhere; }
+.return-skills .plan-disclosure { margin-top: 0; }
+.return-description { line-height: 1.7; margin: 6px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.return-cost { border-left: 2px solid var(--gray-6); padding-left: 8px; }
+.return-reward { margin: 6px 0; }
+.return-battle-metrics { margin-bottom: 10px; }
+.return-tactics > div { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 10px; margin: 9px 0; }
+.return-tactics > div > span { color: var(--gray-11); }
+.return-tactics ol, .return-tactics ul { margin: 0; padding-left: 20px; line-height: 1.9; overflow-wrap: anywhere; }
+.return-tactics p { margin: 0; }
+.return-memo pre, .return-memo > p { font: inherit; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; margin: 6px 0; }
+.action-output-panel .action-returns { margin: 0; }
+@container (max-width: 430px) {
+    .plan-members thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+    .plan-members table, .plan-members tbody { display: block; }
+    .plan-members tbody tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; padding: 8px 0; gap: 3px 12px; }
+    .plan-members th, .plan-members td { display: block; padding: 0; width: auto; }
+    .plan-members tbody th:first-child { width: auto; }
+    .plan-members td:nth-child(2) { color: var(--gray-11); }
+    .plan-members td:last-child { grid-column: 1 / -1; }
+}
+@media (max-width: 767px) {
+    .action-plan-panel.is-compact, .action-output-panel.is-compact { margin-left: 12px; }
+}
 @container (max-width: 650px) {
     .action-workspace { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(180px, 1fr) minmax(180px, 1fr); }
     .action-workspace > .spectator-timeline { border-right: 0; border-bottom: 1px solid var(--border); }

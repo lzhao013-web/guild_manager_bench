@@ -32,7 +32,6 @@ export function ToolCallFilters({ tools, type, status, onType, onStatus, scope }
             <option value="all">全部执行状态</option>
             {Object.entries(TOOL_CALL_STATUS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select>
-        <p>查询与预览均列出，不代表实际收益。工具调用与对应结果合并计一次。</p>
     </div>;
 }
 
@@ -52,7 +51,7 @@ export function ToolCallSummary({ tools, selected, onTool, label }: {
                     <td>{tool.total}</td><td>{tool.succeeded}</td><td>{tool.failed}</td><td>{tool.pending}</td><td>{tool.recorded}</td>
                 </tr>)}</tbody>
             </ResizableTable>
-            {!tools.length && <p>尚无已记录的工具调用。</p>}
+            {!tools.length && <p>尚无工具调用。</p>}
         </section>
     </details>;
 }

@@ -11,7 +11,7 @@ import {
     ClockCounterClockwise,
 } from "@phosphor-icons/react";
 import { useEvents, useLiveWatch } from "./api";
-import { ACTION_STATUS, actionEntries, actionGroups, actionSummary, recentActions } from "./actionModel";
+import { ACTION_STATUS, actionEntries, actionGroups, actionBrief, recentActions } from "./actionModel";
 import type { ActionEntry } from "./actionModel";
 import { ActionResults } from "./ActionResultPanel";
 import { watchFrames } from "./watchModel";
@@ -350,7 +350,7 @@ export function RunDetail({
                             {recentEntries.length ? <ol className="recent-list">
                                 {recentEntries.map(entry => <li key={entry.frame.cursor} className={newEntries.has(entry.frame.cursor) ? "motion-new" : ""}>
                                     <span className="turn-label">{entry.frame.record.event.turn != null ? `T${entry.frame.record.event.turn}` : "提示"}</span>
-                                    <div><strong>{entry.title}</strong><p className={entry.status === "failed" ? "error-text" : "muted"}>{entry.rolledBack ? "已回滚 · " : ""}{actionSummary(entry)}</p></div>
+                                    <div><strong>{entry.title}</strong><p className={entry.status === "failed" ? "error-text" : "muted"}>{entry.rolledBack ? "已回滚 · " : ""}{actionBrief(entry)}</p></div>
                                 </li>)}
                             </ol> : <p className="muted">{watch.isPending ? "正在读取行动" : "尚无工具操作"}</p>}
                         </section>
