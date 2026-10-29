@@ -181,7 +181,7 @@ it("编队卡和详情显示结算贡献，聚焦时说明来源回合及非实�
     expect(within(card).getByText("段位贡献")).toBeVisible();
     expect(within(card).getByText("123.4")).toBeVisible();
     fireEvent.focus(card);
-    expect(await screen.findByRole("tooltip")).toHaveTextContent("第 8 回合结束时的段位贡献，非实时值。");
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("第 8 回合结束时的段位贡献。");
     fireEvent.blur(card);
     fireEvent.click(card);
     const detail = await screen.findByRole("region", { name: "验收重甲卫士 的详情" });
@@ -318,7 +318,7 @@ it("配方展示真实费用、材料缺口和成品，可返回同槽库存，�
     expect(within(details).getByText("当前未满足制作条件")).toBeVisible();
     expect(within(details).getByText("缺铁矿石 1")).toBeVisible();
     expect(within(details).getByText("需要 2 / 持有 1")).toBeVisible();
-    expect(within(details).getByText("只读查看所选快照，不执行制作。")).toBeVisible();
+    expect(within(details).queryByText(/只读查看/)).not.toBeInTheDocument();
     fireEvent.click(within(details).getByRole("button", { name: "查看同槽库存" }));
     expect(screen.getByRole("button", { name: "装备库存" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByLabelText("筛选装备槽位")).toHaveValue("main_hand");

@@ -30,6 +30,5 @@ export function RecipeDetails({ recipe, observation, onInventory }: {
         <h3>成品属性加成</h3><StatTiles stats={recipe.output_stats} modifier />
         <h3>成品技能</h3><SkillCards skills={recipe.output_skills} />
         <button className="scene-text-action" onClick={() => onInventory(recipe.output_slot)}>查看同槽库存<ArrowSquareOut size={13} /></button>
-        <p className="scene-note">只读查看所选快照，不执行制作。</p>
     </div>;
 }

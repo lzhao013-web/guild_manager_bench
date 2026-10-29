@@ -102,9 +102,6 @@ export function ApiProfilesPanel({
             <div className="api-profiles-toolbar">
                 <div>
                     <h2>可复用的 API 连接</h2>
-                    <p className="muted">
-                        编辑时可直接查看和修改 API Key。新建实验和续跑只需选择配置。
-                    </p>
                 </div>
                 <Button
                     highContrast
@@ -119,10 +116,6 @@ export function ApiProfilesPanel({
                     新增 API 配置
                 </Button>
             </div>
-            <p className="callout">
-                历史导入只还原命令中的协议、地址、凭证和模型，不代表密钥仍有效。点击“编辑
-                / 模型”可获取实时模型目录。列举模型不会发起推理请求。
-            </p>
             {message && (
                 <p className="callout" role="status">
                     {message}
@@ -131,7 +124,6 @@ export function ApiProfilesPanel({
             {(failure || error) && (
                 <p className="callout error" role="alert">
                     {failure || error}
-                    。如果刚升级前端，请在现有任务结束后重启服务。
                 </p>
             )}
             <div className="api-profiles-filter">
@@ -296,8 +288,7 @@ export function ApiProfilesPanel({
                         删除 {deleting?.name}？
                     </AlertDialog.Title>
                     <AlertDialog.Description>
-                        删除配置及其系统凭证引用。已经加入队列的 run
-                        不受影响。
+                        删除这份 API 配置。已排队和正在运行的任务不受影响。
                     </AlertDialog.Description>
                     <div className="dialog-footer">
                         <AlertDialog.Cancel>
@@ -332,8 +323,7 @@ export function ApiProfilesPanel({
                         导入本机命令历史中的 API？
                     </AlertDialog.Title>
                     <AlertDialog.Description>
-                        只读取已知位置的 PowerShell、Bash 和 Zsh
-                        命令历史，解析本项目运行命令中的参数，不执行命令。密钥存入当前系统用户的凭证库，不输出原始命令，不自动访问历史服务地址。重复连接会跳过。
+                        从 PowerShell、Bash 和 Zsh 的命令历史中提取本项目用过的 API 配置，并将密钥保存在系统凭证库中。不会执行历史命令或连接其中的服务。重复配置会跳过。
                     </AlertDialog.Description>
                     <div className="dialog-footer">
                         <AlertDialog.Cancel>
@@ -520,11 +510,11 @@ function ProfileEditor({
                     </label>
                 </div>
                 <p className="field-help">
-                    API Key 直接明文显示，可修改后保存。清空后保存会移除已保存的 Key，改用服务端环境变量。
+                    清空并保存后，将删除这份配置中的 API Key，改用服务器环境变量中的密钥。
                 </p>
                 {keyRead.state === "error" && (
                     <p className="callout error" role="alert">
-                        读取已保存的 API Key 失败：{keyRead.message}。可直接填写新的 Key 后保存，未修改前不会覆盖原配置。
+                        API Key 读取失败：{keyRead.message}。可以填写新密钥后保存。
                     </p>
                 )}
                 <ModelPicker
@@ -544,9 +534,7 @@ function ProfileEditor({
                             : undefined}
                 />
                 <p className="field-help">
-                    OpenAI / Responses 使用 /models，Anthropic 使用
-                    /v1/models，Google 原生 API 使用
-                    /models。服务地址按对应适配器的基础地址填写，不包含认证信息或查询参数。保存后使用当前填写的地址和 API Key。
+                    填写服务的基础地址，不要在地址中附带 API Key 或查询参数。
                 </p>
                 {error && (
                     <p className="callout error" role="alert">

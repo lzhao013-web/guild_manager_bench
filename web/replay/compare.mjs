@@ -118,7 +118,7 @@ function updateComparison() {
   $('workspace').hidden = false;
   if (!comparison.rounds.length) {
     $('emptyState').querySelector('h2').textContent = '两份存档都没有可对照的回合记录';
-    $('emptyState').querySelector('p').textContent = '可以重新选择存档。仅有最终统计的 JSON 不能用于行动级复盘。';
+    $('emptyState').querySelector('p').textContent = '请选择包含回合记录的存档。';
   }
   renderConditions(comparison);
   renderHighlights(comparison);
@@ -135,19 +135,15 @@ function conditionValue(value) {
 function renderConditions(comparison) {
   const unknown = comparison.conditions.some(c => c.state === 'unknown');
   const title = comparison.incompatible ? '存在不同的实验条件' : unknown ? '部分实验条件未记录' : '已记录的实验条件一致';
-  const warning = comparison.incompatible
-    ? '本页仍可查看行动差异，但不能据此认定模型优劣。已停用“分差扩大最多”自动推荐。'
-    : unknown ? '可核对的字段已列出。分数差仅供参考，不把缺失配置视为相同。' : '相同实验条件不代表相同模型输出。下面只比较已记录的行为和结果。';
   $('conditions').innerHTML = `<details class="condition-box">
     <summary><strong>${title}</strong>${comparison.conditions.map(c => `<span class="condition-chip ${c.state}">${esc(c.label)} · ${{ same: '相同', different: '不同', unknown: '未知' }[c.state]}</span>`).join('')}</summary>
-    <p class="condition-warning">${warning}</p>
     <table class="comparison-table condition-detail"><thead><tr><th>条件</th><th>A</th><th>B</th></tr></thead><tbody>${comparison.conditions.map(c => `<tr><th>${esc(c.label)}</th><td>${esc(conditionValue(c.left))}</td><td>${esc(conditionValue(c.right))}</td></tr>`).join('')}</tbody></table>
-    </details>${comparison.incompatible || unknown ? `<p class="condition-warning">${warning}</p>` : ''}`;
+    </details>`;
 }
 
 function renderHighlights(comparison) {
   const definitions = [
-    ['widening', '分差扩大最多', comparison.incompatible ? '实验条件不同，不作推荐' : '按相邻回合的绝对分差增量'],
+    ['widening', '分差扩大最多', comparison.incompatible ? '实验条件不同，无法自动选择' : '按相邻回合的绝对分差增量'],
     ['divergence', '首个行动分歧', '成功经营操作或讨伐安排不同'],
     ['failure', '首个失败节点', '工具失败、失败尝试或讨伐战败'],
   ];
@@ -221,12 +217,12 @@ function renderSummary(round) {
     const hasRecord = [a, b].some(attempt => attempt?.actions.some(action => action.name === name));
     if (hasRecord) rows.push([label, countCell(a, name), countCell(b, name)]);
   }
-  const differenceNote = !round.decisionComparable ? '一侧缺少已完成回合或操作记录，不判断完整行动差异。'
-    : round.differences.length ? round.differences.map(d => `<span>${esc(d)}</span>`).join('') : '未识别到已确认的行动差异。不代表操作顺序或所有细节相同。';
+  const differenceNote = !round.decisionComparable ? '其中一份存档缺少本回合的完整记录。'
+    : round.differences.length ? round.differences.map(d => `<span>${esc(d)}</span>`).join('') : '没有找到行动差异。';
   return `<section class="round-summary" aria-label="本回合对照摘要"><div class="summary-heading"><h2>第 ${round.number} 回合 · 行动对照</h2><span class="score-gap ${round.gap > 0 ? 'color-a' : round.gap < 0 ? 'color-b' : ''}">${esc(lead)}${esc(gapNote)}</span></div>
     <div class="difference-list">${differenceNote}</div>
     <table class="comparison-table"><thead><tr><th>对照项</th><th>A · ${esc(slots.A.model.meta.model)}</th><th>B · ${esc(slots.B.model.meta.model)}</th></tr></thead><tbody>${rows.map(([label, left, right]) => `<tr><th>${esc(label)}</th><td>${left}</td><td>${right}</td></tr>`).join('')}</tbody></table>
-    <p class="summary-note">资源显示回合开始 → 结束。未完成尝试仅显示最后已确认的局部状态。操作次数只计算主记录中已确认成功的操作，历史失败尝试另列。</p></section>`;
+    </section>`;
 }
 
 function renderActions(actions) {

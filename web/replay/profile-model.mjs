@@ -181,7 +181,7 @@ function insightsFor(profile) {
     ? `全部已记录尝试中，事实查询占 ${percent(query.count, habits.totalCalls)} 的工具调用；已确认失败 ${habits.failed} 次，成功写入备忘录 ${habits.memos.length} 次。`
     : '没有可分析的工具调用记录。';
   const resourcesText = !resources.last ? incomplete
-    : `最后已完成的第 ${resources.last.turn} 回合末，金币 ${resources.last.gold ?? '未知'}，经验池 ${resources.last.xp ?? '未知'}。余额本身不代表浪费。`;
+    : `最后已完成的第 ${resources.last.turn} 回合末，金币 ${resources.last.gold ?? '未知'}，经验池 ${resources.last.xp ?? '未知'}。`;
   return [
     { key: 'training', title: '培养路线', text: trainingText, events: top?.events || (training.events.length ? training.events : roundEvidence) },
     { key: 'investment', title: '投资节奏', text: investmentText, events: first ? [first] : roundEvidence },

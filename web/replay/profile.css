@@ -3,7 +3,6 @@
 .profile-heading h2 { text-transform: none; font-size: clamp(23px, 3vw, 32px); color: var(--text); letter-spacing: -.02em; overflow-wrap: anywhere; }
 .profile-heading p { color: var(--text-secondary); font-size: 12px; overflow-wrap: anywhere; }
 .profile-heading .profile-eyebrow, .profile-eyebrow { color: var(--profile-accent); font-size: 11px; letter-spacing: .14em; margin: 0 0 8px; }
-.profile-badge { color: var(--profile-accent); padding: 8px 12px; border: 1px solid #235d55; border-radius: 30px; font-size: 12px; white-space: nowrap; }
 .profile-coverage { padding: 14px 16px; background: var(--surface-raised); border: 1px solid var(--line-strong); border-radius: 10px; color: var(--text-secondary); font-size: 12px; }
 .profile-coverage strong { color: var(--profile-accent); }
 .profile-warning { color: #fcd34d; background: var(--warning-dim); padding: 12px 14px; border-radius: 8px; font-size: 12px; overflow-wrap: anywhere; }

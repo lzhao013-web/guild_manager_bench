@@ -35,7 +35,7 @@ function setup(jobs: Job[], url: string) {
 it("曲线分包加载失败时保留导航和原 URL，不自动刷新，并可切换到其它工作区", async () => {
     const { requests } = setup([testJob("active")], "/?run=active&section=curves&curves=active");
     const notice = await screen.findByRole("alert", { name: "曲线对比加载失败" });
-    expect(notice).toHaveTextContent("刷新不会停止后台运行任务");
+    expect(notice).toHaveTextContent("请刷新页面重试");
     expect(within(notice).getByRole("button", { name: "刷新页面" })).toBeVisible();
     expect(location.search).toContain("curves=active");
     expect(location.search).toContain("run=active");

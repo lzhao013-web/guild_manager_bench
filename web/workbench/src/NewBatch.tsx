@@ -15,7 +15,7 @@ interface RecoveryCheck {
     differences: { field: string; archived: string | number | null; current: string | number | null }[];
 }
 interface BatchBody { name: string; runs: RunRequest[] }
-const versionFields: Record<string, string> = { preset: "规则集", benchmark_version: "评测版本", protocol_hash: "运行协议", settings_hash: "评测参数", data_hash: "游戏数据", game_seed: "游戏种子", scoring_seed: "评分种子" };
+const versionFields: Record<string, string> = { preset: "规则集", benchmark_version: "评测版本", protocol_hash: "游戏规则版本", settings_hash: "评测参数", data_hash: "游戏数据", game_seed: "游戏种子", scoring_seed: "评分种子" };
 
 export const defaultDraft = (preset: string): Draft => ({
     name: "",
@@ -135,14 +135,13 @@ export function NewBatch({
             <form onSubmit={submit}>
                 {resume && (
                     <p className="callout">
-                        {branch ? `来源 ${draft.rerun_run_id}。创建独立 run，保留原记录，从指定回合开局重新调用模型。` : `续跑 ${draft.resume_run_id}。未完成回合可能回滚。`}
-                        沿用存档评测参数，版本不同会先要求确认。恢复会执行历史成功操作，跨版本局面可能与原记录不同。
+                        {branch ? `从 ${draft.rerun_run_id} 创建新的运行，原记录保留。` : `继续运行 ${draft.resume_run_id}，未完成的回合可能重新开始。`}
                     </p>
                 )}
                 {branch && <label className="callout">重跑起始回合
                     <input aria-label="重跑起始回合" type="number" min={1} max={draft.rerun_max_turn} required
                         value={draft.rerun_from_turn ?? 1} onChange={event => update("rerun_from_turn", Number(event.target.value))} />
-                    <span> 可选 1 到 {draft.rerun_max_turn}。保留前 x−1 回合，从第 x 回合开局重新执行。</span>
+                    <span> 可选 1 到 {draft.rerun_max_turn} 回合，此前的进度会保留。</span>
                 </label>}
                 <div className="form-grid">
                     <label>
@@ -162,7 +161,6 @@ export function NewBatch({
                 {profilesError && (
                     <p className="callout error" role="alert">
                         无法读取 API 配置：{profilesError}
-                        。刚升级工作台时，请先在任务结束后重启服务。
                     </p>
                 )}
                 <section className="form-section">
@@ -224,12 +222,9 @@ export function NewBatch({
                             )}
                         </div>
                     ))}
-                    <p className="field-help">
-                        选择已保存 API
-                        配置即可复用密钥。自定义连接的密钥仅用于本次执行，点击“保存此
-                        API
-                        配置”才会保存到系统凭证库。任务配置不保存密钥。
-                    </p>
+                    {draft.rows.some(row => !row.profile_id) && <p className="field-help">
+                        临时填写的 API Key 只用于本次运行。点击“保存此 API 配置”可留作下次使用。
+                    </p>}
                 </section>
                 {resume && (
                     <section className="form-section">
@@ -245,7 +240,7 @@ export function NewBatch({
                                     placeholder="留空沿用服务端配置"
                                 />
                                 <small>
-                                    只能选择一个强度，须符合本次接口的支持范围。
+                                    这里只能填写一个推理强度。
                                 </small>
                             </label>
                         </div>
@@ -265,7 +260,7 @@ export function NewBatch({
                                     placeholder="默认，或 medium, high"
                                 />
                                 <small>
-                                    多个强度用逗号分隔，须符合接口支持范围。
+                                    多个强度用逗号分隔。
                                 </small>
                             </label>
                             <label>
@@ -277,7 +272,7 @@ export function NewBatch({
                                     }
                                     placeholder="默认，或 42, 43"
                                 />
-                                <small>留空使用 preset 的默认种子。</small>
+                                <small>留空使用默认种子。</small>
                             </label>
                             <label>
                                 每个组合重复次数
@@ -318,7 +313,7 @@ export function NewBatch({
                                         )
                                     }
                                 />
-                                <small>不包含 end_turn。</small>
+                                <small>结束回合操作不计入次数。</small>
                             </label>
                             <label>
                                 评分种子
@@ -432,8 +427,8 @@ export function NewBatch({
             </form>
             <AlertDialog.Root open={!!confirmation} onOpenChange={open => { if (!open && !busy) setConfirmation(null); }}>
                 <AlertDialog.Content maxWidth="620px">
-                    <AlertDialog.Title>存档版本与当前版本不一致</AlertDialog.Title>
-                    <AlertDialog.Description>强行执行会按当前规则恢复历史操作，局面可能变化，也可能无法恢复。结果会标记为跨版本执行，不作为同版本标准评测比较。取消不会加入队列或请求模型。</AlertDialog.Description>
+                    <AlertDialog.Title>按当前设置继续运行？</AlertDialog.Title>
+                    <AlertDialog.Description>继续后会按当前规则恢复进度，结果可能与原来不同，也可能恢复失败。</AlertDialog.Description>
                     <div style={{ maxHeight: 300, overflow: "auto", overflowWrap: "anywhere", fontSize: 12 }}>
                         {confirmation?.recoveries.map(item => <section key={item.index}>
                             <h3>{item.run_id}{item.from_turn != null ? ` · 从 T${item.from_turn} 分支` : " · 续跑"}</h3>
@@ -445,7 +440,7 @@ export function NewBatch({
                     </div>
                     <div className="dialog-footer">
                         <AlertDialog.Cancel><Button type="button" variant="soft" color="gray" disabled={busy}>取消</Button></AlertDialog.Cancel>
-                        <Button type="button" highContrast color="amber" loading={busy} onClick={() => void confirmVersion()}>确认风险，强行执行</Button>
+                        <Button type="button" highContrast color="amber" loading={busy} onClick={() => void confirmVersion()}>仍然继续</Button>
                     </div>
                 </AlertDialog.Content>
             </AlertDialog.Root>

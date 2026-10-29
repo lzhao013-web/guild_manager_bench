@@ -65,7 +65,7 @@ it("选择保存的 API、从模型目录选择，再提交凭证引用而不是
         "history-model",
     );
     fireEvent.click(screen.getByRole("button", { name: "获取模型" }));
-    expect(await screen.findByText(/API 返回 1 个模型/)).toBeVisible();
+    expect(await screen.findByText(/已获取 1 个模型/)).toBeVisible();
     expect(
         document.querySelector('option[value="api-discovered"]'),
     ).toBeInTheDocument();
@@ -240,7 +240,7 @@ it("读取中的配置不被误报为删除，也不显示已改用环境密钥"
     );
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(
-        screen.getByText("配置尚未解析，不会自动改用其它凭证"),
+        screen.getByText("配置尚未加载"),
     ).toBeVisible();
     expect(screen.getByRole("button", { name: "获取模型" })).toBeDisabled();
 });

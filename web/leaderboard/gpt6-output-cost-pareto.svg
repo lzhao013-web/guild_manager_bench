@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1520 1140" width="1520" height="1140" style="width:100%;height:auto;display:block" role="img" aria-labelledby="chartTitle chartDesc">
 <title id="chartTitle">GPT-6 Astra 与 Sol：输出成本与性能的帕累托前沿</title>
-<desc id="chartDesc">10 个配置，10 次运行。横轴是美元输出费用，采用对数刻度。纵轴是段位积分，从 3000 起显示。菱形表示 Astra，圆形表示 Sol。实心标记表示全部候选点中的非支配解，空心标记表示被支配的配置。每档仅 1 次运行，结果不代表统计显著差异。</desc>
+<desc id="chartDesc">10 个配置，10 次运行。横轴是美元输出费用，采用对数刻度。纵轴是段位积分，从 3000 起显示。菱形表示 Astra，圆形表示 Sol。实心标记表示全部候选点中的非支配解，空心标记表示被支配的配置。每个配置运行 1 次。</desc>
 <style>
   :root {
     color-scheme: light dark;
@@ -174,7 +174,7 @@
 <text x="1208.00" y="982.00" class="cost" text-anchor="start">$12.44</text>
 <text x="1312.00" y="981.00" class="meta" text-anchor="start">7,052 分</text>
 <text x="64.00" y="1051.00" class="foot" text-anchor="start">计费：输出 Tokens ÷ 100 万 × 官方 Standard 短上下文输出单价。价格查询：2026-09-23。</text>
-<text x="64.00" y="1076.00" class="foot" text-anchor="start">仅估算输出费用，不含输入、工具调用及代理加价，不等于实际账单。每档仅 1 次运行，结果不代表统计显著差异。</text>
-<text x="64.00" y="1101.00" class="foot" text-anchor="start">数据来源：本项目排行榜。前沿仅比较图中配置，连线不代表插值。</text>
+<text x="64.00" y="1076.00" class="foot" text-anchor="start">输出费用为估算值，不含输入、工具调用和代理加价。每个配置运行 1 次。</text>
+<text x="64.00" y="1101.00" class="foot" text-anchor="start">数据来源：本项目排行榜。虚线连接帕累托前沿上的配置。</text>
 <a href="https://developers.openai.com/api/docs/pricing" target="_blank" rel="noopener noreferrer"><text x="1456.00" y="1101.00" class="foot link" text-anchor="end">OpenAI 官方定价 ↗</text></a>
 </svg>

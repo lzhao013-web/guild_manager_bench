@@ -137,21 +137,13 @@ export function ModelPicker({
                 ))}
                 {historical.map((model) => (
                     <option key={model} value={model}>
-                        历史记录 / 已保存模型（未验证）
+                        历史记录 / 已保存模型
                     </option>
                 ))}
             </datalist>
             {fetched && (
                 <p className="field-help" role="status">
-                    API 返回 {models.length} 个模型
-                    {truncated ? "，列表已截断" : ""}
-                    。可从输入框建议中选择，也可手动输入。列举成功不代表模型支持当前协议、工具调用或指定推理强度。
-                </p>
-            )}
-            {!fetched && historical.length > 0 && (
-                <p className="field-help">
-                    输入框包含 {historical.length}{" "}
-                    个历史或已保存模型，不代表当前仍可用。点击“获取模型”查询实时目录。
+                    {truncated ? `仅显示前 ${models.length} 个模型` : `已获取 ${models.length} 个模型`}
                 </p>
             )}
             {disabledReason && <p className="field-help">{disabledReason}</p>}

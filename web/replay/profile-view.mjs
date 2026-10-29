@@ -32,8 +32,7 @@ function trainingCard(p) {
       `${fmt(r.amount)} 经验 · ${pct(r.amount, t.knownAmount)}${r.unknownAmounts ? ` · 另有 ${r.unknownAmounts} 次金额未知` : ''}`, r.events)).join('');
   } else body += empty('没有可识别的培养对象。');
   if (t.unresolvedTargets) body += empty(`另有 ${t.unresolvedTargets} 次分配无法识别对象，已知金额 ${fmt(t.unresolvedAmount)}，未合并为某一位成员。`);
-  if (t.unknownAmounts) body += empty(`${t.unknownAmounts} 次分配量未知。占比的分母只包含已知金额，不把缺失金额当零。`);
-  body += empty('按成员 ID 区分接收者，同名成员不会合并。只描述本局投入，不评价培养是否最优。');
+  if (t.unknownAmounts) body += empty(`${t.unknownAmounts} 次经验分配未记录数量。`);
   return card('training', '01', '培养路线', body);
 }
 
@@ -49,7 +48,6 @@ function investmentCard(p) {
     body += i.phases.map(phase => `<div><span>T${phase.start}–${phase.end}</span><strong>${phase.observedRounds ? `${fmt(phase.knownGold)} 金币` : '尚无完成记录'}</strong><small>${phase.observedRounds} 个已完成回合${phase.unknownCosts ? ` · ${phase.unknownCosts} 笔金额未知` : ''}</small>${evidenceLinks(phase.events)}</div>`).join('');
     body += '</div>';
   }
-  body += empty('分段按声明的总回合数等分，仅用于展示。支出来自操作前后快照，不用最终余额倒推，不将失败尝试并入投资。');
   return card('investment', '02', '投资节奏', body);
 }
 
@@ -63,7 +61,7 @@ function equipmentCard(p) {
     body += `<p>${e.snapshot.total} 件装备中，${e.snapshot.free.length} 件明确未穿戴${e.snapshot.unknown ? `，${e.snapshot.unknown} 件归属未知` : ''}。</p>`;
     if (e.snapshot.free.length) body += `<div class="inventory-tags">${e.snapshot.free.map(item => `<span>${esc(item.name || item.instance_id)}</span>`).join('')}</div>`;
   } else body += empty('缺少最后已完成回合的装备快照。');
-  body += empty('首次穿戴不算替换。库存未穿戴不等于无用，可能为后续角色或搭配预留。');
+  body += empty('首次穿戴不算替换。');
   return card('equipment', '03', '装备使用', body);
 }
 
@@ -80,7 +78,7 @@ function habitsCard(p) {
     }).join('') + '</div>';
   } else body += empty('未记录到失败工具调用。');
   body += `<h4>成功写入备忘录 ${h.memos.length} 次</h4>${evidenceLinks(h.memos)}`;
-  body += empty('本节包含全部已记录尝试。只描述失败后的紧邻调用，不把调整参数等同于问题已解决，也不推断模型是否遵守备忘录。');
+  body += empty('包含所有尝试。');
   return card('habits', '04', '行动习惯', body);
 }
 
@@ -101,7 +99,6 @@ function resourcesCard(p) {
   body += '<h4>回合末经验池</h4>' + resourceChart(r.points, 'xp', '经验池');
   if (r.longestXp) body += `<p>最长连续 ${r.longestXp.length} 个已记录回合末仍有经验余额：T${r.longestXp.start}–T${r.longestXp.end}。${evidenceButton(ref(r.longestXp.start))}${r.longestXp.end !== r.longestXp.start ? evidenceButton(ref(r.longestXp.end)) : ''}</p>`;
   body += `<details class="resource-table"><summary>查看逐回合数值与覆盖情况</summary><table><thead><tr><th>回合</th><th>金币</th><th>经验池</th><th>未穿戴装备</th></tr></thead><tbody>${r.points.map(point => `<tr><td>${evidenceButton(ref(point.turn))}</td><td>${fmt(point.gold)}</td><td>${fmt(point.xp)}</td><td>${point.freeEquipment ? `${point.freeEquipment.free.length}${point.freeEquipment.unknown ? ` + ${point.freeEquipment.unknown} 件归属未知` : ''}` : '未知'}</td></tr>`).join('')}</tbody></table></details>`;
-  body += empty('只看已完成回合的边界。缺失回合或快照会中断连续记录，余额不等于积压，更不直接表示策略错误。');
   return card('resources', '05', '资源利用', body);
 }
 
@@ -127,11 +124,10 @@ export class ProfileView {
     this.runId = runId;
     const p = this.profile, c = p.coverage;
     this.root.classList.add('profile-view');
-    this.root.innerHTML = `<header class="profile-heading"><div><p class="profile-eyebrow">本局经营画像</p><h2>${esc(p.meta.model)}</h2><p>${esc(p.meta.source || p.meta.session)} · ${esc(statusName(p.meta.status))}</p></div><span class="profile-badge">事实归纳 · 每项可追溯</span></header>
-      <div class="profile-coverage">已完成 <strong>${c.completed} / ${fmt(c.maxTurns)}</strong> 回合 · 已记录 ${c.attempts} 次尝试 · 其中 ${c.failedAttempts} 次失败。经营投入只统计每回合的主完成记录，行动习惯包含全部尝试。</div>
-      ${c.missingSteps || c.unknownEconomicOutcomes ? `<p class="profile-warning">数据不完整：${c.missingSteps} 个已完成回合缺少操作列表，${c.unknownEconomicOutcomes} 次经营操作结果未知。以下描述仅代表可确认的记录。</p>` : ''}
+    this.root.innerHTML = `<header class="profile-heading"><div><p class="profile-eyebrow">本局经营画像</p><h2>${esc(p.meta.model)}</h2><p>${esc(p.meta.source || p.meta.session)} · ${esc(statusName(p.meta.status))}</p></div></header>
+      <div class="profile-coverage">已完成 <strong>${c.completed} / ${fmt(c.maxTurns)}</strong> 回合 · 已记录 ${c.attempts} 次尝试 · 其中 ${c.failedAttempts} 次失败。</div>
+      ${c.missingSteps || c.unknownEconomicOutcomes ? `<p class="profile-warning">数据不完整：${c.missingSteps} 个已完成回合缺少操作列表，${c.unknownEconomicOutcomes} 次经营操作结果未知。</p>` : ''}
       <section class="profile-insights" aria-label="本局画像摘要">${p.insights.map(i => `<article><span>${esc(i.title)}</span><p>${esc(i.text)}</p>${evidenceLinks(i.events)}</article>`).join('')}</section>
-      <p class="profile-note">这是一局的行为记录，不代表该模型在其他种子或配置下的稳定能力。不生成额外能力评分，不调用 AI 猜测动机。</p>
       <div class="profile-grid">${trainingCard(p)}${investmentCard(p)}${equipmentCard(p)}${habitsCard(p)}${resourcesCard(p)}</div>
       <section class="profile-proof" aria-label="画像依据"><header><div><span class="profile-eyebrow">回到记录核查</span><h3 data-proof-heading aria-live="polite">画像依据</h3></div><label>回合 <select data-proof-turn aria-label="画像依据回合">${[...p.replay.rounds.keys()].map(n => `<option value="${n}">第 ${n} 回合</option>`).join('')}</select></label></header><div data-proof-body></div></section>`;
     this.selectedTurn = p.replay.rounds.has(turn) ? turn : p.replay.rounds.keys().next().value ?? null;

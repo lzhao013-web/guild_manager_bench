@@ -132,8 +132,7 @@ export function ModelConnection({
             </label>
             {row.profile_id && !selected && !loading && !loadError && (
                 <p className="callout error" role="alert">
-                    这份 API
-                    配置已不存在。请选择其它配置或切换为自定义连接，不会自动改用其它凭证。
+                    找不到这份 API 配置。请选择其它配置，或手动填写连接信息。
                 </p>
             )}
             <div className="form-grid connection-fields">
@@ -182,9 +181,9 @@ export function ModelConnection({
                         <strong>凭证</strong>
                         <span>
                             {!selected
-                                ? "配置尚未解析，不会自动改用其它凭证"
+                                ? "配置尚未加载"
                                 : selected.credential_present
-                                  ? "使用系统凭证库中的密钥，浏览器无法读取"
+                                  ? "使用已保存的 API Key"
                                   : "使用服务端环境配置"}
                         </span>
                     </div>
@@ -232,7 +231,7 @@ export function ModelConnection({
                         ? loading
                             ? "正在读取 API 配置"
                             : loadError
-                              ? "API 配置暂时不可读，请刷新页面或重启服务"
+                              ? "API 配置读取失败，请刷新页面重试"
                               : "请选择有效的 API 配置后再获取模型"
                         : undefined
                 }
@@ -263,13 +262,6 @@ export function ModelConnection({
             {error && (
                 <p className="error-text field-help" role="alert">
                     {error}
-                </p>
-            )}
-            {selected && (
-                <p className="field-help">
-                    已选择 {selected.name}
-                    。连接和凭证在服务端解析，修改或删除配置不会影响已经加入队列的
-                    run。
                 </p>
             )}
         </>

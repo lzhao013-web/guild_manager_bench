@@ -25,9 +25,11 @@ it("版本差异先展示确认，取消不会创建任务，再确认才发送�
     const created = form();
     expect(screen.getByLabelText("重跑起始回合")).toHaveValue(3);
     fireEvent.click(screen.getByRole("button", { name: "加入队列" }));
-    const warning = await screen.findByRole("alertdialog", { name: "存档版本与当前版本不一致" });
+    const warning = await screen.findByRole("alertdialog", { name: "按当前设置继续运行？" });
     expect(warning).toHaveTextContent("old-version");
     expect(warning).toHaveTextContent("new-version");
+    expect(warning).toHaveTextContent("结果可能与原来不同，也可能恢复失败");
+    expect(warning).not.toHaveTextContent("标准评测比较");
     expect(warning).toHaveTextContent("从 T3 分支");
     expect(created).not.toHaveBeenCalled();
     expect(requests.map(request => request.path)).toEqual(["/api/workbench/batches/check"]);
@@ -35,7 +37,7 @@ it("版本差异先展示确认，取消不会创建任务，再确认才发送�
     await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
     expect(requests).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "加入队列" }));
-    fireEvent.click(await screen.findByRole("button", { name: "确认风险，强行执行" }));
+    fireEvent.click(await screen.findByRole("button", { name: "仍然继续" }));
     await waitFor(() => expect(created).toHaveBeenCalledOnce());
     const sent = requests.at(-1)!;
     expect(sent.path).toBe("/api/workbench/batches");
@@ -56,11 +58,11 @@ it("检查后版本再次变化会再次要求确认，不能静默沿用旧确�
     });
     const created = form();
     fireEvent.click(screen.getByRole("button", { name: "加入队列" }));
-    fireEvent.click(await screen.findByRole("button", { name: "确认风险，强行执行" }));
+    fireEvent.click(await screen.findByRole("button", { name: "仍然继续" }));
     await waitFor(() => expect(tokens).toHaveLength(1));
     expect(created).not.toHaveBeenCalled();
-    await waitFor(() => expect(screen.getByRole("button", { name: "确认风险，强行执行" })).toBeEnabled());
-    fireEvent.click(screen.getByRole("button", { name: "确认风险，强行执行" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "仍然继续" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "仍然继续" }));
     await waitFor(() => expect(created).toHaveBeenCalledOnce());
     expect(tokens).toEqual([token, "b".repeat(64)]);
 });

@@ -65,7 +65,7 @@ export function Empty({
                 <CircleNotch size={30} />
             </div>
             <h3>{title}</h3>
-            <p>{children}</p>
+            {children != null && <p>{children}</p>}
             {action}
         </div>
     );

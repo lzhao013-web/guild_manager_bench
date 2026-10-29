@@ -48,7 +48,7 @@ export function TalentDetails({ talent, upgrades, onSelect }: {
                 <h4>互斥分支</h4>
                 {requirements(exclusive, true)}
                 {!!missing?.exclusive_upgrade_ids?.length && <p className="error-text scene-note">被已解锁节点锁定：{missing.exclusive_upgrade_ids.map((id) => upgrades.find((upgrade) => upgrade.upgrade_id === id)?.name || id).join("、")}</p>}
-                <p className="scene-note">互斥不是前置，红色虚线表示不能同时选择。</p>
+                <p className="scene-note">红色虚线连接的天赋不能同时解锁。</p>
             </>}
             <h4>解锁效果</h4>
             {typeof talent.party_size_bonus === "number" && talent.party_size_bonus !== 0 && <p>编队容量 +{talent.party_size_bonus}</p>}

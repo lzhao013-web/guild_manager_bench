@@ -159,7 +159,6 @@
     font-size: var(--wb-text-xs);
 }
 .member-contribution > b { color: var(--gray-12); font-weight: 500; white-space: nowrap; }
-.contribution-hint { display: inline-flex; color: var(--gray-11); cursor: help; }
 .scene-member-contribution { margin: -4px 0 10px; }
 .scene-member-contribution > span { display: inline-flex; border-radius: 3px; }
 .scene-member-contribution > span:focus-visible { outline: 2px solid var(--accent-8); outline-offset: 3px; }

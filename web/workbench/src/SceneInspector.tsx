@@ -50,7 +50,7 @@ export function SceneInspector({
             <>
                 <header className="scene-object-heading">
                     <div className="scene-object-identity">
-                        <span className="scene-note" title="当前观看位置的快照，只读查看">
+                        <span className="scene-note" title="当前回合的局面">
                             <Lock size={11} />
                             {
                                 {
@@ -356,9 +356,6 @@ function EntityInspector({
                     {kind === "monster" && (
                         <>
                             <MonsterBadges monster={entity} />
-                            <p className="scene-note">
-                                属性来自本回合怪物快照，不推测胜率或剩余生命。
-                            </p>
                             <Reward value={entity.reward as Record<string, unknown> | undefined} />
                         </>
                     )}
