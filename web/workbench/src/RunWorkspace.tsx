@@ -7,7 +7,8 @@ import { MODULE_NAMES, emptySceneView, openSceneView } from "./sceneNavigation";
 import type { RunModule, SceneModule, SceneViews } from "./sceneNavigation";
 import type { Selection } from "./sceneModel";
 import type { Observation } from "./types";
-import type { RankContributions, WatchFrame, WatchRecord } from "./watchModel";
+import type { MemoSnapshot, RankContributions, WatchFrame, WatchRecord } from "./watchModel";
+import type { ModelTab } from "./ModelContentTabs";
 import "./workspace.css";
 import { animateModuleEnter } from "./motion";
 
@@ -17,6 +18,10 @@ export function RunWorkspace({
     before,
     frames,
     records,
+    memo,
+    modelTab,
+    onModelTab,
+    memoReverted = false,
     activeModule,
     onModule,
     onFrame,
@@ -30,6 +35,10 @@ export function RunWorkspace({
     before: Observation | null;
     frames: WatchFrame[];
     records: WatchRecord[];
+    memo: MemoSnapshot;
+    modelTab: ModelTab;
+    onModelTab: (tab: ModelTab) => void;
+    memoReverted?: boolean;
     activeModule: RunModule | null;
     onModule: (module: RunModule | null) => void;
     onFrame: (frame: WatchFrame) => void;
@@ -134,6 +143,7 @@ export function RunWorkspace({
                     observation={observation}
                     frames={frames}
                     records={records} live={live} returnModule={returningModule}
+                    memo={memo} modelTab={modelTab} onModelTab={onModelTab} memoReverted={memoReverted}
                     onOpen={open}
                     onFrame={onFrame}
                 />

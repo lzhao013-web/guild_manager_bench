@@ -17,11 +17,18 @@ import type { Observation } from "./types";
 import { actionBrief, recentActions } from "./actionModel";
 import { prioritizeUpgrades } from "./previewOrder";
 import { useNewItemKeys } from "./motion";
-import type { WatchFrame, WatchRecord } from "./watchModel";
+import type { MemoSnapshot, WatchFrame, WatchRecord } from "./watchModel";
+import { ModelContentTabs } from "./ModelContentTabs";
+import type { ModelTab } from "./ModelContentTabs";
+import { MemoPanel } from "./MemoPanel";
 
 const lowHealth = isLowHealth;
 
-export function RunOverview({ observation, frames, records, onOpen, onFrame, live = false, returnModule = null }: {
+export function RunOverview({ observation, frames, records, onOpen, onFrame, memo, modelTab, onModelTab, memoReverted = false, live = false, returnModule = null }: {
+    memo: MemoSnapshot;
+    modelTab: ModelTab;
+    onModelTab: (tab: ModelTab) => void;
+    memoReverted?: boolean;
     observation: Observation | null;
     frames: WatchFrame[];
     records: WatchRecord[];
@@ -54,12 +61,37 @@ export function RunOverview({ observation, frames, records, onOpen, onFrame, liv
         Number(lowHealth(b)) - Number(lowHealth(a)));
     const lowCount = observation?.adventurers.filter(lowHealth).length;
     const openAction = (frame: WatchFrame) => { onFrame(frame); onOpen("actions"); };
-    const modelModule = <OverviewModule id="models" returning={returnModule === "models"} title="模型输出" icon={<ChatText size={16} />}
-        emptyNote={!model ? "此位置尚未发出模型请求" : undefined}
-        note={`${models.length} 次调用`} onOpen={onOpen}>
-        {model && <ModelCallStats model={model} live={live} compact />}
-        {model ? <p className="overview-model-excerpt">{model.text || "此位置没有模型正文，展开查看调用记录。"}</p>
-            : <p className="overview-empty">此位置尚未发出模型请求</p>}
+    const modelModule = <section className={`overview-module overview-models ${returnModule === "models" ? "is-return-target" : ""}`} aria-label="模型输出概览">
+        <ModelContentTabs value={modelTab} onChange={onModelTab} compact
+            heading={<><ChatText size={16} /><h3>模型</h3></>}
+            action={<button data-module-target="models" aria-label="展开模型输出" title={`${models.length} 次调用，展开模型输出`} onClick={() => onOpen("models")}><ArrowsOutSimple size={15} /></button>}
+            output={<>
+                {model && <ModelCallStats model={model} live={live && modelTab === "output"} compact />}
+                {model ? <p className="overview-model-excerpt">{model.text || "此位置没有模型正文，展开查看调用记录。"}</p>
+                    : <p className="overview-empty">此位置尚未发出模型请求</p>}
+            </>}
+            memo={<MemoPanel memo={memo} compact reverted={memoReverted} onExpand={() => onOpen("models")} onActions={() => onOpen("actions")} />} />
+    </section>;
+    const actionModule = <OverviewModule id="actions" returning={returnModule === "actions"} title="最近行动" icon={<ListBullets size={16} />}
+        emptyNote={!current ? "此位置尚无经营行动" : undefined}
+        note={queryOnly ? `${queries.length} 次查询` : `${actions.length} 条操作与提示 · ${queries.length} 次查询`} onOpen={onOpen}>
+        {current && (
+            <button className={`overview-current-action ${current.status === "failed" ? "failed" : ""} ${newEntries.has(current.frame.cursor) ? "motion-new" : ""}`} onClick={() => openAction(current.frame)}>
+                <span className="overview-current-label">{current.kind === "query" ? "暂时只有查询记录" : current.kind === "system" ? "运行提示" : current.rolledBack ? "当时的操作，已回滚" : current.status === "pending" ? "正在执行" : "最近操作"} <time className="mono">{time(current.frame.record.at)}</time></span>
+                <strong>{actionTitle(current)}</strong>
+                {actionBrief(current) && <span className="overview-current-summary">{actionBrief(current)}</span>}
+            </button>
+        )}
+        <OverviewItems className="overview-action-rows" items={previewActions} rowHeight={28}>
+            {(entry) => (
+                <button key={entry.frame.cursor} className={`${entry.status === "failed" ? "failed" : ""} ${newEntries.has(entry.frame.cursor) ? "motion-new" : ""}`} onClick={() => openAction(entry.frame)}>
+                    <time className="mono">{time(entry.frame.record.at)}</time>
+                    <strong title={entry.title}>{actionTitle(entry)}</strong>
+                    <span>{entry.rolledBack ? "已回滚 · " : ""}{actionBrief(entry)}</span>
+                </button>
+            )}
+        </OverviewItems>
+        {!current && <p className="overview-empty">此位置尚无经营行动</p>}
     </OverviewModule>;
     return (
         <div className="run-overview" role="region" aria-label="单局总览">
@@ -89,27 +121,7 @@ export function RunOverview({ observation, frames, records, onOpen, onFrame, liv
                         </div>
                     ) : <p className="overview-empty">{observation ? "此时尚未招募冒险者" : "该位置没有编队快照"}</p>}
                 </OverviewModule>
-                <OverviewModule id="actions" returning={returnModule === "actions"} title="最近行动" icon={<ListBullets size={16} />}
-                    emptyNote={!current ? "此位置尚无经营行动" : undefined}
-                    note={queryOnly ? `${queries.length} 次查询` : `${actions.length} 条操作与提示 · ${queries.length} 次查询`} onOpen={onOpen}>
-                    {current && (
-                        <button className={`overview-current-action ${current.status === "failed" ? "failed" : ""} ${newEntries.has(current.frame.cursor) ? "motion-new" : ""}`} onClick={() => openAction(current.frame)}>
-                            <span className="overview-current-label">{current.kind === "query" ? "暂时只有查询记录" : current.kind === "system" ? "运行提示" : current.rolledBack ? "当时的操作，已回滚" : current.status === "pending" ? "正在执行" : "最近操作"} <time className="mono">{time(current.frame.record.at)}</time></span>
-                            <strong>{actionTitle(current)}</strong>
-                            {actionBrief(current) && <span className="overview-current-summary">{actionBrief(current)}</span>}
-                        </button>
-                    )}
-                    <OverviewItems className="overview-action-rows" items={previewActions} rowHeight={28}>
-                        {(entry) => (
-                            <button key={entry.frame.cursor} className={`${entry.status === "failed" ? "failed" : ""} ${newEntries.has(entry.frame.cursor) ? "motion-new" : ""}`} onClick={() => openAction(entry.frame)}>
-                                <time className="mono">{time(entry.frame.record.at)}</time>
-                                <strong title={entry.title}>{actionTitle(entry)}</strong>
-                                <span>{entry.rolledBack ? "已回滚 · " : ""}{actionBrief(entry)}</span>
-                            </button>
-                        )}
-                    </OverviewItems>
-                    {!current && <p className="overview-empty">此位置尚无经营行动</p>}
-                </OverviewModule>
+                {modelModule}
                 {!finished && <OverviewModule id="monsters" returning={returnModule === "monsters"} title="本回合怪物" icon={<Skull size={16} />}
                     emptyNote={!observation?.monsters?.length ? observation?.monsters ? "此时没有怪物记录" : "该快照未记录怪物" : undefined}
                     note={observation?.monsters ? `${observation.monsters.length} 个` : "未记录"} onOpen={onOpen}>
@@ -126,7 +138,7 @@ export function RunOverview({ observation, frames, records, onOpen, onFrame, liv
                         </OverviewItems>
                     ) : <p className="overview-empty">该快照未记录怪物</p>}
                 </OverviewModule>}
-                {!finished && modelModule}
+                {!finished && actionModule}
                 <OverviewModule id="inventory" returning={returnModule === "inventory"} title="装备库" icon={<Backpack size={16} />}
                     emptyNote={!inventory?.length ? inventory ? "此时仓库里没有装备" : "该快照未记录库存" : undefined}
                     note={inventory ? `${inventory.length} 件，${stored!.length} 件未穿戴` : "未记录"} onOpen={onOpen}>
@@ -168,7 +180,7 @@ export function RunOverview({ observation, frames, records, onOpen, onFrame, liv
                         )}
                     </OverviewItems> : <p className="overview-empty">该快照未记录发展状态</p>}
                 </OverviewModule>
-                {finished && modelModule}
+                {finished && actionModule}
             </div>
         </div>
     );

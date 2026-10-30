@@ -25,6 +25,10 @@ import { Empty, JsonDetails, StatusBadge, Trend } from "./ui";
 import { ChangeValue } from "./motion";
 import { WatchMonitor } from "./WatchMonitor";
 import { ModelCallStats } from "./ModelCallStats";
+import { ModelContentTabs } from "./ModelContentTabs";
+import type { ModelTab } from "./ModelContentTabs";
+import { MemoPanel } from "./MemoPanel";
+import { memoAt } from "./memoModel";
 import { ActionTimeline } from "./ActionTimeline";
 import type { ActionEntry } from "./actionModel";
 import { TrajectoryProvider } from "./TrajectoryContext";
@@ -87,6 +91,7 @@ export function WatchRun({
     const [utility, setUtility] = useState(false);
     const [historyRequested, setHistoryRequested] = useState(initialFocus?.actionView === "timeline" || initialFocus?.actionView === "search");
     const [reasoningTarget, setReasoningTarget] = useState<(ModelReasoningTarget & { page: WatchPage }) | null>(null);
+    const [modelTab, setModelTab] = useState<ModelTab>("output");
     const [activeModule, setActiveModule] = useState<RunModule | null>(() => compact ? null : initialFocus?.module || null);
     const live = useLiveWatch(job);
     const history = useQuery({
@@ -125,6 +130,8 @@ export function WatchRun({
     const hasNew = frozenCursor !== undefined && !!live.data?.records.some(record =>
         record.cursor > frozenCursor && isWatchEvent(record.event));
     const cutoff = following ? Infinity : (position.cursor ?? Infinity);
+    const memo = memoAt(page, cutoff);
+    const memoReverted = !!selected && ["rolled_back", "failed"].includes(selected.status);
     const modelRecords = useMemo(
         () => (page?.records || []).filter((r) => r.cursor <= cutoff),
         [page, cutoff],
@@ -149,6 +156,7 @@ export function WatchRun({
         if (!page || entry.frame.call === null) return;
         chooseFrame(entry.frame);
         setReasoningTarget({ call: entry.frame.call, title: entry.title, page });
+        setModelTab("output");
         setActiveModule("models");
     }
     async function locateTrajectory(attempt: number, cursor: number | null, origin: "archive" | "execution") {
@@ -194,17 +202,19 @@ export function WatchRun({
     );
     const modelsPanel = (
         <section className="spectator-models" aria-label="所选位置的模型调用">
-            <ModelPanel
+            <ModelContentTabs value={modelTab} onChange={setModelTab}
+                memo={<MemoPanel memo={memo} reverted={memoReverted} onActions={() => setActiveModule("actions")} />}
+                output={<ModelPanel
                 job={job}
                 records={modelRecords}
                 call={frame?.call ?? null}
-                active={activeModule === "models"}
+                active={activeModule === "models" && modelTab === "output"}
                 live={following && isActive(job)}
                 reasoningTarget={modelTarget}
                 onClearTarget={() => setReasoningTarget(null)}
                 onReturnAction={() => { setReasoningTarget(null); setActiveModule("actions"); }}
                 trajectory={page?.origin}
-            />
+            />} />
         </section>
     );
     const runtime = (
@@ -358,6 +368,7 @@ export function WatchRun({
                             before={frame?.before ?? null}
                             frames={visibleFrames}
                             records={modelRecords}
+                            memo={memo} modelTab={modelTab} onModelTab={setModelTab} memoReverted={memoReverted}
                             activeModule={activeModule}
                             onModule={setActiveModule}
                             onFrame={chooseFrame}

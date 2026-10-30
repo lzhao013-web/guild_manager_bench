@@ -171,9 +171,12 @@ class Workbench:
         return read_events(self.root / job_id / "events.jsonl", after, limit)
 
     def watch(self, job_id: str, attempt: int | None = None) -> dict[str, Any]:
-        self.get(job_id)
+        job = self.get(job_id)
         if job_id not in self._watch:
-            self._watch[job_id] = WatchJournal(self.root / job_id / "events.jsonl")
+            source = job["config"].get("resume_run_id") or job["config"].get("rerun_run_id")
+            def memo_seed(turn: int, finished: bool) -> dict[str, Any]:
+                return WatchJournal(self._archive(source) / "trace.jsonl", archived=True).memo_before_turn(turn, finished)
+            self._watch[job_id] = WatchJournal(self.root / job_id / "events.jsonl", memo_seed=memo_seed if source else None)
         return {**self._watch[job_id].read(attempt), "monster_stages": self.monster_stages(job_id)}
 
     def monster_stages(self, job_id: str) -> dict[str, str]:

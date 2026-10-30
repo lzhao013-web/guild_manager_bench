@@ -91,6 +91,7 @@ afterAll(() => vi.unstubAllGlobals());
 
 function Harness({ value = observation, frames = [], initialModule = null }: { value?: Observation; frames?: WatchFrame[]; initialModule?: RunModule | null }) {
     const [activeModule, setModule] = useState<RunModule | null>(initialModule);
+    const [modelTab, setModelTab] = useState<"output" | "memo">("output");
     return (
         <Theme accentColor="teal">
             <RunWorkspace
@@ -98,6 +99,7 @@ function Harness({ value = observation, frames = [], initialModule = null }: { v
                 before={null}
                 frames={frames}
                 records={records}
+                memo={{ state: "unavailable" }} modelTab={modelTab} onModelTab={setModelTab}
                 activeModule={activeModule}
                 onModule={setModule}
                 onFrame={() => {}}
@@ -310,6 +312,7 @@ it("从已展开模块恢复工作区后，返回总览不会丢失天赋搜索�
 it("外部轨迹定位进入行动后，往返模型模块仍保留检索条件", () => {
     const content = (activeModule: RunModule) => <Theme>
         <RunWorkspace observation={observation} before={null} frames={[]} records={records}
+            memo={{ state: "unavailable" }} modelTab="output" onModelTab={() => {}}
             activeModule={activeModule} onModule={() => {}} onFrame={() => {}}
             actions={<label>整局检索条件<input aria-label="整局检索条件" defaultValue="" /></label>}
             models={<p>对应模型调用</p>} />

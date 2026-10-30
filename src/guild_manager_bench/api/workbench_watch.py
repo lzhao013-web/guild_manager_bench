@@ -8,13 +8,15 @@ from threading import Lock
 from typing import Any
 
 from guild_manager_bench.api.trajectory_index import TrajectoryIndex
+from guild_manager_bench.api.memo_projection import MemoProjection, MemoSeed
 
 
 class WatchJournal:
-    def __init__(self, path: Path, *, archived: bool = False) -> None:
+    def __init__(self, path: Path, *, archived: bool = False, memo_seed: MemoSeed | None = None) -> None:
         self.path = path
         self.archived = archived
         self.trajectory = TrajectoryIndex()
+        self.memo = MemoProjection(memo_seed)
         self.cursor = 0
         self._lock = Lock()
         self.attempts: list[dict[str, Any]] = []
@@ -26,7 +28,7 @@ class WatchJournal:
             self._index()
             return {
                 "cursor": self.cursor, "entries": [dict(row) for row in self.trajectory.rows],
-                "attempts": [{k: v for k, v in attempt.items() if k not in {"start", "end"}}
+                "attempts": [{k: v for k, v in attempt.items() if k not in {"start", "end", "memo_before"}}
                              for attempt in self.attempts],
             }
 
@@ -42,6 +44,11 @@ class WatchJournal:
         with self._lock:
             return self._read(attempt)
 
+    def memo_before_turn(self, turn: int, finished: bool = False) -> dict[str, Any]:
+        with self._lock:
+            self._index()
+            return dict(self.memo.before_turn(turn, finished))
+
     def _read(self, attempt: int | None) -> dict[str, Any]:
         self._index()
         selected = next((a for a in self.attempts if a["id"] == attempt), None) if attempt is not None else (self.attempts[-1] if self.attempts else None)
@@ -50,9 +57,10 @@ class WatchJournal:
         records = self._records(selected) if selected else []
         return {
             "cursor": self.cursor,
-            "attempts": [{k: v for k, v in a.items() if k not in {"start", "end"}} for a in self.attempts],
+            "attempts": [{k: v for k, v in a.items() if k not in {"start", "end", "memo_before"}} for a in self.attempts],
             "selected": selected["id"] if selected else None,
             "records": records,
+            "memo_before": dict(selected["memo_before"]) if selected else {"state": "unavailable"},
         }
 
     def _index(self) -> None:
@@ -72,6 +80,7 @@ class WatchJournal:
                     continue
                 kind = e["type"]
                 at = self._at(record)
+                self.memo.accept(e)
                 # agent 初始化也可能直接失败，保留回合开始之前的诊断事件。
                 if kind == "turn_started" or not self.attempts:
                     turn = e.get("turn") if kind == "turn_started" else None
@@ -83,11 +92,14 @@ class WatchJournal:
                         "status": "running", "score": None, "rank_contributions": None, "actions": 0,
                         "at": at, "updated_at": at,
                         "start": start, "end": self.cursor,
+                        "memo_before": self.memo.current,
                     })
                 current = self.attempts[-1]
                 current.update(end=self.cursor, updated_at=at)
                 self.trajectory.accept(e, attempt=current["id"], cursor=self.cursor, at=at)
                 if kind == "run_resumed":
+                    if current["turn"] is None:
+                        current["memo_before"] = self.memo.current
                     for old in self.attempts:
                         if self.trajectory.attempt_states.get(old["id"]) == "rolled_back":
                             old["status"] = "rolled_back"

@@ -167,8 +167,8 @@
     grid-template-columns: repeat(12, minmax(0, 1fr));
     grid-template-rows: minmax(220px, 1.35fr) minmax(150px, 1fr) minmax(168px, 1fr);
     grid-template-areas:
-        "party party party party party party party actions actions actions actions actions"
-        "monsters monsters monsters monsters monsters monsters monsters models models models models models"
+        "party party party party party party party models models models models models"
+        "monsters monsters monsters monsters monsters monsters monsters actions actions actions actions actions"
         "inventory inventory inventory inventory recruitment recruitment recruitment recruitment upgrades upgrades upgrades upgrades";
     gap: 8px;
 }
@@ -176,8 +176,8 @@
     min-height: 428px;
     grid-template-rows: minmax(220px, 1.2fr) minmax(200px, 1fr);
     grid-template-areas:
-        "party party party party party party party actions actions actions actions actions"
-        "inventory inventory inventory inventory upgrades upgrades upgrades upgrades models models models models";
+        "party party party party party party party models models models models models"
+        "inventory inventory inventory inventory upgrades upgrades upgrades upgrades actions actions actions actions";
 }
 .overview-module {
     position: relative;
@@ -203,6 +203,7 @@
 .overview-actions { grid-area: actions; }
 .overview-monsters { grid-area: monsters; }
 .overview-models { grid-area: models; }
+.overview-grid .overview-models { min-height: 220px; }
 .overview-inventory { grid-area: inventory; }
 .overview-recruitment { grid-area: recruitment; }
 .overview-upgrades { grid-area: upgrades; }
@@ -709,9 +710,9 @@
         min-height: 0;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         grid-template-rows: none;
-        grid-template-areas: "party party" "actions actions" "monsters monsters" "inventory recruitment" "upgrades models";
+        grid-template-areas: "party party" "models models" "monsters monsters" "actions actions" "inventory recruitment" "upgrades upgrades";
     }
-    .overview-grid.is-finished { grid-template-areas: "party party" "actions actions" "inventory upgrades" "models models"; }
+    .overview-grid.is-finished { grid-template-areas: "party party" "models models" "inventory upgrades" "actions actions"; }
     .overview-items { flex: none; height: var(--overview-natural-height); }
     .overview-model-excerpt { flex: none; max-height: 13.2em; }
     .overview-module { min-height: 118px; }
@@ -752,9 +753,9 @@
     .run-overview { padding: 8px; }
     .overview-grid, .overview-grid.is-finished {
         grid-template-columns: minmax(0, 1fr);
-        grid-template-areas: "party" "actions" "monsters" "inventory" "recruitment" "upgrades" "models";
+        grid-template-areas: "party" "models" "monsters" "actions" "inventory" "recruitment" "upgrades";
     }
-    .overview-grid.is-finished { grid-template-areas: "party" "actions" "inventory" "upgrades" "models"; }
+    .overview-grid.is-finished { grid-template-areas: "party" "models" "inventory" "upgrades" "actions"; }
     .overview-module { grid-column: 1; min-height: 115px; }
     .overview-party { min-height: 240px; }
     .overview-party-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }

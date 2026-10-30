@@ -108,5 +108,5 @@ def test_initialization_failure_is_visible_without_a_game_snapshot(tmp_path):
 
 def test_queued_job_has_empty_history(tmp_path):
     assert WatchJournal(tmp_path / "not-created.jsonl").read() == {
-        "cursor": 0, "attempts": [], "selected": None, "records": [],
+        "cursor": 0, "attempts": [], "selected": None, "records": [], "memo_before": {"state": "unavailable"},
     }
