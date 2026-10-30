@@ -1061,12 +1061,25 @@ kbd {
 .party-member:last-child {
   border: 0;
 }
-.party-member img {
+.party-member > .scene-portrait {
   width: 32px;
   height: 32px;
+  flex-shrink: 0;
   object-fit: contain;
   border-radius: 5px;
   background: var(--gray-4);
+}
+.party-member .scene-no-portrait {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+}
+.party-member .scene-no-portrait > svg {
+  width: 18px;
+  height: 18px;
+}
+.party-member .scene-no-portrait > span {
+  display: none;
 }
 .party-member > div:nth-child(2) {
   display: grid;

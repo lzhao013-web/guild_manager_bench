@@ -32,6 +32,7 @@ import { ChangeValue, useNewItemKeys } from "./motion";
 import { ModelCallStats } from "./ModelCallStats";
 import { RunNotices } from "./RunNotices";
 import { RunId } from "./RunId";
+import { Portrait } from "./SceneParts";
 import type { Job } from "./types";
 import type { WatchFocus } from "./sceneNavigation";
 
@@ -281,10 +282,9 @@ export function RunDetail({
                                                             member.adventurer_id
                                                         }
                                                     >
-                                                        <img
-                                                            src={`/assets/icons/classes/${encodeURIComponent(member.template_id)}.png`}
-                                                            alt=""
-                                                            loading="lazy"
+                                                        <Portrait
+                                                            id={member.template_id}
+                                                            name={member.name}
                                                         />
                                                         <div>
                                                             <strong>

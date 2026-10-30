@@ -3,6 +3,7 @@ import { Theme } from "@radix-ui/themes";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 import { RunDetail } from "./RunDetail";
+import footKnightPortrait from "./portraits/foot_knight.webp";
 import { testJob } from "./test-jobs";
 import type { WatchPage, WatchRecord } from "./watchModel";
 import type { Job, Observation } from "./types";
@@ -93,6 +94,22 @@ it("摘要不携带局面时，侧栏从回合快照显示最新队伍和资源"
     expect(party).toHaveTextContent("经验池 25");
     expect(party).toHaveTextContent("HP 60 / 100");
     expect(party).toHaveTextContent("MP 15 / 20");
+});
+
+it("侧栏头像使用随构建更新的 WebP，缺少立绘时不再请求固定 PNG", async () => {
+    const observation: Observation = { ...initial, adventurers: [
+        { adventurer_id: "knight", template_id: "foot_knight", name: "步行骑士", level: 2,
+            resources: { current_hp: 60, current_mp: 15 }, effective_stats: { hp: 100, mp: 20 } },
+        { adventurer_id: "legacy", template_id: "warrior", name: "旧版剑士", level: 2,
+            resources: { current_hp: 60, current_mp: 15 }, effective_stats: { hp: 100, mp: 20 } },
+    ] };
+    setup([rec(1, { type: "turn_started", observation })]);
+    const party = screen.getByRole("heading", { name: "当前队伍" }).closest("section")!;
+    const knight = (await within(party).findByText("步行骑士")).closest(".party-member")!;
+    const portrait = within(knight as HTMLElement).getByRole("presentation");
+    expect(portrait).toHaveAttribute("src", footKnightPortrait);
+    expect(portrait).toHaveAttribute("loading", "lazy");
+    expect(within(party).getByLabelText("旧版剑士 暂无立绘")).toBeVisible();
 });
 
 it("侧栏只查询时不把成功查询描述为经营成果", async () => {
