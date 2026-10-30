@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { fmt, short } from "./model";
 import type { ModelEntry } from "./model";
 import { milliseconds, modelMetrics } from "./modelMetrics";
+import { ModelActivity } from "./motion";
 import "./model-stats.css";
 
 /** 仅展示本次调用的已报告用量，不把整局累计值带入历史调用。 */
@@ -24,7 +25,7 @@ export function ModelCallStats({ model, live = false, compact = false }: {
         metrics.tools === null ? null : `工具 ${metrics.tools} 个`,
     ].filter(Boolean).join(" · ");
     return <span className={`model-call-stats${compact ? " is-compact" : ""}`} role="group" aria-label="本次模型调用概览" title={`本次调用，不是整局累计${extra ? ` · ${extra}` : ""}`}>
-        <span className="model-call-state">{metrics.status}</span>
+        <span className="model-call-state">{live && pending && <ModelActivity state={model.text || model.reasoning ? "receiving" : "waiting"} />}{metrics.status}</span>
         <span title={`本次输入 Token：${metrics.input === null ? "API 未报告" : fmt(metrics.input)}`}>输入 <b>{tokens(metrics.input)}</b><small className="model-input-unit"> Token</small></span>
         <span title={`本次输出 Token：${metrics.output === null ? "API 未报告" : fmt(metrics.output)}`}>输出 <b>{tokens(metrics.output)}</b><small> Token</small></span>
         <span>{metrics.elapsedLabel} <b>{milliseconds(metrics.elapsed)}</b></span>

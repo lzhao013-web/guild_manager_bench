@@ -1,0 +1,105 @@
+.resource-value {
+    position: relative;
+    display: inline-flex;
+    align-items: baseline;
+}
+.resource-delta {
+    position: absolute;
+    top: calc(100% + 2px);
+    inset-inline-end: 0;
+    z-index: 1;
+    padding: 1px 5px;
+    border: 1px solid var(--gray-6);
+    border-radius: 4px;
+    background: var(--gray-2);
+    color: var(--gray-12);
+    font: 500 var(--wb-text-xs)/18px var(--wb-font-mono);
+    white-space: nowrap;
+    pointer-events: none;
+}
+.resource-delta.is-gain { color: var(--accent-11); border-color: var(--accent-6); }
+.resource-delta.is-spend { color: var(--amber-11); border-color: var(--amber-6); }
+.model-activity {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 16px;
+    width: 16px;
+    height: 12px;
+    gap: 2px;
+    vertical-align: -1px;
+    color: var(--accent-11);
+}
+.model-activity i {
+    width: 3px;
+    height: 9px;
+    border-radius: 2px;
+    background: currentColor;
+    opacity: .65;
+    transform: scaleY(.45);
+}
+.model-call-state { display: inline-flex; align-items: center; gap: 5px; }
+.phase-text > .model-activity { margin-inline-end: 5px; }
+.sidebar .sliding-nav { position: relative; }
+.nav-selection {
+    position: absolute;
+    inset: 0 auto auto 0;
+    border-radius: 5px;
+    background: var(--accent-3);
+    pointer-events: none;
+}
+.nav-selection[hidden] { display: none; }
+.nav-selection::before {
+    content: "";
+    position: absolute;
+    inset: 9px auto 9px 3px;
+    width: 2px;
+    border-radius: 2px;
+    background: var(--accent-9);
+}
+.sliding-nav .nav-item.active { background: transparent; }
+.sliding-nav .nav-item::before { display: none; }
+
+@keyframes wb-resource-delta {
+    0% { opacity: 0; transform: translateY(-3px); }
+    15%, 75% { opacity: 1; transform: translateY(0); }
+    100% { opacity: 0; transform: translateY(4px); }
+}
+@keyframes wb-model-wait {
+    0%, 100% { opacity: .3; }
+    45% { opacity: .9; }
+}
+@keyframes wb-model-receive {
+    0%, 100% { transform: scaleY(.35); opacity: .5; }
+    45% { transform: scaleY(1); opacity: 1; }
+}
+@keyframes wb-event-ack {
+    from { opacity: .5; transform: translateY(3px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@keyframes wb-event-wash {
+    0%, 100% { opacity: 0; }
+    25% { opacity: 1; }
+}
+@media (prefers-reduced-motion: no-preference) {
+    .resource-delta { animation: wb-resource-delta 1600ms var(--wb-motion-ease) both; }
+    .model-activity[data-state="waiting"] i { animation: wb-model-wait 1600ms ease-in-out infinite; }
+    .model-activity[data-state="receiving"] i { animation: wb-model-receive 700ms ease-in-out infinite; }
+    .model-activity i:nth-child(2) { animation-delay: 120ms; }
+    .model-activity i:nth-child(3) { animation-delay: 240ms; }
+    .motion-event { animation: wb-event-ack 300ms var(--wb-motion-ease); }
+    .motion-event:not(.actor-frame) { position: relative; }
+    .motion-event:not(.actor-frame)::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        background: var(--accent-a3);
+        pointer-events: none;
+        animation: wb-event-wash 900ms var(--wb-motion-ease);
+    }
+    .motion-event.actor-frame .scene-portrait { animation: wb-event-ack 600ms var(--wb-motion-ease); }
+    .nav-selection { transition: transform 220ms var(--wb-motion-ease); }
+    .overview-module-heading > svg { transition: transform var(--wb-motion-fast) var(--wb-motion-ease); }
+    .overview-module-heading:hover > svg { transform: translate(1px, -1px); }
+}

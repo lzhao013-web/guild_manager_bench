@@ -48,6 +48,22 @@ it("实时未完成调用更新等待耗时，暂停后固定在所看位置", (
     act(() => vi.advanceTimersByTime(10000));
     expect(screen.getByRole("group")).toHaveTextContent("记录间隔 2.0 秒");
 });
+it("等待与接收使用不同活动状态，暂停回看和已返回的调用不再播放", () => {
+    const model: ModelEntry = { key: 1, text: "", reasoning: "" };
+    const view = render(<ModelCallStats model={model} live />);
+    expect(screen.getByText("等待响应")).toBeVisible();
+    expect(document.querySelector(".model-activity")).toHaveAttribute("data-state", "waiting");
+    view.rerender(<ModelCallStats model={{ ...model, reasoning: "正在规划" }} live />);
+    expect(screen.getByText("接收中")).toBeVisible();
+    expect(document.querySelector(".model-activity")).toHaveAttribute("data-state", "receiving");
+    view.rerender(<ModelCallStats model={{ ...model, reasoning: "正在规划" }} />);
+    expect(screen.getByText("未记录完整响应")).toBeVisible();
+    expect(document.querySelector(".model-activity")).not.toBeInTheDocument();
+    view.rerender(<ModelCallStats model={{ ...model, response: {} }} live />);
+    expect(screen.getByText("已返回")).toBeVisible();
+    expect(document.querySelector(".model-activity")).not.toBeInTheDocument();
+});
+
 it("所选历史调用保留自己的统计，不套用后一次调用的用量", () => {
     const events = [
         { type: "model_request", step: 1 },

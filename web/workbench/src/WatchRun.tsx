@@ -22,7 +22,7 @@ import { api, useLiveWatch } from "./api";
 import { fmt, isActive, modelEntries, PHASE, time } from "./model";
 import { ElapsedTime } from "./ElapsedTime";
 import { Empty, JsonDetails, StatusBadge, Trend } from "./ui";
-import { ChangeValue } from "./motion";
+import { ChangeValue, ResourceValue } from "./motion";
 import { WatchMonitor } from "./WatchMonitor";
 import { ModelCallStats } from "./ModelCallStats";
 import { ModelContentTabs } from "./ModelContentTabs";
@@ -300,7 +300,7 @@ export function WatchRun({
                         {presentation.realtime ? <Broadcast size={15} /> : <Clock size={15} />}
                         <strong>{presentation.label}</strong>
                         <span>
-                            {selected ? attemptLabel(selected) : "准备中"}
+                            <ChangeValue value={selected?.id} variant="enter">{selected ? attemptLabel(selected) : "准备中"}</ChangeValue>
                             {selected?.status === "rolled_back" ? " / 已回滚" : ""}
                         </span>
                         <span className="viewpoint-action">{frame?.title}</span>
@@ -314,14 +314,14 @@ export function WatchRun({
                                 <Coins size={14} />
                                 金币
                             </span>
-                            <b><ChangeValue value={observation?.gold ?? "unknown"}>{fmt(observation?.gold)}</ChangeValue></b>
+                            <b><ResourceValue value={observation?.gold} live={following && isActive(job)} scope={`${job.id}:${page.selected}`} label="金币">{fmt(observation?.gold)}</ResourceValue></b>
                         </div>
                         <div>
                             <span>
                                 <Sparkle size={14} />
                                 经验池
                             </span>
-                            <b><ChangeValue value={observation?.experience_pool ?? "unknown"}>{fmt(observation?.experience_pool)}</ChangeValue></b>
+                            <b><ResourceValue value={observation?.experience_pool} live={following && isActive(job)} scope={`${job.id}:${page.selected}`} label="经验池">{fmt(observation?.experience_pool)}</ResourceValue></b>
                         </div>
                         <div>
                             <span>

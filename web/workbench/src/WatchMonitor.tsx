@@ -12,7 +12,7 @@ import { MaterialExchangeStatus } from "./MaterialExchangeStatus";
 import { monsterClassification } from "./monsterModel";
 import { StatusBadge } from "./ui";
 import { RunId } from "./RunId";
-import { ChangeValue } from "./motion";
+import { ChangeValue, ResourceValue, useSceneChanges } from "./motion";
 import { MonitorPreviews } from "./MonitorPreviews";
 import { ATTEMPT_STATUS, attemptLabel, livePosition, watchPresentation } from "./watchModel";
 import type { WatchFrame, WatchPage, WatchPosition, WatchRecord } from "./watchModel";
@@ -49,6 +49,7 @@ export function WatchMonitor({ job, runId, page, live, frame, frames, records, p
     const presentation = watchPresentation(job, following);
     const selected = page?.attempts.find(attempt => attempt.id === page.selected);
     const observation = frame?.observation;
+    const changed = useSceneChanges(observation, presentation.realtime);
     const members = observation && [...observation.adventurers].sort((a, b) =>
         Number(isLowHealth(b)) - Number(isLowHealth(a))).slice(0, 6);
     const monsters = observation?.monsters;
@@ -87,8 +88,8 @@ export function WatchMonitor({ job, runId, page, live, frame, frames, records, p
                     {presentation.realtime ? <Broadcast size={12} /> : <Pause size={12} />}<strong>{presentation.label}</strong>
                 </div>
                 <span className="monitor-score" title={`已记录评分 ${fmt(frame?.score)}`}><ChartLineUp size={12} /><ChangeValue value={frame?.score ?? "unknown"}>{fmt(frame?.score)}</ChangeValue></span>
-                <span title={`金币 ${fmt(observation?.gold)}`}><Coins size={12} /><b><ChangeValue value={observation?.gold ?? "unknown"}>{observation ? short(observation.gold) : "未知"}</ChangeValue></b></span>
-                <span title={`经验池 ${fmt(observation?.experience_pool)}`}><Sparkle size={12} /><b><ChangeValue value={observation?.experience_pool ?? "unknown"}>{observation ? short(observation.experience_pool) : "未知"}</ChangeValue></b></span>
+                <span title={`金币 ${fmt(observation?.gold)}`}><Coins size={12} /><b><ResourceValue value={observation?.gold} live={presentation.realtime} scope={`${job.id}:${page?.selected}`} label="金币">{observation ? short(observation.gold) : "未知"}</ResourceValue></b></span>
+                <span title={`经验池 ${fmt(observation?.experience_pool)}`}><Sparkle size={12} /><b><ResourceValue value={observation?.experience_pool} live={presentation.realtime} scope={`${job.id}:${page?.selected}`} label="经验池">{observation ? short(observation.experience_pool) : "未知"}</ResourceValue></b></span>
                 <button title="查看完整编队" aria-label="展开编队" disabled={!onFocus} onClick={() => inspect({ module: "party" })}><UsersThree size={12} /><ChangeValue value={observation ? `${observation.adventurers.length}/${observation.party_size_limit}` : "unknown"}>{observation ? `${observation.adventurers.length}/${observation.party_size_limit}` : "未知"}</ChangeValue>{observation && observation.adventurers.length > 6 ? "（显示6位）" : ""}</button>
                 {observation?.material_exchange && <MaterialExchangeStatus turn={observation.turn} exchange={observation.material_exchange} />}
             </div>
@@ -97,7 +98,7 @@ export function WatchMonitor({ job, runId, page, live, frame, frames, records, p
             ) : <div className="monitor-body">
                 <section className="monitor-party" aria-label="编队摘要">
                     {members?.length ? members.map(member => <button key={member.adventurer_id}
-                        className={`monitor-member actor-frame ${isLowHealth(member) ? "is-low-health" : ""}`}
+                        className={`monitor-member actor-frame ${isLowHealth(member) ? "is-low-health" : ""} ${changed.has(`member:${member.adventurer_id}`) ? "motion-event" : ""}`}
                         {...adventurerFrame(member)}
                         aria-label={`查看成员 ${member.name}`} aria-description={adventurerStateText(member)} title={`${member.name} · Lv.${member.level}\n生命 ${fmt(member.resources.current_hp)} / ${fmt(member.effective_stats.hp)}\n法力 ${fmt(member.resources.current_mp)} / ${fmt(member.effective_stats.mp)}`} disabled={!onFocus}
                         onClick={() => inspect({ module: "party", selection: { kind: "member", id: member.adventurer_id } })}>

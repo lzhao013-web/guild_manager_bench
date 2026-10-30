@@ -16,7 +16,7 @@ import type { RunModule } from "./sceneNavigation";
 import type { Observation } from "./types";
 import { actionBrief, recentActions } from "./actionModel";
 import { prioritizeUpgrades } from "./previewOrder";
-import { useNewItemKeys } from "./motion";
+import { useNewItemKeys, useSceneChanges } from "./motion";
 import type { MemoSnapshot, WatchFrame, WatchRecord } from "./watchModel";
 import { ModelContentTabs } from "./ModelContentTabs";
 import type { ModelTab } from "./ModelContentTabs";
@@ -37,6 +37,7 @@ export function RunOverview({ observation, frames, records, onOpen, onFrame, mem
     live?: boolean;
     returnModule?: RunModule | null;
 }) {
+    const changed = useSceneChanges(observation, live);
     const models = modelEntries(records);
     const model = models.at(-1);
     const { actions, queries, queryOnly } = recentActions(frames);
@@ -102,7 +103,7 @@ export function RunOverview({ observation, frames, records, onOpen, onFrame, mem
                     {members?.length ? (
                         <div className="overview-party-grid" data-members={members.length}>
                             {members.map((member) => (
-                                <button key={member.adventurer_id} className={`actor-frame ${lowHealth(member) ? "is-low-health" : ""}`}
+                                <button key={member.adventurer_id} className={`actor-frame ${lowHealth(member) ? "is-low-health" : ""} ${changed.has(`member:${member.adventurer_id}`) ? "motion-event" : ""}`}
                                     {...adventurerFrame(member)}
                                     aria-label={`查看成员 ${member.name}`} aria-description={adventurerStateText(member)}
                                     onClick={() => onOpen("party", { kind: "member", id: member.adventurer_id })}>
@@ -144,7 +145,7 @@ export function RunOverview({ observation, frames, records, onOpen, onFrame, mem
                     note={inventory ? `${inventory.length} 件，${stored!.length} 件未穿戴` : "未记录"} onOpen={onOpen}>
                     {inventory ? <OverviewItems className="overview-item-rows" items={previewInventory!} rowHeight={28} minItemWidth={180}>
                         {(item) => (
-                            <button key={item.instance_id} aria-label={`查看装备 ${item.name}`}
+                            <button key={item.instance_id} aria-label={`查看装备 ${item.name}`} className={changed.has(`equipment:${item.instance_id}`) ? "motion-event" : ""}
                                 onClick={() => onOpen("inventory", { kind: "equipment", id: item.instance_id! })}>
                                 <EquipmentIcon templateId={item.template_id} slot={item.slot!} size={17} /><strong title={item.name}>{item.name}</strong>
                                 <span>{item.equipped_by != null ? "已穿戴" : item.equipped_by === null ? "未穿戴" : "未记录"}</span>
@@ -171,7 +172,7 @@ export function RunOverview({ observation, frames, records, onOpen, onFrame, mem
                     note={upgrades ? `${available!.length} 可解锁 / ${upgrades.filter((upgrade) => upgrade.unlocked).length} 已解锁` : "未记录"} onOpen={onOpen}>
                     {upgrades ? <OverviewItems className="overview-upgrade-rows" items={previewUpgrades?.length ? previewUpgrades : upgrades} rowHeight={28} minItemWidth={180}>
                         {(upgrade) => (
-                            <button key={upgrade.upgrade_id as string} aria-label={`查看升级 ${upgrade.name}`}
+                            <button key={upgrade.upgrade_id as string} aria-label={`查看升级 ${upgrade.name}`} className={changed.has(`upgrade:${upgrade.upgrade_id}`) ? "motion-event" : ""}
                                 onClick={() => onOpen("upgrades", { kind: "upgrade", id: upgrade.upgrade_id as string })}>
                                 {upgrade.unlocked ? <Check size={14} /> : upgrade.can_purchase ? <TreeStructure size={14} /> : <Lock size={14} />}
                                 <strong title={upgrade.name}>{upgrade.name}</strong>

@@ -45,7 +45,7 @@ import type { WatchFocus } from "./sceneNavigation";
 import { ApiProfilesPanel, readApiProfiles } from "./ApiProfiles";
 import { Empty, StatusBadge, Trend } from "./ui";
 import { ElapsedTime } from "./ElapsedTime";
-import { ChangeValue } from "./motion";
+import { ChangeValue, ModelActivity, SlidingNav } from "./motion";
 import { RunResultNotice } from "./RunResultNotice";
 import { RecentRuns } from "./RecentRuns";
 import { RunId } from "./RunId";
@@ -492,7 +492,7 @@ export default function App() {
                         </div>
                     </a>
                     <div className="sidebar-label">工作空间</div>
-                    <nav aria-label="主导航">
+                    <SlidingNav activeKey={section}>
                         {(
                             [
                                 ["runs", SquaresFour, "运行中心"],
@@ -508,6 +508,7 @@ export default function App() {
                                         ? "nav-item active"
                                         : "nav-item"
                                 }
+                                aria-current={section === key ? "page" : undefined}
                                 onClick={() => { setSection(key); if (key === "archives") setView("list"); }}
                             >
                                 <Icon size={18} />
@@ -517,7 +518,7 @@ export default function App() {
                                 )}
                             </button>
                         ))}
-                    </nav>
+                    </SlidingNav>
                     <div className="sidebar-bottom">
                         <a href="/leaderboard/">
                             <Stack size={17} />
@@ -1083,6 +1084,7 @@ export default function App() {
                                                                                         maxTurns={job.max_turns}
                                                                                     />
                                                                                     <div className="phase-text">
+                                                                                        {job.status === "running" && (job.phase === "waiting_model" || job.phase === "receiving") && <ModelActivity state={job.phase === "receiving" ? "receiving" : "waiting"} />}
                                                                                         {PHASE[
                                                                                             job
                                                                                                 .phase

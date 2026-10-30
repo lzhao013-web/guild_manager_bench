@@ -1,5 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { fmt } from "./model";
+import type { Observation } from "./types";
+import "./motion.css";
 
 const VALUE_MOTION_MS = 500;
 const NEW_ITEM_MOTION_MS = 220;
@@ -62,6 +65,96 @@ export function useNewItemKeys(keys: readonly (string | number)[], enabled: bool
         return () => window.clearTimeout(timer);
     }, [enabled, signature]);
     return recent;
+}
+
+export function ResourceValue({ value, live, scope, label, children }: {
+    value: number | null | undefined;
+    live: boolean;
+    scope: string;
+    label: string;
+    children: ReactNode;
+}) {
+    const previous = useRef({ value, live, scope });
+    const [change, setChange] = useState<{ value: number; delta: number; scope: string } | null>(null);
+    useEffect(() => {
+        const before = previous.current;
+        previous.current = { value, live, scope };
+        if (!live || !before.live || scope !== before.scope || value == null || before.value == null || value === before.value) {
+            setChange(null);
+            return;
+        }
+        setChange({ value, delta: value - before.value, scope });
+        const timer = window.setTimeout(() => setChange(null), 1600);
+        return () => window.clearTimeout(timer);
+    }, [value, live, scope]);
+    const visible = live && change?.scope === scope && change.value === value ? change : null;
+    return <span className="resource-value">
+        <ChangeValue value={value}>{children}</ChangeValue>
+        {visible && <span key={visible.value} className={`resource-delta ${visible.delta > 0 ? "is-gain" : "is-spend"}`}
+            aria-hidden="true" title={`${label}本次更新净变化：${visible.delta > 0 ? "+" : ""}${fmt(visible.delta)}`}>
+            {visible.delta > 0 ? "+" : ""}{fmt(visible.delta)}
+        </span>}
+    </span>;
+}
+
+// 对比已读取的对象状态，不把首次加载和退出历史回看当成新事件。
+function useChangedKeys(values: Record<string, string>, enabled: boolean) {
+    const previous = useRef({ values, enabled });
+    const [changed, setChanged] = useState<ReadonlySet<string>>(new Set());
+    const signature = JSON.stringify(values);
+    useEffect(() => {
+        const before = previous.current;
+        previous.current = { values, enabled };
+        const keys = enabled && before.enabled
+            ? Object.keys(values).filter(key => values[key] !== before.values[key]) : [];
+        setChanged(new Set(keys));
+        if (!keys.length) return;
+        const timer = window.setTimeout(() => setChanged(new Set()), 900);
+        return () => window.clearTimeout(timer);
+    }, [enabled, signature]);
+    return enabled ? changed : new Set<string>();
+}
+
+export function useSceneChanges(observation: Observation | null | undefined, live: boolean) {
+    const values: Record<string, string> = {};
+    for (const member of observation?.adventurers || [])
+        values[`member:${member.adventurer_id}`] = JSON.stringify([member.level, member.equipment_slots]);
+    for (const item of observation?.equipment_inventory || []) {
+        if (item.instance_id) values[`equipment:${item.instance_id}`] = JSON.stringify(item.equipped_by);
+    }
+    for (const upgrade of observation?.global_upgrades || []) {
+        if (typeof upgrade.upgrade_id === "string") values[`upgrade:${upgrade.upgrade_id}`] = String(upgrade.unlocked);
+    }
+    return useChangedKeys(values, live && !!observation);
+}
+
+export function ModelActivity({ state }: { state: "waiting" | "receiving" }) {
+    return <span className="model-activity" data-state={state} aria-hidden="true"><i /><i /><i /></span>;
+}
+
+export function SlidingNav({ activeKey, children }: { activeKey: string; children: ReactNode }) {
+    const root = useRef<HTMLElement>(null);
+    const marker = useRef<HTMLSpanElement>(null);
+    useLayoutEffect(() => {
+        const nav = root.current!;
+        const indicator = marker.current!;
+        function update() {
+            const selected = nav.querySelector<HTMLElement>('[aria-current="page"]');
+            indicator.hidden = !selected;
+            if (!selected) return;
+            indicator.style.width = `${selected.offsetWidth}px`;
+            indicator.style.height = `${selected.offsetHeight}px`;
+            indicator.style.transform = `translate(${selected.offsetLeft}px, ${selected.offsetTop}px)`;
+        }
+        update();
+        const observer = new ResizeObserver(update);
+        observer.observe(nav);
+        return () => observer.disconnect();
+    }, [activeKey]);
+    return <nav className="sliding-nav" ref={root} aria-label="主导航">
+        <span className="nav-selection" ref={marker} aria-hidden="true" hidden />
+        {children}
+    </nav>;
 }
 
 export function animateModuleEnter(panel: HTMLElement, origin: DOMRect | null) {
