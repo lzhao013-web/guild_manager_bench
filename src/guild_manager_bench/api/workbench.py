@@ -5,13 +5,15 @@ import asyncio
 from collections import Counter
 from datetime import datetime, timezone
 import json
+import logging
 import os
 from pathlib import Path
 import signal
 import shutil
 import subprocess
 import sys
-from typing import Any
+import time
+from typing import Any, Callable
 from uuid import uuid4
 
 from guild_manager_bench.api.routes_llm_debug import _debug_agent
@@ -26,6 +28,9 @@ from guild_manager_bench.game.presets import DataPreset
 from guild_manager_bench.bench.llm.recovery import RecoveryConfirmationRequired, inherited_config, inspect_recovery, read_recovery_archive, recoverable_turns
 
 ACTIVE = {"queued", "starting", "running", "stopping"}
+IO_RETRY_DELAYS = (.05, .1, .2, .4, .8)
+STORAGE_RECOVERY_INTERVAL = 1.0
+logger = logging.getLogger(__name__)
 
 # 公开摘要只携带运行元数据。局面通过选中任务的 watch 接口按需读取，
 # 不把内部状态或未来新增的大字段自动带入全局轮询。
@@ -46,10 +51,39 @@ def timestamp() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def write_json(path: Path, data: Any) -> None:
-    temporary = path.with_suffix(".tmp")
-    temporary.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
-    temporary.replace(path)
+def _write_json_once(path: Path, data: Any) -> None:
+    temporary = path.with_name(f"{path.name}.{uuid4().hex}.tmp")
+    try:
+        temporary.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        temporary.replace(path)
+    finally:
+        # 替换失败也保留旧状态文件，不通过先删除目标来绕过文件占用。
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            logger.warning("无法清理状态临时文件：%s", temporary, exc_info=True)
+
+
+def write_json(path: Path, data: Any, *, retry: bool = True) -> None:
+    delays = IO_RETRY_DELAYS if retry else ()
+    for attempt in range(len(delays) + 1):
+        try:
+            _write_json_once(path, data)
+            return
+        except PermissionError:
+            if attempt == len(delays):
+                raise
+            time.sleep(delays[attempt])
+
+
+async def retry_permission(operation: Callable[[], Any]) -> Any:
+    for attempt in range(len(IO_RETRY_DELAYS) + 1):
+        try:
+            return operation()
+        except PermissionError:
+            if attempt == len(IO_RETRY_DELAYS):
+                raise
+            await asyncio.sleep(IO_RETRY_DELAYS[attempt])
 
 
 def read_events(path: Path, after: int, limit: int = 200) -> dict[str, Any]:
@@ -91,6 +125,7 @@ class Workbench:
         self._stopping_since: dict[str, float] = {}
         self._pump: asyncio.Task | None = None
         self.failure: str | None = None
+        self._recovering_storage = False
         self._ownership = None
         self._watch: dict[str, WatchJournal] = {}
 
@@ -106,10 +141,10 @@ class Workbench:
                 self.jobs[job["id"]] = job
                 # 服务重启不恢复凭证、不自动重复请求。保留检查点供显式续跑。
                 if job["status"] in ACTIVE:
-                    self._consume(job, drain=True)
+                    await retry_permission(lambda: self._consume(job, drain=True))
                     job.update(status="interrupted", ended_at=timestamp(), error="工作台服务已重启，请确认检查点后续跑")
                     set_phase(job, "idle", timestamp())
-                    self._save(job)
+                    await self._save_async(job)
             self._pump = asyncio.create_task(self._run())
         except BaseException:
             self._release()
@@ -118,7 +153,11 @@ class Workbench:
     async def close(self) -> None:
         for job in list(self.jobs.values()):
             if job["status"] in ACTIVE:
-                self.stop(job["id"])
+                try:
+                    self.stop(job["id"])
+                except OSError:
+                    # 停止信号已发送，状态写盘失败不能阻止回收进程和释放所有权。
+                    logger.warning("关闭工作台时无法保存停止状态", exc_info=True)
         deadline = asyncio.get_running_loop().time() + self.stop_timeout + 3
         while self._processes and asyncio.get_running_loop().time() < deadline:
             await asyncio.sleep(.1)
@@ -135,7 +174,12 @@ class Workbench:
                 pump_error = exc
         for job_id, process in list(self._processes.items()):
             await asyncio.to_thread(process.wait)
-            self._finish(self.jobs[job_id], process)
+            try:
+                await self._finish(self.jobs[job_id], process)
+            except OSError:
+                logger.warning("关闭工作台时无法保存终态", exc_info=True)
+                process.stdin.close()
+                self._processes.pop(job_id, None)
         self._release()
         if pump_error is not None:
             raise pump_error
@@ -227,6 +271,8 @@ class Workbench:
 
     def create_batch(self, request: CreateBatch) -> dict[str, Any]:
         if self.failure:
+            if self._recovering_storage:
+                raise ValueError(f"{self.failure}。正在自动重试存储，恢复后可重新提交或续跑")
             raise ValueError("调度器不可用，请检查服务日志后重启")
         if sum(job["status"] in ACTIVE for job in self.jobs.values()) + len(request.runs) > 128:
             raise ValueError("待处理任务最多 128 个，请等待现有任务完成")
@@ -297,10 +343,10 @@ class Workbench:
 
     def stop(self, job_id: str) -> dict[str, Any]:
         job = self.get(job_id)
-        if job["status"] == "queued":
+        if job["status"] == "queued" or (job["status"] == "starting" and job_id not in self._processes):
             job.update(status="interrupted", ended_at=timestamp(), error="启动前已取消")
             set_phase(job, "idle", timestamp())
-            self._payloads.pop(job_id)
+            self._payloads.pop(job_id, None)
         elif job["status"] in {"starting", "running"}:
             job["status"] = "stopping"
             self._stopping_since[job_id] = asyncio.get_running_loop().time()
@@ -360,6 +406,13 @@ class Workbench:
     def _save(self, job: dict[str, Any]) -> None:
         write_json(self.root / job["id"] / "state.json", job)
 
+    async def _save_async(self, job: dict[str, Any]) -> None:
+        def save_current() -> None:
+            # 每次重试读取当前状态，也跳过等待期间已取消并删除的任务。
+            if self.jobs.get(job["id"]) is job:
+                write_json(self.root / job["id"] / "state.json", job, retry=False)
+        await retry_permission(save_current)
+
     def _consume(self, job: dict[str, Any], *, drain: bool = False) -> None:
         # 运行中单轮有界消费。进程退出后读取至末尾，确保不遗漏终态事件。
         pages = 0
@@ -372,9 +425,9 @@ class Workbench:
             if not page["has_more"]:
                 break
 
-    def _launch(self, job: dict[str, Any]) -> None:
+    async def _launch(self, job: dict[str, Any]) -> bool:
         job_id = job["id"]
-        payload = self._payloads.pop(job_id)
+        payload = self._payloads[job_id]
         preset = self.presets[payload["preset"]]
         request = {"payload": payload, "data_dir": str(preset.data_dir.resolve()), "data_source": preset.to_dict(),
                    "archive_root": str(self.archive_root.resolve()),
@@ -382,7 +435,9 @@ class Workbench:
         kwargs = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt" else {"start_new_session": True}
         job.update(status="starting", started_at=timestamp())
         set_phase(job, "starting", timestamp())
-        self._save(job)
+        await self._save_async(job)
+        if job["status"] != "starting":
+            return False
         log = (self.root / job_id / "stderr.log").open("wb")
         try:
             process = subprocess.Popen(
@@ -392,16 +447,18 @@ class Workbench:
         finally:
             log.close()
         self._processes[job_id] = process
+        self._payloads.pop(job_id, None)
         job["status"] = "running"
         try:
             process.stdin.write(json.dumps(request, ensure_ascii=False) + "\n")
             process.stdin.flush()
         except (BrokenPipeError, OSError):
             job["error"] = "工作进程启动失败，请检查该任务的 stderr.log"
+        return True
 
-    def _finish(self, job: dict[str, Any], process: subprocess.Popen) -> None:
-        self._consume(job, drain=True)
-        was_stopping = job["status"] == "stopping"
+    async def _finish(self, job: dict[str, Any], process: subprocess.Popen) -> None:
+        await retry_permission(lambda: self._consume(job, drain=True))
+        was_stopping = job["status"] in {"stopping", "interrupted"}
         if process.returncode == 0 and job["outcome"] == "completed":
             job["status"] = "completed"
         elif was_stopping or job["outcome"] == "interrupted":
@@ -412,10 +469,10 @@ class Workbench:
             job["error"] = job["error"] or f"工作进程退出（退出码 {process.returncode}），请检查 stderr.log"
         job["ended_at"] = timestamp()
         set_phase(job, "idle", timestamp())
+        await self._save_async(job)
         process.stdin.close()
         self._processes.pop(job["id"], None)
         self._stopping_since.pop(job["id"], None)
-        self._save(job)
 
     @staticmethod
     def _kill_tree(process: subprocess.Popen) -> None:
@@ -429,51 +486,96 @@ class Workbench:
             except ProcessLookupError:
                 pass
 
-    async def _run(self) -> None:
-        try:
-            while True:
-                now = asyncio.get_running_loop().time()
-                for job_id, process in list(self._processes.items()):
-                    job = self.jobs[job_id]
-                    self._consume(job)
-                    if process.poll() is not None:
-                        self._finish(job, process)
-                    elif job["status"] == "stopping" and now - self._stopping_since[job_id] >= self.stop_timeout:
-                        await asyncio.to_thread(self._kill_tree, process)
-                        job["error"] = "已超过停止等待时间，强制结束进程。续跑将使用最近成功写入的检查点"
-                    else:
-                        self._save(job)
-                endpoints = Counter(self._endpoint(self.jobs[job_id]) for job_id in self._processes)
-                for job in list(self.jobs.values()):
-                    if len(self._processes) >= self.settings.max_parallel:
-                        break
-                    endpoint = self._endpoint(job)
-                    if job["status"] == "queued" and endpoints[endpoint] < self.settings.per_endpoint:
-                        try:
-                            self._launch(job)
+    async def _schedule(self) -> None:
+        while True:
+            now = asyncio.get_running_loop().time()
+            for job_id, process in list(self._processes.items()):
+                job = self.jobs[job_id]
+                await retry_permission(lambda: self._consume(job))
+                if process.poll() is not None:
+                    await self._finish(job, process)
+                elif job["status"] == "stopping" and now - self._stopping_since[job_id] >= self.stop_timeout:
+                    await asyncio.to_thread(self._kill_tree, process)
+                    job["error"] = "已超过停止等待时间，强制结束进程。续跑将使用最近成功写入的检查点"
+                else:
+                    await self._save_async(job)
+            endpoints = Counter(self._endpoint(self.jobs[job_id]) for job_id in self._processes)
+            for job in list(self.jobs.values()):
+                if len(self._processes) >= self.settings.max_parallel:
+                    break
+                endpoint = self._endpoint(job)
+                if job["status"] == "queued" and endpoints[endpoint] < self.settings.per_endpoint:
+                    try:
+                        if await self._launch(job):
                             endpoints[endpoint] += 1
-                        except (OSError, ValueError) as exc:
-                            job.update(status="failed", error=str(exc), ended_at=timestamp())
-                            set_phase(job, "idle", timestamp())
-                            self._save(job)
-                await asyncio.sleep(.25)
-        except asyncio.CancelledError:
-            raise
-        except Exception as exc:
-            self.failure = f"调度器已停止：{type(exc).__name__}"
-            # 调度或日志存储失效时不能留下无人控制、继续计费的工作进程。
-            for process in list(self._processes.values()):
-                await asyncio.to_thread(self._kill_tree, process)
-                await asyncio.to_thread(process.wait)
-                process.stdin.close()
-            self._processes.clear()
-            self._payloads.clear()
-            for job in self.jobs.values():
-                if job["status"] in ACTIVE:
-                    job.update(status="interrupted", ended_at=timestamp(), error=self.failure)
-                    set_phase(job, "idle", timestamp())
-            # 不再尝试写入已经失效的存储。API 公开故障，重启后按检查点恢复。
-            raise
+                    except (OSError, ValueError) as exc:
+                        self._payloads.pop(job["id"], None)
+                        job.update(status="failed", error=str(exc), ended_at=timestamp())
+                        set_phase(job, "idle", timestamp())
+                        await self._save_async(job)
+            await asyncio.sleep(.25)
+
+    async def _recover_storage(self, affected: set[str]) -> None:
+        while True:
+            await asyncio.sleep(STORAGE_RECOVERY_INTERVAL)
+            try:
+                for job in list(self.jobs.values()):
+                    if job["id"] in affected:
+                        await retry_permission(lambda: self._consume(job, drain=True))
+                        # 退出前的最后事件可能补充存档位置，但不能重新启动旧任务。
+                        set_phase(job, "idle", timestamp())
+                    await self._save_async(job)
+                await retry_permission(lambda: write_json(self.root / "settings.json", self.settings.model_dump(), retry=False))
+            except OSError:
+                continue
+            self.failure = None
+            self._recovering_storage = False
+            logger.info("工作台存储已恢复，调度器重新接单。已停止的任务需显式续跑")
+            return
+
+    async def _run(self) -> None:
+        while True:
+            try:
+                await self._schedule()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                details = []
+                if isinstance(exc, OSError):
+                    filename = exc.filename2 or exc.filename
+                    if filename:
+                        details.append(str(filename))
+                    code = getattr(exc, "winerror", None) or exc.errno
+                    if code is not None:
+                        details.append(f"错误码 {code}")
+                suffix = f"（{'，'.join(details)}）" if details else ""
+                self.failure = f"调度器已停止：{type(exc).__name__}{suffix}"
+                self._recovering_storage = isinstance(exc, OSError)
+                if self._recovering_storage:
+                    self.failure += "，正在等待存储恢复"
+                logger.exception("工作台调度器停止")
+                affected = {job["id"] for job in self.jobs.values() if job["status"] in ACTIVE} | set(self._processes)
+                # 持续存储故障仍需结束工作进程，不能让它们失去监管后继续计费。
+                for process in list(self._processes.values()):
+                    await asyncio.to_thread(self._kill_tree, process)
+                    await asyncio.to_thread(process.wait)
+                    process.stdin.close()
+                self._processes.clear()
+                self._payloads.clear()
+                self._stopping_since.clear()
+                for job in self.jobs.values():
+                    if job["status"] in ACTIVE:
+                        job.update(status="interrupted", ended_at=timestamp(), error=self.failure)
+                        set_phase(job, "idle", timestamp())
+                if not isinstance(exc, OSError):
+                    raise
+                try:
+                    await self._recover_storage(affected)
+                except Exception as recovery_error:
+                    self._recovering_storage = False
+                    self.failure = f"调度器恢复失败：{type(recovery_error).__name__}，请检查服务日志后重启"
+                    logger.exception("工作台存储恢复失败")
+                    raise
 
     @staticmethod
     def _endpoint(job: dict[str, Any]) -> str:
