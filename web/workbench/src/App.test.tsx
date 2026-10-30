@@ -37,6 +37,57 @@ function setup(jobs: Job[], url = "/") {
         update: (next: Job[]) => act(() => { data = { ...data, jobs: next }; client.setQueryData(["workbench"], data); }) };
 }
 
+function pendingRecovery(listState: "loading" | "error", checkpointMissing = false) {
+    history.replaceState(null, "", "/?section=archives");
+    const job = testJob("interrupted", { name: "等待全量列表的运行", status: "interrupted", archive_id: "known-source" });
+    const snapshot: Snapshot = { jobs: [job], settings: { max_parallel: 2, per_endpoint: 2 }, presets: ["default", "advanced"], scheduler_error: null };
+    const requests: { path: string; method: string }[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+        const path = String(input);
+        requests.push({ path, method: init?.method || "GET" });
+        if (path === "/api/workbench") return new Response(JSON.stringify(snapshot));
+        if (path === "/api/workbench/api-profiles") return new Response(JSON.stringify({ profiles: [] }));
+        if (path === "/api/llm/runs") return listState === "loading"
+            ? new Promise<Response>(() => {}) : new Response(JSON.stringify({ detail: "列表不可读" }), { status: 503 });
+        if (path === "/api/workbench/recoveries/known-source") return checkpointMissing
+            ? new Response(JSON.stringify({ detail: "找不到续跑存档" }), { status: 404 })
+            : new Response(JSON.stringify({ preset: "advanced", max_rerun_turn: 13,
+                agent: { type: "OpenAIResponsesAgent", config: { model: "restored-model", base_url: "http://127.0.0.1:1/v1" } },
+                config: { objective: "原存档目标", game_seed: 42 } }));
+        throw new Error(`未预期请求 ${path}`);
+    });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, refetchInterval: false, staleTime: Infinity } } });
+    client.setQueryData(["workbench"], snapshot);
+    render(<QueryClientProvider client={client}><App /></QueryClientProvider>);
+    return requests;
+}
+
+it.each(["loading", "error"] as const)("列表 %s 时续跑只读取对应检查点，使用检查结果填表，不自动创建任务", async state => {
+    const requests = pendingRecovery(state);
+    const more = await screen.findByRole("button", { name: "等待全量列表的运行 的更多操作" });
+    if (state === "error") expect(await screen.findByRole("alert")).toHaveTextContent("列表不可读");
+    await userEvent.click(more);
+    await userEvent.click(screen.getByRole("menuitem", { name: "续跑" }));
+    const dialog = await screen.findByRole("dialog", { name: "从检查点继续运行" });
+    expect(within(dialog).getByRole("combobox", { name: "数据 preset" })).toHaveValue("advanced");
+    expect(within(dialog).getByDisplayValue("restored-model")).toBeVisible();
+    expect(dialog).toHaveTextContent("继续运行 known-source");
+    expect(requests.filter(request => request.path.includes("/recoveries/"))).toEqual([
+        { path: "/api/workbench/recoveries/known-source", method: "GET" },
+    ]);
+    await userEvent.click(within(dialog).getByRole("button", { name: "关闭" }));
+    expect(requests.some(request => request.method !== "GET")).toBe(false);
+});
+
+it("已知存档 ID 不绕过检查点校验，单份读取失败时显示原因而不创建运行", async () => {
+    const requests = pendingRecovery("loading", true);
+    await userEvent.click(await screen.findByRole("button", { name: "等待全量列表的运行 的更多操作" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "续跑" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("找不到续跑存档");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(requests.some(request => request.method !== "GET")).toBe(false);
+});
+
 it("查看曲线时不因根组件秒级计时反复渲染工作区", async () => {
     vi.useFakeTimers();
     const { unmount, client } = setup([], "/?section=curves");

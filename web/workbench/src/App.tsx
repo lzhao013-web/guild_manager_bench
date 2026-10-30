@@ -365,10 +365,11 @@ export default function App() {
             setStopping(false);
         }
     }
-    async function resume(archive: Archive, rerun = false) {
+    async function resume(runId: string, rerun = false) {
         setError("");
         try {
             const replay = await api<{
+                preset: string;
                 agent: {
                     type: string;
                     config: {
@@ -385,12 +386,12 @@ export default function App() {
                 };
                 config: Record<string, unknown>;
                 max_rerun_turn: number;
-            }>(`/api/workbench/recoveries/${encodeURIComponent(archive.run_id)}`);
+            }>(`/api/workbench/recoveries/${encodeURIComponent(runId)}`);
             create({
-                ...defaultDraft(archive.preset),
-                name: `${rerun ? "分支重跑" : "续跑"} ${archive.model || archive.run_id}`,
-                resume_run_id: rerun ? undefined : archive.run_id,
-                rerun_run_id: rerun ? archive.run_id : undefined,
+                ...defaultDraft(replay.preset),
+                name: `${rerun ? "分支重跑" : "续跑"} ${replay.agent.config.model || runId}`,
+                resume_run_id: rerun ? undefined : runId,
+                rerun_run_id: rerun ? runId : undefined,
                 rerun_from_turn: rerun ? 1 : undefined,
                 rerun_max_turn: replay.max_rerun_turn,
                 objective: String(replay.config.objective ?? ""),
@@ -421,7 +422,7 @@ export default function App() {
                                 .reverse()
                                 .find(
                                     (job) =>
-                                        job.archive_id === archive.run_id &&
+                                        job.archive_id === runId &&
                                         job.config.profile_id,
                                 )?.config.profile_id || null,
                         provider:
@@ -1243,7 +1244,7 @@ export default function App() {
                                 </Suspense></PageBoundary>}
                                 {section === "archives" && view === "list" && (
                                     <PageBoundary name="历史存档"><Suspense fallback={<p className="muted">正在加载历史…</p>}>
-                                        <RunHistory jobs={jobs} runKeys={catalog.keys} onCompare={openCurves} onDeleted={deletedHistory} onResume={archive => void resume(archive)} onRerun={archive => void resume(archive, true)} onClone={clone} onOpen={job => openHistory(job)}
+                                        <RunHistory jobs={jobs} runKeys={catalog.keys} onCompare={openCurves} onDeleted={deletedHistory} onResume={runId => void resume(runId)} onRerun={runId => void resume(runId, true)} onClone={clone} onOpen={job => openHistory(job)}
                                             onWatch={selected => { setWatchIds(selected.map(runKey)); setView("watch"); }} />
                                     </Suspense></PageBoundary>
                                 )}

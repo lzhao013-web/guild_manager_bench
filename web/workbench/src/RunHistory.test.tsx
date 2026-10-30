@@ -8,10 +8,10 @@ import { buildRunCatalog } from "./runCatalog";
 import { testArchive, testJob } from "./test-jobs";
 import type { Archive, Job } from "./types";
 
-function setup(jobs: Job[], archives: Archive[]) {
+function setup(jobs: Job[], archives?: Archive[]) {
     const callbacks = { onRerun: vi.fn(), onResume: vi.fn(), onOpen: vi.fn(), onClone: vi.fn(), onWatch: vi.fn(), onCompare: vi.fn(), onDeleted: vi.fn() };
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity, refetchInterval: false } } });
-    client.setQueryData(["archives"], { runs: archives });
+    if (archives !== undefined) client.setQueryData(["archives"], { runs: archives });
     function Harness({ items }: { items: Job[] }) {
         return <QueryClientProvider client={client}><Theme>
             <RunHistory jobs={items} runKeys={buildRunCatalog(items).keys} {...callbacks} />
@@ -60,7 +60,7 @@ it("已完成存档可从指定回合重跑，但不提供原地续跑", async (
     await userEvent.click(screen.getByRole("button", { name: /的更多操作/ }));
     expect(screen.queryByRole("menuitem", { name: "续跑" })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("menuitem", { name: "从指定回合重跑" }));
-    expect(callbacks.onRerun).toHaveBeenCalledWith(archive);
+    expect(callbacks.onRerun).toHaveBeenCalledWith(archive.run_id);
 });
 
 it("历史列表只保留主入口，失败摘要不铺原始错误，更多菜单保留原操作", async () => {
@@ -80,7 +80,30 @@ it("历史列表只保留主入口，失败摘要不铺原始错误，更多菜�
     expect(callbacks.onCompare).toHaveBeenCalledWith([job.id]);
     await userEvent.click(within(row).getByRole("button", { name: /的更多操作/ }));
     await userEvent.click(screen.getByRole("menuitem", { name: "续跑" }));
-    expect(callbacks.onResume).toHaveBeenCalledWith(archive);
+    expect(callbacks.onResume).toHaveBeenCalledWith(archive.run_id);
+});
+
+it.each(["loading", "error"] as const)("存档列表 %s 时按已有存档 ID 提供续跑和重跑，未归档记录才重新创建", async state => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => state === "loading"
+        ? new Promise<Response>(() => {})
+        : new Response(JSON.stringify({ detail: "归档目录暂不可读" }), { status: 503 }));
+    const interrupted = testJob("interrupted", { name: "有检查点的中断运行", status: "interrupted", archive_id: "known-source" });
+    const completed = testJob("completed", { name: "已结束的归档运行", status: "completed", archive_id: "completed-source" });
+    const unarchived = testJob("unarchived", { name: "尚未生成存档", status: "failed", archive_id: null });
+    const callbacks = setup([interrupted, completed, unarchived]);
+    if (state === "error") expect(await screen.findByRole("alert")).toHaveTextContent("归档目录暂不可读");
+    await userEvent.click(screen.getByRole("button", { name: "有检查点的中断运行 的更多操作" }));
+    expect(screen.queryByRole("menuitem", { name: "重新创建" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("menuitem", { name: "续跑" }));
+    expect(callbacks.onResume).toHaveBeenCalledWith("known-source");
+    await userEvent.click(screen.getByRole("button", { name: "已结束的归档运行 的更多操作" }));
+    expect(screen.queryByRole("menuitem", { name: "续跑" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("menuitem", { name: "从指定回合重跑" }));
+    expect(callbacks.onRerun).toHaveBeenCalledWith("completed-source");
+    await userEvent.click(screen.getByRole("button", { name: "尚未生成存档 的更多操作" }));
+    expect(screen.queryByRole("menuitem", { name: "续跑" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("menuitem", { name: "重新创建" }));
+    expect(callbacks.onClone).toHaveBeenCalledWith(unarchived);
 });
 
 it("历史显示模型累计耗时、Token总量和输入输出，缺失值不当作零", () => {

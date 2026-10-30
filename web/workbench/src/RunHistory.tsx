@@ -36,8 +36,8 @@ export function RunHistory({ jobs, runKeys, onDeleted, onResume, onRerun, onOpen
     jobs: Job[];
     runKeys: Map<string, string>;
     onDeleted: (result: HistoryDeletion) => void;
-    onResume: (archive: Archive) => void;
-    onRerun?: (archive: Archive) => void;
+    onResume: (runId: string) => void;
+    onRerun?: (runId: string) => void;
     onOpen: (job: Job) => void;
     onClone: (job: Job) => void;
     onWatch: (jobs: Job[]) => void;
@@ -166,8 +166,8 @@ export function RunHistory({ jobs, runKeys, onDeleted, onResume, onRerun, onOpen
                 {blocked > 0 && <span className="muted">{blocked} 项占用中</span>}
                 <button className="text-button" onClick={() => setChecked([])}>清除选择</button>
             </div>}
-            {query.isPending && <p className="muted">正在读取存档…</p>}
-            {query.isError && <p className="callout error" role="alert">存档读取失败：{query.error.message}</p>}
+            {query.isPending && <p className="muted">{allRows.length ? "正在补充存档列表，已有运行仍可操作。" : "正在读取存档…"}</p>}
+            {query.isError && <p className="callout error" role="alert">存档列表读取失败：{query.error.message}</p>}
             {rows.length ? (
                 <div className="archive-table-wrap">
                     <ResizableTable className="run-table archive-table" storageKey="history" columns={HISTORY_RESIZE_COLUMNS}>
@@ -180,6 +180,8 @@ export function RunHistory({ jobs, runKeys, onDeleted, onResume, onRerun, onOpen
                         <tbody>{rows.map(row => {
                             const { job, archive } = row;
                             const status = job?.status || archive!.status;
+                            // 工作台已记录的存档 ID 足以定位检查点，不依赖全量列表完成。
+                            const recoveryId = job?.archive_id || archive?.run_id;
                             const failure = job ? job.error : archive!.failure_reason;
                             const metrics = historyMetrics(row);
                             const timestamp = historyCreatedAt(row);
@@ -219,9 +221,9 @@ export function RunHistory({ jobs, runKeys, onDeleted, onResume, onRerun, onOpen
                                         <DropdownMenu.Trigger><Button highContrast size="1" variant="ghost" aria-label={`${job?.name || archive!.model || row.id} 的更多操作`}>更多<CaretDown size={12} /></Button></DropdownMenu.Trigger>
                                         <DropdownMenu.Content size="2" align="end">
                                             {job && <DropdownMenu.Item onSelect={() => onCompare([curveId(row)])}>查看曲线</DropdownMenu.Item>}
-                                            {archive && onRerun && <DropdownMenu.Item disabled={!archive.preset} onSelect={() => onRerun(archive)}>从指定回合重跑</DropdownMenu.Item>}
-                                            {archive && status !== "completed" && <DropdownMenu.Item disabled={!archive.preset} onSelect={() => onResume(archive)}>续跑</DropdownMenu.Item>}
-                                            {!archive && job && <DropdownMenu.Item onSelect={() => onClone(job)}>重新创建</DropdownMenu.Item>}
+                                            {recoveryId && onRerun && <DropdownMenu.Item onSelect={() => onRerun(recoveryId)}>从指定回合重跑</DropdownMenu.Item>}
+                                            {recoveryId && status !== "completed" && <DropdownMenu.Item onSelect={() => onResume(recoveryId)}>续跑</DropdownMenu.Item>}
+                                            {!recoveryId && job && <DropdownMenu.Item onSelect={() => onClone(job)}>重新创建</DropdownMenu.Item>}
                                             <DropdownMenu.Separator />
                                             <DropdownMenu.Item color="red" disabled={inUse(row)} onSelect={() => requestDelete([row])}>
                                                 {archive || job?.archive_id ? "删除存档" : "删除记录"}
