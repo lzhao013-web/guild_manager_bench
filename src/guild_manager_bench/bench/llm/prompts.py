@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Mapping, Sequence
 
 from guild_manager_bench.bench.llm.formatting import skill_summary_lines, tactics_summary_lines
+from guild_manager_bench.bench.llm.harness import Memo
 from guild_manager_bench.bench.llm.refs import (
     build_numeric_refs,
     display_ref,
@@ -165,7 +166,7 @@ def build_turn_prompt(
     observation: Mapping[str, Any],
     *,
     previous_turn_event: Mapping[str, Any] | None = None,
-    memo_entries: Sequence[str] = (),
+    memo: Memo = Memo(),
     endgame_start_turn: int | None = None,
     turn_start_rank_score: float | None = None,
 ) -> str:
@@ -174,7 +175,7 @@ def build_turn_prompt(
     parts = [
         _previous_turn_summary(previous_turn_event),
         "",
-        _memo_summary(memo_entries),
+        _memo_summary(memo),
         "",
         _state_summary(observation),
     ]
@@ -189,18 +190,16 @@ def build_turn_prompt(
     return "\n".join(parts).strip()
 
 
-def _memo_summary(memo_entries: Sequence[str]) -> str:
-    values = [
-        entry.strip()
-        for entry in memo_entries
-        if isinstance(entry, str) and entry.strip()
-    ]
-    heading = "备忘录（上回合由模型自行记录）："
-    if not values:
-        return f"{heading}无。跨回合计划请在 end_turn 前用 write_memo 记录，供下一回合使用。"
-    lines = [heading]
-    lines.extend(f"- {entry}" for entry in values)
-    return "\n".join(lines)
+def _memo_summary(memo: Memo) -> str:
+    heading = "备忘录（模型自行维护，局内持续保留）："
+    if memo.updated_turn is not None:
+        heading += f"最后修改于 T{memo.updated_turn}。"
+    if not memo.content:
+        return (
+            f"{heading}\n无。跨回合计划可在 end_turn 前用 write_memo 记录。"
+            '每次写入整份覆盖，content="" 清空，不写则保留。'
+        )
+    return f"{heading}\n{memo.content}"
 
 
 def _endgame_warning(turn: int, turns_remaining: int, max_turns: int) -> str:

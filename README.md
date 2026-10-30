@@ -302,6 +302,8 @@ uv run guild-manager serve --preset advanced
 
 advanced 还提供按需查询的[战斗记录与未来刷新工具](docs/information-tools.md)，以及[方案试算、执行与技能配置](docs/tactical-tools.md)。开发版 `default`、`advanced` 全回合可试算准备方案，终局前不计算战力。试算扣1次，凭据执行免费，但提交时剩余预算必须不少于方案步数。查询使用普通工具调用额度，不自动把完整日志或未来刷新表加入回合提示词。神官、瘟疫法师与七种印记的法力门槛、行动窗口和默认优先级见[职业培养与印记配置](docs/advanced-combat-builds.md)，仅作用于开发版 `advanced`。
 
+开发版 `default`、`advanced` 的 `write_memo` 维护一份局内持久备忘。未调用时保留原文，每次写入整份覆盖，`content=""` 清空。正文最多 500 字符，回合提示词标注最后修改回合，写入仍占一次工具预算。续跑和分支重跑从已完成的历史前缀恢复备忘，不继承失败尝试中的更新。此变更由协议指纹区分版本，冻结的 `full/v1` 仍沿用原有的一回合备忘。
+
 游戏数据位于 `data/presets/<preset_name>/`，主要包含：
 
 ```text

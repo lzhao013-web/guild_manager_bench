@@ -10,6 +10,7 @@ from guild_manager_bench.bench.llm import (
     LlmAgentResponse,
     LlmRunConfig,
     LlmToolCall,
+    Memo,
     TurnToolHarness,
     build_endgame_system_prompt,
     build_system_prompt,
@@ -388,7 +389,7 @@ def test_turn_prompt_includes_compact_skill_summaries() -> None:
     prompt = build_turn_prompt(observation)
 
     assert "上一回合：无，这是本局第一个回合。" in prompt
-    assert "备忘录（上回合由模型自行记录）：无。" in prompt
+    assert "备忘录（模型自行维护，局内持续保留）：\n无。" in prompt
     assert "已购买升级：无" in prompt.splitlines()
     assert "本回合概览：" in prompt
     assert "可制作配方" in prompt
@@ -426,18 +427,19 @@ def test_turn_prompt_shows_purchased_upgrade_names_without_memo() -> None:
     prompt = build_turn_prompt(observation)
 
     assert "已购买升级：训练场、野战医疗" in prompt.splitlines()
-    assert "备忘录（上回合由模型自行记录）：无。" in prompt
+    assert "备忘录（模型自行维护，局内持续保留）：\n无。" in prompt
 
 
-def test_turn_prompt_labels_memo_origin_and_preserves_entries() -> None:
+def test_turn_prompt_labels_memo_origin_and_last_update_and_preserves_content() -> None:
     tools = GuildManagerTools.from_data_dir(_data_dir())
     observation = tools.start_session("memo-origin-prompt")["observation"]
-    entries = ("下回合查看招募。", "保留当前装备。")
+    memo = Memo("长期计划：\n- 查看招募。\n- 保留当前装备。", 1)
 
-    prompt = build_turn_prompt(observation, memo_entries=entries)
+    prompt = build_turn_prompt({**observation, "turn": 3}, memo=memo)
 
-    assert "备忘录（上回合由模型自行记录）：\n- 下回合查看招募。\n- 保留当前装备。" in prompt
-    assert prompt.index("备忘录（上回合由模型自行记录）：") < prompt.index("当前回合：")
+    assert f"备忘录（模型自行维护，局内持续保留）：最后修改于 T1。\n{memo.content}" in prompt
+    assert prompt.index("备忘录（模型自行维护，局内持续保留）：") < prompt.index("当前回合：")
+    assert "上回合由模型" not in prompt
 
 
 def test_system_prompt_includes_static_rules() -> None:
@@ -630,7 +632,7 @@ def test_skill_summary_formats_extended_conditions_and_effects() -> None:
     assert "优先级" not in text
 
 
-def test_memo_tool_content_appears_in_next_turn_prompt() -> None:
+def test_memo_tool_content_persists_in_all_later_turn_prompts_without_rewriting() -> None:
     memo_text = "下回合优先把经验给先锋。"
     agent = RecordingSequenceAgent(
         (
@@ -657,10 +659,42 @@ def test_memo_tool_content_appears_in_next_turn_prompt() -> None:
         for prompt in agent.prompts
         if "当前回合：1/" in prompt
     )
-    assert f"备忘录（上回合由模型自行记录）：\n- {memo_text}" in run.turns[1].prompt
-    assert all(memo_text not in turn.prompt for turn in run.turns[2:])
+    assert all(
+        f"备忘录（模型自行维护，局内持续保留）：最后修改于 T1。\n{memo_text}" in turn.prompt
+        for turn in run.turns[1:]
+    )
+    assert sum(call.name == "write_memo" for turn in run.turns for call in turn.tool_calls) == 1
     assert run.turns[0].tool_calls[0].name == "write_memo"
     assert run.turns[0].messages[3]["content"].startswith("成功 write_memo")
+
+
+def test_memo_overwrite_and_clear_are_visible_in_subsequent_turns() -> None:
+    def end_turn(*calls: LlmToolCall) -> LlmAgentResponse:
+        return LlmAgentResponse(tool_calls=(*calls, LlmToolCall("end_turn", {"hunts": []})))
+
+    agent = SequenceAgent((
+        end_turn(LlmToolCall("write_memo", {"content": "旧长期计划"})),
+        end_turn(),
+        end_turn(LlmToolCall("write_memo", {"content": "新长期计划"})),
+        end_turn(),
+        end_turn(LlmToolCall("write_memo", {"content": ""})),
+        end_turn(),
+    ))
+    run = run_llm_game(agent, data_dir=_data_dir(), config=LlmRunConfig(archive_dir=None))
+    assert run.status == "completed"
+    for turn in run.turns[1:3]:
+        assert "旧长期计划" in turn.prompt
+        assert "最后修改于 T1。" in turn.prompt
+    for turn in run.turns[3:5]:
+        assert "新长期计划" in turn.prompt
+        assert "旧长期计划" not in turn.prompt
+        assert "最后修改于 T3。" in turn.prompt
+    for turn in run.turns[5:]:
+        assert "长期计划" not in turn.prompt
+        assert "最后修改于 T5。\n无。" in turn.prompt
+    result_text = run.turns[4].messages[3]["content"]
+    assert "已清空备忘" in result_text
+    assert "自动消失" not in result_text
 
 
 def test_preview_battle_tool_returns_compact_model_visible_text() -> None:

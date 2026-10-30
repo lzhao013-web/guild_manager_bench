@@ -181,7 +181,8 @@ def test_invalid_plan_is_atomic_and_does_not_return_partial_score(game, bad):
     assert "projected_rank_score" not in result
     assert tools.get_state(sid) is before
     assert tools.get_events(sid) == events
-    assert harness.memo_store.snapshot() == ()
+    assert harness.memo_store.snapshot().content == ""
+    assert harness.memo_store.snapshot().updated_turn is None
     assert result["tool_budget"]["used"] == 1
     assert harness.call_tool("end_turn", {"hunts": []})["ok"]
 

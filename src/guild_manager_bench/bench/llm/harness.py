@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import dataclass, field
 from functools import cached_property
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping
 
 from guild_manager_bench.bench.llm.refs import (
     build_numeric_refs,
@@ -48,59 +48,42 @@ class ToolBudget:
         self.used += 1
 
 
+MAX_MEMO_CHARS = 500
+
+
+@dataclass(frozen=True, slots=True)
+class Memo:
+    """单份工作备忘及其最后修改回合。"""
+
+    content: str = ""
+    updated_turn: int | None = None
+
+
 @dataclass(slots=True)
 class MemoStore:
-    """LLM run 内跨回合保留的备忘录。"""
+    """本局内持续保留的工作备忘，写入时整份覆盖。"""
 
-    entries: list[str] = field(default_factory=list)
-    max_entries: int = 20
-    max_entry_chars: int = 2000
+    memo: Memo = field(default_factory=Memo)
 
-    def __post_init__(self) -> None:
-        if not isinstance(self.max_entries, int) or self.max_entries < 1:
-            raise ValueError("max_entries must be >= 1")
-        if not isinstance(self.max_entry_chars, int) or self.max_entry_chars < 1:
-            raise ValueError("max_entry_chars must be >= 1")
-        self.entries = [str(entry) for entry in self.entries if str(entry).strip()]
-        if len(self.entries) > self.max_entries:
-            self.entries = self.entries[-self.max_entries :]
-
-    def write(self, content: Any) -> dict[str, Any]:
+    def write(self, content: Any, *, turn: int) -> dict[str, Any]:
         if not isinstance(content, str):
             raise ValueError("content must be a string")
-        text = content.strip()
-        if not text:
-            raise ValueError("content must not be empty")
-        if len(text) > self.max_entry_chars:
-            raise ValueError(f"content must be <= {self.max_entry_chars} characters")
+        if len(content) > MAX_MEMO_CHARS:
+            raise ValueError(f"content must be <= {MAX_MEMO_CHARS} characters")
 
-        dropped = 0
-        self.entries.append(text)
-        if len(self.entries) > self.max_entries:
-            dropped = len(self.entries) - self.max_entries
-            del self.entries[:dropped]
+        self.memo = Memo(content=content.strip(), updated_turn=turn)
         return {
-            "content": text,
-            "count": len(self.entries),
-            "max_entries": self.max_entries,
-            "dropped_oldest": dropped,
+            "content": self.memo.content,
+            "updated_turn": self.memo.updated_turn,
+            "max_chars": MAX_MEMO_CHARS,
         }
 
-    def snapshot(self) -> tuple[str, ...]:
-        return tuple(self.entries)
+    def snapshot(self) -> Memo:
+        return self.memo
 
-    def consume(self) -> tuple[str, ...]:
-        """返回所有现有备忘录条目并清空。"""
-        entries = tuple(self.entries)
-        self.entries.clear()
-        return entries
-
-    def restore(self, entries: tuple[str, ...]) -> None:
-        """恢复备忘录快照。"""
-        self.entries = list(entries)
-
-    def clear(self) -> None:
-        self.entries.clear()
+    def restore(self, memo: Memo) -> None:
+        """恢复正文及最后修改回合，用于回滚失败尝试。"""
+        self.memo = memo
 
 
 class TurnToolHarness:
@@ -230,7 +213,7 @@ class TurnToolHarness:
     def _write_memo(self, arguments: Mapping[str, Any] | None) -> dict[str, Any]:
         values = {} if arguments is None else dict(arguments)
         try:
-            memo = self.memo_store.write(values.get("content"))
+            memo = self.memo_store.write(values.get("content"), turn=self._turn)
         except ValueError as exc:
             return {"ok": False, "error": str(exc)}
         return {"ok": True, "memo": memo}
@@ -265,8 +248,9 @@ class TurnToolHarness:
 _WRITE_MEMO_SCHEMA: dict[str, Any] = {
     "name": "write_memo",
     "description": (
-        "各回合独立对话，跨回合计划通过备忘录保存。同回合多次写入会追加，建议在回合末、调用 end_turn 前汇总写入。"
-        "备忘录在下一回合初展示一次后清空。"
+        "各回合独立对话，备忘录在本局跨回合持续保留，不写则不变。"
+        '每次写入整份覆盖旧内容，不追加，content="" 清空。'
+        "仅在内容需要更新时于 end_turn 前调用，及时移除已完成或过期的计划。"
     ),
     "parameters": {
         "type": "object",
@@ -274,40 +258,10 @@ _WRITE_MEMO_SCHEMA: dict[str, Any] = {
         "properties": {
             "content": {
                 "type": "string",
-                "minLength": 1,
-                "maxLength": 500,
-                "description": "备忘内容，最多 500 字符。",
+                "maxLength": MAX_MEMO_CHARS,
+                "description": f"完整备忘内容，最多 {MAX_MEMO_CHARS} 字符。空字符串清空备忘。",
             },
         },
         "additionalProperties": False,
     },
 }
-
-
-def memo_entries_from_tool_steps(turns: Sequence[Any]) -> tuple[str, ...]:
-    """从 replay turn steps 中恢复成功写入的备忘录（仅最后一回合）。"""
-
-    store = MemoStore()
-    for turn in reversed(list(turns)):
-        if not isinstance(turn, Mapping):
-            continue
-        for step in _sequence(turn.get("steps")):
-            if not isinstance(step, Mapping):
-                continue
-            if step.get("type") != "tool_result" or step.get("name") != "write_memo":
-                continue
-            content = step.get("content")
-            if not (isinstance(content, str) and (content.lstrip().startswith("成功 ") or content.lstrip().startswith("OK "))):
-                continue
-            arguments = step.get("arguments")
-            if isinstance(arguments, Mapping):
-                try:
-                    store.write(arguments.get("content"))
-                except ValueError:
-                    continue
-        break
-    return store.snapshot()
-
-
-def _sequence(value: Any) -> Sequence[Any]:
-    return value if isinstance(value, Sequence) and not isinstance(value, str) else ()

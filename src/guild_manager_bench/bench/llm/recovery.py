@@ -133,8 +133,12 @@ class RecoveryPlan:
         observation = tools.get_observation(session_id)["observation"]
         if self.from_turn is not None and (observation["turn"] != self.from_turn or observation["finished"]):
             raise ValueError(f"历史操作无法恢复到第 {self.from_turn} 回合开局，尚未请求模型")
+        if current["preset"] == "full":
+            memo_state = {"memo_entries": runtime.memo_entries_from_tool_steps(replay["turns"])}
+        else:
+            memo_state = {"memo_store": runtime._memo_store_from_replay(replay)}
         return {"session_id": session_id, "replay": replay, "traces": runtime._traces_from_replay(replay),
-                "memo_entries": runtime.memo_entries_from_tool_steps(replay["turns"])}
+                **memo_state}
 
     def writer(self, runtime, config, agent, archive_dir, replay, current):
         if self.from_turn is None:

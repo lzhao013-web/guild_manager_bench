@@ -145,7 +145,7 @@ export function describeAction(frame: WatchFrame, start = frame.cursor, call?: W
         if (kind === "query") summary = querySummary(described);
         else if (e.name === "write_memo" && e.result?.memo) {
             const memo = e.result.memo;
-            if (memo.content != null) summary = "备忘已保存";
+            if (memo.content != null) summary = memo.content === "" ? "备忘已清空" : "备忘已保存";
             else if (memo.count != null) summary = `备忘 ${memo.count} 条${memo.dropped_oldest ? `，已丢弃最早 ${memo.dropped_oldest} 条` : ""}`;
         }
         else if (e.name === "end_turn") {

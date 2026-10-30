@@ -93,6 +93,16 @@ def test_plan_summaries_support_global_preview_execution_and_frozen_full(name, r
     assert expected in reporter._query_summary(name, result)
 
 
+@pytest.mark.parametrize("memo,expected", [
+    ({"content": "长期计划", "updated_turn": 2, "max_chars": 500}, "备忘录已覆盖 · T2 · 长期计划"),
+    ({"content": "", "updated_turn": 3, "max_chars": 500}, "备忘录已清空 · T3"),
+    ({"content": "旧版备忘", "count": 2}, "备忘录已保存 · 共 2 条 · 旧版备忘"),
+])
+def test_memo_summary_supports_persistent_writes_clearing_and_frozen_full(memo, expected):
+    reporter = reporter_for(io.StringIO())
+    assert expected in reporter._query_summary("write_memo", {"memo": memo})
+
+
 def test_watch_output_describes_game_changes_and_actual_battles(recorded_run):
     events, run, candidate, agent = recorded_run
     stream = io.StringIO()

@@ -83,6 +83,13 @@ it("完整模拟战报在展开时才挂载，默认结果不铺开底层事件"
     expect(await screen.findByText(trace)).toBeVisible();
 });
 
+it("清空备忘的行动摘要明确显示已清空", () => {
+    const entry = action("write_memo", { ok: true, memo: { content: "", updated_turn: 5, max_chars: 500 } }, { content: "" });
+    render(<ActionResults entry={entry} />);
+    expect(screen.getByRole("region", { name: "执行结果" })).toHaveTextContent("备忘已清空");
+    expect(screen.queryByText("备忘已保存")).not.toBeInTheDocument();
+});
+
 it("备忘正文使用实际返回文本，长正文可展开且始终按文本渲染", () => {
     const saved = '<img src=x onerror="alert(1)">\n' + "已保存正文".repeat(60) + "末尾";
     const entry = action("write_memo", { ok: true, memo: { content: saved } }, { content: "请求正文" });

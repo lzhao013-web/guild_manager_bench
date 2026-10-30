@@ -29,9 +29,10 @@ def serial_scoring(monkeypatch):
 
 
 class EndAgent:
-    def __init__(self, stop_after=None):
+    def __init__(self, stop_after=None, *, memo_updates=None):
         self.calls = 0
         self.stop_after = stop_after
+        self.memo_updates = memo_updates
         self.prompts = []
 
     def respond(self, *, messages, tools):
@@ -40,7 +41,10 @@ class EndAgent:
         self.calls += 1
         self.prompts.append(json.dumps(messages, ensure_ascii=False))
         calls = []
-        if self.stop_after is not None:
+        if self.memo_updates is not None:
+            if self.calls in self.memo_updates:
+                calls.append(LlmToolCall("write_memo", {"content": self.memo_updates[self.calls]}))
+        elif self.stop_after is not None:
             calls.append(LlmToolCall("write_memo", {"content": f"memo-turn-{self.calls}"}))
         calls.append(LlmToolCall("end_turn", {"hunts": []}))
         return LlmAgentResponse(tool_calls=tuple(calls))
@@ -85,6 +89,67 @@ def test_rerun_creates_branch_keeps_prefix_memo_and_does_not_touch_original(tmp_
     assert any(row["turn"] == 1 and row["lifecycle"] == "confirmed" for row in rows)
     assert any(row["turn"] == 2 and row["lifecycle"] == "rolled_back" for row in rows)
     assert any(row["turn"] == 2 and row["lifecycle"] == "confirmed" for row in rows)
+
+
+@pytest.mark.parametrize("from_turn", [None, 4], ids=["resume", "rerun"])
+@pytest.mark.parametrize("updates,expected,updated_turn", [
+    ({1: "早期长期计划"}, "早期长期计划", 1),
+    ({1: "旧长期计划", 2: "替换后的计划"}, "替换后的计划", 2),
+    ({1: "旧长期计划", 2: ""}, "", 2),
+], ids=["retain", "replace", "clear"])
+def test_recovery_restores_latest_memo_across_unwritten_turns(tmp_path, from_turn, updates, expected, updated_turn):
+    with pytest.raises(RuntimeError, match="fixture stop"):
+        run_llm_game(EndAgent(3, memo_updates=updates), data_dir=ROOT / "data/presets/default",
+                     config=LlmRunConfig(archive_dir=tmp_path))
+    source = next(tmp_path.iterdir())
+    agent = EndAgent()
+    if from_turn is None:
+        result = run_llm_game(agent, data_dir=ROOT / "data/presets/default", resume_archive_dir=source,
+                              config=LlmRunConfig(archive_dir=tmp_path))
+    else:
+        plan = inspect_recovery(source, ROOT / "data/presets/default", from_turn)
+        assert plan.differences == []
+        result = continue_plan(plan, tmp_path, agent)
+    assert result.status == "completed"
+    for turn in result.turns:
+        if turn.turn < 4 or turn.status != "completed":
+            continue
+        assert f"最后修改于 T{updated_turn}。" in turn.prompt
+        assert "旧长期计划" not in turn.prompt
+        if expected:
+            assert expected in turn.prompt
+        else:
+            assert "最后修改于 T2。\n无。" in turn.prompt
+    assert result.turns[-1].turn == 8
+
+
+def test_retry_restores_memo_content_and_update_turn_and_recovery_ignores_failed_writes(tmp_path):
+    class RetryAgent:
+        def __init__(self):
+            self.responses = iter((
+                LlmAgentResponse(tool_calls=(LlmToolCall("write_memo", {"content": "已确认计划"}),
+                                            LlmToolCall("end_turn", {"hunts": []}))),
+                LlmAgentResponse(tool_calls=(LlmToolCall("write_memo", {"content": "应回滚计划"}),)),
+                LlmAgentResponse(),
+            ))
+
+        def respond(self, **kwargs):
+            return next(self.responses, LlmAgentResponse(tool_calls=(LlmToolCall("end_turn", {"hunts": []}),)))
+
+    result = run_llm_game(RetryAgent(), data_dir=ROOT / "data/presets/default",
+                          config=LlmRunConfig(archive_dir=tmp_path, max_empty_responses=1, max_turn_retries=1))
+    assert result.status == "completed"
+    assert [turn.status for turn in result.turns[:3]] == ["completed", "failed", "completed"]
+    for turn in result.turns[2:]:
+        assert "已确认计划" in turn.prompt
+        assert "应回滚计划" not in turn.prompt
+        assert "最后修改于 T1。" in turn.prompt
+    plan = inspect_recovery(Path(result.archive_dir), ROOT / "data/presets/default", 3)
+    child = continue_plan(plan, tmp_path, EndAgent())
+    first = next(turn for turn in child.turns if turn.turn == 3)
+    assert "已确认计划" in first.prompt
+    assert "应回滚计划" not in first.prompt
+    assert "最后修改于 T1。" in first.prompt
 
 
 def test_completed_archive_can_rerun_from_one_but_cannot_resume(tmp_path):

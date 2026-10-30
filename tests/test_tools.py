@@ -5,6 +5,7 @@ import pytest
 
 from guild_manager_bench.bench.llm import (
     GuildManagerTools,
+    Memo,
     ToolCallError,
     TurnToolHarness,
     tool_schemas,
@@ -165,9 +166,40 @@ def test_turn_tool_harness_records_memo() -> None:
     result = harness.call_tool("write_memo", {"content": "下回合优先处理装备。"})
 
     assert result["ok"] is True
-    assert result["memo"]["count"] == 1
+    assert result["memo"] == {"content": "下回合优先处理装备。", "updated_turn": 1, "max_chars": 500}
     assert result["tool_budget"]["used"] == 1
-    assert harness.memo_store.snapshot() == ("下回合优先处理装备。",)
+    assert harness.memo_store.snapshot() == Memo("下回合优先处理装备。", 1)
+
+
+@pytest.mark.parametrize("content", ["", " \n\t"])
+def test_memo_writes_replace_the_whole_document_and_empty_content_clears(content) -> None:
+    tools = GuildManagerTools.from_data_dir(_data_dir())
+    session_id = tools.start_session("memo-replace")["session_id"]
+    harness = TurnToolHarness(tools, session_id, max_tool_calls=3)
+    assert harness.call_tool("write_memo", {"content": "旧计划"})["ok"]
+    replaced = harness.call_tool("write_memo", {"content": "新计划\n保留装备"})
+    assert replaced["memo"]["content"] == "新计划\n保留装备"
+    assert harness.memo_store.snapshot() == Memo("新计划\n保留装备", 1)
+    cleared = harness.call_tool("write_memo", {"content": content})
+    assert cleared["ok"] is True
+    assert cleared["memo"]["content"] == ""
+    assert harness.memo_store.snapshot() == Memo("", 1)
+    assert cleared["tool_budget"]["used"] == 3
+
+
+@pytest.mark.parametrize("arguments", [None, {}, {"content": None}, {"content": False}, {"content": 12}, {"content": "备" * 501}])
+def test_invalid_memo_write_preserves_existing_content_and_consumes_budget(arguments) -> None:
+    tools = GuildManagerTools.from_data_dir(_data_dir())
+    session_id = tools.start_session("memo-invalid")["session_id"]
+    harness = TurnToolHarness(tools, session_id, max_tool_calls=2)
+    text = "备" * 500
+    assert harness.call_tool("write_memo", {"content": text})["ok"]
+    before = harness.memo_store.snapshot()
+    result = harness.call_tool("write_memo", arguments)
+    assert result["ok"] is False
+    assert "content must be" in result["error"]
+    assert result["tool_budget"]["used"] == 2
+    assert harness.memo_store.snapshot() == before == Memo(text, 1)
 
 
 def test_turn_tool_harness_resolves_numeric_ids() -> None:

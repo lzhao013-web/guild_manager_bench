@@ -417,6 +417,9 @@ class RunReporter:
         if name == "write_memo":
             memo = result["memo"]
             content = memo["content"].replace("\n", " ")
+            if "updated_turn" in memo:
+                action = "备忘录已覆盖" if content else "备忘录已清空"
+                return f"{action} · T{memo['updated_turn']} · {content[:100]}{'…' if len(content) > 100 else ''}"
             return f"备忘录已保存 · 共 {memo['count']} 条 · {content[:100]}{'…' if len(content) > 100 else ''}"
         if name == "preview_monster_refresh":
             return f"预览怪物刷新 · 第{result['refresh_number']}次 · 实刷需{result['gold_cost']}金币（未执行）"

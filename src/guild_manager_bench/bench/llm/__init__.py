@@ -7,7 +7,7 @@ from guild_manager_bench.bench.llm.archive import (
     start_llm_run_archive,
     write_llm_run_archive,
 )
-from guild_manager_bench.bench.llm.harness import MemoStore, ToolBudget, TurnToolHarness
+from guild_manager_bench.bench.llm.harness import Memo, MemoStore, ToolBudget, TurnToolHarness
 from guild_manager_bench.bench.llm.anthropic_compat import (
     AnthropicMessagesAgent,
     AnthropicMessagesConfig,
@@ -72,6 +72,7 @@ __all__ = [
     "LlmRunConfig",
     "LlmToolCall",
     "LlmTurnAgent",
+    "Memo",
     "MemoStore",
     "OPENCODE_SESSION_HEADER",
     "OpenAIChatCompletionsAgent",

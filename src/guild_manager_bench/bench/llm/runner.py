@@ -21,7 +21,6 @@ from guild_manager_bench.bench.llm.information_formatting import battle_log_line
 from guild_manager_bench.bench.llm.harness import (
     MemoStore,
     TurnToolHarness,
-    memo_entries_from_tool_steps,
 )
 from guild_manager_bench.bench.llm.preparation_plan import PREPARATION_TOOLS
 from guild_manager_bench.bench.llm.prompts import (
@@ -195,7 +194,7 @@ def run_llm_game(
     else:
         session_id = resume["session_id"]
         traces = list(resume["traces"])
-        memo_store = MemoStore(entries=list(resume["memo_entries"]))
+        memo_store = resume["memo_store"]
         if recovery is not None:
             archive_writer = recovery.writer(sys.modules[__name__], config, agent, resume_archive_dir, resume["replay"], data_source)
         else:
@@ -467,7 +466,7 @@ def run_llm_turn(
     prompt = build_turn_prompt(
         observation,
         previous_turn_event=previous_turn_event,
-        memo_entries=memo_store.consume(),
+        memo=memo_store.snapshot(),
         endgame_start_turn=tools.definition.llm_tools.endgame_start_turn,
         turn_start_rank_score=turn_harness.turn_start_rank_score,
     )
@@ -691,8 +690,25 @@ def _restore_from_replay_archive(
         "session_id": session_id,
         "replay": replay,
         "traces": _traces_from_replay(replay),
-        "memo_entries": memo_entries_from_tool_steps(_sequence(replay.get("turns"))),
+        "memo_store": _memo_store_from_replay(replay),
     }
+
+
+def _memo_store_from_replay(replay: Mapping[str, Any]) -> MemoStore:
+    """按顺序恢复已完成回合的备忘更新，不继承失败或回滚的尝试。"""
+    store = MemoStore()
+    for turn in _sequence(replay.get("turns")):
+        if not isinstance(turn, Mapping) or turn.get("status") != "completed":
+            continue
+        for step in _sequence(turn.get("steps")):
+            if (
+                isinstance(step, Mapping)
+                and step.get("type") == "tool_result"
+                and step.get("name") == "write_memo"
+                and _replay_tool_step_succeeded(step)
+            ):
+                store.write(_replay_tool_arguments(step).get("content"), turn=turn["turn"])
+    return store
 
 
 def _read_replay(path: Path) -> dict[str, Any]:
@@ -988,13 +1004,10 @@ def _format_tool_result_for_model(name: str, result: Mapping[str, Any]) -> str:
                 _append_changes_lines(lines, event.get("changes"), _result_refs(result))
     elif name == "write_memo" and isinstance(result.get("memo"), Mapping):
         memo = result["memo"]
-        lines[0] = (
-            "成功 write_memo："
-            f"已记录备忘 {memo.get('count')} 条，仅下回合出现在提示词中，之后自动消失"
-        )
-        dropped = memo.get("dropped_oldest")
-        if isinstance(dropped, int) and dropped:
-            lines.append(f"已丢弃最早 {dropped} 条备忘")
+        action = "已覆盖备忘" if memo["content"] else "已清空备忘"
+        lines[0] = f"成功 write_memo：{action}，最后修改回合 T{memo['updated_turn']}。"
+        if memo["content"]:
+            lines.append("备忘将在后续回合持续展示，直到再次覆盖或清空。")
     else:
         event = result.get("event")
         if isinstance(event, Mapping):

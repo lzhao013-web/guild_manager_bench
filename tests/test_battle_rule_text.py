@@ -150,7 +150,10 @@ def test_memo_instructions_place_writing_before_end_turn():
     observation = tools.start_session("memo-instructions")["observation"]
     schema = next(s for s in TurnToolHarness(tools, "memo-instructions", max_tool_calls=20).tool_schemas() if s["name"] == "write_memo")
     assert "各回合独立对话" in schema["description"]
-    assert "回合末、调用 end_turn 前汇总写入" in schema["description"]
-    assert "下一回合初展示一次后清空" in schema["description"]
+    assert "内容需要更新时于 end_turn 前调用" in schema["description"]
+    assert "跨回合持续保留，不写则不变" in schema["description"]
+    assert '整份覆盖旧内容，不追加，content="" 清空' in schema["description"]
+    assert schema["parameters"]["properties"]["content"].get("minLength", 0) == 0
+    assert schema["parameters"]["properties"]["content"]["maxLength"] == 500
     assert "准备完成后调用 end_turn 提交讨伐并结束本轮交互" in build_system_prompt()
     assert "end_turn 前用 write_memo 记录" in build_turn_prompt(observation)
