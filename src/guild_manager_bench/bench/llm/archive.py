@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Mapping, Sequence
+from uuid import uuid4
 
 from guild_manager_bench.bench.llm.trace import LlmGameRun, TurnTrace
 
@@ -521,7 +522,7 @@ def _timestamp() -> str:
 
 def _run_directory_name(created_at: str, agent: Mapping[str, Any]) -> str:
     model_name = _extract_model_name(agent)
-    return f"{created_at}_{_safe_path_part(model_name)}"
+    return f"{created_at}_{_safe_path_part(model_name)}_{uuid4().hex}"
 
 
 def _extract_model_name(agent: Mapping[str, Any]) -> str:
