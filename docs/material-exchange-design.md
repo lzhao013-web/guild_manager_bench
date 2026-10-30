@@ -239,26 +239,6 @@ npm run build
 
 未运行全部 Python 测试，未做浏览器视觉验收，也未新增真实模型运行。功能测试不证明平衡。持续恢复、最佳兑换时机和完整终局预算仍按第 6 节验收。
 
-## 8. 前期离线原型产物
+## 8. 前期离线原型
 
-以下文件只用于前期原型及离线分析，不是游戏运行时依赖：
-
-- `runs/.design-exchange-20261027/exchange.py`：状态转换原型。
-- `test_exchange.py`：正确性测试。
-- `probe.py`：原始回放核验、成对构筑比较和奖励检查。
-- `economy.json`：真实库存及 64 组奖励对照。
-- `results/`：十个场景的逐候选记录。
-- `summary.json`：本轮汇总、计算预算中止说明及未证明事项。
-
-分析目录受现有 `.gitignore` 忽略。脚本复用已有分析目录的回放恢复与正式评分辅助函数，不读取旧试验结果作为本轮结论。
-
-复现命令：
-
-```powershell
-.venv/Scripts/python.exe -m pytest runs/.design-exchange-20261027/test_exchange.py -q
-.venv/Scripts/python.exe runs/.design-exchange-20261027/probe.py economy
-.venv/Scripts/python.exe runs/.design-exchange-20261027/probe.py mid
-.venv/Scripts/python.exe runs/.design-exchange-20261027/probe.py no-ring
-.venv/Scripts/python.exe runs/.design-exchange-20261027/probe.py terminal --keys mini_low mini_high
-.venv/Scripts/python.exe runs/.design-exchange-20261027/probe.py terminal --keys qwen_low qwen_high --bundles 2
-```
+前期离线原型脚本和分析结果已清理。功能验证使用第 7 节的正式测试。后续平衡分析应从当前配置、实现和原始运行记录重新验证，不沿用本文的历史离线核验结果作为当前结论。
