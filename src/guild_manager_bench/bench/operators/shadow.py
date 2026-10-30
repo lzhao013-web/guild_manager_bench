@@ -452,6 +452,7 @@ def _dict_to_skill_effect(d: dict[str, Any]) -> SkillEffect:
         stat=d.get("stat"),
         target=d.get("target") or "target",
         status=_dict_to_status(status) if isinstance(status, dict) else None,
+        minimum=d.get("minimum", 0) or 0,
     )
 
 
@@ -480,6 +481,7 @@ def _dict_to_skill(d: dict[str, Any]) -> Skill:
         priority=d.get("priority", 0) or 0,
         once_per_battle=bool(d.get("once_per_battle", False)),
         free=bool(d.get("free", False)),
+        trigger=d.get("trigger", "action"),
     )
 
 

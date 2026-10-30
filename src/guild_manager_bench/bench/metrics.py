@@ -877,6 +877,7 @@ def _skill_from_mapping(data: Mapping[str, Any]) -> Skill:
         priority=_int_field(data, "priority", default=0),
         once_per_battle=bool(data.get("once_per_battle", False)),
         free=bool(data.get("free", False)),
+        trigger=data.get("trigger", "action"),
     )
 
 
@@ -905,6 +906,7 @@ def _skill_effect_from_mapping(data: Mapping[str, Any]) -> SkillEffect:
             if isinstance(status_data, Mapping)
             else None
         ),
+        minimum=_int_field(data, "minimum", default=0),
     )
 
 
