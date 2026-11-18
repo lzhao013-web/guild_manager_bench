@@ -15615,7 +15615,7 @@
           }
         }
       ],
-      "model": "gpt-6.2-astra",
+      "model": "gpt-6.2-astra-xhigh",
       "rank": 4
     },
     {
@@ -60228,7 +60228,7 @@
           }
         }
       ],
-      "model": "gpt-6.2-sol",
+      "model": "gpt-6.2-sol-xhigh",
       "rank": 17
     },
     {
