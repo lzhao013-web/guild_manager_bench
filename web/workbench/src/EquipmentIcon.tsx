@@ -1,4 +1,5 @@
 import { SlotIcon } from "./SceneParts";
+import { equipmentStage } from "./EquipmentBadge";
 
 const images = import.meta.glob<string>("../../assets/icons/equipment/*.webp", {
     eager: true,
@@ -11,6 +12,6 @@ export function EquipmentIcon({ templateId, slot, size = 24 }: {
     size?: number;
 }) {
     const url = images[`../../assets/icons/equipment/${templateId}.webp`];
-    return url ? <img className="equipment-icon" src={url} alt="" width={size} height={size} loading="lazy" />
+    return url ? <img className="equipment-icon" data-equipment-stage={equipmentStage(templateId)} src={url} alt="" width={size} height={size} loading="lazy" />
         : <SlotIcon slot={slot} size={size} />;
 }

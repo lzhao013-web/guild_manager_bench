@@ -23,6 +23,22 @@ export interface Talent extends GameEntity {
     experience_cost?: number;
     material_costs?: Record<string, number>;
 }
+export function talentBonuses(talent: GameEntity) {
+    const fields = [
+        ["party_size_bonus", "编队容量", ""],
+        ["craft_gold_discount_percent", "制作金币减免", "%"],
+        ["hunt_experience_bonus_percent", "讨伐经验加成", "%"],
+        ["hunt_gold_bonus_percent", "讨伐金币加成", "%"],
+        ["elite_boss_gold_bonus_percent", "精英、首领金币额外加成", "%"],
+        ["monster_refresh_discount_percent", "刷新基础价减免", "%"],
+    ] as const;
+    return fields.flatMap(([key, label, unit]) => {
+        const value = talent[key];
+        return typeof value === "number" && value !== 0
+            ? [{ key, label, value: `${key === "party_size_bonus" && value > 0 ? "+" : ""}${value}${unit}` }] : [];
+    });
+}
+
 export const TALENT_STATES = {
     unlocked: "已解锁",
     available: "可解锁",

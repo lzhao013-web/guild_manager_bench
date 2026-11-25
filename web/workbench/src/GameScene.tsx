@@ -29,6 +29,7 @@ import {
 import type { SceneModule, SceneView } from "./sceneNavigation";
 import { Portrait, Vital } from "./SceneParts";
 import { EquipmentIcon } from "./EquipmentIcon";
+import { EquipmentBadge, equipmentDescription, equipmentStage } from "./EquipmentBadge";
 import { MonsterBadges } from "./MonsterBadges";
 import { AdventurerStatus, adventurerFrame, adventurerStateText, monsterFrame } from "./UnitFrame";
 import { monsterClassification } from "./monsterModel";
@@ -266,7 +267,9 @@ export function GameScene({
                                 <div className="scene-equipment-grid">
                                     {filteredInventory!.map((item) => (
                                         <button
-                                            className={`scene-item-card ${item.equipped_by ? "is-equipped" : ""}`}
+                                            className={`scene-item-card equipment-frame ${item.equipped_by ? "is-equipped" : ""}`}
+                                            data-equipment-stage={equipmentStage(item.template_id)}
+                                            aria-description={equipmentDescription(item.template_id)}
                                             key={item.instance_id}
                                             onClick={() => inspect("equipment", item)}
                                             aria-label={`查看装备 ${item.name}`}
@@ -274,7 +277,7 @@ export function GameScene({
                                             <span className="equipment-glyph">
                                                 <EquipmentIcon templateId={item.template_id} slot={item.slot!} size={42} />
                                             </span>
-                                            <strong>{item.name}</strong>
+                                            <span className="equipment-card-heading"><strong>{item.name}</strong><EquipmentBadge templateId={item.template_id} /></span>
                                             <span className="scene-note">
                                                 {SLOTS[item.slot!] || item.slot}
                                             </span>
@@ -306,10 +309,11 @@ export function GameScene({
                     {!subject && module === "inventory" && inventoryMode === "recipes" && (
                         observation.crafting_recipes === undefined ? <p className="scene-note">该快照未记录制作配方</p> :
                         <div className="scene-equipment-grid">
-                            {filteredRecipes!.map(recipe => <button key={recipe.recipe_id} className="scene-item-card scene-recipe-card" aria-label={`查看制作配方 ${recipe.output_name}`}
+                            {filteredRecipes!.map(recipe => <button key={recipe.recipe_id} className="scene-item-card scene-recipe-card equipment-frame" aria-label={`查看制作配方 ${recipe.output_name}`}
+                                data-equipment-stage={equipmentStage(recipe.output_template_id)} aria-description={equipmentDescription(recipe.output_template_id)}
                                 onClick={() => inspect("recipe", recipe)}>
                                 <span className="equipment-glyph"><EquipmentIcon templateId={recipe.output_template_id} slot={recipe.output_slot} size={42} /></span>
-                                <strong>{recipe.output_name}</strong><span className="scene-note">{SLOTS[recipe.output_slot] || recipe.output_slot}</span>
+                                <span className="equipment-card-heading"><strong>{recipe.output_name}</strong><EquipmentBadge templateId={recipe.output_template_id} /></span><span className="scene-note">{SLOTS[recipe.output_slot] || recipe.output_slot}</span>
                                 <span className="candidate-price"><Coins size={13} />{fmt(recipe.gold_cost)}</span>
                                 <small className="scene-note">{materialText(recipe.material_costs) || "无需材料"}</small>
                                 <span className={`scene-availability ${recipe.can_craft ? "available" : ""}`}>{recipe.can_craft ? "可制作" : requirementLines(recipe.missing).join("、")}</span>

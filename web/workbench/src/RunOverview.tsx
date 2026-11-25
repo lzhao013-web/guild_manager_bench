@@ -6,6 +6,7 @@ import {
 import { fmt, modelEntries, time } from "./model";
 import { Portrait, Vital } from "./SceneParts";
 import { EquipmentIcon } from "./EquipmentIcon";
+import { EquipmentBadge, equipmentDescription, equipmentStage } from "./EquipmentBadge";
 import { MonsterBadges } from "./MonsterBadges";
 import { AdventurerStatus, adventurerFrame, adventurerStateText, isLowHealth, monsterFrame } from "./UnitFrame";
 import { ModelCallStats } from "./ModelCallStats";
@@ -145,9 +146,10 @@ export function RunOverview({ observation, frames, records, onOpen, onFrame, mem
                     note={inventory ? `${inventory.length} 件，${stored!.length} 件未穿戴` : "未记录"} onOpen={onOpen}>
                     {inventory ? <OverviewItems className="overview-item-rows" items={previewInventory!} rowHeight={28} minItemWidth={180}>
                         {(item) => (
-                            <button key={item.instance_id} aria-label={`查看装备 ${item.name}`} className={changed.has(`equipment:${item.instance_id}`) ? "motion-event" : ""}
+                            <button key={item.instance_id} aria-label={`查看装备 ${item.name}`} className={`equipment-frame ${changed.has(`equipment:${item.instance_id}`) ? "motion-event" : ""}`}
+                                data-equipment-stage={equipmentStage(item.template_id)} aria-description={equipmentDescription(item.template_id)}
                                 onClick={() => onOpen("inventory", { kind: "equipment", id: item.instance_id! })}>
-                                <EquipmentIcon templateId={item.template_id} slot={item.slot!} size={17} /><strong title={item.name}>{item.name}</strong>
+                                <EquipmentIcon templateId={item.template_id} slot={item.slot!} size={17} /><EquipmentBadge templateId={item.template_id} /><strong title={item.name}>{item.name}</strong>
                                 <span>{item.equipped_by != null ? "已穿戴" : item.equipped_by === null ? "未穿戴" : "未记录"}</span>
                             </button>
                         )}

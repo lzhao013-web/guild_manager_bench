@@ -8,6 +8,7 @@ import { MATERIALS, SLOTS, resolveSubject, subjectId } from "./sceneModel";
 import type { Selection, SceneSubject } from "./sceneModel";
 import { Portrait, SkillCards, StatTiles, Vital } from "./SceneParts";
 import { EquipmentIcon } from "./EquipmentIcon";
+import { EquipmentBadge, equipmentDescription, equipmentStage } from "./EquipmentBadge";
 import { MonsterBadges } from "./MonsterBadges";
 import { AdventurerStatus, adventurerFrame, adventurerStateText, monsterFrame } from "./UnitFrame";
 import type { CraftingRecipe, GameEntity, Observation, PartyMember } from "./types";
@@ -205,12 +206,15 @@ function MemberInspector({
                                     <button
                                         key={equipmentSlot.slot}
                                         data-slot={equipmentSlot.slot}
-                                        className={`paperdoll-slot ${equipped ? "equipped" : "vacant"} ${selected?.slot === equipmentSlot.slot ? "selected" : ""}`}
+                                        className={`paperdoll-slot equipment-frame ${equipped ? "equipped" : "vacant"} ${selected?.slot === equipmentSlot.slot ? "selected" : ""}`}
+                                        data-equipment-stage={equipmentStage(equipped?.template_id)}
+                                        aria-description={equipped ? equipmentDescription(equipped.template_id) : undefined}
                                         aria-label={`${SLOTS[equipmentSlot.slot!] || equipmentSlot.slot}：${equipped?.name || (blocked ? "被占用" : "空")}`}
                                         aria-pressed={selected?.slot === equipmentSlot.slot}
                                         onClick={() => setSlot(equipmentSlot.slot!)}
                                     >
                                         <EquipmentIcon templateId={equipped?.template_id} slot={equipmentSlot.slot!} size={equipped ? 36 : 24} />
+                                        <EquipmentBadge templateId={equipped?.template_id} />
                                         {!equipped && <span>
                                             {SLOTS[equipmentSlot.slot!] || equipmentSlot.slot}
                                         </span>}
@@ -264,6 +268,7 @@ function MemberInspector({
                             <header>
                                 <EquipmentIcon templateId={item?.template_id} slot={selected.slot!} size={20} />
                                 <h3>{item?.name || `${SLOTS[selected.slot!] || selected.slot}：${selected.blocked_by ? "已被占用" : "尚未装备"}`}</h3>
+                                <EquipmentBadge templateId={item?.template_id} />
                             </header>
                             {item && <>
                                 <StatTiles stats={item.stats as Record<string, number> | undefined} modifier />
@@ -345,7 +350,7 @@ function EntityInspector({
                 ) : kind === "candidate" ? (
                     <Portrait id={entity.template_id} name={entity.name!} />
                 ) : (
-                    <div className="entity-item-glyph">
+                    <div className="entity-item-glyph equipment-frame" data-equipment-stage={equipmentStage(entity.template_id)}>
                         <EquipmentIcon templateId={entity.template_id} slot={entity.slot || "ultimate"} size={80} />
                     </div>
                 )}
@@ -375,7 +380,7 @@ function EntityInspector({
                     )}
                     {kind === "equipment" && (
                         <>
-                            <p className="scene-tag">{SLOTS[entity.slot!] || entity.slot}</p>
+                            <div className="equipment-meta"><EquipmentBadge templateId={entity.template_id} /><span className="scene-tag">{SLOTS[entity.slot!] || entity.slot}</span></div>
                             <p className="scene-note">
                                 适用职业：
                                 {entity.allowed_class_names === undefined

@@ -337,6 +337,44 @@ it("历史位置不再包含配方时关闭旧详情，不残留未来条件", a
     expect(screen.getByText("该位置没有制作配方")).toBeVisible();
 });
 
+it("装备阶级贯穿角色槽位、仓库、配方和详情，空槽与旧模板保持中性", async () => {
+    const sword = { ...weapon, template_id: "t2_heavy_sword" };
+    const value: Observation = { ...observation,
+        adventurers: [{ ...member, equipment_slots: [{ slot: "main_hand", item: sword }, ...member.equipment_slots!.slice(1)] }],
+        equipment_inventory: [sword, { ...weapon, instance_id: "old", name: "旧版铁剑", equipped_by: null }],
+        crafting_recipes: [testRecipe({ output_template_id: "t3_heavy_sword" })],
+    };
+    const before = JSON.stringify(value);
+    mount(value);
+    fireEvent.click(screen.getByRole("button", { name: "查看成员 验收重甲卫士" }));
+    const slot = screen.getByRole("button", { name: "主手：沉铁长剑" });
+    expect(slot).toHaveAttribute("data-equipment-stage", "t2");
+    expect(within(slot).getByText("T2")).toBeVisible();
+    expect(slot).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "头盔：空" })).not.toHaveAttribute("data-equipment-stage");
+    fireEvent.click(screen.getByRole("button", { name: /在仓库查看同槽装备/ }));
+    const card = await screen.findByRole("button", { name: "查看装备 沉铁长剑" });
+    expect(card).toHaveAccessibleDescription("装备阶级 T2");
+    expect(within(card).getByText("T2")).toBeVisible();
+    expect(within(card).getByText(member.name)).toBeVisible();
+    const oldCard = screen.getByRole("button", { name: "查看装备 旧版铁剑" });
+    expect(oldCard).not.toHaveAttribute("data-equipment-stage");
+    expect(within(oldCard).queryByText(/^T[123]$/)).not.toBeInTheDocument();
+    fireEvent.click(card);
+    const detail = await screen.findByRole("region", { name: "沉铁长剑 的详情" });
+    expect(within(detail).getByText("T2")).toBeVisible();
+    expect(detail.querySelector(".entity-item-glyph")).toHaveAttribute("data-equipment-stage", "t2");
+    fireEvent.click(screen.getByRole("button", { name: "制作配方" }));
+    const recipe = screen.getByRole("button", { name: "查看制作配方 验收长剑" });
+    expect(within(recipe).getByText("T3")).toBeVisible();
+    expect(recipe).toHaveAttribute("data-equipment-stage", "t3");
+    fireEvent.click(recipe);
+    const recipeDetail = await screen.findByRole("region", { name: "验收长剑配方 的详情" });
+    expect(within(recipeDetail).getByText("T3")).toBeVisible();
+    expect(within(recipeDetail).getByText("当前未满足制作条件")).toBeVisible();
+    expect(JSON.stringify(value)).toBe(before);
+});
+
 it("技能文字保留真实倍率、触发条件和状态，不做胜率或强弱推断", () => {
     expect(conditionText({ type: "self_hp_pct_lte", value: 0.3, conditions: [] })).toBe(
         "自身生命不高于 30%",

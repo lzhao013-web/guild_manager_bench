@@ -3,7 +3,7 @@ import { fmt } from "./model";
 import { BRANCHES, MATERIALS } from "./sceneModel";
 import { SkillCards, StatTiles } from "./SceneParts";
 import { TalentStatus } from "./UpgradeGraph";
-import { talentState } from "./talentModel";
+import { talentBonuses, talentState } from "./talentModel";
 import type { Talent } from "./talentModel";
 import type { GameEntity } from "./types";
 
@@ -51,12 +51,7 @@ export function TalentDetails({ talent, upgrades, onSelect }: {
                 <p className="scene-note">红色虚线连接的天赋不能同时解锁。</p>
             </>}
             <h4>解锁效果</h4>
-            {typeof talent.party_size_bonus === "number" && talent.party_size_bonus !== 0 && <p>编队容量 +{talent.party_size_bonus}</p>}
-            {typeof talent.craft_gold_discount_percent === "number" && talent.craft_gold_discount_percent !== 0 && <p>制作金币减免 {talent.craft_gold_discount_percent}%</p>}
-            {typeof talent.hunt_experience_bonus_percent === "number" && talent.hunt_experience_bonus_percent !== 0 && <p>讨伐经验加成 {talent.hunt_experience_bonus_percent}%</p>}
-            {typeof talent.hunt_gold_bonus_percent === "number" && talent.hunt_gold_bonus_percent !== 0 && <p>讨伐金币加成 {talent.hunt_gold_bonus_percent}%</p>}
-            {typeof talent.elite_boss_gold_bonus_percent === "number" && talent.elite_boss_gold_bonus_percent !== 0 && <p>精英、首领金币额外加成 {talent.elite_boss_gold_bonus_percent}%</p>}
-            {typeof talent.monster_refresh_discount_percent === "number" && talent.monster_refresh_discount_percent !== 0 && <p>刷新基础价减免 {talent.monster_refresh_discount_percent}%</p>}
+            {talentBonuses(talent).map(bonus => <p key={bonus.key}>{bonus.label} {bonus.value}</p>)}
             <StatTiles stats={talent.stats as Record<string, number> | undefined} modifier />
             <h4>技能效果</h4>
             <SkillCards skills={talent.skills as GameEntity[] | undefined} />
