@@ -1030,24 +1030,24 @@ def _apply_reward(state: GameState, reward: RewardBundle) -> GameState:
 
 
 def _apply_turn_recovery(definition: GameDefinition, state: GameState) -> GameState:
+    rules = definition.rules.turn_recovery
     adventurers: list[AdventurerState] = []
     for adventurer in state.adventurers:
         stats = effective_adventurer_stats(definition, state, adventurer)
-        hp_recovery = definition.rules.turn_recovery.hp + int(
-            stats.hp * definition.rules.turn_recovery.hp_percent
-        )
-        if definition.rules.turn_recovery.use_recovery_stat:
+        hp_recovery = rules.hp + int(stats.hp * rules.hp_percent)
+        if rules.use_recovery_stat:
             hp_recovery += stats.recovery
-        mp_recovery_amount = definition.rules.turn_recovery.mp + int(
-            stats.mp * definition.rules.turn_recovery.mp_percent
-        )
-        if definition.rules.turn_recovery.use_recovery_stat:
+        recovered_hp = min(stats.hp, adventurer.resources.current_hp + hp_recovery)
+        if state.turn <= rules.opening_turns:
+            recovered_hp = max(recovered_hp, int(stats.hp * rules.opening_hp_floor_percent))
+        mp_recovery_amount = rules.mp + int(stats.mp * rules.mp_percent)
+        if rules.use_recovery_stat:
             mp_recovery_amount += stats.mp_recovery
         adventurers.append(
             replace(
                 adventurer,
                 resources=CombatResources(
-                    current_hp=min(stats.hp, adventurer.resources.current_hp + hp_recovery),
+                    current_hp=recovered_hp,
                     current_mp=min(
                         stats.mp,
                         adventurer.resources.current_mp + mp_recovery_amount,

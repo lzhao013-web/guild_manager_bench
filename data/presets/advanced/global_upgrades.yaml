@@ -24,12 +24,12 @@ upgrades:
     name: 工艺标准化
     branch: economy
     tier: 2
-    gold: 150
+    gold: 120
     experience: 50
     materials: {iron_ore: 4}
     required: [blacksmith]
-    description: 后续制作装备的金币费用降低15%，向上取整。材料消耗不变，不返还历史支出。
-    craft_gold_discount_percent: 15
+    description: 后续制作装备的金币费用降低18%，向上取整。材料消耗不变，不返还历史支出。
+    craft_gold_discount_percent: 18
 
   - id: training_manual
     name: 训练教范
@@ -284,24 +284,24 @@ upgrades:
     name: 狩猎委托
     branch: economy
     tier: 3
-    gold: 280
+    gold: 220
     experience: 80
     materials: {iron_ore: 6, beast_hide: 4, sharp_claw: 6}
     required: [craft_standardization, scout_network]
-    description: 精英、首领胜利金币增加18%，手动刷新基础价降低10%。固定挑战不在高阶加成范围。
-    elite_boss_gold_bonus_percent: 18
+    description: 精英、首领胜利金币增加30%，手动刷新基础价降低10%。固定挑战不在高阶加成范围。
+    elite_boss_gold_bonus_percent: 30
     monster_refresh_discount_percent: 10
 
   - id: guild_contracts
     name: 行会商路
     branch: economy
     tier: 4
-    gold: 450
+    gold: 380
     experience: 120
     materials: {iron_ore: 10, beast_hide: 6, sharp_claw: 10}
     required: [trade_network, supply_post]
-    description: 后续胜利金币再增加10%，普通累计10%、精英首领累计28%。刷新基础价再降低10%，累计20%。
-    hunt_gold_bonus_percent: 10
+    description: 后续胜利金币再增加16%，普通累计16%、精英首领累计46%。刷新基础价再降低10%，累计20%。
+    hunt_gold_bonus_percent: 16
     monster_refresh_discount_percent: 10
 
   - id: battle_coordination

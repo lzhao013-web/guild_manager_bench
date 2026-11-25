@@ -246,8 +246,12 @@ class TurnRecoveryRules:
     hp_percent: float = 0.0
     mp_percent: float = 0.0
     use_recovery_stat: bool = True
+    opening_turns: int = 0
+    opening_hp_floor_percent: float = 0.0
 
     def __post_init__(self) -> None:
+        _require_at_least("opening_turns", self.opening_turns, 0)
+        _require_ratio("opening_hp_floor_percent", self.opening_hp_floor_percent)
         _require_at_least("hp", self.hp, 0)
         _require_at_least("mp", self.mp, 0)
         _require_ratio("hp_percent", self.hp_percent)

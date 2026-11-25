@@ -426,6 +426,11 @@ def _parse_turn_recovery(data: Mapping[str, Any]) -> TurnRecoveryRules:
             data.get("use_recovery_stat", True),
             "rules.turn_recovery.use_recovery_stat",
         ),
+        opening_turns=_int(data.get("opening_turns", 0), "rules.turn_recovery.opening_turns"),
+        opening_hp_floor_percent=_number(
+            data.get("opening_hp_floor_percent", 0.0),
+            "rules.turn_recovery.opening_hp_floor_percent",
+        ),
     )
 
 

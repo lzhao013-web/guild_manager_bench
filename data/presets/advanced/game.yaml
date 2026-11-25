@@ -64,9 +64,11 @@ rules:
     hp_percent: 0.08
     mp_percent: 0.15
     use_recovery_stat: true
+    opening_turns: 3
+    opening_hp_floor_percent: 0.5
 
 starting:
-  gold: 175
+  gold: 190
   materials:
     iron_ore: 2
     bone: 2

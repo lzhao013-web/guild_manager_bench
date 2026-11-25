@@ -402,6 +402,8 @@ def _turn_recovery_rules_to_dict(definition: GameDefinition) -> dict[str, Any]:
         "hp_percent": rules.hp_percent,
         "mp_percent": rules.mp_percent,
         "use_recovery_stat": rules.use_recovery_stat,
+        "opening_turns": rules.opening_turns,
+        "opening_hp_floor_percent": rules.opening_hp_floor_percent,
     }
 
 

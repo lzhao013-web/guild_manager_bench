@@ -9,13 +9,14 @@ from guild_manager_bench.game.engine import (
     effective_adventurer_skills,
     effective_adventurer_stats,
     effective_crafting_recipe,
+    effective_hunt_reward,
     new_game,
     spawn_monsters,
 )
 from guild_manager_bench.game.loader import load_game_definition
 from guild_manager_bench.game.models import CombatResources, CombatStats
 from guild_manager_bench.game.skills import Skill, SkillCondition, SkillEffect
-from guild_manager_bench.game.state import AdventurerState
+from guild_manager_bench.game.state import AdventurerState, RewardBundle
 from guild_manager_bench.game.upgrades import UpgradeError
 from guild_manager_bench.runtime.observation import build_observation
 
@@ -138,21 +139,31 @@ def test_recovery_talents_preserve_legacy_finisher_regressions(definition, node_
 
 
 @pytest.mark.parametrize("node_id,gold,experience", [
-    ("craft_standardization", 150, 50),
+    ("craft_standardization", 120, 50),
+    ("trade_network", 220, 80),
+    ("guild_contracts", 380, 120),
     ("training_manual", 100, 80),
 ])
 def test_economy_revised_purchase_boundary_and_atomic_failure(definition, node_id, gold, experience):
     node = next(item for item in definition.content.global_upgrades if item.upgrade_id == node_id)
+    nodes = {item.upgrade_id: item for item in definition.content.global_upgrades}
+    prerequisites = set(node.required_upgrade_ids)
+    pending = list(prerequisites)
+    while pending:
+        for required_id in nodes[pending.pop()].required_upgrade_ids:
+            if required_id not in prerequisites:
+                prerequisites.add(required_id)
+                pending.append(required_id)
     state = replace(
         new_game(definition), gold=gold, experience_pool=experience,
         materials={cost.material_id: cost.quantity for cost in node.material_costs},
-        unlocked_upgrade_ids=frozenset(node.required_upgrade_ids),
+        unlocked_upgrade_ids=frozenset(prerequisites),
     )
     after = apply_preparation_action(definition, state, PurchaseUpgradeAction(node_id))
     assert after.gold == 0 and after.experience_pool == 0
     assert all(amount == 0 for amount in after.materials.values())
     assert node_id in after.unlocked_upgrade_ids
-    assert node.craft_gold_discount_percent == (15 if node_id == "craft_standardization" else 0)
+    assert node.craft_gold_discount_percent == (18 if node_id == "craft_standardization" else 0)
     assert node.hunt_experience_bonus_percent == (6 if node_id == "training_manual" else 0)
     for field in ("gold", "experience_pool"):
         short = replace(state, **{field: getattr(state, field) - 1})
@@ -162,12 +173,34 @@ def test_economy_revised_purchase_boundary_and_atomic_failure(definition, node_i
         assert build_observation(definition, short) == before
 
 
+@pytest.mark.parametrize("buy_guild,expected", [
+    (False, (101, 131, 131)),
+    (True, (117, 147, 147)),
+])
+def test_economy_gold_bonuses_use_current_preset_and_round_after_adding(definition, buy_guild, expected):
+    state = replace(new_game(definition), gold=10000, experience_pool=10000,
+                    materials={"iron_ore": 100, "bone": 100, "herb": 100,
+                               "beast_hide": 100, "sharp_claw": 100})
+    purchases = ["blacksmith", "craft_standardization", "scout_network", "trade_network"]
+    if buy_guild:
+        purchases.extend(["supply_post", "guild_contracts"])
+    for uid in purchases:
+        state = apply_preparation_action(definition, state, PurchaseUpgradeAction(uid))
+    reward = RewardBundle(gold=101, experience=61, materials={"herb": 3})
+    for tier, gold in zip(("normal", "elite", "boss"), expected):
+        actual = effective_hunt_reward(definition, state, reward, tier=tier)
+        assert actual == RewardBundle(gold=gold, experience=61, materials={"herb": 3})
+    # 固定挑战的零金币不能因经济加成产生收入。
+    core = RewardBundle(materials={"siege_core": 1})
+    assert effective_hunt_reward(definition, state, core, tier="challenge") == core
+
+
 def test_craft_standardization_requires_only_early_iron_and_blacksmith(definition):
     node = next(u for u in definition.content.global_upgrades if u.upgrade_id == "craft_standardization")
     assert node.required_upgrade_ids == ("blacksmith",)
     assert {c.material_id: c.quantity for c in node.material_costs} == {"iron_ore": 4}
     state = replace(
-        new_game(definition), gold=150, experience_pool=50,
+        new_game(definition), gold=120, experience_pool=50,
         materials={"iron_ore": 4}, unlocked_upgrade_ids=frozenset({"blacksmith"}),
     )
     after = apply_preparation_action(definition, state, PurchaseUpgradeAction(node.upgrade_id))
@@ -179,18 +212,18 @@ def test_craft_standardization_requires_only_early_iron_and_blacksmith(definitio
         assert build_observation(definition, short) == before
 
 
-def test_craft_standardization_fifteen_percent_discount_matches_all_real_recipes(definition):
+def test_craft_standardization_eighteen_percent_discount_matches_all_real_recipes(definition):
     state = replace(
         new_game(definition), unlocked_upgrade_ids=frozenset({"blacksmith", "craft_standardization"}),
     )
     recipes = build_observation(definition, state)["crafting_recipes"]
     for raw, observed in zip(definition.content.crafting_recipes, recipes):
-        expected = (raw.gold_cost * 85 + 99) // 100
+        expected = (raw.gold_cost * 82 + 99) // 100
         assert effective_crafting_recipe(definition, state, raw).gold_cost == expected
         assert (observed["base_gold_cost"], observed["gold_cost"]) == (raw.gold_cost, expected)
     raw = next(r for r in definition.content.crafting_recipes if r.recipe_id == "recipe_t1_heavy_sword")
     assert raw.gold_cost == 25
-    state = replace(state, gold=22, materials={c.material_id: c.quantity for c in raw.material_costs})
+    state = replace(state, gold=21, materials={c.material_id: c.quantity for c in raw.material_costs})
     crafted = apply_preparation_action(definition, state, CraftAction(raw.recipe_id))
     assert crafted.gold == 0
     assert all(amount == 0 for amount in crafted.materials.values())
