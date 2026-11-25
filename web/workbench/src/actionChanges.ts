@@ -32,6 +32,8 @@ function snapshotChanges(entry: ActionEntry): ActionChange[] | null {
         const old = before.adventurers.find(item => item.adventurer_id === member.adventurer_id);
         if (!old) { changes.push({ kind: "adventurer", label: "新冒险者", after: member.name }); continue; }
         add("adventurer", `${member.name} 等级`, old.level, member.level);
+        if (entry.event.name === "allocate_experience" && old.experience != null && member.experience != null)
+            add("adventurer", `${member.name} 经验`, old.experience, member.experience);
         add("adventurer", `${member.name} 当前生命`, old.resources.current_hp, member.resources.current_hp);
         add("adventurer", `${member.name} 当前法力`, old.resources.current_mp, member.resources.current_mp);
         for (const [key, value] of Object.entries(member.effective_stats))

@@ -18,7 +18,7 @@ function setup(records: WatchRecord[], selected?: number) {
     return { frames, onFrame, select: (cursor: number) => view.rerender(node(frames.find(frame => frame.cursor === cursor)!)) };
 }
 
-it("默认展示资源与成员变化，输入按需展开，点击仍定位真实结果帧", () => {
+it("时间线只展示摘要，资源与成员明细保留在右侧，点击仍定位真实结果帧", () => {
     const { frames, onFrame } = setup([
         rec(2, { type: "tool_call", name: "allocate_experience", call_id: "xp", arguments: { adventurer_id: "hero", amount: 12 } }),
         rec(3, { type: "tool_result", name: "allocate_experience", call_id: "xp", result: { ok: true, event: { summary: "为验收剑士分配经验", changes: [
@@ -37,10 +37,42 @@ it("默认展示资源与成员变化，输入按需展开，点击仍定位真�
     expect(within(detail).getByRole("region", { name: "实际成员变化" })).toHaveTextContent("1 → 2");
     const row = screen.getByRole("button", { name: "定位行动 为验收剑士分配经验" });
     expect(row).not.toHaveTextContent("输入 ·");
-    expect(within(row.closest("article")!).getByRole("region", { name: "实际成员变化" })).toHaveTextContent("1 → 2");
+    expect(row).toHaveTextContent("经验池 -12");
+    expect(within(screen.getByRole("region", { name: "观战行动时间线" })).queryByRole("region", { name: "业务返回" })).not.toBeInTheDocument();
     fireEvent.click(row);
     expect(onFrame).toHaveBeenCalledWith(frames.at(-1));
     expect(frames.at(-1)!.record.event).not.toHaveProperty("arguments");
+});
+
+it("招募记录不重复铺开角色属性，切换摘要仍能查看各自的完整招募结果", () => {
+    const recruit = { adventurer_id: "archer", name: "林地射手·迟钝", template_id: "archer", level: 1,
+        effective_stats: { hp: 82, mp: 0, attack: 19, defense: 4, speed: 18 }, resources: { current_hp: 82, current_mp: 0 } };
+    const { frames, onFrame, select } = setup([
+        rec(2, { type: "tool_result", name: "recruit_adventurer", result: { ok: true, recruited_adventurer: recruit,
+            event: { summary: `招募 ${recruit.name}`, changes: [{ kind: "resource", label: "金币", before: 100, after: 57 }] } } }),
+        rec(3, { type: "tool_result", name: "recruit_adventurer", result: { ok: true,
+            recruited_adventurer: { ...recruit, adventurer_id: "warrior", name: "佣兵战士·脆弱" },
+            event: { summary: "招募 佣兵战士·脆弱", changes: [{ kind: "resource", label: "金币", before: 57, after: 13 }] } } }),
+    ], 2);
+    const timeline = screen.getByRole("region", { name: "观战行动时间线" });
+    const archer = within(timeline).getByRole("button", { name: "定位行动 招募 林地射手·迟钝" });
+    const warrior = within(timeline).getByRole("button", { name: "定位行动 招募 佣兵战士·脆弱" });
+    expect(archer).toHaveTextContent("金币 -43");
+    expect(warrior).toHaveTextContent("金币 -44");
+    expect(archer).toHaveAttribute("aria-pressed", "true");
+    expect(warrior).toHaveAttribute("aria-pressed", "false");
+    expect(within(timeline).queryByRole("region", { name: "招募结果" })).not.toBeInTheDocument();
+    expect(within(timeline).queryByText("完整字段")).not.toBeInTheDocument();
+    const result = () => within(screen.getByRole("region", { name: "所选行动详情" })).getByRole("region", { name: "招募结果" });
+    expect(result()).toHaveTextContent("林地射手·迟钝");
+    expect(within(result()).getByText("生命").parentElement).toHaveTextContent("生命82");
+    fireEvent.click(warrior);
+    expect(onFrame).toHaveBeenCalledWith(frames.at(-1));
+    select(3);
+    expect(warrior).toHaveAttribute("aria-pressed", "true");
+    expect(archer).toHaveAttribute("aria-pressed", "false");
+    expect(result()).toHaveTextContent("佣兵战士·脆弱");
+    expect(result()).not.toHaveTextContent("林地射手·迟钝");
 });
 
 it("回看调用时显示当时输入和执行中，不提前展示之后的结果", () => {
@@ -55,6 +87,29 @@ it("回看调用时显示当时输入和执行中，不提前展示之后的结�
     expect(input).toHaveTextContent("10");
     expect(within(detail).getByRole("region", { name: "执行结果" })).toHaveTextContent("等待工具返回");
     expect(within(detail).queryByText("余额不足", { exact: true })).not.toBeInTheDocument();
+});
+
+it("运行事件默认收起，定位系统帧不自动展开，手动开关状态保持可控", () => {
+    const { frames, onFrame, select } = setup([
+        rec(2, { type: "tool_result", name: "get_party", result: { adventurers: [] } }),
+        rec(3, { type: "model_request", step: 1 }),
+        rec(4, { type: "turn_scored", turn: 1, rank_score: 12.5 }),
+    ], 4);
+    const group = screen.getByText(/运行事件 ·/).closest("details")!;
+    const summary = group.querySelector("summary")!;
+    expect(group).not.toHaveAttribute("open");
+    expect(within(group).getByRole("button", { name: "定位行动 评分已记录", hidden: true })).not.toBeVisible();
+    fireEvent.click(summary);
+    expect(group).toHaveAttribute("open");
+    fireEvent.click(within(group).getByRole("button", { name: "定位行动 请求模型" }));
+    expect(onFrame).toHaveBeenCalledWith(frames.find(frame => frame.cursor === 3));
+    select(3);
+    expect(group).toHaveAttribute("open");
+    fireEvent.click(summary);
+    expect(group).not.toHaveAttribute("open");
+    select(4);
+    expect(group).not.toHaveAttribute("open");
+    expect(screen.getByRole("region", { name: "所选行动详情" })).toHaveTextContent("评分已记录");
 });
 
 it("所有工具默认可见且按具体工具筛选汇总，调用与结果合并计一次", () => {
@@ -106,8 +161,10 @@ it("派遣参数按成员和怪物逐项展示，实际战果与输入分开", (
     expect(within(input).getByText("派遣 1")).toBeVisible();
     expect(within(input).getByText("验收剑士", { exact: true })).toBeVisible();
     expect(within(input).getByText("史莱姆", { exact: true })).toBeVisible();
-    expect(screen.getByRole("region", { name: "执行结果" })).toHaveTextContent("1 场，1 胜 0 负");
-    expect(within(screen.getByRole("region", { name: "所选行动详情" })).getByRole("region", { name: "战斗结果" })).toHaveTextContent("验收剑士 → 史莱姆");
+    expect(screen.getByRole("region", { name: "执行结果" })).toHaveTextContent("本轮已结算");
+    const battles = within(screen.getByRole("region", { name: "所选行动详情" })).getByRole("region", { name: "战斗结果" });
+    expect(within(battles).getByLabelText("战果概览")).toHaveTextContent("场数1胜1负0");
+    expect(within(battles).getByRole("article", { name: "验收剑士 → 史莱姆" })).toHaveTextContent("胜利");
 });
 
 it("实时追加只标记新行动，暂停期间的新记录不会在恢复时补播", () => {

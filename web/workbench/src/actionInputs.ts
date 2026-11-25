@@ -27,6 +27,7 @@ const LABELS: Record<string, string> = {
     since_sequence: "起始事件序号", kind: "预告类型", start_turn: "起始回合", end_turn: "结束回合",
     name_contains: "名称包含", material: "材料", tier: "阶级", entry_index: "条目序号", detail: "详细程度",
     operations: "试算操作", type: "操作类型", material_id: "兑换材料", quantity: "兑换份数",
+    op: "块操作", expires_turn: "最后有效回合",
 };
 const TARGETS: Record<string, string> = {
     adventurer_id: "adventurer", candidate_id: "recruit", monster_id: "monster", locked_monster_ids: "monster",
@@ -52,8 +53,11 @@ export function actionNames(frame: WatchFrame): Map<string, string> {
     return names;
 }
 export function readableActionText(text: string, names: Map<string, string>): string {
-    return text.replace(/[\w-]+/g, token => names.get(token) || (Object.hasOwn(MATERIALS, token) ? MATERIALS[token] : Object.hasOwn(SLOTS, token) ? SLOTS[token] : token))
-        .replace(/\bHP\b/g, "生命").replace(/\bMP\b/g, "法力");
+    return text.replace(/\$[A-Za-z][A-Za-z0-9_]*|[\w-]+/g, token => {
+        if (token.startsWith("$")) return token;
+        const value = names.get(token) || (Object.hasOwn(MATERIALS, token) ? MATERIALS[token] : Object.hasOwn(SLOTS, token) ? SLOTS[token] : token);
+        return value.replace(/\bHP\b/g, "生命").replace(/\bMP\b/g, "法力");
+    });
 }
 export function actionTarget(frame: WatchFrame, kind: string, value: unknown, names: Map<string, string>): string {
     if (value == null) return "";
@@ -72,7 +76,7 @@ export function describeInput(frame: WatchFrame, names: Map<string, string>): Ac
         if (typeof raw === "object") {
             const pairs = Object.entries(raw);
             return { kind: "object", text: pairs.length ? "" : "空对象 {}", original: null,
-                children: pairs.map(([key, item]) => ({ key, label: Object.hasOwn(LABELS, key) ? LABELS[key] : key, value: value(item, key) })) };
+                children: pairs.map(([key, item]) => ({ key, label: key === "operations" && frame.record.event.name === "write_memo" ? "备忘操作" : Object.hasOwn(LABELS, key) ? LABELS[key] : key, value: value(item, key) })) };
         }
         if (typeof raw === "boolean") return { kind: "scalar", text: raw ? "是（true）" : "否（false）", original: null, children: [] };
         const original = String(raw);

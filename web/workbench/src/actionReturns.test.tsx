@@ -59,7 +59,7 @@ it("查询使用本次返回而非当前快照，空返回不从已有队伍补�
     expect(within(screen.getByRole("region", { name: "返回的队伍" })).getByRole("cell", { name: "攻击 18" })).toBeVisible();
 });
 
-it("默认突出逐场战果和奖励，派遣输入按需展开", () => {
+it("结束回合先列安排再列逐场战果与奖励，原始派遣参数按需展开", () => {
     const second = { ...member, adventurer_id: "hero2", name: "第二位剑士" };
     const action = actionEntries(watchFrames([
         rec(1, { type: "turn_started", observation: { ...before, adventurers: [member, second] } }),
@@ -78,9 +78,27 @@ it("默认突出逐场战果和奖励，派遣输入按需展开", () => {
     expect(within(input).getAllByRole("row")).toHaveLength(3);
     const battles = screen.getByRole("region", { name: "战斗结果" });
     expect(battles).toHaveTextContent("胜利");
-    expect(within(battles).getByLabelText("战果概览")).toHaveTextContent("奖励金币+0奖励经验+12");
+    expect(within(battles).getByLabelText("战果概览")).toHaveTextContent("场数2胜1负1");
+    const rewards = screen.getByRole("region", { name: "讨伐奖励" });
+    expect(within(within(rewards).getByRole("row", { name: /金币/ })).getAllByRole("cell")[0]).toHaveTextContent("+0");
+    expect(within(within(rewards).getByRole("row", { name: /经验/ })).getAllByRole("cell")[0]).toHaveTextContent("+12");
     expect(within(battles).queryByRole("columnheader", { name: "行动 / 耗时" })).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "执行结果" }).compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+it("整队预览明确区分模拟平局，详情保留回合末恢复而不声称真实结算", async () => {
+    const action = entry("preview_hunts", { ok: true, simulation_only: true,
+        battles: [{ adventurer_name: "结果剑士", monster_name: "铁壁", won: false, outcome: "draw", reward: { gold: 0, experience: 0 } }],
+        reward: { gold: 0, experience: 0 },
+        party_after_recovery: [{ adventurer_id: "hero", name: "结果剑士", resources: { current_hp: 88, current_mp: 5 } }],
+    });
+    render(<ActionResults entry={action} />);
+    expect(screen.getByRole("heading", { name: "预览结果" })).toBeVisible();
+    expect(screen.getByRole("region", { name: "模拟战果" })).toHaveTextContent("平局");
+    fireEvent.click(screen.getByText("其他返回字段"));
+    expect(await screen.findByText("回合末恢复后的队伍")).toBeVisible();
+    expect(screen.getByRole("region", { name: "业务返回" })).toHaveTextContent("88");
+    expect(action.kind).toBe("query");
 });
 
 it("大集合可在已返回数据内分页和筛选，不额外请求，也不依赖原始 JSON", () => {

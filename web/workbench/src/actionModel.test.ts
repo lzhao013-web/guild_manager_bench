@@ -94,6 +94,20 @@ it("只有查询时明确没有经营动作，试算战斗不会被当成真实�
     expect(result.queries[0].summary).toBe("验收剑士 → 验收史莱姆：模拟胜利");
 });
 
+it("整队讨伐预览展示总收益和逐场结果，不计入真实经营成果", () => {
+    const result = recentActions(watchFrames([initial, rec(2, { type: "tool_result", name: "preview_hunts", result: {
+        ok: true, simulation_only: true,
+        battles: [{ adventurer_name: "验收剑士", monster_name: "验收史莱姆", won: true, reward: { gold: 20, experience: 45 } }],
+        reward: { gold: 20, experience: 45 },
+        party_after_recovery: [{ adventurer_id: "a1", name: "验收剑士", resources: { current_hp: 90, current_mp: 0 } }],
+    } })]));
+    expect(result.actions).toEqual([]);
+    expect(result.queries[0]).toMatchObject({ title: "预览讨伐方案", summary: "模拟 1 个对位，金币 20、经验 45（未执行）" });
+    expect(result.queries[0].returned.preview).toBe(true);
+    expect(result.queries[0].returned.tables[0]).toMatchObject({ kind: "battles", title: "模拟战果" });
+    expect(result.queries[0].effects).toEqual([]);
+});
+
 it("查询失败直接显示错误但仍不算经营动作，技术重试也不会被算成经营成果", () => {
     const recent = recentActions(watchFrames([initial,
         rec(2, { type: "tool_result", name: "get_party", result: { ok: false, error: "构造查询失败" } }),

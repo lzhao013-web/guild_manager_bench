@@ -40,7 +40,8 @@ export function ToolResultPanel({ entry, compact = false }: { entry: ActionEntry
     const changes = useMemo(() => describeChanges(entry), [entry]);
     if (isPlan(entry)) return <ActionPlanPanel entry={entry} compact={compact} />;
     const returned = entry.returned;
-    const memo = entry.event.name === "write_memo" && entry.status === "succeeded" ? entry.event.result?.memo?.content : undefined;
+    const memoResult = entry.event.name === "write_memo" && entry.status === "succeeded" ? entry.event.result?.memo : undefined;
+    const memo = memoResult?.content;
     const statistics = entry.event.result?.statistics;
     const tables = returned.tables;
     const extra = Object.fromEntries(Object.entries(returned.fields).filter(([key]) => !(key === "memo" && memo != null) && !(key === "statistics" && statistics != null)));
@@ -56,7 +57,7 @@ export function ToolResultPanel({ entry, compact = false }: { entry: ActionEntry
                 : changed && table.kind === "members" && !["recruit_adventurer", "dismiss_adventurer"].includes(entry.event.name) ? <details className="plan-disclosure" key={index}><summary>成员详情（{table.rows.length} 位）</summary><ReturnCollection data={table} entry={entry} /></details>
                 : <ReturnCollection key={index} data={table} entry={entry} />)}
             {statistics != null && <section className="return-statistics" aria-label="战斗统计"><h4>战斗统计</h4><ReturnedValue value={statistics} /></section>}
-            {memo != null && <section className="return-memo" aria-label="备忘正文"><h4>备忘正文</h4>{compact && memo.length > 160 ? <><p>{memo.slice(0, 160)}…</p><details className="plan-disclosure"><summary>完整正文</summary><pre>{memo}</pre></details></> : <pre>{memo}</pre>}</section>}
+            {memo != null && <section className="return-memo" aria-label="备忘正文"><h4>备忘正文</h4>{memoResult?.used_chars !== undefined && <p className="muted">已用 {memoResult.used_chars}/{memoResult.max_chars} 字符</p>}{compact && memo.length > 160 ? <><p>{memo.slice(0, 160)}…</p><details className="plan-disclosure"><summary>完整正文</summary><pre>{memo}</pre></details></> : <pre>{memo}</pre>}</section>}
             {extras && (primary ? <ExtraFields key={entry.frame.cursor} value={extra} /> : <ReturnedValue value={extra} />)}
         </section> : null}
     </div>;

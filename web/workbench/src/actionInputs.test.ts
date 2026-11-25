@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { actionEntries, actionSummary } from "./actionModel";
-import { inputPreview } from "./actionInputs";
+import { inputPreview, readableActionText } from "./actionInputs";
 import { watchFrames } from "./watchModel";
 import type { Observation } from "./types";
 import type { WatchRecord } from "./watchModel";
@@ -77,4 +77,10 @@ it("完整摘要保留第三项之后的实际变化，缺失结果不冒充成�
     expect(actionSummary(entry({}, {}))).toBe("执行结果未记录");
     expect(actionSummary(entry({}, { ok: true }))).toBe("操作完成");
     expect(actionSummary(entry({}, { ok: false }))).toBe("失败原因未记录");
+});
+
+it("方案别名保持原文，不被同名对象、材料、槽位或 HP/MP 翻译替换", () => {
+    const names = new Map([["armor", "秘银护甲"], ["$armor", "方案装备 $armor"]]);
+    expect(readableActionText("装备 $armor，槽位 armor，材料 $iron_ore，$HP 与 $MP，HP 10 MP 5", names))
+        .toBe("装备 $armor，槽位 秘银护甲，材料 $iron_ore，$HP 与 $MP，生命 10 法力 5");
 });

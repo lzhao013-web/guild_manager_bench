@@ -6,6 +6,7 @@ import type { WatchFrame } from "./watchModel";
 export type ReturnKind = "members" | "equipment" | "upgrades" | "monsters" | "recruits" | "recipes" | "tactics" | "battles" | "events" | "forecast";
 export interface ReturnTable {
     kind: ReturnKind;
+    source?: "action_output";
     title: string;
     columns: string[];
     rows: string[][];
@@ -42,8 +43,11 @@ export const RETURN_LABELS: Record<string, string> = {
     rank_score: "试算战力", simulation_only: "仅模拟", can_afford: "费用是否满足", monster_refresh: "怪物刷新状态",
     plan_id: "方案凭据", operation_count: "方案步数", required_calls: "执行所需最低预算余额",
     remaining_calls: "当前剩余预算", can_execute: "当前可执行", already_executed: "已提交，本次未重复执行",
+    party_after_recovery: "回合末恢复后的队伍", plan_entities: "准备方案投影编号", upgrade_names: "升级名称索引",
     current_rank_score: "当前真实战力", projected_rank_score: "方案战力", rank_score_delta: "战力变化",
     next_gold_cost: "下次刷新费用", content: "备忘正文", count: "备忘数量", dropped_oldest: "已丢弃旧备忘数量",
+    blocks: "备忘块", key: "块名", created_turn: "创建回合", updated_turn: "更新回合", expires_turn: "最后有效回合",
+    used_chars: "已用字符", max_chars: "字符上限",
 };
 export const returnLabel = (key: string) => Object.hasOwn(RETURN_LABELS, key) ? RETURN_LABELS[key] : key;
 const SIDES: Record<string, string> = { left: "冒险者", right: "怪物", preview: "预览记录，未实际执行", actual: "真实战斗记录", basic: "普攻", basic_attack: "普攻", skill: "技能", status: "状态结算" };
@@ -59,8 +63,8 @@ const price = (item: Record<string, any>) => [item.gold_cost != null ? `金币 $
     item.experience_cost != null ? `经验 ${item.experience_cost}` : "", item.material_costs ? Object.entries(item.material_costs).map(([key, val]) => `${MATERIALS[key] || key} ${val}`).join("、") : ""].filter(Boolean).join(" · ") || "未记录";
 const flag = (value: unknown, yes: string, no: string) => value === true ? yes : value === false ? no : "未记录";
 export function battleResult(battle: Record<string, any>): string {
-    return typeof battle.won === "boolean" ? battle.won ? "胜利" : "失败" :
-        ({ left_win: "胜利", right_win: "失败", draw: "平局" } as Record<string, string>)[battle.combat?.outcome || battle.outcome] || "结果未记录";
+    const outcome = ({ left_win: "胜利", right_win: "失败", draw: "平局" } as Record<string, string>)[battle.combat?.outcome || battle.outcome];
+    return outcome || (typeof battle.won === "boolean" ? battle.won ? "胜利" : "失败" : "结果未记录");
 }
 
 export function summarizeBattles(records: Record<string, any>[]) {
@@ -73,8 +77,9 @@ export function summarizeBattles(records: Record<string, any>[]) {
     const materialsKnown = records.every(battle => battle.reward?.materials != null);
     if (materialsKnown) for (const battle of records) for (const [id, amount] of Object.entries(battle.reward.materials))
         if (typeof amount === "number") materials.set(id, (materials.get(id) || 0) + amount);
-    return { battles, wins, losses, unknown: battles.length - wins - losses, gold: reward("gold"), experience: reward("experience"),
-        materials: materialsKnown ? [...materials].filter(([, value]) => value !== 0).map(([id, value]) => `${MATERIALS[id] || id} +${fmt(value)}`) : null };
+    const materialTotals = materialsKnown ? [...materials].filter(([, value]) => value !== 0).map(([id, value]) => ({ id, value })) : null;
+    return { battles, wins, losses, unknown: battles.length - wins - losses, gold: reward("gold"), experience: reward("experience"), materialTotals,
+        materials: materialTotals?.map(({ id, value }) => `${MATERIALS[id] || id} +${fmt(value)}`) ?? null };
 }
 
 export function returnNames(frame: WatchFrame): Map<string, string> {
@@ -103,9 +108,10 @@ export function describeReturn(frame: WatchFrame): ActionReturn {
     const skillNames = (items: Record<string, any>[] | undefined) => items == null ? "" : items.map(skill => skill.name || skill.skill_id).join("、");
     const used = new Set(["ok", "event", "_llm_refs", "_observation_after", "_action_output", "session_id", "error"]);
     function table(kind: ReturnKind, title: string, columns: string[], records: Record<string, any>[], row: (record: Record<string, any>) => string[], first = false) {
-        const result = { kind, title, columns, records, rows: records.map(row) };
+        const result: ReturnTable = { kind, title, columns, records, rows: records.map(row) };
         if (first) view.tables.unshift(result);
         else view.tables.push(result);
+        return result;
     }
     function members(items: Record<string, any>[], title: string) {
         if (event.name !== "configure_tactics") table("members", title, ["成员 / 编号", "等级", "生命 / 法力", "属性", "技能"], items, item => [
@@ -119,13 +125,13 @@ export function describeReturn(frame: WatchFrame): ActionReturn {
         ]);
     }
     function equipment(items: Record<string, any>[], title: string) {
-        table("equipment", title, ["装备 / 实例", "槽位", "属性", "穿戴者", "技能"], items, item => [
+        return table("equipment", title, ["装备 / 实例", "槽位", "属性", "穿戴者", "技能"], items, item => [
             `${item.name || "名称未记录"}\n${item.instance_id ?? ""}`, SLOTS[item.slot] || item.slot || "未记录",
             returnStats(item.stats), item.equipped_by === null ? "未穿戴" : readable(item.equipped_by), skillNames(item.skills),
         ]);
     }
     function upgrades(items: Record<string, any>[], title: string, costs = true) {
-        table("upgrades", title, costs ? ["天赋", "状态", "效果", "费用 / 缺口"] : ["天赋", "状态", "效果"], items, item => [item.name || item.upgrade_id,
+        return table("upgrades", title, costs ? ["天赋", "状态", "效果", "费用 / 缺口"] : ["天赋", "状态", "效果"], items, item => [item.name || item.upgrade_id,
             item.unlocked === true ? "已解锁" : flag(item.can_purchase, "可解锁", "条件未满足"),
             [item.description, item.stats && returnStats(item.stats), typeof item.party_size_bonus === "number" && item.party_size_bonus !== 0 ? `编队容量加成 ${item.party_size_bonus}` : "", skillNames(item.skills)].filter(Boolean).join("\n") || "未记录",
             ...(costs ? [[price(item), ...requirementLines(item.missing, items)].join("\n")] : []),
@@ -159,8 +165,8 @@ export function describeReturn(frame: WatchFrame): ActionReturn {
     }
     const returnedMembers = [...membersById.values()];
     used.add("recruited_adventurer");
-    if (output.global_upgrades?.length) upgrades(output.global_upgrades, "本次已解锁天赋", false);
-    if (output.equipment_inventory?.length) equipment(output.equipment_inventory, event.name === "craft_equipment" ? "实际制作出的装备" : "操作后的装备");
+    if (output.global_upgrades?.length) upgrades(output.global_upgrades, "本次已解锁天赋", false).source = "action_output";
+    if (output.equipment_inventory?.length) equipment(output.equipment_inventory, event.name === "craft_equipment" ? "实际制作出的装备" : "操作后的装备").source = "action_output";
     if (returnedMembers.length) members(returnedMembers, event.name === "recruit_adventurer" ? "招募结果" : "操作后的成员");
     if (output.dismissed_adventurers?.length) members(output.dismissed_adventurers, "已解雇成员，以下为离队前记录");
     const battles = r.turn_result?.battles || r.event?.battles || r.battles || (r.preview ? [r.preview] : r.battle ? [r.battle] : undefined);

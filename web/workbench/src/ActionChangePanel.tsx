@@ -6,7 +6,20 @@ function Change({ change, entry }: { change: ActionChange; entry: ActionEntry })
     return <span className="plan-change"><span>{change.label}</span><b className="mono">{changeDelta(change, entry)}</b></span>;
 }
 
-export function ActionChangePanel({ entry, changes, showEmpty = false }: { entry: ActionEntry; changes: ActionChanges; showEmpty?: boolean }) {
+export function ActionResourceStrip({ entry, changes }: { entry: ActionEntry; changes: ActionChanges }) {
+    return changes.resources.length > 0 && <section className="result-resource-strip" aria-label={changes.preview ? "预计资源变化" : "实际资源变化"}>
+        <h4>{changes.preview ? "预计资源" : "资源变化"}</h4>
+        <dl>{changes.resources.map((change, index) => {
+            const delta = typeof change.before === "number" && typeof change.after === "number" ? change.after - change.before : null;
+            return <div key={index}><dt>{change.label}</dt><dd>
+                <strong className={`mono ${delta !== null && delta < 0 ? "is-spend" : delta !== null && delta > 0 ? "is-gain" : ""}`}>{changeDelta(change, entry)}</strong>
+                {change.before != null && <span className="mono">{changeValue(change.before, entry)} → {changeValue(change.after, entry)}</span>}
+            </dd></div>;
+        })}</dl>
+    </section>;
+}
+
+export function ActionChangePanel({ entry, changes, showEmpty = false, showDetails = true }: { entry: ActionEntry; changes: ActionChanges; showEmpty?: boolean; showDetails?: boolean }) {
     const title = changes.preview ? "预计变化" : "实际变化";
     const visibleStats = (stats: ActionChange[]) => stats.filter(change => !["经验", "当前生命", "当前法力"].includes(change.label));
     const level = (name: string) => {
@@ -32,12 +45,17 @@ export function ActionChangePanel({ entry, changes, showEmpty = false }: { entry
         {changes.other.length > 0 && <ul className="plan-other-changes">{changes.other.map((change, index) => <li key={index}>{change.label}：{change.before !== undefined && `${changeValue(change.before, entry, change.label)} → `}{changeValue(change.after, entry, change.label)}</li>)}</ul>}
         {showEmpty && !changes.changesRecorded && <p className="plan-missing">{title}未记录</p>}
         {showEmpty && changes.changesRecorded && !changes.resources.length && !changes.members.length && !changes.other.length && <p className="plan-missing">无变化</p>}
-        {(changes.resources.length > 0 || changes.members.length > 0) && <details className="plan-disclosure" key={`changes:${entry.frame.cursor}`}>
-            <summary>完整{title}（含属性前后值）</summary>
-            <ul className="plan-full-changes">
-                {changes.resources.map((change, index) => <li key={`resource:${index}`}>{change.label}：{change.before != null && `${changeValue(change.before, entry)} → `}{changeValue(change.after, entry)} <span className="mono">（{changeDelta(change, entry)}）</span></li>)}
-                {changes.members.map(member => <li key={member.name}><strong>{member.name}</strong><ul>{[...(member.level ? [member.level] : []), ...member.stats, ...member.configuration].map((change, index) => <li key={index}>{change.label}：{change.before != null && `${changeValue(change.before, entry, change.label)} → `}{changeValue(change.after, entry, change.label)}</li>)}</ul></li>)}
-            </ul>
-        </details>}
+        {showDetails && <ActionChangeDetails entry={entry} changes={changes} />}
     </>;
+}
+
+export function ActionChangeDetails({ entry, changes, includeOther = false }: { entry: ActionEntry; changes: ActionChanges; includeOther?: boolean }) {
+    return (changes.resources.length > 0 || changes.members.length > 0 || includeOther && changes.other.length > 0) && <details className="plan-disclosure" key={`changes:${entry.frame.cursor}`}>
+        <summary>完整{changes.preview ? "预计变化" : "实际变化"}（含属性前后值）</summary>
+        <ul className="plan-full-changes">
+            {changes.resources.map((change, index) => <li key={`resource:${index}`}>{change.label}：{change.before != null && `${changeValue(change.before, entry)} → `}{changeValue(change.after, entry)} <span className="mono">（{changeDelta(change, entry)}）</span></li>)}
+            {changes.members.map(member => <li key={member.name}><strong>{member.name}</strong><ul>{[...(member.level ? [member.level] : []), ...member.stats, ...member.configuration].map((change, index) => <li key={index}>{change.label}：{change.before != null && `${changeValue(change.before, entry, change.label)} → `}{changeValue(change.after, entry, change.label)}</li>)}</ul></li>)}
+            {includeOther && changes.other.map((change, index) => <li key={`other:${index}`}>{change.label}：{change.before !== undefined && `${changeValue(change.before, entry, change.label)} → `}{changeValue(change.after, entry, change.label)}</li>)}
+        </ul>
+    </details>;
 }

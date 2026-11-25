@@ -7,13 +7,12 @@ import { useTrajectories } from "./TrajectoryContext";
 import type { ReactNode } from "react";
 import { ACTION_STATUS, actionEntries, actionGroups, actionBrief, describeAction, recentActions } from "./actionModel";
 import { ActionResults } from "./ActionResultPanel";
-import { ToolResultPanel } from "./ToolResultPanel";
-import { isPlan } from "./actionPlan";
+import { findPlanPreview } from "./actionPlan";
 import type { ActionEntry } from "./actionModel";
 import { time } from "./model";
 import { useNewItemKeys } from "./motion";
 import { ToolCallFilters, ToolCallSummary } from "./ToolCallSummary";
-import { matchesTool, summarizeToolCalls, toolCategoryLabel } from "./toolCalls";
+import { matchesTool, summarizeToolCalls } from "./toolCalls";
 import type { ToolCallStatus } from "./toolCalls";
 import { ArrowSquareOut } from "@phosphor-icons/react";
 import type { WatchFrame } from "./watchModel";
@@ -45,6 +44,13 @@ export function ActionTimeline({ frames, frame, active, following, rolledBack, o
     const showingRecent = following && frame && !frame.failed && !["tool_call", "tool_result"].includes(frame.record.event.type);
     const detailFrame = showingRecent ? recent.actions[0]?.frame || recent.queries.at(-1)?.frame || frame : frame;
     const selected = detailFrame && (recent.entries.find(entry => entry.frame.cursor === detailFrame.cursor) || describeAction(detailFrame));
+    const preview = selected && findPlanPreview(selected, entries);
+    const previewLink = selected?.event.name === "execute_plan" ? preview ? { onOpen: () => {
+        setToolType("all");
+        setToolStatus("all");
+        setView("turn");
+        onFrame(preview.frame);
+    } } : null : undefined;
     const actions = entries.filter(entry => entry.kind === "action");
     const queries = entries.filter(entry => entry.kind === "query");
     const newEntries = useNewItemKeys(entries.map(entry => entry.frame.cursor), following && active);
@@ -56,36 +62,31 @@ export function ActionTimeline({ frames, frame, active, following, rolledBack, o
         const node = viewport.current;
         const selected = node.querySelector<HTMLElement>(".spectator-step.selected");
         if (!following && selected && previousFrame.current !== frame?.cursor) {
-            const group = selected.closest("details");
-            if (group) group.open = true;
-            node.scrollTop += selected.getBoundingClientRect().top - node.getBoundingClientRect().top - 8;
+            const group = selected.closest<HTMLDetailsElement>("details.action-group");
+            const target = group && !group.open ? group : selected;
+            node.scrollTop += target.getBoundingClientRect().top - node.getBoundingClientRect().top - 8;
         } else node.scrollTop = following ? node.scrollHeight : scroll.current;
         previousFrame.current = frame?.cursor;
     }, [active, frame?.cursor, toolType, toolStatus, following, view]);
     function row(entry: ActionEntry) {
         const isSelected = entry.frame.cursor === frame?.cursor || entry.start === frame?.cursor;
-        const query = entry.kind === "query" && !isPlan(entry);
-        if (entry.kind !== "system") return <article key={entry.frame.cursor} className={`action-plan-entry ${query ? "is-query" : ""} ${isSelected ? "selected" : ""}`}>
+        const brief = actionBrief(entry);
+        return <article key={entry.frame.cursor} className="action-timeline-entry">
             <button aria-label={`定位行动 ${entry.title}`} aria-pressed={isSelected}
                 className={`spectator-step action-entry ${isSelected ? "selected" : ""} ${entry.status === "failed" ? "failed" : ""} ${newEntries.has(entry.frame.cursor) ? "motion-new" : ""}`}
                 onClick={() => onFrame(entry.frame)}>
-                <span className="action-entry-time mono">{time(entry.frame.record.at)}</span>
-                <span><span className="action-plan-heading"><strong>{entry.title}</strong>{entry.returned.preview ? <span className="action-status is-pending">预览</span> : !query && <span className="action-entry-category">{toolCategoryLabel(entry.event)}</span>}<span className={`action-status is-${entry.status}`}>{ACTION_STATUS[entry.status]}</span></span>
-                    <small>{actionBrief(entry)}</small>
-                    {(entry.rolledBack || rolledBack) && <span className="action-rollback">{entry.kind === "query" ? "所属尝试已回滚" : "已回滚，不再生效"}</span>}
+                <time className="action-entry-time mono" dateTime={entry.frame.record.at}>{time(entry.frame.record.at)}</time>
+                <span className="action-entry-content">
+                    <strong title={entry.title}>{entry.title}</strong>
+                    {brief && <small title={brief}>{brief}</small>}
+                    {entry.kind !== "system" && (entry.rolledBack || rolledBack) && <span className="action-rollback">{entry.kind === "query" ? "所属尝试已回滚" : "已回滚，不再生效"}</span>}
+                </span>
+                <span className="action-entry-badges">
+                    {entry.returned.preview && <span className="action-status is-pending">预览</span>}
+                    <span className={`action-status is-${entry.status}`}>{entry.kind === "system" && entry.status === "recorded" ? "运行提示" : ACTION_STATUS[entry.status]}</span>
                 </span>
             </button>
-            {!query && <ToolResultPanel entry={entry} compact />}
         </article>;
-        return <button key={entry.frame.cursor} aria-label={`定位行动 ${entry.title}`} aria-pressed={isSelected}
-            className={`spectator-step action-entry ${isSelected ? "selected" : ""} ${entry.status === "failed" ? "failed" : ""} ${newEntries.has(entry.frame.cursor) ? "motion-new" : ""}`}
-            onClick={() => onFrame(entry.frame)}>
-            <span className="action-entry-time mono">{time(entry.frame.record.at)}</span>
-            <span><strong>{entry.title}</strong>
-                <small>{actionBrief(entry)}</small>
-                <span className="action-entry-meta"><span className={`action-status is-${entry.status}`}>{entry.status === "recorded" ? "运行提示" : ACTION_STATUS[entry.status]}</span></span>
-            </span>
-        </button>;
     }
     const mode = history && <nav className="trajectory-mode" aria-label="行动查看范围">
         <button aria-pressed={view === "turn"} onClick={() => setView("turn")}>所选回合</button>
@@ -94,19 +95,20 @@ export function ActionTimeline({ frames, frame, active, following, rolledBack, o
     </nav>;
     const detail = <section key={selected?.frame.cursor ?? "empty"} className="action-detail" aria-label="所选行动详情">
         {selected ? <>
-            <header><span className="subtle-label">{selected.kind === "query" ? "查询" : selected.kind === "system" ? "运行事件" : "操作"}</span>
-                <h3>{selected.title}</h3><div className="action-detail-meta">{selected.returned.preview && <span className="action-status is-pending">预览</span>}<span className={`action-status is-${selected.status}`}>{ACTION_STATUS[selected.status]}</span><time className="mono">{time(selected.frame.record.at)}</time>
-                    {selected.kind !== "system" && onModelReasoning && <button className="action-model-link"
-                        disabled={selected.frame.call === null}
-                        title={selected.frame.call === null ? "没有对应的模型调用记录" : "定位所属模型调用并打开 API 推理文本"}
-                        onClick={() => onModelReasoning(selected)}>
-                        <ArrowSquareOut size={13} />{selected.frame.call === null ? "未记录模型关联" : "查看对应模型推理"}
-                    </button>}
+            <header className="action-detail-header">
+                <div><span className="subtle-label">{selected.kind === "query" ? "查询" : selected.kind === "system" ? "运行事件" : "操作"}</span>
+                    <h3>{selected.title}</h3>
+                    <div className="action-detail-meta">{selected.returned.preview && <span className="action-status is-pending">预览</span>}<span className={`action-status is-${selected.status}`}>{ACTION_STATUS[selected.status]}</span><time className="mono" dateTime={selected.frame.record.at}>{time(selected.frame.record.at)}</time></div>
                 </div>
+                {selected.kind !== "system" && onModelReasoning && <button className="action-model-link"
+                    disabled={selected.frame.call === null}
+                    title={selected.frame.call === null ? "没有对应的模型调用记录" : "定位所属模型调用并打开 API 推理文本"}
+                    onClick={() => onModelReasoning(selected)}>
+                    <ArrowSquareOut size={13} />{selected.frame.call === null ? "未记录模型关联" : "查看对应模型推理"}
+                </button>}
             </header>
             {rolledBack && selected.kind === "action" && <span className="action-rollback">已回滚</span>}
-            <ActionResults entry={selected} />
-            {renderDetails(selected.frame)}
+            <ActionResults entry={selected} recordDetails={renderDetails(selected.frame)} previewLink={previewLink} />
         </> : <p className="scene-empty">选择一条行动查看对象、结果和局面变化</p>}
     </section>;
     async function inspect(row: TrajectoryRow) {

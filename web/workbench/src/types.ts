@@ -47,6 +47,7 @@ export interface PartyMember {
     name: string;
     template_id: string;
     level: number;
+    experience?: number;
     resources: { current_hp: number; current_mp: number };
     effective_stats: { hp: number; mp: number; [key: string]: number };
     base_stats?: Record<string, number>;

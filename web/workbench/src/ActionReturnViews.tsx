@@ -3,7 +3,7 @@ import type { ActionEntry } from "./actionModel";
 import { returnLabel, returnNames } from "./actionReturns";
 import type { ReturnTable } from "./actionReturns";
 import { fmt } from "./model";
-import { MATERIALS, SLOTS, STAT_NAMES } from "./sceneModel";
+import { MATERIALS, SLOTS, STAT_NAMES, signed } from "./sceneModel";
 import { ResizableTable } from "./ResizableTable";
 
 const ENUMS: Record<string, string> = { left_win: "冒险者胜利", right_win: "怪物胜利", draw: "平局", actual: "真实战斗", preview: "模拟预览", left: "冒险者方", right: "怪物方" };
@@ -14,6 +14,13 @@ export function ReturnedValue({ value, fieldKey = "" }: { value: unknown; fieldK
         <dt>{returnLabel(key)}</dt><dd><ReturnedValue value={item} fieldKey={key} /></dd>
     </div>)}</dl> : <span>空对象</span>;
     return <span className="return-text">{typeof value === "boolean" ? value ? "是（true）" : "否（false）" : (["source", "outcome", "actor_side", "target_side", "healing_target_side"].includes(fieldKey) && Object.hasOwn(ENUMS, String(value)) ? ENUMS[String(value)] : undefined) || String(value)}</span>;
+}
+
+export function ReturnedFields({ value, label }: { value: unknown; label: string }) {
+    const [open, setOpen] = useState(false);
+    return <details className="plan-disclosure" onToggle={event => setOpen(event.currentTarget.open)}>
+        <summary>{label}</summary>{open && <ReturnedValue value={value} />}
+    </details>;
 }
 
 export function ResultTable({ data, dense = false }: { data: ReturnTable; dense?: boolean }) {
@@ -44,11 +51,11 @@ function ResultRow({ row, record, columns, expanded, onExpand, dense }: { row: s
         {expanded && <tr className="return-record-fields"><td colSpan={columns}><ReturnedValue value={record} /></td></tr>}
     </>;
 }
-export function StatValues({ stats }: { stats: Record<string, number> | undefined }) {
+export function StatValues({ stats, modifier = false }: { stats: Record<string, number> | undefined; modifier?: boolean }) {
     if (stats == null) return null;
     const fields = Object.entries(stats);
     const nonzero = fields.filter(([, value]) => value !== 0);
-    return <dl className="return-stat-grid">{(nonzero.length ? nonzero : fields).map(([key, value]) => <div key={key}><dt>{STAT_NAMES[key] || key}</dt><dd className="mono">{fmt(value)}</dd></div>)}</dl>;
+    return <dl className="return-stat-grid">{(nonzero.length ? nonzero : fields).map(([key, value]) => <div key={key}><dt>{STAT_NAMES[key] || key}</dt><dd className="mono">{modifier ? signed(value) : fmt(value)}</dd></div>)}</dl>;
 }
 function Cost({ item }: { item: Record<string, any> }) {
     const gold = item.gold_cost ?? item.recruit_gold;
@@ -58,11 +65,10 @@ function Cost({ item }: { item: Record<string, any> }) {
         {Object.entries(item.material_costs || {}).map(([key, value]) => <div key={key}><dt>{MATERIALS[key] || key}</dt><dd className="mono">{String(value)}</dd></div>)}
     </dl>;
 }
-function Skills({ skills }: { skills: Record<string, any>[] | undefined }) {
+export function Skills({ skills }: { skills: Record<string, any>[] | undefined }) {
     return skills && skills.length > 0 && <div className="return-skills"><span>技能</span><ul>{skills.slice(0, 3).map((skill, i) => <li key={i}>{skill.name || skill.skill_id}</li>)}</ul>{skills.length > 3 && <details className="plan-disclosure"><summary>其余 {skills.length - 3} 个技能</summary><ul>{skills.slice(3).map((skill, i) => <li key={i}>{skill.name || skill.skill_id}</li>)}</ul></details>}</div>;
 }
 function EntityResult({ item, data, index, names }: { item: Record<string, any>; data: ReturnTable; index: number; names: Map<string, string> }) {
-    const [expanded, setExpanded] = useState(false);
     const kind = data.kind;
     const name = item.name || item.output_name || data.rows[index][0].split("\n")[0];
     const level = item.level;
@@ -82,7 +88,7 @@ function EntityResult({ item, data, index, names }: { item: Record<string, any>;
         <Skills skills={skills} />
         <Cost item={item} />
         {(item.reward || item.base_reward) && <div className="return-reward"><span>{item.base_reward ? "基础奖励" : "目标奖励"}</span><RewardValues reward={item.reward || item.base_reward} /></div>}
-        <details className="plan-disclosure" onToggle={event => setExpanded(event.currentTarget.open)}><summary>完整字段</summary>{expanded && <ReturnedValue value={item} />}</details>
+        <ReturnedFields value={item} label="完整字段" />
     </article>;
 }
 export function RewardValues({ reward }: { reward: Record<string, any> }) {

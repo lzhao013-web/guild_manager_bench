@@ -119,6 +119,7 @@ function querySummary(frame: WatchFrame): string {
     if (field && r._collection_counts?.[field[0]] != null) return `返回 ${r._collection_counts[field[0]]} ${field[1]}`;
     if (e.name === "get_forecast" && r.start_turn != null) return `${r.kind === "recruits" ? "招募" : "怪物"}预告 T${r.start_turn}${r.start_turn === r.end_turn ? "" : `-T${r.end_turn}`}，${fmt(r.total_matches)} 条`;
     if (e.name === "preview_team_power" && r.current_rank_score != null) return `战力 ${fmt(r.current_rank_score)} → ${fmt(r.projected_rank_score)}（${signed(r.rank_score_delta)}）`;
+    if (e.name === "preview_hunts" && Array.isArray(r.battles)) return `模拟 ${r.battles.length} 个对位，金币 ${fmt(r.reward?.gold)}、经验 ${fmt(r.reward?.experience)}（未执行）`;
     if (e.name === "preview_battle" && r.preview) return `${r.preview.adventurer_name} → ${r.preview.monster_name}：模拟${battleResult(r.preview)}`;
     if (e.name === "preview_team_power" && r.rank_score != null) return `试算战力 ${fmt(r.rank_score)}`;
     if (e.name === "preview_team_power" && r.operation_count != null) return `共 ${r.operation_count} 步`;
@@ -145,8 +146,10 @@ export function describeAction(frame: WatchFrame, start = frame.cursor, call?: W
         if (kind === "query") summary = querySummary(described);
         else if (e.name === "write_memo" && e.result?.memo) {
             const memo = e.result.memo;
-            if (memo.content != null) summary = memo.content === "" ? "备忘已清空" : "备忘已保存";
+            if (memo.blocks != null) summary = `备忘已更新 · ${memo.blocks.length} 块`;
+            else if (memo.content != null) summary = memo.content === "" ? "备忘已清空" : "备忘已保存";
             else if (memo.count != null) summary = `备忘 ${memo.count} 条${memo.dropped_oldest ? `，已丢弃最早 ${memo.dropped_oldest} 条` : ""}`;
+            if (memo.used_chars !== undefined) summary += ` · 已用 ${memo.used_chars}/${memo.max_chars} 字符`;
         }
         else if (e.name === "end_turn") {
             const battles = e.result?.turn_result?.battles;
