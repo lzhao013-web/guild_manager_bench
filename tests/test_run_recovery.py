@@ -119,7 +119,7 @@ def test_recovery_restores_latest_memo_across_unwritten_turns(tmp_path, from_tur
         if expected:
             assert expected in turn.prompt
         else:
-            assert "最后修改于 T2。\n无。" in turn.prompt
+            assert "最后修改于 T2。\n已用 0/4000 字符。\n无有效备忘。" in turn.prompt
     assert result.turns[-1].turn == 8
 
 
@@ -150,6 +150,50 @@ def test_retry_restores_memo_content_and_update_turn_and_recovery_ignores_failed
     assert "已确认计划" in first.prompt
     assert "应回滚计划" not in first.prompt
     assert "最后修改于 T1。" in first.prompt
+
+
+@pytest.mark.parametrize("from_turn", [None, 2], ids=["resume-after-expiry", "rerun-before-expiry"])
+def test_block_memo_archive_restores_times_expiry_and_selected_prefix(tmp_path, from_turn):
+    class BlockAgent:
+        def __init__(self):
+            self.calls = 0
+
+        def respond(self, **kwargs):
+            self.calls += 1
+            if self.calls > 3:
+                raise RuntimeError("fixture stop")
+            operations = {
+                1: [{"op": "add", "key": "计划", "content": "早期计划"},
+                    {"op": "add", "key": "机会", "content": "只在T2前有效", "expires_turn": 2}],
+                2: [{"op": "update", "key": "计划", "content": "修订计划"}],
+            }.get(self.calls)
+            calls = [] if operations is None else [LlmToolCall("write_memo", {"operations": operations})]
+            return LlmAgentResponse(tool_calls=(*calls, LlmToolCall("end_turn", {"hunts": []})))
+
+    with pytest.raises(RuntimeError, match="fixture stop"):
+        run_llm_game(BlockAgent(), data_dir=ROOT / "data/presets/default", config=LlmRunConfig(archive_dir=tmp_path))
+    source = next(tmp_path.iterdir())
+    agent = EndAgent()
+    if from_turn is None:
+        result = run_llm_game(agent, data_dir=ROOT / "data/presets/default", resume_archive_dir=source,
+                              config=LlmRunConfig(archive_dir=tmp_path))
+        first = next(t for t in result.turns if t.turn == 4 and t.status == "completed")
+        assert "[计划] 创建 T1，更新 T2，无到期回合" in first.prompt
+        assert "修订计划" in first.prompt and "只在T2前有效" not in first.prompt
+    else:
+        plan = inspect_recovery(source, ROOT / "data/presets/default", from_turn)
+        assert plan.differences == []
+        result = continue_plan(plan, tmp_path, agent)
+        first = next(t for t in result.turns if t.turn == 2 and t.status == "completed")
+        assert "[机会] 创建 T1，更新 T1，有效至 T2（含）" in first.prompt
+        assert "早期计划" in first.prompt and "修订计划" not in first.prompt
+    assert result.status == "completed"
+    assert all("只在T2前有效" not in t.prompt for t in result.turns if t.turn > 2)
+    replay = json.loads((Path(result.archive_dir) / "replay.json").read_text(encoding="utf-8"))
+    restored = runner._memo_store_from_replay(replay).snapshot()
+    assert [b.key for b in restored.blocks] == ["计划"]
+    assert restored.blocks[0].created_turn == 1
+    assert restored.blocks[0].updated_turn == (2 if from_turn is None else 1)
 
 
 def test_completed_archive_can_rerun_from_one_but_cannot_resume(tmp_path):

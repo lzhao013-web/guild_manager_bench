@@ -18,6 +18,14 @@ it("备忘随精确步骤更新，不泄露未来正文，清空不是缺失，�
     expect(memoAt({ ...page, attempts: [{ ...page.attempts[0], status: "rolled_back" }] }, 30)).toEqual(page.memo_before);
     expect(memoAt({ ...page, attempts: [{ ...page.attempts[0], status: "failed" }] }, 20)).toEqual(page.memo_before);
 });
+it("多块结构和字符数随成功结果保留，失败结果不能覆盖", () => {
+    const blocks = [{ key: "计划", content: "保留", created_turn: 1, updated_turn: 2, expires_turn: 5 }];
+    const result = { ok: true, memo: { content: "块头\n保留", updated_turn: 2, blocks, used_chars: 4, max_chars: 4000 } };
+    const updated = { ...page, records: [{ ...page.records[1], event: { ...page.records[1].event, result } }] };
+    expect(memoAt(updated, 20)).toEqual({ state: "saved", ...result.memo });
+    expect(memoAt({ ...updated, records: [{ ...updated.records[0], event: { ...updated.records[0].event, result: { ...result, ok: false } } }] }, 20)).toEqual(page.memo_before);
+});
+
 it("旧服务未提供基线时显示未知，当前成功的结构化写入仍可读取", () => {
     const old = { ...page, memo_before: undefined };
     expect(memoAt(old, 10)).toEqual({ state: "unavailable" });

@@ -12,7 +12,7 @@ def skill_summary(skills: Any) -> str:
     return "; ".join(values)
 
 
-def skill_summary_lines(skills: Any) -> tuple[str, ...]:
+def skill_summary_lines(skills: Any, *, compact: bool = False) -> tuple[str, ...]:
     """主动技能按战斗检查顺序展示，被动技能按原顺序置后。"""
 
     values = [
@@ -26,7 +26,8 @@ def skill_summary_lines(skills: Any) -> tuple[str, ...]:
     )
     automatic_skills = sorted((skill for skill in values if skill.get("trigger") == "action_start"), key=lambda skill: (-skill.get("priority", 0), skill.get("skill_id", "")))
     passive_skills = [skill for skill in values if skill.get("kind") == "passive"]
-    return tuple(_skill_text(skill) for skill in (*automatic_skills, *active_skills, *passive_skills))
+    formatter = _compact_skill_text if compact else _skill_text
+    return tuple(formatter(skill) for skill in (*automatic_skills, *active_skills, *passive_skills))
 
 
 def tactics_summary_lines(tactics: Any) -> tuple[str, ...]:
@@ -82,6 +83,37 @@ def _skill_text(skill: Mapping[str, Any]) -> str:
                    else "触发后不替代普通攻击" if skill.get("free") else "触发后替代普通攻击")
     sentences.append(f"效果：{replacement}，{effect_text}。")
     return "".join(sentences)
+
+
+def class_restriction_text(class_ids: Sequence[str], names: Sequence[str]) -> str:
+    """职业限制保留中文名和可直接用于筛选的 ID，兼容只有名称的旧记录。"""
+    if not class_ids:
+        return "、".join(names)
+    return "、".join(
+        f"{name}（class_id={class_id}）" if name != class_id else f"class_id={class_id}"
+        for class_id, name in zip(class_ids, names or class_ids, strict=True)
+    )
+
+
+def modifier_summary(stats: Mapping[str, Any]) -> str:
+    """只展示非零属性增量，战后恢复与战斗内恢复保持区分。"""
+    return "、".join(f"{_stat_text(key)}{value:+g}" for key, value in stats.items() if value)
+
+
+def _compact_skill_text(skill: Mapping[str, Any]) -> str:
+    kind = skill["kind"]
+    automatic = skill.get("trigger") == "action_start"
+    label = ("被动" if kind == "passive" else "自动回复，不占主动、不追加普攻" if automatic
+             else "即时主动，施放后追加普攻" if skill.get("free") else "普通主动，替代普攻")
+    limits = [label]
+    if kind != "passive":
+        limits.append(f"耗{_number(skill['mp_cost'])}MP")
+    if skill["once_per_battle"]:
+        limits.append("每场1次")
+    limits.append(_condition_text(skill["condition"]))
+    effects = "，".join(_effect_text(effect, parent_once_per_battle=skill["once_per_battle"])
+                       for effect in skill["effects"])
+    return f"{skill['name']} [{skill['skill_id']}]：{'，'.join(limits)}。{effects}。"
 
 
 def _condition_text(value: Any) -> str:

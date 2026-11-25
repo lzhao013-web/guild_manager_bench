@@ -13,12 +13,17 @@ export function MemoPanel({ memo, compact = false, onExpand, onActions, reverted
     const [copying, setCopying] = useState(false);
     const [feedback, setFeedback] = useState<{ content: string; text: string } | null>(null);
     const content = memo.state === "saved" ? memo.content : null;
-    const meta = (memo.state === "saved" || memo.state === "empty") && memo.updated_turn !== null
-        ? <p className="memo-meta" title={`最后修改于 T${memo.updated_turn}`}>
-            {compact ? `T${memo.updated_turn} 更新` : `最后修改于 T${memo.updated_turn}`}
-        </p> : null;
+    const meta = (memo.state === "saved" || memo.state === "empty")
+        ? <div className="memo-meta">
+            {memo.updated_turn !== null && <span title={`最后修改于 T${memo.updated_turn}`}>
+                {compact ? `T${memo.updated_turn} 更新` : `最后修改于 T${memo.updated_turn}`}
+            </span>}
+            {memo.used_chars !== undefined && <span>已用 {memo.used_chars}/{memo.max_chars} 字符</span>}
+        </div> : null;
+    const preview = memo.state === "saved" && memo.blocks
+        ? memo.blocks.map(block => `[${block.key}] ${block.content}`).join("\n\n") : content;
     const emptyNote = memo.state === "empty"
-        ? memo.updated_turn === null ? "模型尚未记录备忘。" : "模型已清空备忘。"
+        ? memo.blocks ? "当前没有有效备忘。" : memo.updated_turn === null ? "模型尚未记录备忘。" : "模型已清空备忘。"
         : memo.state === "legacy" ? "此记录使用旧版逐条备忘，请在行动时间线查看原文。" : "该位置未记录备忘状态。";
     const warning = reverted && <p className="memo-note">此尝试未保留，显示回合开始时的备忘。</p>;
     const legacyAction = memo.state === "legacy" && onActions && <div className="memo-actions"><button onClick={onActions}>查看行动记录</button></div>;
@@ -37,7 +42,7 @@ export function MemoPanel({ memo, compact = false, onExpand, onActions, reverted
     if (compact) return <section className="memo-panel is-compact" aria-label="模型备忘">
         {warning}
         {memo.state === "saved" ? <button className="memo-preview" aria-label="展开备忘全文" title="点击查看完整备忘" onClick={onExpand}>
-            <span className="memo-text">{memo.content}</span>
+            <span className="memo-text">{preview}</span>
         </button> : <p className="memo-note">{emptyNote}</p>}
         {meta}
         {legacyAction}
@@ -51,7 +56,13 @@ export function MemoPanel({ memo, compact = false, onExpand, onActions, reverted
                 {feedback?.content === content && <span role="status">{feedback.text}</span>}
             </div>}
         </div>
-        {memo.state === "saved" ? <pre className="memo-text">{memo.content}</pre> : <p className="memo-note">{emptyNote}</p>}
+        {memo.state === "saved" ? memo.blocks ? <div className="memo-blocks">
+            {memo.blocks.map(block => <article className="memo-block" key={block.key} aria-label={block.key}>
+                <h4>{block.key}</h4>
+                <p className="memo-block-meta">创建 T{block.created_turn} · 更新 T{block.updated_turn} · {block.expires_turn === null ? "无到期回合" : `有效至 T${block.expires_turn}（含）`}</p>
+                <pre className="memo-text">{block.content}</pre>
+            </article>)}
+        </div> : <pre className="memo-text">{memo.content}</pre> : <p className="memo-note">{emptyNote}</p>}
         {legacyAction}
     </section>;
 }

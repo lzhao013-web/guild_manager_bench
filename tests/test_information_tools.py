@@ -33,9 +33,9 @@ def game():
 
 def test_preview_log_is_cached_paginated_and_uses_only_query_budget(game, monkeypatch):
     tools, sid, harness = game
-    preview = harness.call_tool("preview_battle", {"adventurer_id": 1, "monster_id": 1})
-    battle_id = preview["preview"]["battle_id"]
-    text = _format_tool_result_for_model("preview_battle", preview)
+    preview = harness.call_tool("preview_hunts", {"hunts": [{"adventurer_id": 1, "monster_id": 1}]})
+    battle_id = preview["battles"][0]["battle_id"]
+    text = _format_tool_result_for_model("preview_hunts", preview)
     assert f"battle_id={battle_id}" in text
     assert "不随后续调整更新" in text
     state = tools.get_state(sid)
@@ -44,9 +44,9 @@ def test_preview_log_is_cached_paginated_and_uses_only_query_budget(game, monkey
 
     def no_simulation(*args, **kwargs):
         raise AssertionError("读取记录不得重新模拟")
-    monkeypatch.setattr("guild_manager_bench.bench.llm.tools.preview_battle_result", no_simulation)
+    monkeypatch.setattr("guild_manager_bench.bench.llm.tools.simulate_end_turn", no_simulation)
     summary = harness.call_tool("get_battle_log", {"battle_id": battle_id})
-    assert summary["battle"]["event_count"] == len(preview["preview"]["events"])
+    assert summary["battle"]["event_count"] == len(preview["battles"][0]["events"])
     args = {"battle_id": battle_id, "detail": "events"}
     result = harness.call_tool("get_battle_log", args)
     returned = list(result["events"])
@@ -56,8 +56,8 @@ def test_preview_log_is_cached_paginated_and_uses_only_query_budget(game, monkey
         result = harness.call_tool("get_battle_log", {**args, "cursor": result["next_cursor"]})
         assert result["ok"]
         returned.extend(result["events"])
-    assert len(returned) == len(preview["preview"]["events"])
-    for actual, expected in zip(returned, preview["preview"]["events"], strict=True):
+    assert len(returned) == len(preview["battles"][0]["events"])
+    for actual, expected in zip(returned, preview["battles"][0]["events"], strict=True):
         assert {k: actual[k] for k in expected if k not in ("actor_id", "target_id")} == {
             k: v for k, v in expected.items() if k not in ("actor_id", "target_id")
         }
@@ -73,8 +73,8 @@ def test_preview_log_is_cached_paginated_and_uses_only_query_budget(game, monkey
 
 def test_log_window_and_cached_records_survive_roster_changes(game):
     tools, sid, harness = game
-    preview = harness.call_tool("preview_battle", {"adventurer_id": 1, "monster_id": 1})
-    battle_id = preview["preview"]["battle_id"]
+    preview = harness.call_tool("preview_hunts", {"hunts": [{"adventurer_id": 1, "monster_id": 1}]})
+    battle_id = preview["battles"][0]["battle_id"]
     original = tools.get_battle_log(sid, battle_id, "events")
     assert tools.dismiss_adventurer(sid, tools.get_state(sid).adventurers[0].adventurer_id)["ok"]
     assert tools.get_battle_log(sid, battle_id, "events") == original
@@ -96,8 +96,8 @@ def test_log_window_and_cached_records_survive_roster_changes(game):
 def test_only_current_previews_and_previous_actual_battles_are_visible(game):
     tools, sid, harness = game
     assert not harness.call_tool("get_battle_log", {"battle_id": "missing"})["ok"]
-    preview = harness.call_tool("preview_battle", {"adventurer_id": 1, "monster_id": 1})
-    preview_id = preview["preview"]["battle_id"]
+    preview = harness.call_tool("preview_hunts", {"hunts": [{"adventurer_id": 1, "monster_id": 1}]})
+    preview_id = preview["battles"][0]["battle_id"]
     ended = harness.call_tool("end_turn", {"hunts": [{"adventurer_id": 1, "monster_id": 1}]})
     assert ended["ok"]
     battle_id = ended["turn_result"]["battles"][0]["battle_id"]
@@ -158,10 +158,10 @@ def test_battle_statistics_keep_status_damage_and_instant_skill_events_distinct(
 def test_log_queries_work_after_preview_quota_is_exhausted_and_are_session_local(game):
     tools, sid, _ = game
     harness = TurnToolHarness(tools, sid, max_tool_calls=10, max_battle_preview_per_turn=1)
-    preview = harness.call_tool("preview_battle", {"adventurer_id": 1, "monster_id": 1})
+    preview = harness.call_tool("preview_hunts", {"hunts": [{"adventurer_id": 1, "monster_id": 1}]})
     assert preview["ok"]
-    battle_id = preview["preview"]["battle_id"]
-    assert not harness.call_tool("preview_battle", {"adventurer_id": 1, "monster_id": 1})["ok"]
+    battle_id = preview["battles"][0]["battle_id"]
+    assert not harness.call_tool("preview_hunts", {"hunts": [{"adventurer_id": 1, "monster_id": 1}]})["ok"]
     assert harness.call_tool("get_battle_log", {"battle_id": battle_id})["ok"]
     tools.start_session("other")
     assert not TurnToolHarness(tools, "other", max_tool_calls=1).call_tool("get_battle_log", {"battle_id": battle_id})["ok"]
@@ -232,13 +232,13 @@ def test_event_pages_have_fixed_size_and_preserve_all_events():
 
 def test_preview_ids_are_distinct_and_never_alias_later_turns(game):
     tools, sid, harness = game
-    first = harness.call_tool("preview_battle", {"adventurer_id": 1, "monster_id": 1})["preview"]["battle_id"]
-    second = harness.call_tool("preview_battle", {"adventurer_id": 1, "monster_id": 1})["preview"]["battle_id"]
+    first = harness.call_tool("preview_hunts", {"hunts": [{"adventurer_id": 1, "monster_id": 1}]})["battles"][0]["battle_id"]
+    second = harness.call_tool("preview_hunts", {"hunts": [{"adventurer_id": 1, "monster_id": 1}]})["battles"][0]["battle_id"]
     assert first != second
     assert harness.call_tool("get_battle_log", {"battle_id": first})["ok"]
     assert harness.call_tool("end_turn", {"hunts": []})["ok"]
     current = TurnToolHarness(tools, sid, max_tool_calls=5)
-    third = current.call_tool("preview_battle", {"adventurer_id": 1, "monster_id": 1})["preview"]["battle_id"]
+    third = current.call_tool("preview_hunts", {"hunts": [{"adventurer_id": 1, "monster_id": 1}]})["battles"][0]["battle_id"]
     assert third not in (first, second)
     assert not current.call_tool("get_battle_log", {"battle_id": first})["ok"]
     assert current.call_tool("get_battle_log", {"battle_id": third})["ok"]
@@ -338,7 +338,7 @@ def test_future_references_cannot_be_used_as_current_candidates_or_monsters(game
     failed = harness.call_tool("recruit_adventurer", {"candidate_id": recruit["forecast_ref"]})
     assert not failed["ok"]
     monster = harness.call_tool("get_forecast", {"kind": "monsters", "start_turn": 2})["items"][0]
-    failed = harness.call_tool("preview_battle", {"adventurer_id": 1, "monster_id": monster["forecast_ref"]})
+    failed = harness.call_tool("preview_hunts", {"hunts": [{"adventurer_id": 1, "monster_id": monster["forecast_ref"]}]})
     assert not failed["ok"]
     assert tools.get_state(sid) is before
     assert harness._turn_refs == refs

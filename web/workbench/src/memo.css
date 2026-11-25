@@ -59,7 +59,10 @@
 .memo-panel.is-compact { display: flex; flex-direction: column; flex: 1; gap: 12px; overflow: hidden; }
 .memo-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-bottom: 20px; }
 .memo-meta, .memo-note { color: var(--gray-11); font-size: var(--wb-text-sm); line-height: 1.7; }
-.memo-meta { margin: 0; font-size: var(--wb-text-xs); flex-shrink: 0; }
+.memo-meta { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0; font-size: var(--wb-text-xs); flex-shrink: 0; }
+.memo-block + .memo-block { margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--gray-5); }
+.memo-block h4 { margin: 0 0 5px; color: var(--gray-12); font-size: var(--wb-text-base); font-weight: 600; overflow-wrap: anywhere; }
+.memo-block-meta { margin: 0 0 10px; color: var(--gray-11); font-size: var(--wb-text-sm); line-height: 1.7; }
 .memo-panel.is-compact > .memo-meta { margin-top: auto; }
 .memo-text {
     margin: 0;

@@ -37,7 +37,7 @@ def test_tool_schemas_expose_agent_facing_tools() -> None:
     assert "list_sessions" not in names
     assert "get_score" not in names
     assert "get_observation" not in names
-    assert "preview_battle" not in names
+    assert "preview_hunts" not in names
     for schema in schemas:
         parameters = schema["parameters"]
         assert "session_id" not in parameters.get("required", [])
@@ -57,7 +57,7 @@ def test_tool_schemas_expose_agent_facing_tools() -> None:
         by_name["recruit_adventurer"]["parameters"]["properties"]["candidate_id"]["type"]
         == "integer"
     )
-    assert "preview_battle" in {
+    assert "preview_hunts" in {
         schema["name"]
         for schema in tool_schemas(expose_battle_preview=True)
     }
@@ -166,7 +166,7 @@ def test_turn_tool_harness_records_memo() -> None:
     result = harness.call_tool("write_memo", {"content": "下回合优先处理装备。"})
 
     assert result["ok"] is True
-    assert result["memo"] == {"content": "下回合优先处理装备。", "updated_turn": 1, "max_chars": 500}
+    assert result["memo"] == {"content": "下回合优先处理装备。", "updated_turn": 1, "used_chars": len("下回合优先处理装备。"), "max_chars": 4000}
     assert result["tool_budget"]["used"] == 1
     assert harness.memo_store.snapshot() == Memo("下回合优先处理装备。", 1)
 
@@ -187,17 +187,17 @@ def test_memo_writes_replace_the_whole_document_and_empty_content_clears(content
     assert cleared["tool_budget"]["used"] == 3
 
 
-@pytest.mark.parametrize("arguments", [None, {}, {"content": None}, {"content": False}, {"content": 12}, {"content": "备" * 501}])
+@pytest.mark.parametrize("arguments", [None, {}, {"content": None}, {"content": False}, {"content": 12}, {"content": "备" * 4001}])
 def test_invalid_memo_write_preserves_existing_content_and_consumes_budget(arguments) -> None:
     tools = GuildManagerTools.from_data_dir(_data_dir())
     session_id = tools.start_session("memo-invalid")["session_id"]
     harness = TurnToolHarness(tools, session_id, max_tool_calls=2)
-    text = "备" * 500
+    text = "备" * 4000
     assert harness.call_tool("write_memo", {"content": text})["ok"]
     before = harness.memo_store.snapshot()
     result = harness.call_tool("write_memo", arguments)
     assert result["ok"] is False
-    assert "content must be" in result["error"]
+    assert "备忘内容" in result["error"]
     assert result["tool_budget"]["used"] == 2
     assert harness.memo_store.snapshot() == before == Memo(text, 1)
 
@@ -259,16 +259,13 @@ def test_battle_preview_tool_is_controlled_by_definition_switch() -> None:
         disabled_session_id,
         max_tool_calls=2,
     )
-    assert "preview_battle" not in {
+    assert "preview_hunts" not in {
         schema["name"]
         for schema in disabled_harness.tool_schemas()
     }
     disabled = disabled_harness.call_tool(
-        "preview_battle",
-        {
-            "adventurer_id": "vanguard",
-            "monster_id": "turn_1_monster_1",
-        },
+        "preview_hunts",
+        {"hunts": [{"adventurer_id": "vanguard", "monster_id": "turn_1_monster_1"}]},
     )
     assert disabled["ok"] is False
     assert "未知工具" in disabled["error"]
@@ -286,26 +283,23 @@ def test_battle_preview_tool_is_controlled_by_definition_switch() -> None:
     before = enabled_tools.get_observation(session_id)["observation"]
     harness = TurnToolHarness(enabled_tools, session_id, max_tool_calls=2)
 
-    assert "preview_battle" in {
+    assert "preview_hunts" in {
         schema["name"]
         for schema in harness.tool_schemas()
     }
 
     monster_id = before["monsters"][0]["monster_id"]
     preview = harness.call_tool(
-        "preview_battle",
-        {
-            "adventurer_id": adventurer_id,
-            "monster_id": monster_id,
-        },
+        "preview_hunts",
+        {"hunts": [{"adventurer_id": adventurer_id, "monster_id": monster_id}]},
     )
     after = enabled_tools.get_observation(session_id)["observation"]
 
     assert preview["ok"] is True
-    assert preview["preview"]["adventurer_id"] == adventurer_id
-    assert preview["preview"]["monster_id"] == monster_id
-    assert "adventurer_resources" in preview["preview"]
-    assert "events" in preview["preview"]
+    assert preview["battles"][0]["adventurer_id"] == adventurer_id
+    assert preview["battles"][0]["monster_id"] == monster_id
+    assert "adventurer_resources" in preview["battles"][0]
+    assert "events" in preview["battles"][0]
     assert preview["tool_budget"]["used"] == 1
     assert after["turn"] == before["turn"]
     assert after["adventurers"][0]["resources"] == before["adventurers"][0]["resources"]

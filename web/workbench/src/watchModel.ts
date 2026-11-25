@@ -19,9 +19,21 @@ export interface WatchAttempt {
     updated_at: string;
 }
 export type WatchRecord = EventRecord & { after: number };
+export interface MemoBlock {
+    key: string;
+    content: string;
+    created_turn: number;
+    updated_turn: number;
+    expires_turn: number | null;
+}
+interface MemoDetails {
+    blocks?: MemoBlock[];
+    used_chars?: number;
+    max_chars?: number;
+}
 export type MemoSnapshot =
-    | { state: "saved"; content: string; updated_turn: number }
-    | { state: "empty"; updated_turn: number | null }
+    | ({ state: "saved"; content: string; updated_turn: number } & MemoDetails)
+    | ({ state: "empty"; updated_turn: number | null } & MemoDetails)
     | { state: "unavailable" | "legacy" };
 export interface WatchPage {
     cursor: number;

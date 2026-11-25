@@ -82,6 +82,7 @@ def reporter_for(stream, *, mode="watch", width=100, terminal=False, **kwargs):
 
 
 @pytest.mark.parametrize("name,result,expected", [
+    ("preview_hunts", {"battles": [{}, {}], "reward": {"gold": 80, "experience": 150}}, "2个对位 · 金币80、经验150（未执行）"),
     ("preview_team_power", {"operation_count": 2}, "不估算战力"),
     ("preview_team_power", {"current_rank_score": 10, "projected_rank_score": 12, "rank_score_delta": 2}, "10.0 → 12.0"),
     ("preview_team_power", {"rank_score": 9}, "Rank Score 9.0"),

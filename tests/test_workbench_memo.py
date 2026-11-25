@@ -99,6 +99,38 @@ def test_watch_api_seeds_resume_from_archived_events(tmp_path):
     assert not m._processes
 
 
+def test_block_expiry_without_writes_is_reversible_at_historical_checkpoints(tmp_path):
+    from guild_manager_bench.bench.llm.memo import MemoStore
+
+    store = MemoStore()
+    saved = store.apply({"operations": [
+        {"op": "add", "key": "临时", "content": "到T2", "expires_turn": 2},
+        {"op": "add", "key": "长期", "content": "保留计划"},
+    ]}, turn=1)
+    path = tmp_path / "blocks.jsonl"
+    append(path, {"type": "run_started", "observation": {"turn": 1}},
+           {"type": "turn_started", "turn": 1},
+           {"type": "tool_result", "name": "write_memo", "result": {"ok": True, "memo": saved}},
+           {"type": "turn_scored", "turn": 1, "rank_score": 0},
+           {"type": "turn_started", "turn": 2}, {"type": "turn_scored", "turn": 2, "rank_score": 0},
+           {"type": "turn_started", "turn": 3})
+    journal = WatchJournal(path)
+    current = deepcopy(journal.read())
+    assert [b["key"] for b in current["memo_before"]["blocks"]] == ["长期"]
+    assert current["memo_before"]["used_chars"] == len("长期保留计划")
+    assert "到T2" not in current["memo_before"]["content"]
+    earlier = next(a["id"] for a in current["attempts"] if a["turn"] == 2)
+    assert [b["key"] for b in journal.read(earlier)["memo_before"]["blocks"]] == ["临时", "长期"]
+    assert journal.memo_before_turn(2, True)["blocks"][0]["expires_turn"] == 2
+    # 观看T3发生的过滤不能抹掉历史T2的块，回滚也要恢复当时的有效期。
+    append(path, {"type": "run_resumed", "restored_observation": {"turn": 2}},
+           {"type": "turn_started", "turn": 2})
+    restored = journal.read()["memo_before"]
+    assert [b["key"] for b in restored["blocks"]] == ["临时", "长期"]
+    assert restored["blocks"][0]["created_turn"] == 1
+    assert journal.read(current["selected"])["memo_before"] == current["memo_before"]
+
+
 def test_legacy_notes_are_identified_instead_of_claimed_to_be_persistent(tmp_path):
     path = tmp_path / "events.jsonl"
     append(path, {"type": "run_started", "observation": {"turn": 1}},

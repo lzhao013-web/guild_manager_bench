@@ -69,6 +69,7 @@ export const TOOLS: Record<string, string> = {
     end_turn: "结束回合",
     write_memo: "记录备忘",
     preview_battle: "预览战斗",
+    preview_hunts: "预览讨伐方案",
     preview_team_power: "方案试算",
     execute_plan: "执行方案",
 };

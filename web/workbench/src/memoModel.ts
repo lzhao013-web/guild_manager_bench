@@ -12,9 +12,14 @@ export function memoAt(page: WatchPage | undefined, cursor: number): MemoSnapsho
         if (event.type !== "tool_result" || event.name !== "write_memo" || event.result?.ok !== true) continue;
         const saved = event.result.memo;
         if (saved && "count" in saved) memo = { state: "legacy" };
-        else if (typeof saved?.content === "string" && typeof saved.updated_turn === "number")
-            memo = saved.content ? { state: "saved", content: saved.content, updated_turn: saved.updated_turn }
-                : { state: "empty", updated_turn: saved.updated_turn };
+        else if (typeof saved?.content === "string" && typeof saved.updated_turn === "number") {
+            const details = {
+                ...(saved.blocks !== undefined ? { blocks: saved.blocks } : {}),
+                ...(saved.used_chars !== undefined ? { used_chars: saved.used_chars, max_chars: saved.max_chars } : {}),
+            };
+            memo = saved.content ? { state: "saved", content: saved.content, updated_turn: saved.updated_turn, ...details }
+                : { state: "empty", updated_turn: saved.updated_turn, ...details };
+        }
         else memo = { state: "unavailable" };
     }
     return memo;

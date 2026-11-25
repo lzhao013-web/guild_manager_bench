@@ -148,7 +148,7 @@ def craft_equipment(
 
     missing = missing_requirements(recipe, inventory)
     if missing:
-        raise CraftingError(f"not enough resources: {missing}")
+        raise CraftingError(f"合成资源不足：{_format_missing_resources(missing)}")
 
     materials = dict(inventory.materials)
     for cost in recipe.material_costs:
@@ -168,6 +168,21 @@ def craft_equipment(
         equipment=equipment,
         inventory=new_inventory,
     )
+
+
+def _format_missing_resources(missing: Mapping[str, int]) -> str:
+    # 延迟导入：state 依赖本模块，顶层导入会形成循环。
+    from guild_manager_bench.game.state import MATERIAL_NAMES
+
+    parts = []
+    if "gold" in missing:
+        parts.append(f"金币缺 {missing['gold']}")
+    materials = {k: v for k, v in missing.items() if k != "gold"}
+    if materials:
+        parts.append(
+            "材料缺 " + "、".join(f"{MATERIAL_NAMES.get(k, k)}×{v}" for k, v in materials.items())
+        )
+    return "，".join(parts)
 
 
 def _freeze_materials(materials: Mapping[str, int]) -> Mapping[str, int]:

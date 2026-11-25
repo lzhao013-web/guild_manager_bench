@@ -155,7 +155,7 @@ def combine_equipment_skills(
 
 def _validate_slot(slot: str) -> None:
     if slot not in EQUIPMENT_SLOTS:
-        raise ValueError(f"unknown equipment slot: {slot}")
+        raise ValueError(f"未知的装备槽位: {slot}")
 
 
 def _validate_hand_slots(slots: set[EquipmentSlot]) -> None:

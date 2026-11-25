@@ -16,8 +16,9 @@ from guild_manager_bench.bench.llm.archive import (
     resume_llm_run_archive,
     start_llm_run_archive,
 )
-from guild_manager_bench.bench.llm.formatting import skill_summary, skill_summary_lines, tactics_summary_lines
+from guild_manager_bench.bench.llm.formatting import class_restriction_text, skill_summary, skill_summary_lines, tactics_summary_lines
 from guild_manager_bench.bench.llm.information_formatting import battle_log_lines, forecast_lines
+from guild_manager_bench.bench.llm.catalog import recipe_summary_lines, upgrade_summary_lines
 from guild_manager_bench.bench.llm.harness import (
     MemoStore,
     TurnToolHarness,
@@ -296,6 +297,7 @@ def run_llm_game(
         tactics_enabled=tools.definition.llm_tools.expose_tactics,
         battle_log_enabled=tools.definition.llm_tools.expose_battle_log,
         forecast_enabled=tools.definition.llm_tools.expose_forecast,
+        expose_battle_preview=tools.definition.llm_tools.expose_battle_preview,
         monster_refresh_rules=initial_observation.get("monster_refresh"),
         challenge_rules={
             "start_turn": min(c.min_turn for c in tools.definition.content.challenge_archetypes),
@@ -700,6 +702,7 @@ def _memo_store_from_replay(replay: Mapping[str, Any]) -> MemoStore:
     for turn in _sequence(replay.get("turns")):
         if not isinstance(turn, Mapping) or turn.get("status") != "completed":
             continue
+        store.expire(turn["turn"])
         for step in _sequence(turn.get("steps")):
             if (
                 isinstance(step, Mapping)
@@ -707,7 +710,10 @@ def _memo_store_from_replay(replay: Mapping[str, Any]) -> MemoStore:
                 and step.get("name") == "write_memo"
                 and _replay_tool_step_succeeded(step)
             ):
-                store.write(_replay_tool_arguments(step).get("content"), turn=turn["turn"])
+                store.apply(_replay_tool_arguments(step), turn=turn["turn"])
+    final = replay.get("final_observation")
+    if isinstance(final, Mapping):
+        store.expire(final["turn"])
     return store
 
 
@@ -946,6 +952,9 @@ def _format_tool_result_for_model(name: str, result: Mapping[str, Any]) -> str:
     lines: list[str] = []
     if ok is False:
         lines.append(f"失败 {name}：{result.get('error', '未知错误')}")
+        if name == "write_memo" and isinstance(result.get("memo"), Mapping):
+            memo = result["memo"]
+            lines.append(f"备忘未修改，已用 {memo['used_chars']}/{memo['max_chars']} 字符。")
         event = result.get("event")
         if isinstance(event, Mapping) and event.get("summary"):
             lines.append(f"事件: {event['summary']}")
@@ -990,6 +999,8 @@ def _format_tool_result_for_model(name: str, result: Mapping[str, Any]) -> str:
         lines.extend(forecast_lines(result))
     elif name == "get_events" and isinstance(result.get("events"), Sequence):
         _append_events_lines(lines, result["events"])
+    elif name == "preview_hunts":
+        _append_hunts_preview_lines(lines, result, result.get("_preview_refs", _result_refs(result)))
     elif name == "preview_battle" and isinstance(result.get("preview"), Mapping):
         _append_battle_preview_lines(lines, result["preview"], _result_refs(result))
     elif name == "preview_team_power" and result.get("ok") is True:
@@ -1004,10 +1015,14 @@ def _format_tool_result_for_model(name: str, result: Mapping[str, Any]) -> str:
                 _append_changes_lines(lines, event.get("changes"), _result_refs(result))
     elif name == "write_memo" and isinstance(result.get("memo"), Mapping):
         memo = result["memo"]
-        action = "已覆盖备忘" if memo["content"] else "已清空备忘"
-        lines[0] = f"成功 write_memo：{action}，最后修改回合 T{memo['updated_turn']}。"
-        if memo["content"]:
-            lines.append("备忘将在后续回合持续展示，直到再次覆盖或清空。")
+        if "blocks" in memo:
+            lines[0] = f"成功 write_memo：已提交批量操作，当前 {len(memo['blocks'])} 块。"
+            lines.append("有效块将在后续回合自动展示，未修改的块无需重写。")
+        else:
+            action = "已覆盖备忘" if memo["content"] else "已清空备忘"
+            lines[0] = f"成功 write_memo：{action}，最后修改回合 T{memo['updated_turn']}。"
+        if "used_chars" in memo:
+            lines.append(f"已用 {memo['used_chars']}/{memo['max_chars']} 字符。")
     else:
         event = result.get("event")
         if isinstance(event, Mapping):
@@ -1054,6 +1069,32 @@ def _format_tool_result_for_model(name: str, result: Mapping[str, Any]) -> str:
                 )
 
     return "\n".join(_append_budget_lines(lines, result))
+
+
+def _append_hunts_preview_lines(lines, result, refs) -> None:
+    battles = result["battles"]
+    lines[0] = f"成功 preview_hunts：只读模拟 T{result['turn']} 的{len(battles)}个对位，真实状态未改变，方案未执行。"
+    lines.append(f"总收益：{_reward_inline(result['reward'])}")
+    for battle in battles:
+        before = battle["adventurer_resources"]["before"]
+        after = battle["adventurer_resources"]["after"]
+        lines.append(
+            f"- {display_ref(refs, 'adventurer', battle['adventurer_id'])} {battle['adventurer_name']} vs "
+            f"{display_ref(refs, 'monster', battle['monster_id'])} {battle['monster_name']}："
+            f"{_combat_outcome_zh(battle['outcome'])}，HP {before['current_hp']}→{after['current_hp']}，"
+            f"MP {before['current_mp']}→{after['current_mp']}，敌剩HP {battle['monster_resources']['after']['current_hp']}，"
+            f"{battle['actions_taken']}次行动，耗时{battle['time_elapsed']}，"
+            f"{_combat_reason_zh(battle['reason'])}，奖励{_reward_inline(battle['reward'])}"
+        )
+        if "battle_id" in battle:
+            lines.append(f"  battle_id={battle['battle_id']}")
+    lines.append("回合末恢复后（包括休整成员）：")
+    for hero in result["party_after_recovery"]:
+        resources = hero["resources"]
+        lines.append(f"- {display_ref(refs, 'adventurer', hero['adventurer_id'])} {hero['name']}："
+                     f"HP {resources['current_hp']}，MP {resources['current_mp']}")
+    if any("battle_id" in battle for battle in battles):
+        lines.append("可按 battle_id 调用 get_battle_log。记录基于本次预览时的状态，不随后续调整更新。")
 
 
 def _append_battle_preview_lines(
@@ -1129,6 +1170,10 @@ def _append_team_power_preview_lines(
             + ("当前可执行。" if result["can_execute"] else "当前不可执行，请缩短方案后重新试算或结束回合。")
         )
         lines.append("查询会减少预算，改变游戏状态或跨回合会使凭据失效。")
+        if "plan_entities" in result:
+            lines.append("以下编号仅用于带本 plan_id 的 preview_hunts，不可用于真实操作：")
+            for category, label in (("adventurers", "角色"), ("monsters", "怪物")):
+                lines.append(label + "：" + "、".join(f"{item['id']} {item['name']}" for item in result["plan_entities"][category]))
     else:
         lines.append("空方案不签发执行凭据。")
 
@@ -1149,6 +1194,8 @@ def _append_observation_lines(lines: list[str], observation: Mapping[str, Any]) 
     lines.append("冒险者:")
     for adventurer in _sequence(observation.get("adventurers")):
         if isinstance(adventurer, Mapping):
+            class_id = adventurer.get("template_id")
+            class_text = f"（class_id={class_id}）" if class_id else ""
             resources = adventurer.get("resources", {})
             stats = adventurer.get("effective_stats", {})
             if not isinstance(resources, Mapping):
@@ -1162,7 +1209,7 @@ def _append_observation_lines(lines: list[str], observation: Mapping[str, Any]) 
             lines.append(
                 "- "
                 f"{display_ref(refs, 'adventurer', adventurer.get('adventurer_id'))} "
-                f"{adventurer.get('name')} "
+                f"{adventurer.get('name')}{class_text} "
                 f"Lv{adventurer.get('level')} "
                 f"EXP {exp_text} "
                 f"每级属性成长 {growth_text} "
@@ -1307,7 +1354,10 @@ def _append_crafting_result_lines(
         f"金币 {result.get('gold')}; "
         f"材料 {_mapping_inline(result.get('materials'))}"
     )
-    _append_recipe_lines(lines, result.get("crafting_recipes"), refs)
+    if result.get("detail", "full") == "summary":
+        lines.extend(recipe_summary_lines(result, refs))
+    else:
+        _append_recipe_lines(lines, result.get("crafting_recipes"), refs)
 
 
 def _append_inventory_result_lines(
@@ -1330,7 +1380,10 @@ def _append_upgrades_result_lines(
         )
     else:
         lines.append(f"升级资源: 金币 {result.get('gold')}")
-    _append_upgrade_lines(lines, result.get("global_upgrades"), refs)
+    if result.get("detail", "full") == "summary":
+        lines.extend(upgrade_summary_lines(result, refs))
+    else:
+        _append_upgrade_lines(lines, result.get("global_upgrades"), refs)
 
 
 def _append_recruitment_result_lines(
@@ -1362,6 +1415,8 @@ def _append_adventurer_lines(
         return
     lines.append("冒险者:")
     for adventurer in values:
+        class_id = adventurer.get("template_id")
+        class_text = f"（class_id={class_id}）" if class_id else ""
         resources = adventurer.get("resources", {})
         stats = adventurer.get("effective_stats", {})
         if not isinstance(resources, Mapping):
@@ -1376,7 +1431,7 @@ def _append_adventurer_lines(
         lines.append(
             "- "
             f"{display_ref(refs, 'adventurer', adventurer.get('adventurer_id'))} "
-            f"{adventurer.get('name')} "
+            f"{adventurer.get('name')}{class_text} "
             f"Lv{adventurer.get('level')} "
             f"EXP {exp_text} "
             f"每级属性成长 {growth_text} "
@@ -1408,6 +1463,8 @@ def _append_recruit_candidate_lines(
     if all("effective_stats" in candidate for candidate in values):
         lines.append("属性为入队时的Lv1面板，已计入公会直接加成。")
     for candidate in values:
+        class_id = candidate.get("template_id")
+        class_text = f"（class_id={class_id}）" if class_id else ""
         availability = "可招募" if candidate.get("can_recruit") else "不可招募"
         missing = candidate.get("missing")
         missing_text = _missing_suffix_zh(missing, refs)
@@ -1417,8 +1474,7 @@ def _append_recruit_candidate_lines(
         lines.append(
             "- "
             f"{display_ref(refs, 'recruit', candidate.get('candidate_id'))} "
-            f"{candidate.get('name')} "
-            f"模板 {candidate.get('template_id')} "
+            f"{candidate.get('name')}{class_text} "
             f"费用 {candidate.get('recruit_gold')} "
             f"HP {stats.get('hp')} MP {stats.get('mp')} "
             f"攻击 {stats.get('attack')} 防御 {stats.get('defense')} "
@@ -1490,9 +1546,11 @@ def _append_recipe_lines(
             f"成本 金币 {recipe.get('gold_cost')} 材料 {_mapping_inline(recipe.get('material_costs'))} "
             f"{availability}{missing_text}"
         )
-        allowed_class_names = recipe.get("output_allowed_class_names")
-        if allowed_class_names:
-            lines.append(f"  职业限制 {', '.join(allowed_class_names)}")
+        restriction = class_restriction_text(
+            recipe.get("output_allowed_classes", ()), recipe.get("output_allowed_class_names", ()),
+        )
+        if restriction:
+            lines.append(f"  职业限制 {restriction}")
         _append_skill_lines(lines, recipe.get("output_skills"), label="产物技能", indent="  ")
 
 
@@ -1520,14 +1578,16 @@ def _append_inventory_lines(
             f"属性 {_nonzero_mapping_inline(item.get('stats'))} "
             f"空闲"
         )
-        allowed_names = item.get("allowed_class_names")
-        if allowed_names:
-            lines.append(f"  职业限制 {', '.join(allowed_names)}")
+        restriction = class_restriction_text(item.get("allowed_classes", ()), item.get("allowed_class_names", ()))
+        if restriction:
+            lines.append(f"  职业限制 {restriction}")
         _append_skill_lines(lines, item.get("skills"), indent="  ")
     for item in equipped_items:
         equipped = display_ref(refs, "adventurer", item.get("equipped_by"))
+        restriction = class_restriction_text(item.get("allowed_classes", ()), item.get("allowed_class_names", ()))
         lines.append(
             f"- {item.get('name')}({display_ref(refs, 'equipment', item.get('instance_id'))}, {item.get('slot')}) [装备者 {equipped}]"
+            + (f" 职业限制 {restriction}" if restriction else "")
         )
 
 
@@ -1807,7 +1867,7 @@ def _append_budget_lines(lines: list[str], result: Mapping[str, Any]) -> list[st
         bp_used = budget.get("battle_preview_used")
         bp_limit = budget.get("battle_preview_limit")
         bp_text = (
-            f"；preview_battle {bp_used}/{bp_limit}"
+            f"；preview_hunts {bp_used}/{bp_limit}"
             if isinstance(bp_used, int) and isinstance(bp_limit, int)
             else ""
         )

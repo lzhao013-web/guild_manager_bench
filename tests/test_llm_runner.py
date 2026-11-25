@@ -389,7 +389,7 @@ def test_turn_prompt_includes_compact_skill_summaries() -> None:
     prompt = build_turn_prompt(observation)
 
     assert "上一回合：无，这是本局第一个回合。" in prompt
-    assert "备忘录（模型自行维护，局内持续保留）：\n无。" in prompt
+    assert "备忘录（模型自行维护，局内持续保留）：\n已用 0/4000 字符。\n无有效备忘。" in prompt
     assert "已购买升级：无" in prompt.splitlines()
     assert "本回合概览：" in prompt
     assert "可制作配方" in prompt
@@ -427,7 +427,7 @@ def test_turn_prompt_shows_purchased_upgrade_names_without_memo() -> None:
     prompt = build_turn_prompt(observation)
 
     assert "已购买升级：训练场、野战医疗" in prompt.splitlines()
-    assert "备忘录（模型自行维护，局内持续保留）：\n无。" in prompt
+    assert "备忘录（模型自行维护，局内持续保留）：\n已用 0/4000 字符。\n无有效备忘。" in prompt
 
 
 def test_turn_prompt_labels_memo_origin_and_last_update_and_preserves_content() -> None:
@@ -437,7 +437,7 @@ def test_turn_prompt_labels_memo_origin_and_last_update_and_preserves_content() 
 
     prompt = build_turn_prompt({**observation, "turn": 3}, memo=memo)
 
-    assert f"备忘录（模型自行维护，局内持续保留）：最后修改于 T1。\n{memo.content}" in prompt
+    assert f"备忘录（模型自行维护，局内持续保留）：最后修改于 T1。\n已用 {len(memo.content)}/4000 字符。\n{memo.content}" in prompt
     assert prompt.index("备忘录（模型自行维护，局内持续保留）：") < prompt.index("当前回合：")
     assert "上回合由模型" not in prompt
 
@@ -468,7 +468,7 @@ def test_system_prompt_includes_static_rules() -> None:
     assert "每回合最多允许 7 次收费工具调用" in prompt
     assert "end_turn与execute_plan不扣预算" in prompt
     assert "提交时剩余预算必须不少于方案步数" in prompt
-    assert "preview_battle 最多 5 次/回合" in prompt
+    assert "preview_hunts 最多 5 套方案/回合，每套最多6个对位" in prompt
     assert "使用列表左侧的数字 id" in prompt
     assert "技能配置使用技能字符串 ID" in prompt
     assert "战斗日志使用结果中的 battle_id" in prompt
@@ -477,7 +477,7 @@ def test_system_prompt_includes_static_rules() -> None:
     # Dynamic content should NOT be in system prompt
     assert "当前回合" not in prompt
     assert "本回合概览" not in prompt
-    assert "备忘录" not in prompt
+    assert "备忘录最多4000字符" in prompt
     assert "上一回合" not in prompt
     assert "现在是终局阶段" not in prompt
     assert "终局阶段规则" not in prompt
@@ -660,7 +660,7 @@ def test_memo_tool_content_persists_in_all_later_turn_prompts_without_rewriting(
         if "当前回合：1/" in prompt
     )
     assert all(
-        f"备忘录（模型自行维护，局内持续保留）：最后修改于 T1。\n{memo_text}" in turn.prompt
+        f"备忘录（模型自行维护，局内持续保留）：最后修改于 T1。\n已用 {len(memo_text)}/4000 字符。\n{memo_text}" in turn.prompt
         for turn in run.turns[1:]
     )
     assert sum(call.name == "write_memo" for turn in run.turns for call in turn.tool_calls) == 1
@@ -691,7 +691,7 @@ def test_memo_overwrite_and_clear_are_visible_in_subsequent_turns() -> None:
         assert "最后修改于 T3。" in turn.prompt
     for turn in run.turns[5:]:
         assert "长期计划" not in turn.prompt
-        assert "最后修改于 T5。\n无。" in turn.prompt
+        assert "最后修改于 T5。\n已用 0/4000 字符。\n无有效备忘。" in turn.prompt
     result_text = run.turns[4].messages[3]["content"]
     assert "已清空备忘" in result_text
     assert "自动消失" not in result_text
@@ -714,11 +714,8 @@ def test_preview_battle_tool_returns_compact_model_visible_text() -> None:
             LlmAgentResponse(
                 tool_calls=(
                     LlmToolCall(
-                        "preview_battle",
-                        {
-                            "adventurer_id": adventurer_id,
-                            "monster_id": monster_id,
-                        },
+                        "preview_hunts",
+                        {"hunts": [{"adventurer_id": adventurer_id, "monster_id": monster_id}]},
                     ),
                 )
             ),
@@ -732,11 +729,11 @@ def test_preview_battle_tool_returns_compact_model_visible_text() -> None:
     tool_message = next(
         message
         for message in trace.messages
-        if message.get("role") == "tool" and message.get("name") == "preview_battle"
+        if message.get("role") == "tool" and message.get("name") == "preview_hunts"
     )
-    assert tool_message["content"].startswith("成功 preview_battle")
-    assert "资源:" in tool_message["content"]
-    assert "战斗:" in tool_message["content"]
+    assert tool_message["content"].startswith("成功 preview_hunts")
+    assert "总收益" in tool_message["content"]
+    assert "回合末恢复后" in tool_message["content"]
     assert "预算: 已用 1/" in tool_message["content"]
     assert not tool_message["content"].lstrip().startswith("{")
 

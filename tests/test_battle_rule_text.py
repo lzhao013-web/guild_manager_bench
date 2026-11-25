@@ -151,9 +151,20 @@ def test_memo_instructions_place_writing_before_end_turn():
     schema = next(s for s in TurnToolHarness(tools, "memo-instructions", max_tool_calls=20).tool_schemas() if s["name"] == "write_memo")
     assert "各回合独立对话" in schema["description"]
     assert "内容需要更新时于 end_turn 前调用" in schema["description"]
-    assert "跨回合持续保留，不写则不变" in schema["description"]
-    assert '整份覆盖旧内容，不追加，content="" 清空' in schema["description"]
-    assert schema["parameters"]["properties"]["content"].get("minLength", 0) == 0
-    assert schema["parameters"]["properties"]["content"]["maxLength"] == 500
-    assert "准备完成后调用 end_turn 提交讨伐并结束本轮交互" in build_system_prompt()
+    assert "未修改且未到期的块不变" in schema["description"]
+    assert "operations 可批量 add、update、delete" in schema["description"]
+    assert schema["parameters"]["required"] == ["operations"]
+    add, update, delete = schema["parameters"]["properties"]["operations"]["items"]["anyOf"]
+    assert add["properties"]["content"]["maxLength"] == 4000
+    assert "content" in add["required"]
+    assert update["properties"]["expires_turn"]["type"] == ["integer", "null"]
+    assert update["anyOf"] == [{"required": ["content"]}, {"required": ["expires_turn"]}]
+    assert set(delete["properties"]) == {"op", "key"}
+    system = build_system_prompt()
+    writing_guidance = "请使用自然、流畅的中文完整表述你的想法和策略，不要为了节省token将记录省略成堆砌符号与数字、使用大量缩写、语法过于简略的“电报体”。"
+    assert writing_guidance not in schema["description"]
+    assert system.count(writing_guidance) == 1
+    assert "每回合是独立对话。当前游戏状态会重新提供，先前的分析与计划不会自动保留，请通过备忘录保存。" in system
+    assert "备忘录最多4000字符" in system
+    assert "准备完成后调用 end_turn 提交讨伐并结束本轮交互" in system
     assert "end_turn 前用 write_memo 记录" in build_turn_prompt(observation)

@@ -4,7 +4,25 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from guild_manager_bench.bench.llm.memo import Memo
+
 MemoSeed = Callable[[int, bool], dict[str, Any]]
+
+
+def _snapshot(memo: dict[str, Any]) -> dict[str, Any]:
+    value = {"state": "saved", "content": memo["content"], "updated_turn": memo["updated_turn"]} if memo["content"] else {
+        "state": "empty", "updated_turn": memo["updated_turn"]}
+    if "used_chars" in memo:
+        value.update(used_chars=memo["used_chars"], max_chars=memo["max_chars"])
+    if "blocks" in memo:
+        value["blocks"] = memo["blocks"]
+    return value
+
+
+def _at_turn(value: dict[str, Any], turn: int) -> dict[str, Any]:
+    if "blocks" not in value:
+        return value
+    return _snapshot(Memo.from_dict(value).at_turn(turn).to_dict())
 
 
 def memo_write(event: dict[str, Any]) -> dict[str, Any] | None:
@@ -21,8 +39,7 @@ def memo_write(event: dict[str, Any]) -> dict[str, Any] | None:
         return {"state": "legacy"}
     if not isinstance(memo.get("content"), str) or not isinstance(memo.get("updated_turn"), int):
         return {"state": "unavailable"}
-    return {"state": "saved", "content": memo["content"], "updated_turn": memo["updated_turn"]} if memo["content"] else {
-        "state": "empty", "updated_turn": memo["updated_turn"]}
+    return _snapshot(memo)
 
 
 class MemoProjection:
@@ -37,7 +54,8 @@ class MemoProjection:
     def before_turn(self, turn: int, finished: bool = False) -> dict[str, Any]:
         cutoff = turn + int(finished)
         earlier = [key for key in self.committed if key < cutoff]
-        return self.committed[max(earlier)] if earlier else self.initial
+        value = self.committed[max(earlier)] if earlier else self.initial
+        return _at_turn(value, turn)
 
     def accept(self, event: dict[str, Any]) -> None:
         kind = event["type"]
@@ -58,6 +76,7 @@ class MemoProjection:
                 self.committed = {key: value for key, value in self.committed.items() if key < turn + int(finished)}
                 self.before = self.current
         elif kind == "turn_started":
+            self.current = _at_turn(self.current, event["turn"])
             self.before = self.current
         elif kind in {"turn_failed", "turn_retry"}:
             self.current = self.before

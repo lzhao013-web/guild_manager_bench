@@ -75,7 +75,7 @@ def forecast_lines(result: Mapping[str, Any]) -> list[str]:
             if "stats" in item:
                 lines.append(f"  属性：{_stats_text(item['stats'])}")
         else:
-            lines.append(f"{prefix}，职业 {item['template_id']}，招募金币 {item['recruit_gold']}")
+            lines.append(f"{prefix}，class_id={item['template_id']}，招募金币 {item['recruit_gold']}")
             if "base_stats" in item:
                 lines.append(f"  初始属性：{_stats_text(item['base_stats'])}")
                 lines.append(f"  每级成长：{_stats_text(item['stat_growth_per_level'])}")

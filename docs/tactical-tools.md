@@ -2,11 +2,84 @@
 
 本页说明开发版 `default`、`advanced` 的 LLM 工具。方案试算和凭据执行在所有游戏回合可用，正式战力估算仅在 preset 配置的终局阶段开放。未配置终局起始回合时，只提供方案预检，不计算战力。冻结的 `full v1` 保持原协议。
 
+## 筛选升级和制作配方
+
+模型侧 `get_upgrades`、`get_crafting` 默认返回 `detail="summary"` 简表。简表保留非零属性、精确技能、当前实际成本和资源缺口，省略空字段与已满足的前置。复杂技能仍保留费用、次数、触发条件、伤害类型及状态持续时间。已购升级集中列出，不重复历史成本。用 `detail="full"` 查看完整属性和全部前置。
+
+```json
+{"branch": "economy", "status": "locked", "detail": "summary"}
+```
+
+上例用于 `get_upgrades`。它支持 `branch`（common/economy/martial/survival/arcane）、`tier`、`status`（available/locked/purchased）。`get_crafting` 支持 `slot`、`class_id` 和 `craftable_only`。职业筛选使用职业 `template_id`，同时包含该职业专属和通用装备。合法 `class_id` 由当前 preset 的职业定义生成并列入工具 schema 枚举。成员、招募候选与装备职业限制的文本保留中文名称和ID，例如 `连击师（class_id=jester）`，无需跨回合记忆内部名称。错误的职业值会返回合法值列表。
+
+```json
+{"slot": "armor", "class_id": "cleric"}
+```
+
+两个工具还支持 `ids` 数字列表和 `name_contains` 名称或内部ID子串筛选。多个条件取交集，结果保持原顺序和本回合原编号。默认不筛掉尚不可购买或制作的未来目标。无匹配时明确返回0项。直接 Python `get_upgrades`、`get_crafting` 调用继续默认完整视图。
+
+## 整队讨伐预览
+
+`preview_hunts` 替换开发版模型工具 `preview_battle`。它只计算模型提交的对位，不选择目标或推荐阵容。
+
+```json
+{"hunts": [{"adventurer_id": 1, "monster_id": 3}, {"adventurer_id": 2, "monster_id": 5}]}
+```
+
+- 每套最多6个对位，每名角色和每个怪物各至多出战一次。`hunts=[]` 预览全员休整。
+- 复用真实回合结算引擎，按提交顺序计算胜负、奖励、挑战职业资格和回合末恢复。
+- 返回逐场战后HP/MP、敌方剩余HP、总收益，以及全队回合末恢复后的HP/MP，包含休整与战败成员。
+- 不改变真实回合、资源、怪池、资格或会话事件。非法列表整单失败，不保存部分战斗日志。
+- 每次包括失败消耗1次普通调用及1次整队预览额度。默认每回合最多3套方案，由现有 `max_battle_preview_per_turn` 配置控制。3套最多模拟18场，额度单位不再是单场战斗。
+- 每场返回的 `battle_id` 可用于 `get_battle_log`，查询日志不占整队预览额度。日志反映当时状态，不随调整更新。
+
+可以传入尚未执行的准备方案 `plan_id`，在投影状态上预览讨伐，无需先招募、购买或换装：
+
+```json
+{"plan_id": "准备试算返回的凭据", "hunts": [{"adventurer_id": "$hero", "monster_id": 3}]}
+```
+
+角色可使用该准备方案的 `$别名`，或 `plan_entities` 列出的投影编号。包含刷新时，新怪物使用 `plan_entities.monsters` 的编号。这些投影编号仅用于带同一 `plan_id` 的 `preview_hunts`，不改变真实编号，也不能直接用于真实动作。准备方案已执行、真实状态改变、跨回合或跨会话后，必须重新试算。
+
+## 跨回合备忘
+
+每回合是独立对话。当前游戏状态会重新提供，先前的分析与计划不会自动保留，请通过备忘录保存。
+
+`write_memo(operations)` 按稳定块名批量新增、修改和删除备忘。只提交变化的块，未修改且未到期的块持续保留。整批包括失败只消耗一次普通工具预算。每回合初自动提供全部有效块，不需要另行读取。
+
+例如在T8记录：
+
+```json
+{"operations": [
+  {"op": "add", "key": "待验证", "content": "比较已选两套配装的续航，再决定是否换装。", "expires_turn": 17},
+  {"op": "add", "key": "比较结论", "content": "保留当前配置下的结论，升级或换装后重新验证。"}
+]}
+```
+
+每块自动记录 `created_turn` 和 `updated_turn`。`expires_turn=17` 表示T17仍有效，T18起停止提供并释放容量，历史回放不变。新增时省略有效期表示持续保留。修改时省略有效期则保留原值，显式设为 `null` 可取消有效期，修改正文不会自动续期。
+
+```json
+{"operations": [
+  {"op": "update", "key": "比较结论", "content": "更新后的结论及其适用配置。", "expires_turn": null},
+  {"op": "delete", "key": "待验证"}
+]}
+```
+
+- `add` 必须提供非空 `content`，块名不得已存在。`update`、`delete` 的块名必须存在。`update` 至少提供正文或有效期之一，正文替换该块全文。`delete` 只提供 `op` 和 `key`。
+- 同一批每个块名只能出现一次。系统先验证全部操作及最终容量，成功后一起提交。任一操作非法或超容时，原备忘保持不变。
+- 所有有效块的块名与正文合计最多4000字符，系统生成的时间标签不占容量。返回 `memo.used_chars` 和 `memo.max_chars`，失败返回中也保留当前已用量。模型侧返回只确认操作和用量，不重复回显全部正文。
+- 续跑只恢复已完成历史前缀的成功操作，并按恢复到的回合应用有效期。失败尝试的更新会回滚。
+- 旧的直接调用 `write_memo(content)` 仍按整份覆盖处理，空字符串清空全部备忘。旧全文与批量操作交替使用时，旧正文作为 `全文` 块保留。新模型的工具 schema 只提供批量操作。
+
+模型提示采用：
+
+> 备忘录只记录“以后用得上、查不到”的关键信息：跨回合计划、预留资源、待办验证、核心对比结论等。不要抄录当前面板状态、基础规则和随时能查到的列表。如果有必要，给时效信息标上过期回合，过期的和办完的及时删掉。4000字是上限，不必强求写满。
+
 ## 方案试算
 
 `preview_team_power(operations)` 按顺序预检最多20步准备动作，不改变真实状态，不消耗游戏资源，也不写入会话事件。每次试算扣1次调用预算，非法方案的试算也扣1次。
 
-支持当前启用的制作、招募、解雇、经验分配、天赋购买、穿脱装备、技能配置和付费刷新。不能嵌套查询、预览、执行方案、备忘录或结束回合。
+支持当前启用的制作、招募、解雇、经验分配、天赋购买、穿脱装备、技能配置、材料兑换和付费刷新。不能嵌套查询、预览、执行方案、备忘录或结束回合。
 
 ```json
 {
@@ -18,7 +91,7 @@
 }
 ```
 
-真实对象使用本回合数字编号。招募与制作步骤可用 `as` 定义局部名称，后续步骤通过 `$名称` 引用。名称不能重复，角色与装备引用不能混用。这些名称只在本方案内有效，试算产生的内部编号不能用于真实操作。
+真实对象使用本回合数字编号。招募与制作步骤可用 `as` 定义局部名称，后续步骤通过 `$名称` 引用。名称不能重复，角色与装备引用不能混用。这些名称用于本方案内的后续步骤，也可用于带同一 `plan_id` 的讨伐预览。试算产生的内部编号不能用于真实操作。
 
 合法非空方案返回：
 
@@ -26,7 +99,8 @@
 - `operation_count`、`required_calls`：方案步数，以及提交时必须满足的最低预算余额。
 - `remaining_calls`：本次试算扣费后的剩余预算。
 - `can_execute`：按试算后的余额判断，现在是否满足提交门槛。
-- `plan_id`：绑定当前游戏状态与固定方案内容的执行凭据。
+- `plan_id`：绑定当前游戏状态与固定方案内容的执行凭据，也可用于投影讨伐预览。
+- `plan_entities`：用于该方案讨伐预览的角色和怪物编号，不是当前真实对象编号表。
 
 终局前不计算或返回综合战力、预测胜率或评分差值。终局阶段额外返回 `current_rank_score`、`projected_rank_score` 和 `rank_score_delta`，均使用正式 `rank_score`。差值相对于调用前的真实状态，不是相对于回合开始。
 
@@ -69,5 +143,5 @@ preset 启用 `expose_tactics` 时，可调用 `configure_tactics`：
 ## 验证
 
 ```text
-uv run pytest tests/test_plan_execution.py tests/test_tactical_tools.py tests/test_endgame_feedback.py -q
+uv run pytest tests/test_decision_support.py tests/test_plan_execution.py tests/test_tactical_tools.py tests/test_endgame_feedback.py -q
 ```

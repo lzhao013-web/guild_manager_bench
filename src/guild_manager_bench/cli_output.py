@@ -33,7 +33,7 @@ _TOOL_NAMES = {
     "purchase_upgrade": "升级公会", "allocate_experience": "分配经验",
     "recruit_adventurer": "招募冒险者", "dismiss_adventurer": "解散冒险者",
     "equip_item": "穿戴装备", "unequip_item": "卸下装备",
-    "preview_battle": "模拟对战", "preview_team_power": "方案试算", "execute_plan": "执行方案",
+    "preview_battle": "模拟对战", "preview_hunts": "预览讨伐方案", "preview_team_power": "方案试算", "execute_plan": "执行方案",
     "preview_monster_refresh": "预览怪物刷新", "refresh_monsters": "刷新怪物",
     "write_memo": "保存备忘录", "end_turn": "安排讨伐并结束回合",
 }
@@ -418,11 +418,19 @@ class RunReporter:
             memo = result["memo"]
             content = memo["content"].replace("\n", " ")
             if "updated_turn" in memo:
-                action = "备忘录已覆盖" if content else "备忘录已清空"
-                return f"{action} · T{memo['updated_turn']} · {content[:100]}{'…' if len(content) > 100 else ''}"
+                if "blocks" in memo:
+                    action = f"备忘录已更新 · {len(memo['blocks'])} 块"
+                else:
+                    action = "备忘录已覆盖" if content else "备忘录已清空"
+                usage = f" · 已用 {memo['used_chars']}/{memo['max_chars']} 字符" if "used_chars" in memo else ""
+                return f"{action} · T{memo['updated_turn']}{usage} · {content[:100]}{'…' if len(content) > 100 else ''}"
             return f"备忘录已保存 · 共 {memo['count']} 条 · {content[:100]}{'…' if len(content) > 100 else ''}"
         if name == "preview_monster_refresh":
             return f"预览怪物刷新 · 第{result['refresh_number']}次 · 实刷需{result['gold_cost']}金币（未执行）"
+        if name == "preview_hunts":
+            reward = result["reward"]
+            return (f"预览讨伐方案 · {len(result['battles'])}个对位 · "
+                    f"金币{reward['gold']}、经验{reward['experience']}（未执行）")
         if name == "preview_battle":
             p = result["preview"]
             return f"模拟对战 · {p['adventurer_name']} → {p['monster_name']} · {'胜利' if p['won'] else '未获胜'}（非实际讨伐）"

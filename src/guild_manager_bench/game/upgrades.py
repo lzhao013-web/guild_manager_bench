@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Iterable, Mapping
+from typing import Any, Iterable, Mapping
 
 from guild_manager_bench.game.crafting import MaterialCost
 
@@ -181,7 +181,7 @@ def purchase_upgrade(
     _validate_upgrade_and_inventory(upgrade, inventory)
     missing = missing_upgrade_requirements(upgrade, inventory)
     if missing:
-        raise UpgradeError(f"cannot purchase upgrade: {missing}")
+        raise UpgradeError(f"无法购买升级：{_format_missing_requirements(missing)}")
 
     materials = dict(inventory.materials)
     for cost in upgrade.material_costs:
@@ -193,6 +193,28 @@ def purchase_upgrade(
         unlocked_upgrade_ids=inventory.unlocked_upgrade_ids | {upgrade.upgrade_id},
     )
     return UpgradePurchaseResult(upgrade_id=upgrade.upgrade_id, inventory=new_inventory)
+
+
+def _format_missing_requirements(missing: Mapping[str, Any]) -> str:
+    # 延迟导入：state 依赖本模块，顶层导入会形成循环。
+    from guild_manager_bench.game.state import MATERIAL_NAMES
+
+    parts = []
+    if "already_unlocked" in missing:
+        parts.append("该天赋已解锁")
+    if "gold" in missing:
+        parts.append(f"金币缺 {missing['gold']}")
+    if "experience" in missing:
+        parts.append(f"经验缺 {missing['experience']}")
+    if "materials" in missing:
+        parts.append(
+            "材料缺 " + "、".join(f"{MATERIAL_NAMES.get(k, k)}×{v}" for k, v in missing["materials"].items())
+        )
+    if "required_upgrade_ids" in missing:
+        parts.append("缺少前置天赋 " + "、".join(missing["required_upgrade_ids"]))
+    if "exclusive_upgrade_ids" in missing:
+        parts.append("与互斥天赋冲突 " + "、".join(missing["exclusive_upgrade_ids"]))
+    return "，".join(parts)
 
 
 def validate_upgrade_tree(upgrades: tuple[GlobalUpgrade, ...]) -> None:

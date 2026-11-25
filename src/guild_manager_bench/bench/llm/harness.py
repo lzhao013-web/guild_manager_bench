@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import cached_property
 from typing import Any, Mapping
 
+from guild_manager_bench.bench.llm.memo import MAX_MEMO_CHARS, Memo, MemoStore, WRITE_MEMO_SCHEMA as _WRITE_MEMO_SCHEMA
 from guild_manager_bench.bench.llm.refs import (
     build_numeric_refs,
     resolve_tool_arguments_with_refs,
@@ -48,44 +49,6 @@ class ToolBudget:
         self.used += 1
 
 
-MAX_MEMO_CHARS = 500
-
-
-@dataclass(frozen=True, slots=True)
-class Memo:
-    """单份工作备忘及其最后修改回合。"""
-
-    content: str = ""
-    updated_turn: int | None = None
-
-
-@dataclass(slots=True)
-class MemoStore:
-    """本局内持续保留的工作备忘，写入时整份覆盖。"""
-
-    memo: Memo = field(default_factory=Memo)
-
-    def write(self, content: Any, *, turn: int) -> dict[str, Any]:
-        if not isinstance(content, str):
-            raise ValueError("content must be a string")
-        if len(content) > MAX_MEMO_CHARS:
-            raise ValueError(f"content must be <= {MAX_MEMO_CHARS} characters")
-
-        self.memo = Memo(content=content.strip(), updated_turn=turn)
-        return {
-            "content": self.memo.content,
-            "updated_turn": self.memo.updated_turn,
-            "max_chars": MAX_MEMO_CHARS,
-        }
-
-    def snapshot(self) -> Memo:
-        return self.memo
-
-    def restore(self, memo: Memo) -> None:
-        """恢复正文及最后修改回合，用于回滚失败尝试。"""
-        self.memo = memo
-
-
 class TurnToolHarness:
     """单个游戏回合内的 LLM 工具调用包装器。
 
@@ -114,6 +77,7 @@ class TurnToolHarness:
         # 固化本回合的数字 ID 映射，避免并行动作导致列表变化后序号偏移
         observation = tools.get_observation(session_id)["observation"]
         self._turn = int(observation["turn"])
+        self.memo_store.expire(self._turn)
         self._turn_start_state = tools.get_state(session_id)
         self._turn_refs = build_numeric_refs(observation)
         self._agent_tool_names = tuple(
@@ -146,15 +110,15 @@ class TurnToolHarness:
         """调用一个 LLM 工具，并附加当前回合预算状态。"""
 
         if self.ended:
-            return self._error("回合已结束")
+            return self._error("回合已结束", tool=name)
 
         if name not in {"end_turn", "execute_plan"} and self.budget.exhausted:
-            return self._error("工具调用次数已用尽；仅允许使用 end_turn")
+            return self._error("工具调用次数已用尽；仅允许使用 end_turn", tool=name)
 
-        if name == "preview_battle" and self._battle_preview_count >= self.max_battle_preview_per_turn:
+        if name == "preview_hunts" and self._battle_preview_count >= self.max_battle_preview_per_turn:
             return self._error(
-                f"preview_battle 次数已达上限（每回合 {self.max_battle_preview_per_turn} 次）；"
-                "请仅在关键对战时使用 preview_battle"
+                f"preview_hunts 次数已达上限（每回合 {self.max_battle_preview_per_turn} 套方案）。"
+                "可查询已有战斗日志或提交 end_turn"
             )
 
         if name not in {"end_turn", "execute_plan"}:
@@ -164,21 +128,36 @@ class TurnToolHarness:
             result = self._write_memo(arguments)
         else:
             try:
+                call_refs = self._turn_refs
+                if name == "preview_hunts" and arguments and arguments.get("plan_id") is not None:
+                    call_refs = self._plan_refs(arguments["plan_id"])
                 result = self.tools.call_tool(
                     name,
-                    self._arguments_with_session(name, arguments),
+                    self._arguments_with_session(name, arguments, refs=call_refs),
                 )
+                if name == "preview_hunts" and result.get("ok"):
+                    result["_preview_refs"] = deepcopy(call_refs)
             except (ToolCallError, ValueError) as exc:
                 result = {"ok": False, "error": str(exc)}
 
         if name == "preview_team_power" and result.get("ok") is True:
+            if "plan_id" in result:
+                observation = self.tools.get_plan_observation(self.session_id, result["plan_id"])
+                refs = deepcopy(self._turn_refs)
+                update_numeric_refs(refs, observation)
+                result["plan_entities"] = {
+                    "adventurers": [{"id": refs["adventurer"][a["adventurer_id"]], "name": a["name"]}
+                                    for a in observation["adventurers"]],
+                    "monsters": [{"id": refs["monster"][m["monster_id"]], "name": m["name"]}
+                                 for m in observation["monsters"]],
+                }
             result = {
                 **result,
                 "remaining_calls": self.budget.remaining,
                 "can_execute": bool(result.get("plan_id")) and self.budget.remaining >= result["required_calls"],
             }
 
-        if name == "preview_battle":
+        if name == "preview_hunts":
             self._battle_preview_count += 1
 
         if name == "end_turn" and result.get("ok") is True:
@@ -198,13 +177,23 @@ class TurnToolHarness:
         observation = self.tools.get_observation(self.session_id)["observation"]
         update_numeric_refs(self._turn_refs, observation)
 
+    def _plan_refs(self, plan_id: str):
+        observation = self.tools.get_plan_observation(self.session_id, plan_id)
+        refs = deepcopy(self._turn_refs)
+        update_numeric_refs(refs, observation)
+        return refs
+
     def _arguments_with_session(
         self,
         name: str,
         arguments: Mapping[str, Any] | None,
+        *,
+        refs=None,
     ) -> dict[str, Any]:
         values = {} if arguments is None else dict(arguments)
-        values = resolve_tool_arguments_with_refs(self._turn_refs, name, values)
+        values = resolve_tool_arguments_with_refs(self._turn_refs if refs is None else refs, name, values)
+        if name in {"get_upgrades", "get_crafting"}:
+            values.setdefault("detail", "summary")
         values["session_id"] = self.session_id
         if name == "execute_plan":
             values["remaining_calls"] = self.budget.remaining
@@ -213,13 +202,16 @@ class TurnToolHarness:
     def _write_memo(self, arguments: Mapping[str, Any] | None) -> dict[str, Any]:
         values = {} if arguments is None else dict(arguments)
         try:
-            memo = self.memo_store.write(values.get("content"), turn=self._turn)
+            memo = self.memo_store.apply(values, turn=self._turn)
         except ValueError as exc:
-            return {"ok": False, "error": str(exc)}
+            return {"ok": False, "error": str(exc), "memo": self.memo_store.snapshot().to_dict()}
         return {"ok": True, "memo": memo}
 
-    def _error(self, message: str) -> dict[str, Any]:
-        return self._with_budget({"ok": False, "error": message})
+    def _error(self, message: str, *, tool: str | None = None) -> dict[str, Any]:
+        result: dict[str, Any] = {"ok": False, "error": message}
+        if tool == "write_memo":
+            result["memo"] = self.memo_store.snapshot().to_dict()
+        return self._with_budget(result)
 
     def _with_budget(self, result: dict[str, Any]) -> dict[str, Any]:
         data = dict(result)
@@ -243,25 +235,3 @@ class TurnToolHarness:
             "battle_preview_used": self._battle_preview_count,
             "battle_preview_limit": self.max_battle_preview_per_turn,
         }
-
-
-_WRITE_MEMO_SCHEMA: dict[str, Any] = {
-    "name": "write_memo",
-    "description": (
-        "各回合独立对话，备忘录在本局跨回合持续保留，不写则不变。"
-        '每次写入整份覆盖旧内容，不追加，content="" 清空。'
-        "仅在内容需要更新时于 end_turn 前调用，及时移除已完成或过期的计划。"
-    ),
-    "parameters": {
-        "type": "object",
-        "required": ["content"],
-        "properties": {
-            "content": {
-                "type": "string",
-                "maxLength": MAX_MEMO_CHARS,
-                "description": f"完整备忘内容，最多 {MAX_MEMO_CHARS} 字符。空字符串清空备忘。",
-            },
-        },
-        "additionalProperties": False,
-    },
-}

@@ -82,7 +82,11 @@ def resolve_tool_arguments_with_refs(
     """使用预构建的 refs 映射解析 LLM 数字 ID 为游戏内部 ID。"""
 
     values = dict(arguments)
-    if name == "craft_equipment":
+    if name in {"get_crafting", "get_upgrades"}:
+        category = "recipe" if name == "get_crafting" else "upgrade"
+        if isinstance(values.get("ids"), list):
+            values["ids"] = [_resolve_ref(value, category, "ids", refs) for value in values["ids"]]
+    elif name == "craft_equipment":
         _resolve_field(values, "recipe_id", "recipe", refs)
     elif name == "purchase_upgrade":
         _resolve_field(values, "upgrade_id", "upgrade", refs)
@@ -97,7 +101,7 @@ def resolve_tool_arguments_with_refs(
         _resolve_field(values, "adventurer_id", "adventurer", refs)
     elif name == "dismiss_adventurer":
         _resolve_field(values, "adventurer_id", "adventurer", refs)
-    elif name == "end_turn":
+    elif name in {"end_turn", "preview_hunts"}:
         hunts = values.get("hunts")
         if isinstance(hunts, Sequence) and not isinstance(hunts, str):
             values["hunts"] = [

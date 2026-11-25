@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Mapping, Sequence
 
 from guild_manager_bench.bench.llm.formatting import skill_summary_lines, tactics_summary_lines
-from guild_manager_bench.bench.llm.harness import Memo
+from guild_manager_bench.bench.llm.memo import MAX_MEMO_CHARS, MEMO_GUIDANCE, Memo
 from guild_manager_bench.bench.llm.refs import (
     build_numeric_refs,
     display_ref,
@@ -48,12 +48,13 @@ def build_system_prompt(
     challenge_rules: Mapping[str, Any] | None = None,
     monster_refresh_rules: Mapping[str, Any] | None = None,
     scoring_rules: Mapping[str, Any] | None = None,
+    expose_battle_preview: bool = True,
 ) -> str:
     """构建系统提示词（静态游戏规则，跨回合不变，适合 LLM prompt caching）。"""
 
     bp_limit_text = (
-        f"；preview_battle 最多 {max_battle_preview_per_turn} 次/回合"
-        if max_battle_preview_per_turn
+        f"；preview_hunts 最多 {max_battle_preview_per_turn} 套方案/回合，每套最多6个对位"
+        if expose_battle_preview and max_battle_preview_per_turn
         else ""
     )
 
@@ -70,6 +71,10 @@ def build_system_prompt(
     lines = [
             "你正在进行 Guild Manager Bench。",
             f"目标：{objective}",
+            "每回合是独立对话。当前游戏状态会重新提供，先前的分析与计划不会自动保留，请通过备忘录保存。",
+            f"备忘录最多{MAX_MEMO_CHARS}字符，按命名块批量增删改，未修改且未到期的块持续保留。",
+            MEMO_GUIDANCE,
+            "请使用自然、流畅的中文完整表述你的想法和策略，不要为了节省token将记录省略成堆砌符号与数字、使用大量缩写、语法过于简略的“电报体”。",
             *([_evaluation_rules(scoring_rules)] if scoring_rules is not None else []),
             "",
             "回合流程：每回合可查询详情或调整队伍，准备完成后调用 end_turn 提交讨伐并结束本轮交互。",
@@ -95,7 +100,18 @@ def build_system_prompt(
             "同一凭据只执行一次，重复提交返回已有结果。",
             "对象编号：角色、怪物、配方、升级、候选和装备使用列表左侧的数字 id（同回合已有编号固定，新对象编号见工具返回）。技能配置使用技能字符串 ID，战斗日志使用结果中的 battle_id。",
             "工具返回：每次调用均返回执行状态（成功/失败）、剩余预算及结果摘要。准备工具仅返回变更摘要，完整列表详情需通过对应的查询工具查看。",
+            "目录查询：get_upgrades、get_crafting默认简表，可按类别、状态、名称或ids筛选，用detail=full展开详情。筛选不改变编号，默认保留尚不可购买的未来目标。",
+            "讨伐预览：preview_hunts(hunts)只读模拟整套对位，返回逐场战后资源、总收益及全队回合末恢复。hunts=[]预览休整。可带准备方案plan_id，在投影状态上使用返回的预览编号或$角色别名，不执行准备方案。每次包括失败消耗一次普通预算和一次整队预览额度，不替你选择对位。",
     ]
+    if not expose_battle_preview:
+        lines = [line for line in lines if not line.startswith("讨伐预览：")]
+    if rules.get("opening_turns", 0) > 0 and rules.get("opening_hp_floor_percent", 0) > 0:
+        lines.append(
+            f"开局恢复保底：仅在T1至T{rules['opening_turns']}回合末，正常恢复后，"
+            f"全体角色的HP至少达到最大HP×{_percent(rules['opening_hp_floor_percent'])}（向下取整）。"
+            "已超过该值的不额外回血，不额外回复MP。"
+            f"T{rules['opening_turns'] + 1}起仅按普通回合末恢复公式结算。"
+        )
     if talent_tree_enabled:
         lines.extend([
             "自动回复：自身行动开始、持续状态结算后检查，每场一次，不占普通主动选择、不额外普攻。可停用，不能排序。",
@@ -175,7 +191,7 @@ def build_turn_prompt(
     parts = [
         _previous_turn_summary(previous_turn_event),
         "",
-        _memo_summary(memo),
+        _memo_summary(memo.at_turn(int(observation["turn"]))),
         "",
         _state_summary(observation),
     ]
@@ -194,12 +210,13 @@ def _memo_summary(memo: Memo) -> str:
     heading = "备忘录（模型自行维护，局内持续保留）："
     if memo.updated_turn is not None:
         heading += f"最后修改于 T{memo.updated_turn}。"
+    usage = f"已用 {memo.used_chars}/{MAX_MEMO_CHARS} 字符。"
     if not memo.content:
         return (
-            f"{heading}\n无。跨回合计划可在 end_turn 前用 write_memo 记录。"
-            '每次写入整份覆盖，content="" 清空，不写则保留。'
+            f"{heading}\n{usage}\n无有效备忘。跨回合计划可在 end_turn 前用 write_memo 记录。"
+            "operations 支持批量 add/update/delete，未修改且未到期的块保留。"
         )
-    return f"{heading}\n{memo.content}"
+    return f"{heading}\n{usage}\n{memo.content}"
 
 
 def _endgame_warning(turn: int, turns_remaining: int, max_turns: int) -> str:
@@ -269,6 +286,8 @@ def _state_summary(observation: Mapping[str, Any]) -> str:
     lines.append(_turn_overview(observation))
     lines.append("冒险者：")
     for adventurer in adventurers:
+        class_id = adventurer.get("template_id")
+        class_text = f"（class_id={class_id}）" if class_id else ""
         resources = adventurer["resources"]
         stats = adventurer["effective_stats"]
         exp_text = _experience_text(adventurer)
@@ -283,7 +302,7 @@ def _state_summary(observation: Mapping[str, Any]) -> str:
         lines.append(
             "- "
             f"{display_ref(refs, 'adventurer', adventurer['adventurer_id'])} "
-            f"{adventurer['name']} "
+            f"{adventurer['name']}{class_text} "
             f"Lv{adventurer['level']} "
             f"EXP {exp_text} "
             f"每级属性成长 {growth_text} "

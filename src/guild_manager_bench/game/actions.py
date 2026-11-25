@@ -93,7 +93,7 @@ class UnequipAction:
     def __post_init__(self) -> None:
         _require_non_empty("adventurer_id", self.adventurer_id)
         if self.slot not in EQUIPMENT_SLOTS:
-            raise ValueError(f"unknown equipment slot: {self.slot}")
+            raise ValueError(f"未知的装备槽位: {self.slot}")
 
 
 @dataclass(frozen=True, slots=True)

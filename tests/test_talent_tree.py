@@ -261,13 +261,19 @@ def test_llm_query_exposes_complete_tree_and_keeps_legacy_tool_contract():
     sid = advanced.start_session()["session_id"]
     result = advanced.get_upgrades(sid)
     text = _format_tool_result_for_model("get_upgrades", result)
-    for part in ("经验池", "材料", "互斥", "工艺标准化", "15%", "战争学院", "秘法结社"):
+    for part in ("经验池", "材料", "互斥", "工艺标准化", "18%", "战争学院", "秘法结社"):
         assert part in text
     assert len(result["global_upgrades"]) == 35
     craft = next(u for u in result["global_upgrades"] if u["upgrade_id"] == "craft_standardization")
-    assert (craft["gold_cost"], craft["experience_cost"], craft["material_costs"], craft["craft_gold_discount_percent"]) == (150, 50, {"iron_ore": 4}, 15)
+    assert (craft["gold_cost"], craft["experience_cost"], craft["material_costs"], craft["craft_gold_discount_percent"]) == (120, 50, {"iron_ore": 4}, 18)
     legacy = GuildManagerTools(load_game_definition("data/presets/full"))
-    assert legacy.list_tool_schemas() == tool_schemas(expose_battle_preview=True)
+    # 直接加载 full 数据的 live 工具额外提供方案工具，冻结 full/v1 由 test_protocols 验证。
+    expected_schemas = tool_schemas(expose_battle_preview=True)
+    crafting = next(s for s in expected_schemas if s["name"] == "get_crafting")
+    crafting["parameters"]["properties"]["class_id"]["enum"] = sorted({
+        t.template_id for t in legacy.definition.content.recruitable_adventurers
+    } | {a.template_id for a in legacy.definition.content.adventurers if a.template_id})
+    assert [s for s in legacy.list_tool_schemas() if s["name"] not in {"preview_team_power", "execute_plan"}] == expected_schemas
     legacy_result = legacy.get_upgrades(legacy.start_session()["session_id"])
     assert set(legacy_result) == {"session_id", "gold", "global_upgrades"}
     assert "全局天赋" not in build_system_prompt()

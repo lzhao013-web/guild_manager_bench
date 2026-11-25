@@ -72,6 +72,7 @@ def plan_operations_schema(schemas: Sequence[Mapping[str, Any]]) -> dict[str, An
 class PreparedPlan:
     projected_state: GameState
     actions: tuple[PreparationAction, ...]
+    aliases: dict[str, tuple[str, str]]
 
 
 def simulate_preparation_plan(
@@ -138,4 +139,4 @@ def simulate_preparation_plan(
             for alias, (_, canonical_id) in aliases.items():
                 message = message.replace(canonical_id, f"${alias}")
             raise ValueError(f"方案第 {index} 步：{message}") from exc
-    return PreparedPlan(state, tuple(actions))
+    return PreparedPlan(state, tuple(actions), aliases)

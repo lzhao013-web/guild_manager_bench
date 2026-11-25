@@ -95,14 +95,29 @@ def test_winning_preview_never_clears_target_or_grants_rewards(game):
     before = tools.get_state(sid)
     events = deepcopy(tools.get_events(sid))
     monster_ref = harness._turn_refs["monster"]["challenge_doom_oracle"]
-    result = harness.call_tool("preview_battle", {"adventurer_id": 1, "monster_id": monster_ref})
-    assert result["ok"] and result["preview"]["won"]
+    result = harness.call_tool("preview_hunts", {"hunts": [{"adventurer_id": 1, "monster_id": monster_ref}]})
+    assert result["ok"] and result["battles"][0]["won"]
     assert tools.get_state(sid) is before
     assert tools.get_events(sid) == events
     assert not tools.get_state(sid).used_challenge_class_ids
-    log = harness.call_tool("get_battle_log", {"battle_id": result["preview"]["battle_id"]})
+    log = harness.call_tool("get_battle_log", {"battle_id": result["battles"][0]["battle_id"]})
     assert log["battle"]["monster_name"].startswith("【挑战】")
     assert log["tool_budget"]["battle_preview_used"] == 1
+
+
+def test_hunt_preview_validates_same_class_challenges_sequentially_and_atomically(game):
+    tools, sid = game
+    harness = TurnToolHarness(tools, sid, max_tool_calls=20)
+    before = tools.get_state(sid)
+    events = deepcopy(tools.get_events(sid))
+    targets = [harness._turn_refs["monster"][f"challenge_{name}"] for name in ("doom_oracle", "iron_colossus")]
+    result = harness.call_tool("preview_hunts", {"hunts": [
+        {"adventurer_id": 1, "monster_id": targets[0]},
+        {"adventurer_id": 2, "monster_id": targets[1]},
+    ]})
+    assert not result["ok"] and "职业已成功通关" in result["error"]
+    assert tools.get_state(sid) is before and tools.get_events(sid) == events
+    assert sid not in tools._battle_previews
 
 
 @pytest.mark.parametrize("challenge,core", [
@@ -196,7 +211,7 @@ def test_forecast_challenges_are_conditional_paginated_and_not_operable(game):
     assert "此前尚未击败" in entry["availability_condition"]
     assert "仅在此前尚未击败" in _format_tool_result_for_model("get_forecast", response)
     assert harness._turn_refs == refs
-    assert not harness.call_tool("preview_battle", {"adventurer_id": 1, "monster_id": entry["forecast_ref"]})["ok"]
+    assert not harness.call_tool("preview_hunts", {"hunts": [{"adventurer_id": 1, "monster_id": entry["forecast_ref"]}]})["ok"]
     kill(tools, sid)
     forecast = tools.get_forecast(sid, kind="monsters", start_turn=32, tier="challenge", material="轮回核心")
     assert forecast["total_matches"] == 0
@@ -478,7 +493,7 @@ def test_replaying_confirmed_challenge_win_restores_class_limit(game, tmp_path):
     from guild_manager_bench.bench.llm.runner import _restore_from_replay_archive
 
     tools, _ = game
-    d = replace(tools.definition, rules=replace(tools.definition.rules, max_turns=3),
+    d = replace(tools.definition, rules=replace(tools.definition.rules, max_turns=3, material_exchange=None),
                 content=replace(tools.definition.content, challenge_archetypes=tuple(
                     replace(c, min_turn=1) for c in tools.definition.content.challenge_archetypes)))
     original = GuildManagerTools(d)

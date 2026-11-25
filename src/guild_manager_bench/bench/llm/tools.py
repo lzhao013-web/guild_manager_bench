@@ -11,10 +11,11 @@ from uuid import uuid4
 
 from guild_manager_bench.bench.llm.battle_log import BATTLE_LOG_SCHEMA, battle_log_id, query_battle_log
 from guild_manager_bench.bench.llm.forecast import FORECAST_SCHEMA, query_forecast
+from guild_manager_bench.bench.llm.catalog import catalog_properties, filter_recipes, filter_upgrades
 from guild_manager_bench.bench.llm.monster_refresh import PREVIEW_REFRESH_SCHEMA, REFRESH_SCHEMA
 from guild_manager_bench.bench.llm.material_exchange import material_exchange_schema
 from guild_manager_bench.game.actions import PreparationAction
-from guild_manager_bench.game.engine import GameError, preview_battle as preview_battle_result
+from guild_manager_bench.game.engine import GameError, end_turn as simulate_end_turn, preview_battle as preview_battle_result
 from guild_manager_bench.game.loader import load_game_definition
 from guild_manager_bench.game.models import CombatResources
 from guild_manager_bench.game.state import GameDefinition, GameState
@@ -46,7 +47,7 @@ def tool_schemas(*, expose_battle_preview: bool = False, talent_tree_enabled: bo
 
     schemas = list(_BASE_TOOL_SCHEMAS)
     if expose_battle_preview:
-        schemas.append(_battle_preview_schema(max_battle_preview_per_turn))
+        schemas.append(_hunts_preview_schema(max_battle_preview_per_turn))
     if expose_tactics:
         schemas.append(_TACTICS_SCHEMA)
     if expose_battle_log:
@@ -61,7 +62,7 @@ def tool_schemas(*, expose_battle_preview: bool = False, talent_tree_enabled: bo
         unequip["parameters"]["properties"]["slot"]["enum"].append("ultimate")
     if talent_tree_enabled:
         descriptions = {
-            "get_upgrades": "查看全局天赋树全部节点的成本、效果、前置、互斥与解锁状态。",
+            "get_upgrades": "筛选全局天赋的成本、精确效果、缺口与互斥。默认简表，detail=full 展开全部前置。",
             "purchase_upgrade": "消耗金币、材料和经验池经验解锁一个全局天赋节点。需满足前置且未选互斥节点，解锁后不可退回。",
         }
         for schema in schemas:
@@ -74,6 +75,8 @@ def tool_schemas(*, expose_battle_preview: bool = False, talent_tree_enabled: bo
 class _PlanReceipt:
     base_state: GameState
     actions: tuple[PreparationAction, ...]
+    projected_state: GameState
+    aliases: dict[str, tuple[str, str]]
     result: dict[str, Any] | None = None
 
 
@@ -101,6 +104,11 @@ class GuildManagerTools:
 
         return cls(load_game_definition(data_dir))
 
+    def _class_ids(self) -> set[str]:
+        return {t.template_id for t in self.definition.content.recruitable_adventurers} | {
+            a.template_id for a in self.definition.content.adventurers if a.template_id
+        }
+
     def list_tool_schemas(self) -> list[dict[str, Any]]:
         """返回当前工具层支持的工具 schema。"""
 
@@ -114,6 +122,14 @@ class GuildManagerTools:
             expose_ultimates=any(t.slot == "ultimate" for t in self.definition.content.equipment_templates),
             max_battle_preview_per_turn=self.definition.llm_tools.max_battle_preview_per_turn,
         )
+        crafting = next(schema for schema in schemas if schema["name"] == "get_crafting")
+        properties = crafting["parameters"]["properties"]
+        class_ids = sorted(self._class_ids())
+        if class_ids:
+            properties["class_id"]["enum"] = class_ids
+        else:
+            # 无职业模板的自定义游戏没有可用的职业筛选值。
+            properties.pop("class_id")
         if self.definition.rules.material_exchange is not None:
             schemas.append(material_exchange_schema(
                 self.definition.rules.material_exchange,
@@ -191,7 +207,9 @@ class GuildManagerTools:
                 **({"monster_refresh": observation["monster_refresh"]} if "monster_refresh" in observation else {}),
             }
 
-    def get_crafting(self, session_id: str) -> dict[str, Any]:
+    def get_crafting(self, session_id: str, detail: str = "full", ids: list[str] | None = None,
+                     name_contains: str | None = None, slot: str | None = None,
+                     class_id: str | None = None, craftable_only: bool = False) -> dict[str, Any]:
         """读取资源和制作配方详细信息。"""
 
         with self._lock:
@@ -201,7 +219,13 @@ class GuildManagerTools:
                 "session_id": session.session_id,
                 "gold": observation["gold"],
                 "materials": observation["materials"],
-                "crafting_recipes": observation["crafting_recipes"],
+                **({"detail": "summary"} if detail == "summary" else {}),
+                "crafting_recipes": filter_recipes(
+                    observation["crafting_recipes"], detail=detail, ids=ids,
+                    name_contains=name_contains, slot=slot, class_id=class_id,
+                    craftable_only=craftable_only,
+                    class_ids=self._class_ids(),
+                ),
             }
 
     def get_inventory(self, session_id: str) -> dict[str, Any]:
@@ -215,7 +239,9 @@ class GuildManagerTools:
                 "equipment_inventory": observation["equipment_inventory"],
             }
 
-    def get_upgrades(self, session_id: str) -> dict[str, Any]:
+    def get_upgrades(self, session_id: str, detail: str = "full", ids: list[str] | None = None,
+                     name_contains: str | None = None, branch: str | None = None,
+                     tier: int | None = None, status: str | None = None) -> dict[str, Any]:
         """读取资源、天赋成本、前置、互斥与效果。"""
 
         with self._lock:
@@ -226,7 +252,13 @@ class GuildManagerTools:
                 "gold": observation["gold"],
                 **({"experience_pool": observation["experience_pool"], "materials": observation["materials"]}
                    if self.definition.content.has_talent_tree else {}),
-                "global_upgrades": observation["global_upgrades"],
+                **({"detail": "summary", "upgrade_names": {
+                    u["upgrade_id"]: u["name"] for u in observation["global_upgrades"]
+                }} if detail == "summary" else {}),
+                "global_upgrades": filter_upgrades(
+                    observation["global_upgrades"], detail=detail, ids=ids,
+                    name_contains=name_contains, branch=branch, tier=tier, status=status,
+                ),
             }
 
     def get_recruitment(self, session_id: str) -> dict[str, Any]:
@@ -502,6 +534,84 @@ class GuildManagerTools:
                 preview["battle_id"] = battle_log_id("preview", session.state.turn, len(records))
             return {"ok": True, "preview": preview}
 
+    def _pending_plan(self, session: GameSession, plan_id: str) -> _PlanReceipt:
+        if not _non_empty_string(plan_id):
+            raise ToolCallError("plan_id 必须是非空字符串")
+        receipt = self._plans_for(session).get(plan_id)
+        if receipt is None:
+            raise ToolCallError("方案凭据不存在或已跨回合失效，请重新试算")
+        if receipt.result is not None or session.state is not receipt.base_state:
+            raise ToolCallError("游戏状态已改变或方案已执行，请重新试算")
+        return receipt
+
+    def get_plan_observation(self, session_id: str, plan_id: str) -> dict[str, Any]:
+        """供 harness 构造独立投影编号，不更新真实编号或状态。"""
+        with self._lock:
+            receipt = self._pending_plan(self._get_session(session_id), plan_id)
+            return build_observation(self.definition, receipt.projected_state)
+
+    def preview_hunts(self, session_id: str, hunts: list[Mapping[str, str]],
+                      plan_id: str | None = None) -> dict[str, Any]:
+        """使用真实回合引擎只读模拟完整讨伐，整单校验成功后才保存战斗日志。"""
+        with self._lock:
+            session = self._get_session(session_id)
+            assert session.state is not None
+            state = session.state
+            try:
+                if not isinstance(hunts, list) or len(hunts) > 6:
+                    raise ToolCallError("hunts 必须是至多6个对位的列表")
+                aliases = {}
+                if plan_id is not None:
+                    receipt = self._pending_plan(session, plan_id)
+                    state, aliases = receipt.projected_state, receipt.aliases
+                resolved = []
+                for hunt in hunts:
+                    if not isinstance(hunt, Mapping):
+                        raise ToolCallError("每个讨伐对位必须是对象")
+                    if set(hunt) != {"adventurer_id", "monster_id"}:
+                        raise ToolCallError("每个讨伐对位必须且只能包含 adventurer_id、monster_id")
+                    hunt = dict(hunt)
+                    hero = hunt.get("adventurer_id")
+                    if isinstance(hero, str) and hero.startswith("$"):
+                        reference = aliases.get(hero[1:])
+                        if reference is None or reference[0] != "adventurer_id":
+                            raise ToolCallError(f"不是该准备方案的角色别名：{hero}")
+                        hunt["adventurer_id"] = reference[1]
+                    resolved.append(hunt)
+                turn_result = simulate_end_turn(self.definition, state, decode_end_turn_action({
+                    "type": "end_turn", "hunts": resolved,
+                }))
+            except (ActionCodecError, GameError, ValueError, TypeError) as exc:
+                return {"ok": False, "error": str(exc)}
+            previews = [_battle_preview(state, battle) for battle in turn_result.battles]
+            if self.definition.llm_tools.expose_battle_log:
+                turn, records = self._battle_previews.get(session_id, (state.turn, []))
+                if turn != state.turn:
+                    records = []
+                for preview, battle in zip(previews, turn_result.battles, strict=True):
+                    records.append({
+                        "adventurer_name": preview["adventurer_name"],
+                        "monster_name": preview["monster_name"],
+                        "combat": asdict(battle.combat_result),
+                    })
+                    preview["battle_id"] = battle_log_id("preview", state.turn, len(records))
+                self._battle_previews[session_id] = (state.turn, records)
+            reward_materials: dict[str, int] = {}
+            for battle in turn_result.battles:
+                for key, value in battle.reward.materials.items():
+                    reward_materials[key] = reward_materials.get(key, 0) + value
+            return {
+                "ok": True, "simulation_only": True, "turn": state.turn,
+                "battles": previews,
+                "reward": {"gold": sum(b.reward.gold for b in turn_result.battles),
+                           "experience": sum(b.reward.experience for b in turn_result.battles),
+                           "materials": reward_materials},
+                "party_after_recovery": [
+                    {"adventurer_id": a.adventurer_id, "name": a.name,
+                     "resources": _resources_to_dict(a.resources)} for a in turn_result.state.adventurers
+                ],
+            }
+
     def get_battle_log(
         self, session_id: str, battle_id: str, detail: str = "summary", cursor: int = 0,
     ) -> dict[str, Any]:
@@ -584,7 +694,9 @@ class GuildManagerTools:
             # 空方案可查询当前状态，但不签发免费执行凭据。
             if plan.actions:
                 plan_id = uuid4().hex
-                self._plans_for(session)[plan_id] = _PlanReceipt(session.state, plan.actions)
+                self._plans_for(session)[plan_id] = _PlanReceipt(
+                    session.state, plan.actions, plan.projected_state, plan.aliases,
+                )
                 result["plan_id"] = plan_id
             return result
 
@@ -667,7 +779,7 @@ class GuildManagerTools:
     def _handler_names(self) -> dict[str, str]:
         names = dict(_BASE_HANDLER_NAMES)
         if self.definition.llm_tools.expose_battle_preview:
-            names["preview_battle"] = "preview_battle"
+            names["preview_hunts"] = "preview_hunts"
         if self.definition.llm_tools.expose_tactics:
             names["configure_tactics"] = "configure_tactics"
         if self.definition.llm_tools.expose_battle_log:
@@ -896,11 +1008,11 @@ _EQUIPMENT_INSTANCE_ID = {
 _BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
     {
         "name": "get_crafting",
-        "description": "查看当前金币、材料及全部装备配方（产物槽位、属性、技能、职业限制、成本与缺口）。",
+        "description": "筛选装备配方的槽位、属性、精确技能、职业限制、实际成本与缺口。默认简表，detail=full 展开详情。",
         "parameters": {
             "type": "object",
             "required": ["session_id"],
-            "properties": {"session_id": _SESSION_ID},
+            "properties": {"session_id": _SESSION_ID, **catalog_properties("crafting")},
             "additionalProperties": False,
         },
     },
@@ -916,11 +1028,11 @@ _BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
     },
     {
         "name": "get_upgrades",
-        "description": "查看全局升级的成本、效果与购买状态。",
+        "description": "筛选全局升级的成本、精确效果与购买状态。默认简表，detail=full 展开详情。",
         "parameters": {
             "type": "object",
             "required": ["session_id"],
-            "properties": {"session_id": _SESSION_ID},
+            "properties": {"session_id": _SESSION_ID, **catalog_properties("upgrades")},
             "additionalProperties": False,
         },
     },
@@ -1091,32 +1203,38 @@ _BASE_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
 )
 
 
-def _battle_preview_schema(max_battle_preview_per_turn: int = 3) -> dict[str, Any]:
+def _hunts_preview_schema(max_battle_preview_per_turn: int = 3) -> dict[str, Any]:
     limit_notice = (
         f"每回合最多 {max_battle_preview_per_turn} 次。"
         if max_battle_preview_per_turn
         else ""
     )
     return {
-        "name": "preview_battle",
+        "name": "preview_hunts",
         "description": (
-            "无副作用模拟一场已入队角色与当前怪物的1v1战斗，不适用于招募候选。"
+            "只读模拟一套讨伐方案（最多6个对位，角色和怪物各至多出战一次），返回逐场结果、总收益及全队回合末恢复。"
+            "hunts=[]预览全员休整。可带preview_team_power的plan_id在准备方案投影上模拟，使用其预览编号或$角色别名。"
+            "不执行准备方案、不推进真实回合、不改变资源。每次包括失败扣1次普通预算及1次整队预览额度。"
             f"{limit_notice}"
         ),
         "parameters": {
             "type": "object",
-            "required": ["session_id", "adventurer_id", "monster_id"],
+            "required": ["session_id", "hunts"],
             "properties": {
                 "session_id": _SESSION_ID,
-                "adventurer_id": _ADVENTURER_ID,
-                "monster_id": _MONSTER_ID,
+                "plan_id": {"type": "string", "minLength": 1, "description": "可选，绑定当前状态且尚未执行的准备方案。"},
+                "hunts": {"type": "array", "maxItems": 6, "items": {
+                    "type": "object", "required": ["adventurer_id", "monster_id"],
+                    "properties": {
+                        "adventurer_id": {"anyOf": [_ADVENTURER_ID, {"type": "string", "pattern": r"^\$[A-Za-z][A-Za-z0-9_]{0,31}$"}]},
+                        "monster_id": _MONSTER_ID,
+                    }, "additionalProperties": False,
+                }},
             },
             "additionalProperties": False,
         },
     }
 
-
-_BATTLE_PREVIEW_SCHEMA: dict[str, Any] = _battle_preview_schema(3)
 
 _TACTICS_SCHEMA: dict[str, Any] = {
     "name": "configure_tactics",

@@ -314,7 +314,7 @@ def test_replay_rebuild_reexecutes_paid_refresh_and_not_preview(definition):
     assert observations[0] is None
     assert observations[1]['monster_refresh']['refreshes_used']==1
     assert observations[2]['monster_refresh']['refreshes_used']==2
-    assert observations[2]['gold']==175-10-20
+    assert observations[2]['gold']==definition.starting_gold-10-20
     assert observations[3]['monster_refresh']['refreshes_used']==0
     assert observations[3]['monsters']==tools.get_observation(sid)['observation']['monsters']
 
@@ -323,9 +323,9 @@ def test_existing_battle_preview_log_survives_monster_refresh(game):
     tools,sid=game
     harness=TurnToolHarness(tools,sid,max_tool_calls=20)
     assert harness.call_tool('recruit_adventurer',{'candidate_id':1})['ok']
-    result=harness.call_tool('preview_battle',{'adventurer_id':1,'monster_id':1})
+    result=harness.call_tool('preview_hunts',{'hunts':[{'adventurer_id':1,'monster_id':1}]})
     assert result['ok']
-    battle_id=result['preview']['battle_id']
+    battle_id=result['battles'][0]['battle_id']
     log=tools.get_battle_log(sid,battle_id,'events')
     assert harness.call_tool('refresh_monsters',{'locked_monster_ids':[]})['ok']
     assert tools.get_battle_log(sid,battle_id,'events')==log
