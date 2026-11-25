@@ -11,34 +11,85 @@
       "label": "当前数据",
       "sources": [
         {
-          "replay": "../../runs/llm/20261021-174500-786482_deepseek-v4.1-flash/replay.json"
+          "replay": "../../runs/llm/20261030-151006-556527_deepseek-v4.1-flash_7a9c7c676ad4493ca12f7b56887fb792/replay.json"
         },
         {
-          "replay": "../../runs/llm/20261021-174545-271993_qwen-3-8-flash-next-hipfire_xhigh/replay.json"
+          "replay": "../../runs/llm/20261030-151006-557491_deepseek-v4.1-flash_8d81124fce894fb69d9edc913b04928d/replay.json"
         },
         {
-          "replay": "../../runs/llm/20261021-175806-560936_gpt-6-astra/replay.json"
+          "replay": "../../runs/llm/20261030-151006-569497_deepseek-v4.1-flash_f18bf667fbbb49258a7f2b378c0f14fa/replay.json"
         },
         {
-          "replay": "../../runs/llm/20261021-221003-351152_qwen-3-8-flash-next-halogen_xhigh/replay.json"
+          "replay": "../../runs/llm/20261103-153152-094624_gpt-6.1-terra_d9c8bcfa2cc04ed9ada386683719dc8c/replay.json"
         },
         {
-          "replay": "../../runs/llm/20261021-223437-693041_mimo-v2.6-pro/replay.json"
+          "replay": "../../runs/llm/20261103-153152-094710_gpt-6.1-terra_abfb1882bb9447a99a01fe01faaeca4b/replay.json"
         },
         {
-          "replay": "../../runs/llm/20261021-223541-703108_glm-5.3-flash/replay.json"
+          "replay": "../../runs/llm/20261103-153152-095296_gpt-6.1-terra_c7f2df11bc3145969764910a47c1035d/replay.json"
         },
         {
-          "replay": "../../runs/llm/20261021-223612-639374_glm-5.3/replay.json"
+          "replay": "../../runs/llm/20261104-105819-045951_gpt-6-astra_7860b802eaf8403992b93d14764d04bc/replay.json"
         },
         {
-          "replay": "../../runs/llm/20261021-232635-823476_gpt-6.1-sol/replay.json"
+          "replay": "../../runs/llm/20261104-105819-046187_gpt-6-astra_6f1ab3323b3c46c4bc10bf5a56b01c7e/replay.json"
         },
         {
-          "replay": "../../runs/llm/20261021-232706-641132_gpt-6-astra/replay.json"
+          "replay": "../../runs/llm/20261104-105819-046448_gpt-6-astra_607019db664a4bfcb929ba1ae35ce070/replay.json"
         },
         {
-          "replay": "../../runs/llm/20261022-010829-351970_gpt-6.1-sol/replay.json"
+          "replay": "../../runs/llm/20261104-105834-000192_k3.1-pro_01870fbac7404a4dafb5f83939a9f61e/replay.json"
+        },
+        {
+          "replay": "../../runs/llm/20261104-152557-037911_k3.1-pro_0038814c2084465aa655b0cde5bb8b22/replay.json"
+        },
+        {
+          "replay": "../../runs/llm/20261104-220521-934180_gpt-6-astra_06c8d93f311d4009a328cf9bbe988263/replay.json"
+        },
+        {
+          "replay": "../../runs/llm/20261104-220549-819031_gpt-6-astra_44c5966513e24a61bba1435bd1eb9d1c/replay.json"
+        },
+        {
+          "replay": "../../runs/llm/20261104-220549-819453_gpt-6-astra_9926c62edb9146e898c2b0d525f2f7fe/replay.json"
+        },
+        {
+          "replay": "../../runs/llm/20261104-220617-690754_k3.1-pro_72e0dff0548b431688fb115df06ffaee/replay.json"
+        },
+        {
+          "replay": "../../runs/llm/20261105-092429-477190_gpt-6-astra_e01853d7b6b6439199573379f26cc954/replay.json"
+        },
+        {
+          "replay": "../../runs/llm/20261105-092429-478734_gpt-6-astra_1a06911d8a2742d288886cfd808a0df2/replay.json"
+        },
+        {
+          "replay": "../../runs/llm/20261105-092429-484309_gpt-6-astra_8a85339f31df42f69f16820e8e9077e5/replay.json"
+        },
+        {
+          "replay": "../../runs/llm/20261105-093522-447431_minimax-m3.1-flash_5b06ecab3ded4770bfdb3acc9fffd878/replay.json"
+        },
+        {
+          "replay": "../../runs/llm/20261105-093522-448737_minimax-m3.1-flash_86a13627694e4d5e90ad48b8e3c941d7/replay.json"
+        },
+        {
+          "replay": "../../runs/llm/20261105-093522-450098_minimax-m3.1-flash_c0be74da8de44373baaf4cd13dc0b684/replay.json"
+        },
+        {
+          "replay": "../../runs/llm/20261105-110247-966685_gpt-6-astra_27c65b8cfdd840f2b3455683a698bcf9/replay.json"
+        },
+        {
+          "replay": "../../runs/llm/20261105-110247-966841_gpt-6-astra_946f5fa095a34654a4f48ac753d91d04/replay.json"
+        },
+        {
+          "replay": "../../runs/llm/20261105-110247-978168_gpt-6-astra_72d36c7a9b5d4fd3acf9eae2864d2178/replay.json"
+        },
+        {
+          "replay": "../../runs/llm/20261106-090502-781157_gpt-6.1-sol_75912e9bbf8241cc9612f41fa2a6bdf6/replay.json"
+        },
+        {
+          "replay": "../../runs/llm/20261106-090502-784555_gpt-6.1-sol_02bd2a2cee34412ba2dfc9a1d0a95bf5/replay.json"
+        },
+        {
+          "replay": "../../runs/llm/20261106-090502-785758_gpt-6.1-sol_0ead393e3d274c9a95f752e1ed7c8cca/replay.json"
         }
       ]
     },
@@ -49,6 +100,9 @@
       "sources": [
         {
           "published": "full_history.json"
+        },
+        {
+          "replay": "../../runs/llm/20261103-151620-239639_LongCat-2.5/replay.json"
         }
       ]
     }
