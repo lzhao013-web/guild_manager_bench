@@ -13,6 +13,7 @@ import msgspec
 
 from guild_manager_bench.api.archive_io import read_archive_json, read_archive_response_bytes
 from guild_manager_bench.api.workbench_events import recovery_history
+from guild_manager_bench.api.run_report import render_run_report
 from guild_manager_bench.bench.llm.runner import (
     rebuild_replay_observations,
     replay_observations_complete,
@@ -46,6 +47,29 @@ def llm_archive_router(base_dir: str | Path = "runs/llm") -> APIRouter:
         if not content.startswith(b"{"):
             raise HTTPException(status_code=500, detail="replay must be a JSON object")
         return Response(content=content, media_type="application/json")
+
+    @router.get("/{run_id}/report")
+    async def get_report(run_id: str) -> Response:
+        """只读导出白名单字段，下载文件无需本机服务或网络。"""
+        replay_path = _replay_path(archive_dir, run_id)
+        try:
+            replay = await asyncio.to_thread(read_archive_json, replay_path)
+            content = await asyncio.to_thread(render_run_report, replay)
+        except FileNotFoundError:
+            raise HTTPException(404, "存档已移动或不存在") from None
+        except OSError:
+            raise HTTPException(503, "存档暂不可读，请稍后重试") from None
+        except (KeyError, TypeError, AttributeError):
+            raise HTTPException(422, "存档格式不支持战报导出，原存档保持不变") from None
+        except json.JSONDecodeError:
+            raise HTTPException(422, "存档 JSON 不完整或格式错误") from None
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from None
+        return Response(content, media_type="text/html", headers={
+            "Content-Disposition": 'attachment; filename="guild-report.html"',
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        })
 
     @router.post("/{run_id}/rescore")
     async def rescore_replay(run_id: str) -> dict[str, Any]:

@@ -1,0 +1,3 @@
+.report-export { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.report-export > span { font-size: 12px; overflow-wrap: anywhere; }
+.report-export-status { margin: 0 0 10px; font-size: 13px; }

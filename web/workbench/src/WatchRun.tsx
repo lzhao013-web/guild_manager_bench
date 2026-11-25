@@ -35,6 +35,7 @@ import { TrajectoryProvider } from "./TrajectoryContext";
 import type { TrajectoryPage } from "./trajectoryModel";
 import { RunWorkspace } from "./RunWorkspace";
 import { RunId } from "./RunId";
+import { ReportExportButton } from "./ReportExport";
 import type { RunModule, WatchFocus } from "./sceneNavigation";
 import { SceneMaterials } from "./SceneMaterials";
 import { MaterialExchangeStatus } from "./MaterialExchangeStatus";
@@ -436,6 +437,7 @@ export function WatchRun({
                 ) : null}
             </div>
             <footer className="detail-footer spectator-footer">
+                {job.status === "completed" && job.archive_id && <ReportExportButton key={job.archive_id} runId={job.archive_id} />}
                 <Button
                     highContrast
                     variant="soft"

@@ -1168,6 +1168,51 @@ kbd {
   width: 14px;
   height: 14px;
 }
+.run-summary .detail-header { flex-shrink: 0; }
+.run-summary .detail-identity {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+.run-summary .detail-utilities { display: flex; align-items: center; gap: 2px; }
+.run-summary .detail-icon {
+  min-width: 32px;
+  padding: 6px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--gray-11);
+}
+.run-summary .detail-icon:hover { background: var(--gray-4); }
+.run-summary .detail-icon[aria-pressed="true"] { color: var(--accent-11); background: var(--accent-3); }
+.run-summary .detail-close { position: static; }
+.run-summary .detail-title { padding-right: 0; }
+.run-summary .detail-title h2 { margin: 0 0 6px; }
+.run-summary .detail-status { flex-wrap: wrap; gap: 6px 10px; padding: 0; }
+.run-summary .detail-status > span:last-child { margin-left: 0; }
+.run-summary .detail-actions { flex-wrap: nowrap; }
+.run-summary .detail-more { background: transparent; border-color: transparent; color: var(--gray-11); }
+.run-summary .detail-more:hover,
+.run-summary .detail-more[data-state="open"] { background: var(--gray-4); color: var(--gray-12); }
+.run-summary .detail-header > p { margin: 0; font-size: var(--wb-text-xs); overflow-wrap: anywhere; }
+.detail-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 20px;
+  margin: 0 0 18px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--wb-text-sm);
+}
+.detail-summary > div { display: flex; align-items: baseline; gap: 10px; }
+.detail-summary dt { color: var(--muted); }
+.detail-summary dd { margin: 0; font-family: var(--wb-font-mono); white-space: nowrap; }
+.detail-summary + .detail-section { border-top: 0; margin-top: 0; padding-top: 0; }
+.run-summary .detail-usage .metric strong { font-size: 14px; }
+.detail-trend-empty { margin: 0; }
 .callout {
   padding: 12px 14px;
   background: var(--amber-2);

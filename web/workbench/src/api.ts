@@ -8,7 +8,7 @@ export class ApiError extends Error {
     constructor(message: string, public status: number, public detail: unknown) { super(message); }
 }
 
-export async function api<T>(path: string, options?: RequestInit): Promise<T> {
+export async function apiResponse(path: string, options?: RequestInit): Promise<Response> {
     const response = await fetch(path, {
         ...options,
         headers: { "Content-Type": "application/json", ...options?.headers },
@@ -25,7 +25,11 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
             response.status, detail,
         );
     }
-    return response.json();
+    return response;
+}
+
+export async function api<T>(path: string, options?: RequestInit): Promise<T> {
+    return (await apiResponse(path, options)).json();
 }
 
 export function useLiveWatch(job: Job) {

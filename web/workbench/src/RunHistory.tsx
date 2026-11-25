@@ -8,6 +8,7 @@ import { HISTORY_COLUMNS, historyCreatedAt, historyMetrics, historyPreset, histo
 import { milliseconds } from "./modelMetrics";
 import { ResizableTable } from "./ResizableTable";
 import { RunId } from "./RunId";
+import { useReportExport } from "./ReportExport";
 import type { HistoryRun, HistorySort, HistorySortField } from "./runCatalog";
 import { Empty } from "./ui";
 import type { Archive, HistoryDeletion, Job } from "./types";
@@ -44,6 +45,7 @@ export function RunHistory({ jobs, runKeys, onDeleted, onResume, onRerun, onOpen
     onCompare: (ids: string[]) => void;
 }) {
     const client = useQueryClient();
+    const report = useReportExport();
     const [deleteTargets, setDeleteTargets] = useState<HistoryRun[]>([]);
     const [deleting, setDeleting] = useState(false);
     const [deleteErrors, setDeleteErrors] = useState<{ row: HistoryRun; message: string }[]>([]);
@@ -166,6 +168,9 @@ export function RunHistory({ jobs, runKeys, onDeleted, onResume, onRerun, onOpen
                 {blocked > 0 && <span className="muted">{blocked} 项占用中</span>}
                 <button className="text-button" onClick={() => setChecked([])}>清除选择</button>
             </div>}
+            {report.busy && <p className="report-export-status muted" role="status">正在生成战报…</p>}
+            {report.error && <p className="report-export-status error-text" role="alert">导出失败：{report.error}</p>}
+            {report.message && <p className="report-export-status muted" role="status">{report.message}</p>}
             {query.isPending && <p className="muted">{allRows.length ? "正在补充存档列表，已有运行仍可操作。" : "正在读取存档…"}</p>}
             {query.isError && <p className="callout error" role="alert">存档列表读取失败：{query.error.message}</p>}
             {rows.length ? (
@@ -221,6 +226,8 @@ export function RunHistory({ jobs, runKeys, onDeleted, onResume, onRerun, onOpen
                                         <DropdownMenu.Trigger><Button highContrast size="1" variant="ghost" aria-label={`${job?.name || archive!.model || row.id} 的更多操作`}>更多<CaretDown size={12} /></Button></DropdownMenu.Trigger>
                                         <DropdownMenu.Content size="2" align="end">
                                             {job && <DropdownMenu.Item onSelect={() => onCompare([curveId(row)])}>查看曲线</DropdownMenu.Item>}
+                                            {recoveryId && status === "completed" && <DropdownMenu.Item disabled={report.busy}
+                                                onSelect={() => void report.exportReport(recoveryId)}>导出战报</DropdownMenu.Item>}
                                             {recoveryId && onRerun && <DropdownMenu.Item onSelect={() => onRerun(recoveryId)}>从指定回合重跑</DropdownMenu.Item>}
                                             {recoveryId && status !== "completed" && <DropdownMenu.Item onSelect={() => onResume(recoveryId)}>续跑</DropdownMenu.Item>}
                                             {!recoveryId && job && <DropdownMenu.Item onSelect={() => onClone(job)}>重新创建</DropdownMenu.Item>}

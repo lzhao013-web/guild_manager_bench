@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Theme } from "@radix-ui/themes";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
 import { RunDetail } from "./RunDetail";
 import footKnightPortrait from "./portraits/foot_knight.webp";
 import { testJob } from "./test-jobs";
@@ -11,12 +12,13 @@ import type { Job, Observation } from "./types";
 const initial: Observation = { gold: 100, experience_pool: 0, materials: {}, adventurers: [], party_size_limit: 3, turn: 1, max_turns: 8 };
 const rec = (cursor: number, event: WatchRecord["event"]): WatchRecord => ({ cursor, after: cursor - 1, at: "2026-10-19T10:00:00Z", event });
 function setup(records: WatchRecord[], rawRecords: WatchRecord[] = [], job: Job = testJob("sidebar", { status: "completed", cursor: 10 }),
-    actions: Pick<Parameters<typeof RunDetail>[0], "onCurves" | "onPin" | "onFocus" | "onClose" | "pinned"> = {}) {
+    actions: Partial<Pick<Parameters<typeof RunDetail>[0], "onCurves" | "onPin" | "onFocus" | "onClose" | "pinned" | "onStop" | "onClone">> = {}) {
     const requests: string[] = [];
     const page: WatchPage = { cursor: 10, selected: 1, attempts: [], records };
     vi.spyOn(globalThis, "fetch").mockImplementation(async input => {
         const path = String(input);
         requests.push(path);
+        if (path.endsWith("/report")) return new Response(JSON.stringify({ detail: "存档暂不可读，请稍后重试" }), { status: 503 });
         // 原始事件窗口为空，行动必须来自完整的只读回合投影。
         return new Response(JSON.stringify(path.endsWith("/watch") ? page : { events: rawRecords, cursor: 10, has_more: false }));
     });
@@ -26,32 +28,114 @@ function setup(records: WatchRecord[], rawRecords: WatchRecord[] = [], job: Job 
     return requests;
 }
 
-it.each([false, true])("运行操作显示文字，关注状态为 %s 时按钮仍执行原有操作", pinned => {
-    const actions = { onCurves: vi.fn(), onFocus: vi.fn(), onPin: vi.fn(), onClose: vi.fn(), pinned };
-    setup([], [], testJob("controls"), actions);
+it.each([false, true])("头部只突出专注入口，关注状态为 %s 时图标和菜单仍执行原操作", async pinned => {
+    const actions = { onCurves: vi.fn(), onFocus: vi.fn(), onPin: vi.fn(), onClose: vi.fn(), onClone: vi.fn(), onStop: vi.fn(), pinned };
+    const job = testJob("controls");
+    setup([], [], job, actions);
     const group = screen.getByRole("group", { name: "运行操作" });
     const focus = within(group).getByRole("button", { name: "专注查看" });
-    expect(focus).toHaveTextContent("专注查看");
     expect(focus).toHaveClass("is-primary");
-    const curves = within(group).getByRole("button", { name: "查看运行曲线" });
-    expect(curves).toHaveTextContent("曲线");
-    const pin = within(group).getByRole("button", { name: pinned ? "取消关注" : "关注此 run" });
-    expect(pin).toHaveTextContent(pinned ? "已关注" : "关注");
+    expect(within(group).getAllByRole("button")).toHaveLength(2);
+    expect(screen.queryByRole("menuitem")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "停止运行" })).not.toBeInTheDocument();
+    const pin = screen.getByRole("button", { name: pinned ? "取消关注" : "关注此 run" });
+    expect(pin).toHaveTextContent("");
     expect(pin).toHaveAttribute("aria-pressed", String(pinned));
-    const close = within(group).getByRole("button", { name: "关闭详情" });
+    const close = screen.getByRole("button", { name: "关闭详情" });
     expect(close).toHaveTextContent("");
     fireEvent.click(focus);
-    fireEvent.click(curves);
     fireEvent.click(pin);
     fireEvent.click(close);
-    for (const callback of [actions.onFocus, actions.onCurves, actions.onPin, actions.onClose]) expect(callback).toHaveBeenCalledOnce();
+    expect(actions.onStop).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "更多运行操作" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "查看运行曲线" }));
+    await userEvent.click(screen.getByRole("button", { name: "更多运行操作" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "复制配置" }));
+    for (const callback of [actions.onFocus, actions.onCurves, actions.onPin, actions.onClose, actions.onClone]) expect(callback).toHaveBeenCalledOnce();
+    expect(actions.onClone).toHaveBeenCalledWith(job);
 });
 
-it("侧栏提供整局时间线直达入口，不改变后台运行", () => {
+it.each(["running", "completed", "failed"] as const)("侧栏菜单仅为已归档的完成运行提供战报入口：%s", async status => {
+    setup([], [], testJob("report-entry", { status, archive_id: "report-archive" }));
+    await userEvent.click(screen.getByRole("button", { name: "更多运行操作" }));
+    if (status === "completed") expect(screen.getByRole("menuitem", { name: "导出战报" })).toBeVisible();
+    else expect(screen.queryByRole("menuitem", { name: "导出战报" })).not.toBeInTheDocument();
+});
+
+it("菜单导出使用存档 ID，失败提示在菜单收起后仍可见并允许重试", async () => {
+    const requests = setup([], [], testJob("execution-id", { status: "completed", archive_id: "archive-id" }));
+    for (let attempt = 0; attempt < 2; attempt++) {
+        await userEvent.click(screen.getByRole("button", { name: "更多运行操作" }));
+        await userEvent.click(screen.getByRole("menuitem", { name: "导出战报" }));
+        expect(await screen.findByRole("alert")).toHaveTextContent("导出失败：存档暂不可读");
+        expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    }
+    expect(requests.filter(path => path.endsWith("/report"))).toEqual([
+        "/api/llm/runs/archive-id/report", "/api/llm/runs/archive-id/report",
+    ]);
+});
+
+it("完成但未归档时不显示战报入口", async () => {
+    setup([], [], testJob("no-archive", { status: "completed", archive_id: null }));
+    await userEvent.click(screen.getByRole("button", { name: "更多运行操作" }));
+    expect(screen.queryByRole("menuitem", { name: "导出战报" })).not.toBeInTheDocument();
+});
+
+it("更多菜单支持键盘打开、Escape 关闭和整局时间线定位", async () => {
     const onFocus = vi.fn();
-    setup([], [], testJob("timeline-shortcut"), { onFocus });
-    fireEvent.click(screen.getByRole("button", { name: "整局时间线" }));
+    const onStop = vi.fn();
+    setup([], [], testJob("timeline-shortcut"), { onFocus, onStop });
+    const more = screen.getByRole("button", { name: "更多运行操作" });
+    more.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(await screen.findByRole("menuitem", { name: "整局时间线" })).toHaveFocus();
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(more).toHaveFocus();
+    expect(onStop).not.toHaveBeenCalled();
+    await userEvent.click(more);
+    await userEvent.click(screen.getByRole("menuitem", { name: "整局时间线" }));
     expect(onFocus).toHaveBeenCalledWith({ module: "actions", actionView: "timeline" });
+});
+
+it.each(["queued", "running", "stopping", "completed", "failed", "interrupted"] as const)("管理操作沿用原回调与状态约束：%s", async status => {
+    const job = testJob("stop", { status });
+    const onStop = vi.fn();
+    setup([], [], job, { onStop });
+    await userEvent.click(screen.getByRole("button", { name: "更多运行操作" }));
+    const stop = screen.queryByRole("menuitem", { name: status === "queued" ? "取消排队" : "停止运行" });
+    if (status === "queued" || status === "running") {
+        await userEvent.click(stop!);
+        expect(onStop).toHaveBeenCalledExactlyOnceWith(job);
+    } else if (status === "stopping") {
+        expect(stop).toHaveAttribute("aria-disabled", "true");
+        await userEvent.click(stop!);
+        expect(onStop).not.toHaveBeenCalled();
+    } else expect(stop).not.toBeInTheDocument();
+});
+
+it.each([0, 1, 2])("概览先展示队伍与行动，%s 个评分记录按实际数据显示走势", count => {
+    const scores = [{ turn: 1, value: 0 }, { turn: 4, value: 41.3 }].slice(0, count);
+    setup([], [], testJob("overview", { scores, last_score: scores.at(-1)?.value ?? null }));
+    const sidebar = screen.getByRole("region", { name: "构造的同名模型 的运行详情" });
+    const body = sidebar.querySelector(".detail-body")!;
+    expect(within(body as HTMLElement).getAllByRole("heading").map(node => node.textContent)).toEqual(["当前队伍", "最近行动", "战力走势", "用量与健康状态"]);
+    const summary = sidebar.querySelector(".detail-summary")!;
+    expect(summary).toHaveAttribute("aria-label", "运行进度与评分");
+    expect(summary.querySelectorAll("dd")[1]).toHaveTextContent(count === 0 ? "未知" : count === 1 ? "0" : "41.3");
+    expect(sidebar.querySelector("footer")).toBeNull();
+    const chart = within(sidebar).queryByRole("img", { name: /已记录评分趋势/ });
+    if (count === 0) {
+        expect(screen.getByText("暂无评分记录")).toBeVisible();
+        expect(chart).not.toBeInTheDocument();
+    } else if (count === 1) {
+        expect(screen.getByText("仅记录 T1：0，暂无走势")).toBeVisible();
+        expect(chart).not.toBeInTheDocument();
+    } else {
+        expect(chart).toBeVisible();
+        expect(screen.getByText("首个已记录回合 1")).toBeVisible();
+        expect(screen.getByText("最新回合 4")).toBeVisible();
+    }
 });
 
 it("运行列表侧栏也保留具体对象与影响，不再被原始 600 事件窗口和连续查询覆盖", async () => {
@@ -200,4 +284,9 @@ it("列表侧栏的模型正文也附带本次调用统计，不用整局累计�
     expect(stats).toHaveTextContent("输出 4 Token");
     expect(stats).toHaveTextContent("耗时 200 ms");
     expect(screen.getByText("侧栏构造正文")).toBeVisible();
+    expect(screen.getByRole("button", { name: "跟随最新" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "跟随最新" }));
+    expect(screen.getByRole("button", { name: "跟随已暂停" })).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(screen.getByRole("button", { name: "概览" }));
+    expect(screen.queryByRole("button", { name: "跟随已暂停" })).not.toBeInTheDocument();
 });

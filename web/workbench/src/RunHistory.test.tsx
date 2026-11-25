@@ -54,6 +54,29 @@ it("操作列表头和各行使用固定列，排序后按钮仍打开各自的�
     }
 });
 
+it("已完成的受控与 CLI 存档均可导出，使用各自的存档 ID", async () => {
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify({ detail: "测试读取失败" }), { status: 503 }));
+    setup([testJob("managed", { name: "受控导出", status: "completed", archive_id: "managed-archive" })],
+        [testArchive("cli-archive", { model: "CLI导出", status: "completed" })]);
+    for (const [name, id] of [["受控导出", "managed-archive"], ["CLI导出", "cli-archive"]]) {
+        await userEvent.click(screen.getByRole("button", { name: `${name} 的更多操作` }));
+        await userEvent.click(screen.getByRole("menuitem", { name: "导出战报" }));
+        expect(await screen.findByRole("alert")).toHaveTextContent("测试读取失败");
+        expect(fetch).toHaveBeenLastCalledWith(`/api/llm/runs/${id}/report`, expect.anything());
+    }
+});
+
+it("未完成或未归档的历史运行没有战报导出入口", async () => {
+    setup([testJob("failed-report", { name: "失败记录", status: "failed", archive_id: "failed-archive" }),
+        testJob("unarchived-report", { name: "无存档", status: "completed", archive_id: null })],
+        [testArchive("running-cli", { model: "运行中的CLI", status: "running" })]);
+    for (const name of ["失败记录", "无存档", "运行中的CLI"]) {
+        await userEvent.click(screen.getByRole("button", { name: `${name} 的更多操作` }));
+        expect(screen.queryByRole("menuitem", { name: "导出战报" })).not.toBeInTheDocument();
+        await userEvent.keyboard("{Escape}");
+    }
+});
+
 it("已完成存档可从指定回合重跑，但不提供原地续跑", async () => {
     const archive = testArchive("completed-parent", { model: "已完成来源", status: "completed" });
     const callbacks = setup([], [archive]);
@@ -97,6 +120,7 @@ it.each(["loading", "error"] as const)("存档列表 %s 时按已有存档 ID �
     await userEvent.click(screen.getByRole("menuitem", { name: "续跑" }));
     expect(callbacks.onResume).toHaveBeenCalledWith("known-source");
     await userEvent.click(screen.getByRole("button", { name: "已结束的归档运行 的更多操作" }));
+    expect(screen.getByRole("menuitem", { name: "导出战报" })).toBeVisible();
     expect(screen.queryByRole("menuitem", { name: "续跑" })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("menuitem", { name: "从指定回合重跑" }));
     expect(callbacks.onRerun).toHaveBeenCalledWith("completed-source");

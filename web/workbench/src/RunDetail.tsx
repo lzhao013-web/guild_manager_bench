@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Button } from "@radix-ui/themes";
+import { DropdownMenu } from "@radix-ui/themes";
 import {
     ArrowsOutSimple,
     Copy,
@@ -9,6 +9,8 @@ import {
     ArrowDown,
     ChartLineUp,
     ClockCounterClockwise,
+    DotsThree,
+    DownloadSimple,
 } from "@phosphor-icons/react";
 import { useEvents, useLiveWatch } from "./api";
 import { ACTION_STATUS, actionEntries, actionGroups, actionBrief, recentActions } from "./actionModel";
@@ -32,6 +34,7 @@ import { ChangeValue, useNewItemKeys } from "./motion";
 import { ModelCallStats } from "./ModelCallStats";
 import { RunNotices } from "./RunNotices";
 import { RunId } from "./RunId";
+import { useReportExport } from "./ReportExport";
 import { Portrait } from "./SceneParts";
 import type { Job } from "./types";
 import type { WatchFocus } from "./sceneNavigation";
@@ -61,6 +64,7 @@ export function RunDetail({
 }) {
     const [tab, setTab] = useState("overview");
     const [follow, setFollow] = useState(true);
+    const report = useReportExport();
     const { records, error, loading } = useEvents(job.id, isActive(job));
     const scroll = useRef<HTMLDivElement>(null);
     const models = useMemo(() => modelEntries(records), [records]);
@@ -116,53 +120,80 @@ export function RunDetail({
           ];
     return (
         <section
-            className={`run-detail ${compact ? "compact-detail" : ""}`}
+            className={`run-detail run-summary ${compact ? "compact-detail" : ""}`}
             aria-label={`${job.name} 的运行详情`}
         >
             <header className="detail-header">
-                <div className="detail-title">
+                <div className="detail-identity">
                     <RunId id={runId} />
+                    <div className="detail-utilities" role="group" aria-label="详情面板操作">
+                        {onPin && (
+                            <button className="detail-action detail-icon"
+                                title={pinned ? "取消关注" : "关注此 run"}
+                                aria-label={pinned ? "取消关注" : "关注此 run"}
+                                aria-pressed={pinned} onClick={onPin}>
+                                <PushPin size={16} weight={pinned ? "fill" : "regular"} />
+                            </button>
+                        )}
+                        {onClose && (
+                            <button className="detail-close" title="关闭详情" aria-label="关闭详情" onClick={onClose}>
+                                <X size={17} />
+                            </button>
+                        )}
+                    </div>
+                </div>
+                <div className="detail-title">
                     <h2>{job.name}</h2>
+                    <div className="detail-status">
+                        <StatusBadge status={job.status} turn={job.turn} maxTurns={job.max_turns} />
+                        <span>{PHASE[job.phase] || job.phase}</span>
+                        {isActive(job) && (
+                            <span className="mono muted">
+                                <ElapsedTime start={job.phase_started_at} live />
+                            </span>
+                        )}
+                    </div>
                     <RunNotices key={job.id} config={job.config} data={job.data} />
                 </div>
                 <div className="detail-actions" role="group" aria-label="运行操作">
                     {onFocus && (
-                        <><button className="detail-action is-primary" onClick={() => onFocus()}>
+                        <button className="detail-action is-primary" onClick={() => onFocus()}>
                             <ArrowsOutSimple size={16} />专注查看
                         </button>
-                        <button className="detail-action" onClick={() => onFocus({ module: "actions", actionView: "timeline" })} title="按回合阅读整局操作">
-                            <ClockCounterClockwise size={16} />整局时间线
-                        </button></>
                     )}
-                    {onCurves && (
-                        <button className="detail-action" aria-label="查看运行曲线" title="查看经济、经验与战力曲线" onClick={onCurves}>
-                            <ChartLineUp size={16} />曲线
-                        </button>
-                    )}
-                    {onPin && (
-                        <button className="detail-action"
-                            title={pinned ? "取消关注" : "关注此 run"}
-                            aria-label={pinned ? "取消关注" : "关注此 run"}
-                            aria-pressed={pinned} onClick={onPin}>
-                            <PushPin size={16} weight={pinned ? "fill" : "regular"} />{pinned ? "已关注" : "关注"}
-                        </button>
-                    )}
-                    {onClose && (
-                        <button className="detail-close" title="关闭详情" aria-label="关闭详情" onClick={onClose}>
-                            <X size={17} />
-                        </button>
-                    )}
+                    <DropdownMenu.Root>
+                        <DropdownMenu.Trigger>
+                            <button className="detail-action detail-more" aria-label="更多运行操作">
+                                <DotsThree size={18} weight="bold" />更多
+                            </button>
+                        </DropdownMenu.Trigger>
+                        <DropdownMenu.Content size="2" align="start">
+                            {onFocus && <DropdownMenu.Item onSelect={() => onFocus({ module: "actions", actionView: "timeline" })}>
+                                <ClockCounterClockwise size={16} />整局时间线
+                            </DropdownMenu.Item>}
+                            {onCurves && <DropdownMenu.Item onSelect={onCurves}>
+                                <ChartLineUp size={16} />查看运行曲线
+                            </DropdownMenu.Item>}
+                            <DropdownMenu.Item onSelect={() => onClone(job)}>
+                                <Copy size={16} />复制配置
+                            </DropdownMenu.Item>
+                            {job.status === "completed" && job.archive_id && (
+                                <DropdownMenu.Item disabled={report.busy} onSelect={() => void report.exportReport(job.archive_id!)}>
+                                    <DownloadSimple size={16} />{report.busy ? "正在导出战报…" : "导出战报"}
+                                </DropdownMenu.Item>
+                            )}
+                            {isActive(job) && <>
+                                <DropdownMenu.Separator />
+                                <DropdownMenu.Item color="red" disabled={job.status === "stopping"} onSelect={() => onStop(job)}>
+                                    <Stop size={16} />{job.status === "queued" ? "取消排队" : "停止运行"}
+                                </DropdownMenu.Item>
+                            </>}
+                        </DropdownMenu.Content>
+                    </DropdownMenu.Root>
                 </div>
+                {report.error && <p className="error-text" role="alert">导出失败：{report.error}</p>}
+                {report.message && <p className="muted" role="status">{report.message}</p>}
             </header>
-            <div className="detail-status">
-                <StatusBadge status={job.status} turn={job.turn} maxTurns={job.max_turns} />
-                <span>{PHASE[job.phase] || job.phase}</span>
-                {isActive(job) && (
-                    <span className="mono muted">
-                        <ElapsedTime start={job.phase_started_at} live />
-                    </span>
-                )}
-            </div>
             {job.error && (
                 <p
                     className={`callout ${job.status === "failed" ? "error" : ""}`}
@@ -206,47 +237,16 @@ export function RunDetail({
             >
                 {tab === "overview" && (
                     <>
-                        <div className="metric-grid">
-                            <Metric
-                                label="当前回合"
-                                value={
-                                    job.turn == null
-                                        ? "尚未开始"
-                                        : `${job.turn} / ${job.max_turns}`
-                                }
-                                changeValue={job.turn ?? "pending"}
-                            />
-                            <Metric
-                                label="最新 Rank Score"
-                                value={fmt(job.last_score)}
-                                changeValue={job.last_score ?? "unknown"}
-                            />
-                            <Metric
-                                label="模型 / 工具调用"
-                                value={`${fmt(job.calls)} / ${fmt(job.tools)}`}
-                                changeValue={`${job.calls}/${job.tools}`}
-                            />
-                            <Metric
-                                label="运行耗时"
-                                value={<ElapsedTime start={job.started_at} end={job.ended_at} live={isActive(job)} />}
-                            />
-                        </div>
-                        <section className="detail-section">
-                            <div className="section-heading">
-                                <h3>战力走势</h3>
-                                <span className="muted">按真实回合</span>
+                        <dl className="detail-summary" aria-label="运行进度与评分">
+                            <div>
+                                <dt>回合</dt>
+                                <dd><ChangeValue value={job.turn ?? "pending"}>{job.turn == null ? "尚未开始" : `${job.turn} / ${job.max_turns}`}</ChangeValue></dd>
                             </div>
-                            <Trend points={job.scores} large />
-                            <div className="chart-axis">
-                                <span>
-                                    首个已记录回合{" "}
-                                    {job.scores[0]?.turn ?? "未知"}
-                                </span>
-                                <span>
-                                    最新回合 {job.scores.at(-1)?.turn ?? "未知"}
-                                </span>
+                            <div>
+                                <dt>Rank Score</dt>
+                                <dd><ChangeValue value={job.last_score ?? "unknown"}>{fmt(job.last_score)}</ChangeValue></dd>
                             </div>
-                        </section>
+                        </dl>
                         <section className="detail-section">
                             <div className="section-heading">
                                 <h3>当前队伍</h3>
@@ -355,8 +355,35 @@ export function RunDetail({
                             </ol> : <p className="muted">{watch.isPending ? "正在读取行动" : "尚无工具操作"}</p>}
                         </section>
                         <section className="detail-section">
+                            <div className="section-heading">
+                                <h3>战力走势</h3>
+                                {job.scores.length >= 2 && <span className="muted">按真实回合</span>}
+                            </div>
+                            {job.scores.length >= 2 ? <>
+                                <Trend points={job.scores} large />
+                                <div className="chart-axis">
+                                    <span>首个已记录回合 {job.scores[0].turn}</span>
+                                    <span>最新回合 {job.scores.at(-1)!.turn}</span>
+                                </div>
+                            </> : <p className="muted detail-trend-empty">
+                                {job.scores.length === 1
+                                    ? `仅记录 T${job.scores[0].turn}：${fmt(job.scores[0].value)}，暂无走势`
+                                    : "暂无评分记录"}
+                            </p>}
+                        </section>
+                        <section className="detail-section detail-usage">
                             <h3>用量与健康状态</h3>
                             <div className="metric-grid">
+                                <Metric
+                                    label="模型 / 工具调用"
+                                    value={`${fmt(job.calls)} / ${fmt(job.tools)}`}
+                                    changeValue={`${job.calls}/${job.tools}`}
+                                />
+                                <Metric
+                                    label="总运行耗时"
+                                    value={<ElapsedTime start={job.started_at} end={job.ended_at} live={isActive(job)} />}
+                                    note="含工具执行与评分"
+                                />
                                 <Metric
                                     label="输入 Token（已报告）"
                                     value={fmt(job.usage.input_tokens)}
@@ -544,31 +571,8 @@ export function RunDetail({
                     </>
                 )}
             </div>
-            <footer className="detail-footer">
-                <Button
-                    highContrast
-                    variant="soft"
-                    color="gray"
-                    size="2"
-                    onClick={() => onClone(job)}
-                >
-                    <Copy />
-                    复制配置
-                </Button>
-                {isActive(job) && (
-                    <Button
-                        highContrast
-                        variant="soft"
-                        color="red"
-                        size="2"
-                        disabled={job.status === "stopping"}
-                        onClick={() => onStop(job)}
-                    >
-                        <Stop />
-                        {job.status === "queued" ? "取消排队" : "停止运行"}
-                    </Button>
-                )}
-                {tab !== "overview" && (
+            {tab !== "overview" && (
+                <footer className="detail-footer">
                     <button
                         className={`follow-button ${follow ? "active" : ""}`}
                         aria-pressed={follow}
@@ -582,8 +586,8 @@ export function RunDetail({
                         <ArrowDown />
                         {follow ? "跟随最新" : "跟随已暂停"}
                     </button>
-                )}
-            </footer>
+                </footer>
+            )}
         </section>
     );
 }

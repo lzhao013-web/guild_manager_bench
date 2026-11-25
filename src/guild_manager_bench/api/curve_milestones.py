@@ -24,8 +24,9 @@ def _purchase_id(step: dict[str, Any]) -> str | None:
     return None
 
 
-def extract_milestones(replay: dict[str, Any], completed_turns: set[int]) -> list[dict[str, Any]]:
-    """节点归属发生回合，与传入的已结算曲线回合保持一致。"""
+def extract_milestones(replay: dict[str, Any], completed_turns: set[int], *,
+                       include_evidence: bool = False) -> list[dict[str, Any]]:
+    """节点归属发生回合。战报可附带原始步骤位置，不复制参数、正文或快照。"""
     marks: list[dict[str, Any]] = []
     expansions: set[str] = set()
     level9: set[str] = set()
@@ -33,22 +34,25 @@ def extract_milestones(replay: dict[str, Any], completed_turns: set[int]) -> lis
     next_openings = {turn["turn"] - 1: turn["observation_before"] for turn in replay["turns"]
                      if isinstance(turn.get("observation_before"), dict)}
 
-    def add(number: int, kind: str, identity: str, label: str, detail: str) -> None:
+    def add(number: int, kind: str, identity: str, label: str, detail: str,
+            evidence: dict[str, Any]) -> None:
         marks.append({"id": f"T{number}:{kind}:{identity}", "turn": number, "kind": kind,
-                      "label": label, "detail": detail})
+                      "label": label, "detail": detail,
+                      **({"evidence": evidence} if include_evidence else {})})
 
-    def expansion(number: int, identity: str) -> None:
+    def expansion(number: int, identity: str, evidence: dict[str, Any]) -> None:
         if identity in EXPANSIONS and identity not in expansions:
             expansions.add(identity)
             label = f"解锁{EXPANSIONS[identity]}"
-            add(number, "expansion", identity, label, label)
+            add(number, "expansion", identity, label, label, evidence)
 
-    def transitions(number: int, before: dict[str, Any], after: dict[str, Any]) -> None:
+    def transitions(number: int, before: dict[str, Any], after: dict[str, Any],
+                    evidence: dict[str, Any]) -> None:
         old_upgrades = {item["upgrade_id"]: item for item in before.get("global_upgrades", [])}
         for item in after.get("global_upgrades", []):
             identity = item["upgrade_id"]
             if item.get("unlocked") is True and old_upgrades.get(identity, {}).get("unlocked") is False:
-                expansion(number, identity)
+                expansion(number, identity, evidence)
         old_heroes = {item["adventurer_id"]: item for item in before.get("adventurers", [])}
         for item in after.get("adventurers", []):
             identity = item["adventurer_id"]
@@ -58,7 +62,7 @@ def extract_milestones(replay: dict[str, Any], completed_turns: set[int]) -> lis
                     and isinstance(current, int) and not isinstance(current, bool) and previous < 9 <= current):
                 level9.add(identity)
                 name = item.get("name") or identity
-                add(number, "level_9", identity, f"{name}达到 Lv9", f"{name}：Lv{previous} → Lv{current}")
+                add(number, "level_9", identity, f"{name}达到 Lv9", f"{name}：Lv{previous} → Lv{current}", evidence)
 
     for turn in replay["turns"]:
         number = turn["turn"]
@@ -66,18 +70,19 @@ def extract_milestones(replay: dict[str, Any], completed_turns: set[int]) -> lis
             continue
         state = turn.get("observation_before") or {}
         monsters = {item["monster_id"]: item for item in state.get("monsters", [])}
-        for step in turn["steps"]:
+        for step_number, step in enumerate(turn["steps"], 1):
             if step.get("type") != "tool_result" or not _succeeded(step):
                 continue
             name = step.get("name", "")
             result = step.get("result", {})
+            evidence = {"step": step_number, "tool": name, "source": "result"}
             if (name.startswith(("get_", "preview_")) or result.get("simulation_only") is True
                     or name == "refresh_monsters" and step.get("arguments", {}).get("preview") is True):
                 continue
             if name == "purchase_upgrade":
                 identity = _purchase_id(step)
                 if identity is not None:
-                    expansion(number, identity)
+                    expansion(number, identity, evidence)
             if name == "end_turn":
                 for index, battle in enumerate(result.get("turn_result", {}).get("battles", []), 1):
                     enemy = monsters.get(battle.get("monster_id"), {})
@@ -91,13 +96,14 @@ def extract_milestones(replay: dict[str, Any], completed_turns: set[int]) -> lis
                         actor = next((hero.get("name") for hero in state.get("adventurers", [])
                                       if hero["adventurer_id"] == battle.get("adventurer_id")), None)
                     enemy_name = enemy.get("name") or battle.get("monster_name") or battle["monster_id"]
-                    add(number, kind, str(index), label, f"{actor or '出战角色未记录'} · {label}：{enemy_name}")
+                    add(number, kind, str(index), label, f"{actor or '出战角色未记录'} · {label}：{enemy_name}",
+                        {**evidence, "battle": index})
             after = step.get("observation_after")
             if isinstance(after, dict):
-                transitions(number, state, after)
+                transitions(number, state, after, {**evidence, "source": "observation_after"})
                 state = after
                 monsters.update((item["monster_id"], item) for item in after.get("monsters", []))
         opening = next_openings.get(number)
         if opening is not None:
-            transitions(number, state, opening)
+            transitions(number, state, opening, {"source": "next_opening", "turn": number + 1})
     return marks
