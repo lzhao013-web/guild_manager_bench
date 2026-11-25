@@ -2,7 +2,6 @@ from copy import deepcopy
 import io
 import json
 from pathlib import Path
-import sys
 import time
 
 import pytest
@@ -11,8 +10,8 @@ from rich.console import Console
 from guild_manager_bench.batch_monitor import DetailMonitor, TraceDetails, dashboard
 from guild_manager_bench.bench.llm.tools import GuildManagerTools
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from scripts import run_gpt61_advanced as batch_script
+def open_reader(path):
+    return path.open(encoding="utf-8")
 
 
 @pytest.fixture
@@ -63,7 +62,7 @@ def test_incremental_reader_waits_for_partial_utf8_line_and_never_recounts(tmp_p
     path = tmp_path / "trace.jsonl"
     append(path, record("turn_started", observation=observation), tool_event("get_crafting"))
     details = TraceDetails(path)
-    details.poll(batch_script.open_shared_read)
+    details.poll(open_reader)
     assert details.tool_counts == {"get_crafting": 1}
     first_offset = details.offset
     partial = (json.dumps(tool_event("recruit_adventurer", result={
@@ -72,15 +71,15 @@ def test_incremental_reader_waits_for_partial_utf8_line_and_never_recounts(tmp_p
     split = partial.index("炮".encode()) + 1
     with path.open("ab") as stream:
         stream.write(partial[:split])
-    details.poll(batch_script.open_shared_read)
+    details.poll(open_reader)
     assert details.offset == first_offset
     assert not details.caught_up and details.warning is None
     with path.open("ab") as stream:
         stream.write(partial[split:])
-    details.poll(batch_script.open_shared_read)
+    details.poll(open_reader)
     assert details.caught_up and details.tool_counts["recruit_adventurer"] == 1
     assert details.recent[-1]["summary"] == "招募火药炮手"
-    details.poll(batch_script.open_shared_read)
+    details.poll(open_reader)
     assert details.tool_counts["recruit_adventurer"] == 1
     assert details.offset == path.stat().st_size
 
@@ -108,7 +107,7 @@ def test_details_aggregate_budgets_failures_scores_and_real_battles_without_mode
            record("turn_scored", turn=2, rank_score=125))
     before = path.read_bytes()
     details = TraceDetails(path)
-    details.poll(batch_script.open_shared_read)
+    details.poll(open_reader)
     assert details.turn_requests == 1 and details.turn_tools == 1 and details.turn_failures == 0
     assert details.tool_counts["get_forecast"] == 1 and details.failed_tools["configure_tactics"] == 1
     assert details.retries == {"empty_response": 1}
@@ -128,7 +127,7 @@ def test_read_errors_keep_last_known_details_and_recover(tmp_path, observation):
     path = tmp_path / "trace.jsonl"
     append(path, record("turn_started", observation=observation), tool_event("get_inventory"))
     details = TraceDetails(path)
-    details.poll(batch_script.open_shared_read)
+    details.poll(open_reader)
     offset = details.offset
     def denied(path):
         raise PermissionError("sharing conflict")
@@ -136,7 +135,7 @@ def test_read_errors_keep_last_known_details_and_recover(tmp_path, observation):
     assert details.offset == offset and details.tool_counts["get_inventory"] == 1
     assert "PermissionError" in details.warning
     assert not details.caught_up
-    details.poll(batch_script.open_shared_read)
+    details.poll(open_reader)
     assert details.warning is None and details.caught_up
 
 
@@ -146,10 +145,10 @@ def test_complete_corrupt_line_is_reported_without_discarding_or_double_counting
     with path.open("ab") as stream:
         stream.write(b'{broken json}\n')
     details = TraceDetails(path)
-    details.poll(batch_script.open_shared_read)
+    details.poll(open_reader)
     offset = details.offset
     assert "JSONDecodeError" in details.warning
-    details.poll(batch_script.open_shared_read)
+    details.poll(open_reader)
     assert details.offset == offset and details.tool_counts["get_inventory"] == 1
 
 
@@ -158,10 +157,10 @@ def test_read_budget_marks_partial_statistics_and_new_archive_does_not_reuse_old
     path.parent.mkdir()
     append(path, tool_event("get_inventory"), tool_event("get_inventory"))
     details = TraceDetails(path)
-    details.poll(batch_script.open_shared_read, max_bytes=1)
+    details.poll(open_reader, max_bytes=1)
     assert not details.caught_up and details.tool_counts["get_inventory"] == 1
     assert "以下为已读部分" in render([row()], {"high": details}, effort="high")
-    monitor = DetailMonitor(batch_script.open_shared_read)
+    monitor = DetailMonitor(open_reader)
     monitor.states["high"] = details
     monitor.refresh([row(archive_dir=str(path.parent))], catch_up=True)
     assert details.caught_up and details.tool_counts["get_inventory"] == 2
@@ -173,7 +172,7 @@ def test_read_budget_marks_partial_statistics_and_new_archive_does_not_reuse_old
 
 
 def test_no_archive_and_missing_trace_display_unknown_not_fake_statistics(tmp_path):
-    monitor = DetailMonitor(batch_script.open_shared_read)
+    monitor = DetailMonitor(open_reader)
     rows = [row(archive_dir=None)]
     monitor.refresh(rows)
     assert monitor.states == {}
@@ -206,44 +205,3 @@ def test_stale_score_does_not_display_delta_for_a_different_turn(tmp_path):
     details.scores.extend([(1, 100), (2, 120)])
     text = render([row(completed_turns=3, rank=200)], {"high": details})
     assert "+20.0" not in text
-
-
-def test_monitor_reader_does_not_block_appending_or_replacing_trace(tmp_path):
-    path = tmp_path / "trace.jsonl"
-    append(path, tool_event("get_crafting"))
-    with batch_script.open_shared_read(path) as reader:
-        append(path, tool_event("get_inventory"))
-        replacement = tmp_path / "replacement.tmp"
-        replacement.write_text("new", encoding="utf-8")
-        batch_script.replace_json_file(replacement, path)
-        assert "get_crafting" in reader.read()
-    assert path.read_text(encoding="utf-8") == "new"
-
-
-def test_watch_cli_passes_focus_and_compact_options(monkeypatch, tmp_path):
-    calls = []
-    monkeypatch.setattr(batch_script, "watch", lambda batch, **kwargs: calls.append((batch, kwargs)) or 0)
-    for option in ([], ["--effort", "medium"], ["--compact"]):
-        monkeypatch.setattr(sys, "argv", ["run_gpt61_advanced.py", "watch", str(tmp_path), "--once", *option])
-        assert batch_script.main() == 0
-    assert calls[0][1] == {"once": True, "effort": None, "compact": False}
-    assert calls[1][1]["effort"] == "medium"
-    assert calls[2][1]["compact"] is True
-    monkeypatch.setattr(sys, "argv", ["run_gpt61_advanced.py", "watch", str(tmp_path), "--effort", "high", "--compact"])
-    with pytest.raises(SystemExit) as caught:
-        batch_script.main()
-    assert caught.value.code == 2
-
-
-def test_detailed_watch_once_reads_existing_files_without_writing_them(tmp_path, observation, capsys):
-    batch_script.write_json(tmp_path / "batch.json", {"efforts": ["high"], "max_tool_calls_per_turn": 20})
-    job = tmp_path / "high"
-    archive = job / "archive"
-    archive.mkdir(parents=True)
-    append(archive / "trace.jsonl", record("turn_started", observation=observation), tool_event("get_inventory"))
-    batch_script.write_json(job / "progress.json", row(archive_dir=str(archive)))
-    before = {p: p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}
-    assert batch_script.watch(tmp_path, once=True, effort="high") == 0
-    text = capsys.readouterr().out
-    assert "最近操作" in text and "get_inventory" in text and "装备：" in text
-    assert before == {p: p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}

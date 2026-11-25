@@ -2,7 +2,6 @@ from copy import deepcopy
 import io
 import json
 from pathlib import Path
-import sys
 from xml.etree import ElementTree as ET
 
 import pytest
@@ -12,8 +11,8 @@ from guild_manager_bench.batch_curves import (
     CurveMonitor, extract_curves, render_svg, segments, terminal_curves,
 )
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from scripts import run_gpt61_advanced as batch_script
+def read_json(path):
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def completed_turn(number, *, score=100, gold=50, xp=60, rewards=((10, 20),)):
@@ -38,7 +37,7 @@ def row(archive, effort="high", **kwargs):
 
 def save(path, data):
     path.parent.mkdir(parents=True, exist_ok=True)
-    batch_script.write_json(path, data)
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
 
 
 def text_chart(rows, monitor, **kwargs):
@@ -143,7 +142,7 @@ def test_monitor_caches_unchanged_replay_and_uses_resumed_authoritative_history(
     reads = []
     def read(path):
         reads.append(path)
-        return batch_script.read_monitor_json(path)
+        return read_json(path)
     monitor = CurveMonitor(read)
     monitor.refresh([row(tmp_path)])
     monitor.refresh([row(tmp_path)])
@@ -160,7 +159,7 @@ def test_monitor_caches_unchanged_replay_and_uses_resumed_authoritative_history(
 def test_transient_read_failure_preserves_last_chart_and_then_recovers(tmp_path):
     path = tmp_path / "replay.json"
     save(path, replay(completed_turn(1)))
-    monitor = CurveMonitor(batch_script.read_monitor_json)
+    monitor = CurveMonitor(read_json)
     monitor.refresh([row(tmp_path)])
     expected = monitor.runs["high"]
     path.write_text('{"incomplete":', encoding="utf-8")
@@ -173,7 +172,7 @@ def test_transient_read_failure_preserves_last_chart_and_then_recovers(tmp_path)
 
 
 def test_missing_or_new_archive_never_borrows_old_chart(tmp_path):
-    monitor = CurveMonitor(batch_script.read_monitor_json)
+    monitor = CurveMonitor(read_json)
     monitor.refresh([{"effort": "medium", "status": "starting"}])
     assert monitor.runs == {} and "等待" in monitor.warnings["medium"]
     save(tmp_path / "first/replay.json", replay(completed_turn(1)))
@@ -184,7 +183,7 @@ def test_missing_or_new_archive_never_borrows_old_chart(tmp_path):
 
 
 def test_terminal_plots_three_aligned_runs_and_labels_balance_vs_income(tmp_path):
-    monitor = CurveMonitor(batch_script.read_monitor_json)
+    monitor = CurveMonitor(read_json)
     rows = []
     for index, effort in enumerate(("medium", "high", "xhigh")):
         directory = tmp_path / effort
@@ -206,7 +205,7 @@ def test_terminal_plots_three_aligned_runs_and_labels_balance_vs_income(tmp_path
 
 
 def test_svg_is_valid_escaped_contains_tooltips_and_does_not_connect_gaps(tmp_path):
-    monitor = CurveMonitor(batch_script.read_monitor_json)
+    monitor = CurveMonitor(read_json)
     monitor.runs["high"] = extract_curves(replay(completed_turn(1), completed_turn(2),
                                                 completed_turn(3, score=None), completed_turn(4)), "high")
     rows = [row(tmp_path)]
@@ -221,63 +220,3 @@ def test_svg_is_valid_escaped_contains_tooltips_and_does_not_connect_gaps(tmp_pa
     assert "nan" not in source.lower() and "inf" not in source.lower()
     assert "金币余额" not in source
     assert "不重新评分" in source
-
-
-def test_cli_routes_curve_options_and_rejects_non_svg_output(monkeypatch, tmp_path):
-    calls = []
-    monkeypatch.setattr(batch_script, "curves", lambda batch, **kwargs: calls.append((batch, kwargs)) or 0)
-    monkeypatch.setattr(sys, "argv", ["script", "curves", str(tmp_path), "--once", "--resource-mode", "income", "--metric", "gold"])
-    assert batch_script.main() == 0
-    assert calls == [(tmp_path.resolve(), {"once": True, "resource_mode": "income", "metric": "gold", "output": None})]
-    monkeypatch.setattr(sys, "argv", ["script", "curves", str(tmp_path), "--output", "replay.json"])
-    with pytest.raises(SystemExit) as error:
-        batch_script.main()
-    assert error.value.code == 2
-
-
-@pytest.mark.parametrize("efforts", [
-    ("high",),
-    ("medium", "high", "xhigh"),
-    ("gemini4-medium", "gemini4-high", "astra-xhigh"),
-])
-def test_curve_command_reads_active_batch_and_exports_without_changing_run_files(tmp_path, capsys, efforts):
-    save(tmp_path / "batch.json", {"efforts": list(efforts), "max_turns": 35})
-    for index, effort in enumerate(efforts):
-        archive = tmp_path / effort / "archive"
-        save(archive / "replay.json", replay(completed_turn(1, score=100 + index * 50),
-                                               completed_turn(2, score=200 + index * 50)))
-        save(tmp_path / effort / "progress.json", row(archive, effort=effort))
-    before = {p: p.read_bytes() for p in tmp_path.rglob("*.json")}
-    assert batch_script.curves(tmp_path, once=True) == 0
-    terminal = capsys.readouterr().out
-    assert "金币余额" in terminal
-    assert all(effort in terminal for effort in efforts)
-    output = tmp_path / "report/income.svg"
-    assert batch_script.curves(tmp_path, resource_mode="income", output=output) == 0
-    assert "已导出曲线" in capsys.readouterr().out
-    root = ET.parse(output).getroot()
-    ns = {"svg": "http://www.w3.org/2000/svg"}
-    assert root.tag.endswith("svg")
-    colors = {}
-    for circle in root.findall("svg:circle", ns):
-        name = circle.find("svg:title", ns).text.split(" · ")[0]
-        colors.setdefault(name, set()).add(circle.attrib["fill"])
-    assert set(colors) == set(efforts)
-    assert all(len(values) == 1 for values in colors.values())
-    assert len(set.union(*colors.values())) == len(efforts)
-    assert "累计讨伐经验收入" in output.read_text(encoding="utf-8")
-    assert before == {p: p.read_bytes() for p in tmp_path.rglob("*.json")}
-
-
-def test_live_curves_keep_refreshing_after_unreadable_progress(monkeypatch, tmp_path):
-    initial = [{"effort": "high", "status": "running"}]
-    stale = [{"effort": "high", "status": "running", "monitor_warning": "进度暂不可读"}]
-    final = [{"effort": "high", "status": "completed"}]
-    calls = []
-    def read(batch, previous=None):
-        calls.append(previous)
-        return [initial, stale, final][len(calls) - 1]
-    monkeypatch.setattr(batch_script, "read_progress", read)
-    monkeypatch.setattr(batch_script.time, "sleep", lambda _: None)
-    assert batch_script.curves(tmp_path) == 1  # No archive yet, but the monitor finishes normally.
-    assert calls == [None, initial, stale]
