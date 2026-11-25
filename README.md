@@ -208,50 +208,7 @@ uv run guild-manager run --no-color
 除非显式开启。`--debug` 包含完整请求和响应内容，日志可能包含敏感提示词或模型数据，分享前请检查。
 输出重定向到文件时自动禁用动画和 ANSI 样式。`--no-stream` 只控制 API 请求方式，不控制展示详细程度。
 
-三档并行批次的监控：
-
-```powershell
-# 替换为实际批次目录
-$batch = "runs/你的批次目录"
-
-# 三局总览和详情卡片
-uv run python -X utf8 scripts/run_gpt61_advanced.py watch "$batch"
-
-# 保留总览，展开 high 的装备、最近5条操作、实战和评分变化
-uv run python -X utf8 scripts/run_gpt61_advanced.py watch "$batch" --effort high
-
-# 原有简表，不读取详情日志
-uv run python -X utf8 scripts/run_gpt61_advanced.py watch "$batch" --compact
-
-# 静态输出完整详情，适合小窗口滚动查看或重定向到文件
-uv run python -X utf8 scripts/run_gpt61_advanced.py watch "$batch" --effort medium --once
-```
-
-增强监控显示当前回合、工具预算、最近评分变化、队伍HP/MP与装备概况、材料、最近操作、新工具使用次数、实战奖励和失败重试。默认不展示模型正文、推理或备忘录内容。窄窗口建议使用 `--effort`，被终端高度截断时可用 `--once` 静态输出查看完整内容。`--effort` 与 `--compact` 互斥。
-
-监控只读已有进度文件并增量读取 `trace.jsonl`，不重新调用模型或模拟战斗，不修改工作进程及源码快照。正在运行的批次无需重开，只需重新打开监控。日志尚未读完或暂不可读时会明确标注，已读记录不会重复累计。详情统计以已记录的工具结果为准，包含失败调用，`end_turn` 计入工具总数但不占调用预算。实战的“未胜”可能包括平局，重试通知不包含 provider 内部的HTTP重试。
-
-### 批次曲线比较
-
-```powershell
-# 实时比较三局的战力、金币余额和未分配经验池，约每2秒刷新
-uv run python -X utf8 scripts/run_gpt61_advanced.py curves "$batch"
-
-# 只展开战力曲线，单次输出便于滚动查看
-uv run python -X utf8 scripts/run_gpt61_advanced.py curves "$batch" --metric power --once
-
-# 改为累计讨伐金币、经验收入，避免把已投入培养的资源误读为收益较低
-uv run python -X utf8 scripts/run_gpt61_advanced.py curves "$batch" --resource-mode income
-
-# 导出当前三项曲线的SVG，可用浏览器打开并悬停查看每回合数值
-uv run python -X utf8 scripts/run_gpt61_advanced.py curves "$batch" --resource-mode income --output "$batch/curves-income.svg"
-```
-
-`--metric` 可选 `all`、`power`、`gold` 或 `experience`，默认三项。`--resource-mode balance` 为默认口径，使用每回合 `end_turn` 结算及恢复后的金币余额和未分配经验池。`income` 为累计实际讨伐奖励，含当时已生效的天赋加成，不扣除购买或培养支出，也不把解雇返还的经验计作收入。
-
-横轴按游戏回合对齐，同一指标下所有run共用纵轴。终端以 `m`、`h`、`x` 区分三档，同格交叠显示 `*`。SVG使用颜色区分，悬停实测点可查看准确数值。SVG是导出时的静态快照，`--output` 写完即退出，不持续更新。
-
-曲线只读取正式 `replay.json` 中已完成回合。战力直接使用已记录的 `rank_score`，不重新评分。正在执行的回合及续跑时被回滚的操作不入图，缺失值保持空缺且断线，不补零、不外推。续跑重写历史时可能缺少结算快照，此时使用下一回合准备前的初始快照，两者资源余额相同。两类快照均缺失时余额未知，不用回合中途的最新资源代替。缺少奖励明细或缺少中间回合时，后续累计收入未知。回放暂不可读时保留上次成功读取的曲线并显示警告。查询与导出不修改运行进程、游戏快照或原始存档。
+多局并行运行、观战和经济／经验／战力曲线比较请使用[运行工作台](docs/workbench.md)。旧的专用批次脚本及其命令行测试已退役，曲线和日志投影库仍保留测试。
 
 统计口径：
 
@@ -296,13 +253,15 @@ uv run guild-manager run --preset advanced --archive-dir runs/advanced
 uv run guild-manager serve --preset advanced
 ```
 
+`advanced` 初始金币为 190。T1—T3 回合末先正常恢复，再将不足有效最大 HP 50% 的角色补到该值，向下取整。已达到保底值的不额外回血，MP 恢复不变，T4 回合末起只按普通公式恢复。保底由 `game.yaml` 的 `rules.turn_recovery.opening_turns` 与 `opening_hp_floor_percent` 配置，未配置时关闭。`default` 和冻结的 `full/v1` 不启用这项补助。
+
 `advanced` 已接入 T12 起开放、整局共享 6 点额度的付费材料兑换，不新增 preset。规则只写入工具说明，回合摘要只加状态行，不增加系统提示词教程。沿用现有协议指纹区分变更前后的版本，整体平衡仍待验证。规则及限制见[材料兑换设计](docs/material-exchange-design.md)。
 
-完整节点、成本和结算规则见 [Advanced 天赋树](docs/talent-tree-expansion-plan.md)。full 的提示词、工具、引擎、评分器和数据已冻结，advanced 的后续改动不会改变 full 正式运行。新的存档记录协议与配置指纹，排行榜按 preset 与版本分组。缺少协议证据的旧存档标记为 `legacy-*`，不自动归入 `v1`。续跑必须使用相同协议，旧局请使用其原始代码快照。详见 [评测协议与版本](docs/benchmark-protocols.md)。
+完整节点、成本和结算规则见 [Advanced 天赋树](docs/talent-tree-expansion-plan.md)。full 的提示词、工具、引擎、评分器和数据已冻结，advanced 的后续改动不会改变 full 正式运行。新的存档记录协议与配置指纹，排行榜按 preset 与版本分组。缺少协议证据的旧存档标记为 `legacy-*`，不自动归入 `v1`。续跑前应核对原协议与数据版本。工作台的续跑与版本确认行为见[停止、关页与恢复](docs/workbench.md#停止关页与恢复)。
 
-advanced 还提供按需查询的[战斗记录与未来刷新工具](docs/information-tools.md)，以及[方案试算、执行与技能配置](docs/tactical-tools.md)。开发版 `default`、`advanced` 全回合可试算准备方案，终局前不计算战力。试算扣1次，凭据执行免费，但提交时剩余预算必须不少于方案步数。查询使用普通工具调用额度，不自动把完整日志或未来刷新表加入回合提示词。神官、瘟疫法师与七种印记的法力门槛、行动窗口和默认优先级见[职业培养与印记配置](docs/advanced-combat-builds.md)，仅作用于开发版 `advanced`。
+advanced 还提供按需查询的[战斗记录与未来刷新工具](docs/information-tools.md)，以及[方案试算、执行与技能配置](docs/tactical-tools.md)。开发版 `default`、`advanced` 的升级和配方查询支持筛选，模型侧默认简表，可用 `detail="full"` 展开。整队 `preview_hunts` 替换模型侧单场预览，每套最多6个对位，默认每回合最多3套，也支持准备方案投影。全回合可试算准备方案，终局前不计算战力。试算扣1次，凭据执行免费，但提交时剩余预算必须不少于方案步数。查询使用普通工具调用额度，不自动把完整日志或未来刷新表加入回合提示词。神官、瘟疫法师与七种印记的法力门槛、行动窗口和默认优先级见[职业培养与印记配置](docs/advanced-combat-builds.md)，仅作用于开发版 `advanced`。
 
-开发版 `default`、`advanced` 的 `write_memo` 维护一份局内持久备忘。未调用时保留原文，每次写入整份覆盖，`content=""` 清空。正文最多 500 字符，回合提示词标注最后修改回合，写入仍占一次工具预算。续跑和分支重跑从已完成的历史前缀恢复备忘，不继承失败尝试中的更新。此变更由协议指纹区分版本，冻结的 `full/v1` 仍沿用原有的一回合备忘。
+开发版 `default`、`advanced` 的 `write_memo(operations)` 按命名块批量增删改局内备忘。每块记录创建、更新回合，并可设置最后有效回合，未修改且未到期的块持续保留。块名与正文合计最多4000字符，操作返回已用字符数。一批操作占一次普通工具预算，验证全部操作和最终容量后一起提交。每回合自动提供完整有效备忘，优先保存计划、预留资源和核心比较结论，避免抄录面板和随时可查询的列表。旧 `write_memo(content)` 仍兼容整份覆盖和空串清空。续跑和分支重跑从已完成的历史前缀恢复备忘，不继承失败尝试中的更新。接口与有效期规则见[跨回合备忘](docs/tactical-tools.md#跨回合备忘)。此变更由协议指纹区分版本，冻结的 `full/v1` 仍沿用原有的一回合备忘。
 
 游戏数据位于 `data/presets/<preset_name>/`，主要包含：
 
@@ -330,6 +289,12 @@ uv run guild-manager serve-leaderboard
 原来的目录扫描方式仍可用：`build-leaderboard --run-dir <目录> --output <另一个输出文件>`，按 preset 与协议版本分组，并保留该输出中已有的历史明细。两种来源方式不能同时使用。清单格式和筛选方法见 [排行榜构建](docs/leaderboard.md)。
 
 启动主服务后，可以在 `/replay/` 加载本地 `replay.json`，或浏览 `runs/llm` 下的运行存档。
+
+### 导出离线战报
+
+在工作台历史列表选择“更多 → 导出战报”，或在已完成运行的单局观战、详情侧栏底部点击“导出战报”，即可下载 `guild-report.html`。支持受控运行和 CLI 存档。
+
+战报包含终局队伍立绘、配装、人物成长履历、已记录的正式 Rank、模型用量，以及精选节点和可展开的完整历程。精选按重要事件条件保留，不设条数上限、不按类别凑数，普通操作仍可在完整历程查看。丰富事件仅供战报使用，不增加曲线时间轴节点。缩略图按需内嵌并去重，图片与履历不写入运行存档。单文件可离线打开，无外部资源，不包含模型正文、推理、提示词、备忘录或连接配置，也不重新评分或修改存档。缺失记录保持未知，模型与角色等展示名称仍会保留。范围和更新步骤见[导出离线战报](docs/workbench.md#导出离线战报)。
 
 ### 行动级对照复盘
 
